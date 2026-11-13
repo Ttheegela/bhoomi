@@ -25,7 +25,7 @@ Stay in your lane's folder. If you must touch another lane's files, say so in th
 - Never push to `main`. Never force-push a shared branch.
 - `uv run pytest -q` must pass before you open a PR. Add one test for any non-trivial logic.
 - Right after opening a PR, turn on auto-merge: `gh pr merge <n> --auto --merge` (merge commits, not squash). It lands by itself once the `test` and `secrets` checks pass, then Vercel deploys `main` to production.
-- If a check fails, fix it yourself: `gh run view <run-id> --log-failed`, fix, push to the same branch. Auto-merge waits for green.
+- If a check fails, the `auto-fix` workflow makes one attempt (commits from `claude[bot]` starting `fix(ci):`). If it can't, fix it yourself: `gh run view <run-id> --log-failed`, fix, push to the same branch. Auto-merge waits for green. Pull before pushing again so you don't overwrite its fix.
 - Exception: a PR that changes `docs/CONTRACTS.md` does not auto-merge. Wait for an OK from every lane it affects.
 - Before starting, read the open issues/PRs for your lane with `gh issue list` / `gh pr list` and any comments on them.
 - Shared data shapes live in `docs/CONTRACTS.md`. Never change a shape quietly: open a separate PR that edits `docs/CONTRACTS.md` and tag the owners of every lane that uses it.
