@@ -1,6 +1,7 @@
 import contextlib
 import os
 
+import httpx
 from fastapi import FastAPI
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -34,3 +35,17 @@ def health() -> dict:
 
 
 app.mount("/mcp", mcp_app)
+
+
+@app.get("/api/health/keys")
+def health_keys() -> dict:
+    """Which keys this deployment has, and whether OpenRouter and Langfuse accept them. Never returns key values."""
+    env = os.environ.get
+    out = {n: bool(env(n)) for n in ("OPENROUTER_API_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST")}
+    if out["OPENROUTER_API_KEY"]:
+        r = httpx.get("https://openrouter.ai/api/v1/key", headers={"Authorization": f"Bearer {env('OPENROUTER_API_KEY')}"}, timeout=10)
+        out["openrouter_ok"] = r.status_code == 200
+    if out["LANGFUSE_PUBLIC_KEY"] and out["LANGFUSE_SECRET_KEY"] and out["LANGFUSE_HOST"]:
+        r = httpx.get(f"{env('LANGFUSE_HOST')}/api/public/projects", auth=(env("LANGFUSE_PUBLIC_KEY"), env("LANGFUSE_SECRET_KEY")), timeout=10)
+        out["langfuse_ok"] = r.status_code == 200
+    return out

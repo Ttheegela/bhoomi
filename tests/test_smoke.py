@@ -17,3 +17,11 @@ def test_health_and_mcp():
 
         r = c.post("/mcp/", headers={**H, "Host": "evil.example"}, json=PING)
         assert r.status_code == 421  # DNS-rebinding protection rejects unknown hosts
+
+
+def test_health_keys_reports_missing_keys_without_calling_out(monkeypatch):
+    from earthtrends.app import health_keys
+
+    for n in ("OPENROUTER_API_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"):
+        monkeypatch.delenv(n, raising=False)
+    assert health_keys() == {"OPENROUTER_API_KEY": False, "LANGFUSE_PUBLIC_KEY": False, "LANGFUSE_SECRET_KEY": False, "LANGFUSE_HOST": False}
