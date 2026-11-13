@@ -31,7 +31,7 @@ app = FastAPI(title="Trend Detective", lifespan=lifespan)
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "okay"}
 
 
 app.mount("/mcp", mcp_app)
