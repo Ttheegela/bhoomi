@@ -14,7 +14,12 @@ jobs:
       - run: uv run pytest -q
 
   secrets:
+    # PRs only: on a branch's first push gitleaks-action has no base commit and errors out.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read  # gitleaks-action lists the PR's commits
     steps:
       - uses: actions/checkout@v4
         with:
