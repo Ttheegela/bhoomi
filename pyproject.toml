@@ -26,3 +26,6 @@ packages = ["earthtrends"]
 dev = [
     "pytest>=9.2.0",
 ]
+
+[tool.vercel]
+entrypoint = "earthtrends.app:app"
