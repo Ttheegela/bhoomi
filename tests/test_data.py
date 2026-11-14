@@ -447,7 +447,10 @@ def _coops_list_reply(monkeypatch, body):
     coops.stations.cache_clear()
 
 
-@pytest.mark.parametrize("body", [{"stations": []}, {"other": 1}, [], {"stations": [{"id": "1", "lat": "", "lng": "-74"}]}])
+_ROW = {"name": "N", "lat": "40.7", "lng": "-74.01"}  # a good position, so only the id is wrong
+@pytest.mark.parametrize("body", [{"stations": []}, {"other": 1}, [], {"stations": [{"id": "1", "lat": "", "lng": "-74"}]},
+                                  {"stations": [dict(_ROW, id=None), dict(_ROW, id=8518750), dict(_ROW, id=["x"]), dict(_ROW, id=""),
+                                                dict(_ROW, id="​"), {k: v for k, v in _ROW.items()}]}])
 def test_coops_unusable_station_list_is_a_provider_failure(monkeypatch, body):
     calls = []
     monkeypatch.setattr(psmsl, "stations", lambda: calls.append("list") or [])
@@ -457,8 +460,32 @@ def test_coops_unusable_station_list_is_a_provider_failure(monkeypatch, body):
         with pytest.raises(httpx.DecodingError):
             data.get_series("sea_level", 40.70, -74.01)
     finally:
+        size = coops.stations.cache_info().currsize
         coops.stations.cache_clear()
-    assert calls == []
+    assert calls == [] and size == 0  # PSMSL never asked, nothing cached
+
+
+def test_coops_row_without_a_name_is_named_by_its_id(monkeypatch):
+    _coops_list_reply(monkeypatch, {"stations": [{"id": "8518750", "lat": "40.7", "lng": "-74.01"},
+                                                 {"id": "8000001", "name": "  ", "lat": "10", "lng": "10"}]})
+    try:
+        assert [s["name"] for s in coops.stations()] == ["8518750", "8000001"]
+        with pytest.raises(ValueError, match=r"the nearest is 8000001, \d+ km away"):
+            coops.nearest(10.0, 30.0, [s for s in coops.stations() if s["id"] == "8000001"])
+    finally:
+        coops.stations.cache_clear()
+
+
+def test_provider_values_of_the_wrong_type_do_not_crash():
+    assert [s["id"] for s in psmsl.parse_stations("1; 1.0; 2.0; ​‮; 1; 1; N\n2; 1.0; 2.0; Ok; 1; 1; N")] == [2]
+    st = ghcn.parse_search({"results": [{"stations": [{"id": "", "name": "n", "dataTypes": []}], "boundingPoints": [{"coordinates": [1, 2]}]},
+                                        {"stations": [{"id": "​", "name": "n", "dataTypes": []}], "boundingPoints": [{"coordinates": [1, 2]}]},
+                                        {"stations": [{"id": "A", "name": "​", "dataTypes": []}], "boundingPoints": [{"coordinates": [1, 2]}]}]})
+    assert [(s["id"], s["name"]) for s in st] == [("A", "A")]
+    for reply in ([], "x", None, {"error": "plain string"}, {"error": None}, {"data": "x"}, {"data": [{"year": "2000"}, 5]}):
+        with pytest.raises((ValueError, httpx.HTTPError)):
+            coops.parse(reply, "Foo")
+    assert coops.parse({"data": [{"year": "2000", "month": "1", "MSL": None}, {"year": "2000", "month": "2", "MSL": "0.5"}]}) == (["2000-01", "2000-02"], [None, 500.0])
 
 
 def test_coops_bad_station_rows_are_dropped(monkeypatch):

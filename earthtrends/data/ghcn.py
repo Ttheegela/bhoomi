@@ -58,7 +58,10 @@ def parse_search(resp: dict) -> list[dict]:
             lat, lon = float(lat), float(lon)
             if not (isfinite(lat) and isfinite(lon) and abs(lat) <= 90 and abs(lon) <= 180 and isinstance(st["id"], str) and isinstance(st["name"], str)):
                 continue
-            out.append({"id": text(st["id"], 40), "name": text(st["name"], NAME), "lat": lat, "lon": lon, "types": types})
+            sid = text(st["id"], 40)
+            if not sid:
+                continue
+            out.append({"id": sid, "name": text(st["name"], NAME) or sid, "lat": lat, "lon": lon, "types": types})
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             continue
     return out

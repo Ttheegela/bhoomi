@@ -28,8 +28,10 @@ def stations() -> list[dict]:
     for s in rows if isinstance(rows, list) else []:
         try:  # a row without an id, or with a lat/lng that is not a finite number in range, is dropped
             lat, lng = float(s["lat"]), float(s["lng"])
-            if isfinite(lat) and isfinite(lng) and abs(lat) <= 90 and abs(lng) <= 180 and text(s["id"], 40):
-                out.append({**s, "id": text(s["id"], 40), "name": text(s.get("name", ""), NAME)})
+            sid = text(s["id"], 40) if isinstance(s["id"], str) else ""  # a null or numeric id is not an id
+            if isfinite(lat) and isfinite(lng) and abs(lat) <= 90 and abs(lng) <= 180 and sid:
+                name = text(s["name"], NAME) if isinstance(s.get("name"), str) else ""
+                out.append({**s, "id": sid, "name": name or sid})  # no name: the id stands in, never an empty string
         except (KeyError, TypeError, ValueError, AttributeError):
             continue
     if not out:  # not cached: lru_cache keeps only returns
@@ -48,13 +50,19 @@ def nearest(lat: float, lon: float, station_list: list[dict]) -> tuple[dict, flo
 
 
 def parse(resp: dict, name: str = "this station") -> tuple[list[str], list[float | None]]:
+    if not isinstance(resp, dict):
+        raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.")
     if "error" in resp or "data" not in resp:
-        msg = resp.get("error", {}).get("message", "no data returned")
+        err = resp.get("error")
+        msg = (err.get("message") if isinstance(err, dict) else err) or "no data returned"
         raise ValueError(fit(f"No monthly sea level at {text(name, NAME)}: ", msg))
     by_month = {}
-    for row in resp["data"]:
-        v = row["MSL"]
-        by_month[(int(row["year"]), int(row["month"]))] = round(float(v) * 1000, 1) if v != "" else None  # m -> mm
+    for row in resp["data"] if isinstance(resp["data"], list) else []:
+        try:  # a malformed row is skipped
+            v = row["MSL"]
+            by_month[(int(row["year"]), int(row["month"]))] = round(float(v) * 1000, 1) if v not in ("", None) else None  # m -> mm
+        except (KeyError, TypeError, ValueError):
+            continue
     if not by_month:
         raise ValueError(f"No monthly sea level at {text(name, NAME)}: no rows returned")
     (y0, m0), (y1, m1) = min(by_month), max(by_month)
