@@ -167,8 +167,18 @@ def test_real_cases_file_plan(monkeypatch):
                                                None, skip_check=False)
     assert models == ["openrouter:anthropic/claude-haiku-5.5"]
     assert [m for m, _ in dropped] == ["openrouter:x/gone", "anthropic:claude-haiku-5-5"]
-    assert {cid for cid, _ in skipped} == {"northwest-india-groundwater", "central-valley-groundwater"}
-    assert len(cases) + len(skipped) == len(run.load_cases())
+    assert skipped == []  # water_storage (grace) is built, so the two groundwater cases are planned
+    assert {"northwest-india-groundwater", "central-valley-groundwater"} <= {c["id"] for c in cases}
+    assert len(cases) == len(run.load_cases())
+
+
+def test_plan_skips_a_case_that_cannot_run(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-not-a-key")
+    extra = {**CASE, "id": "snow-depth", "expect_variable": "snow_depth"}  # made-up variable: not in the catalog
+    monkeypatch.setattr(run, "load_cases", lambda: [CASE, extra])
+    _, cases, skipped, _ = run.plan("openrouter:anthropic/claude-haiku-5.5", None, skip_check=True)
+    assert [c["id"] for c in cases] == ["atlantic-city-sea-level"]
+    assert [cid for cid, _ in skipped] == ["snow-depth"] and "snow_depth" in skipped[0][1]
 
 
 # ---- the run: retries, budget guards, scores ----
@@ -239,8 +249,10 @@ def test_main_writes_markdown_and_json(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-not-a-key")
     answers = {"atlantic-city-sea-level": fake_run(), "springfield-ambiguous": fake_run("It is warming 0.3 per decade.", [])}
     monkeypatch.setattr(run, "ask", lambda q, model: answers["springfield-ambiguous" if "Springfield" in q else "atlantic-city-sea-level"])
+    cases = run.load_cases() + [{**CASE, "id": "snow-depth", "expect_variable": "snow_depth"}]  # a case that cannot run
+    monkeypatch.setattr(run, "load_cases", lambda: cases)
     assert run.main(["--models", "openrouter:anthropic/claude-haiku-5.5", "--cases",
-                     "atlantic-city-sea-level,springfield-ambiguous,central-valley-groundwater", "--out", str(tmp_path)]) == 0
+                     "atlantic-city-sea-level,springfield-ambiguous,snow-depth", "--out", str(tmp_path)]) == 0
     md_path, = tmp_path.glob("*-model-comparison.md")
     md = md_path.read_text()
     for col in ("model", "pass rate", "right tool", "right variable", "right place", "right source", "verdict",
@@ -249,7 +261,7 @@ def test_main_writes_markdown_and_json(monkeypatch, tmp_path):
         assert col in md
     assert "| `openrouter:anthropic/claude-haiku-5.5` | 1/2 (of 2) | 50% |" in md
     assert "springfield-ambiguous: numbers, must_say" in md
-    assert "central-valley-groundwater: variable 'water_storage'" in md
+    assert "snow-depth: variable 'snow_depth'" in md
     assert "Git commit" in md and "Anthropic effort setting for candidates: medium" in md
     assert "not run" in md  # no Anthropic key, so no judge
     recs = json.loads(next(tmp_path.glob("*-model-comparison.json")).read_text())
@@ -267,7 +279,8 @@ def test_dry_run_spends_nothing(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(run, "judge", no)
     assert run.main(["--dry-run", "--models", "openrouter:anthropic/claude-haiku-5.5", "--out", str(tmp_path / "o")]) == 0
     out = capsys.readouterr().out
-    assert "openrouter:anthropic/claude-haiku-5.5" in out and "skip central-valley-groundwater" in out
+    assert "openrouter:anthropic/claude-haiku-5.5" in out and "skip " not in out  # every real case is runnable now
+    assert "central-valley-groundwater" in out
     assert not (tmp_path / "o").exists()
 
 

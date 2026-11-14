@@ -32,7 +32,9 @@ def offline(monkeypatch):
 def test_variables():
     r = client.get("/api/variables")
     assert r.status_code == 200
-    assert len(r.json()) == 4
+    assert len(r.json()) == 5
+    ws = next(v for v in r.json() if v["id"] == "water_storage")
+    assert ws["units"] == "cm" and ws["sources"] == ["grace"]
     assert all(set(v) == {"id", "name", "units", "sources", "start_year", "resolution", "good_for"} for v in r.json())
 
 

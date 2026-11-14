@@ -33,7 +33,7 @@ Is it really changing here?      [Question line]
 - Desktop verdict column is sticky (top 16 px) beside the chart. Below 900 px all stacked.
 - Header AI label: bordered text "Built with AI assistance", always visible in the header (not hidden at 375). Footer repeats it with the line "Data come from the sources named next to each number. Only public data."
 - Controls: the "Show trend" button lives inside the coordinates section (a closed `<details>`); chips and the measurement select run at once.
-- Verdict card order: heading, the source link line ("Data: {source.name} ↗"), sentence 1, the "our calculation" line, then the explanatory paragraphs and the p-value. Source links are block-level lines, 48 px tall, never inside a sentence.
+- Verdict card order: heading, the big number, the "our calculation" line, the source link line ("Raw data: {source.name} ↗"), sentence 1, the grey lean line (no clear change only), then the explanatory paragraphs and the p-value. Source links are block-level lines, 48 px tall, never inside a sentence.
 - Ask slot: `<section id="ask" hidden aria-label="Ask a question"></section>` after "How to read this". Empty now.
 
 ## 3. Words on screen
@@ -83,7 +83,7 @@ Container `figure`, width 100%, SVG `viewBox` scales with it. Two stacked panels
 Light: `--bg #FFFFFF`, `--surface #F4F4F4`, `--ink #111111` (18:1), `--ink-2 #4A4A4A` (8.9:1), `--line #767676` (4.5:1, control borders, icons), `--hairline #D6D6D6` (decorative only), `--chart-faint #767676`, `--focus #111111`.
 Dark: `--bg #0D0D0D`, `--surface #1A1A1A`, `--ink #F2F2F2`, `--ink-2 #BDBDBD`, `--line #8C8C8C`, `--hairline #333333`, `--chart-faint #8C8C8C`, `--focus #FFFFFF`. Selected via `@media (prefers-color-scheme: dark)`; set `color-scheme: light dark`. SVG uses `currentColor` / the tokens, never hard-coded colours. Verdict card for rising/falling/no clear change: `--surface` fill, 2 px `--ink` border, headline row inverted (`--bg` text on `--ink`).
 Type: `system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`; numbers `font-variant-numeric: tabular-nums`. Sizes px (phone/desktop): small 14, body 16, lead 18, h2 22/24, verdict headline 28/32 weight 700, h1 24/28 weight 700. Line height 1.5 body, 1.2 headings. Max line length 70 ch.
-Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Controls min height 44 px; chips 44 px tall, 12 px gap. Borders 1 px (controls), 2 px (verdict card). Focus: 3 px solid `--focus`, offset 2 px, never removed. No gradients, no shadows.
+Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Controls min height 44 px; chips 44 px tall, 12 px gap. Borders 1 px (controls), 2 px (verdict card). Focus: 3 px solid `--focus`, offset 2 px, never removed. No gradients. No shadows, except that the selected tab's 3 px underline is drawn as an inset `box-shadow`.
 
 ## 7. Accessibility checklist
 - [ ] Landmarks: header, main, footer; one h1; headings in order; page `lang="en"`; skip link "Skip to the answer".
@@ -95,7 +95,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - [ ] Loading and errors announced (`role="status"` / `alert`); focus moves to the result heading after a user run.
 - [ ] Reflows at 375 px with no horizontal page scroll (only the table scroller); zoom 200% works; targets >= 44 px.
 - [ ] `prefers-reduced-motion`: no animation. Dark mode follows the system.
-- [ ] Every number block has "Source: {name}" with a working link; "Built with AI assistance" visible in header and footer.
+- [ ] Every number block has "Raw data: {name}" with a working link (error cards: "Source:"); "Built with AI assistance" visible in header and footer.
 
 ## 8. Done-check for QA (screenshots at 375 px and 1280 px, light and dark)
 - [ ] First load shows New York sea level with a verdict and chart, no empty form. Verdict names its dataset (from the API) as a link.
@@ -114,7 +114,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 
 ## 9. Review checklist (apply after every UI change)
 1. No sample data is shown as real. A demo value is labelled "sample" or not shown. Every number names its source with a link, including numbers inside error cards.
-2. What we computed is marked. The verdict, trend line, shaded band, yearly averages and "seasons removed" line carry a grey label: "Trend, range and verdict: our calculation (Mann-Kendall test, Sen's slope)" beside a "Data: {source} ↗" link. The legend groups "From the dataset" and "Our calculation".
+2. What we computed is marked. The verdict, trend line, shaded band, yearly averages and "seasons removed" line carry a grey label: "Trend, range and verdict: our calculation." directly under the big number, then a "Raw data: {source} ↗" link. The legend groups "From the dataset" and "Our calculation".
 3. The verdict sentence holds the number and the uncertainty in plain words, for example "about +42.5 mm per decade; the shaded band shows where the true trend likely sits". Never "X% chance it's real" or "95% sure". Never claim more than the data show.
 4. Contrast meets WCAG AA in light and dark. Text is at least 4.5:1. Borders, icons and chart lines are at least 3:1. Recompute from the tokens after any token change, and measure muted text on the surface and the inverted verdict header in both themes.
 5. Labels are sentence case, grey, 14 px (12 px minimum), regular weight. No ALL CAPS, no small caps, no letter-spacing.
@@ -140,6 +140,12 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Grey labels stay at 14 px. This overrides the 'about 12 px' label rule from the Konam checklist.
 - Use in your AI: framed as 'use Trend Detective in your own AI agent'; example agents (Claude, ChatGPT, GitHub Copilot) named in one line only when their docs confirm remote MCP support; detailed tabs only for apps with verified steps; one 'Any other AI agent' tab; no ChatGPT tab.
 - MCP page: both, tabs per AI app with steps, then a config block for developers.
+- Visual choices (his words, 2026-11-14: "go with the leans": 1B 2C 3C 4B 5C, picked from screenshots):
+  1. Tabs versus chips (1B): the three main tabs are plain text on a thin line; the selected tab is bold with a 3 px underline and no fill. Example-place chips keep their filled pressed state. The app picker on "Use in your AI" follows the same tab style (his addition).
+  2. Answer card (2C): same order as before; "Trend, range and verdict: our calculation." sits directly under the big number (the Mann-Kendall wording stays only in the Method row of the facts list); the source link has a grey "Raw data:" label.
+  3. The AI's message on Ask (3C): no edge line; a quiet box in the page's surface tone. The "Written by an AI model" label and the AI badge stay.
+  4. Code and settings blocks (4B): no wrapping; each block scrolls sideways inside itself with a visible scroll bar; a short hint line shows only when text is cut off ("Swipe sideways to see the whole line."). Copy still copies the whole text.
+  5. Chart (5C): the source link sits under the chart headline; the legend follows the chart closely (6 px margin); the "No change" label goes to the end of the dashed line the trend line is clear of; the legend lines say "(upper chart)" and "(lower chart)".
 
 ### Chosen by the agent (swappable)
 - Single-page flow: place chips, then measurement, then verdict and chart.
@@ -177,3 +183,15 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Ask sends no `history` until the backend history PR lands.
 - Per-app MCP steps taken from each app's official docs (checked 2026-11-14).
 - Period-first sentence 1 and a separate wording when the range misses zero but p is 0.05 or more.
+- The settings-file picker on "Use in your AI" uses the same tab style as the app picker (same kind of control; his 1B addition named only the app picker).
+- One source label, "Raw data:", on every link that names where numbers came from (answer card, chart, table, Ask answers), in grey before the name. This reconciles 2C ("Raw data:") with 5C (whose patch said "Data:"). Error cards keep "Source:". The facts list keeps its row label "Source" (a table row label, not a link label). The plain-text line "Raw values: {source}." in the chart caption and table caption is unchanged.
+- Under 360 px the help line of each select sits directly under its own select (markup order: field, help, field, help); from 360 px the two fields share a row and both help lines run full width below.
+- The footer lists a source only when the catalog (`/api/variables`) lists it. The ERA5 entry carries Open-Meteo's attribution: "Weather data by Open-Meteo.com" (link), "ERA5 reanalysis", "CC BY 4.0" (link to creativecommons.org).
+- A 429 from the data routes shows the API's own sentence in the problem card with "Try again".
+- The grey lean line ("The data lean up, but ...") now sits after sentence 1 at every width (it did so only on phones before).
+- When the catalog fails to load, the footer lists every known source except `grace`, which is known only through the catalog.
+- The "No change" label is drawn last, over the lines and the band, with a 4 px halo in the page background colour (`.c-halo`, used only by that label), so data never shows through it.
+- The footer's ERA5 entry is one list item that flows as one line of text: Open-Meteo link, ", ERA5 reanalysis, ", CC BY 4.0 link.
+- Below 360 px a lone last item in the app picker takes the full row.
+- The sideways-scroll hint on the code blocks says "Scroll sideways to see the whole line." on non-touch screens ("Swipe sideways..." on touch screens, from his option 4B).
+- The server address field on "Use in your AI" stays on one line.

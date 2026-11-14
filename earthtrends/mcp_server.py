@@ -36,7 +36,7 @@ def list_variables() -> list[dict]:
     """List the Earth variables this server can check for long-term change in past data.
 
     Call this first to learn the valid `variable` ids for get_series and detect_trend.
-    Each entry has: id (e.g. "air_temp", "air_temp_max", "precip", "sea_level"), name, units,
+    Each entry has: id (e.g. "air_temp", "air_temp_max", "precip", "sea_level", "water_storage"), name, units,
     sources (data source ids; the FIRST one is the default), start_year, resolution, good_for.
     """
     return tools.list_variables()
@@ -52,7 +52,8 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
 
     Inputs:
     - variable: a catalog id from list_variables, e.g. "air_temp" (degC), "air_temp_max" (degC),
-      "precip" (mm/day), "sea_level" (mm, US tide gauges only).
+      "precip" (mm/day), "sea_level" (mm, tide gauges: NOAA CO-OPS in the US, PSMSL elsewhere within 100 km),
+      "water_storage" (cm of water, land only, a regional average about 400 km across, from GRACE satellites).
     - lat: latitude in degrees, -90 to 90, e.g. 39.36. lon: longitude in degrees, -180 to 180, e.g. -74.42.
     - start, end (optional): first and last period to include, "YYYY" or "YYYY-MM", e.g. "1990" or "2015-06".
       Left out: the whole record.
@@ -76,7 +77,7 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
     slope with a 95% confidence interval. It describes change that already happened, not a forecast.
 
     Inputs (same as get_series):
-    - variable: a catalog id from list_variables, e.g. "air_temp", "air_temp_max", "precip", "sea_level".
+    - variable: a catalog id from list_variables, e.g. "air_temp", "air_temp_max", "precip", "sea_level", "water_storage".
     - lat: latitude, -90 to 90, e.g. 39.36. lon: longitude, -180 to 180, e.g. -74.42.
     - start, end (optional): "YYYY" or "YYYY-MM", e.g. "1990", "2020-12". Left out: the whole record.
     - source (optional): e.g. "power" or "coops". Left out: the variable's default (first catalog source).
