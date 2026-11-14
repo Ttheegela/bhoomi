@@ -10,6 +10,7 @@ from .upstream import NAME, fit, text
 BASE = "https://api.tidesandcurrents.noaa.gov"
 SOURCE = {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"}
 MAX_KM = 100
+TIMEOUT = httpx.Timeout(30, connect=5, write=10)  # the station-list fetch: at most 5 + 10 + 30 = 45 s
 
 
 def haversine_km(lat1, lon1, lat2, lon2) -> float:
@@ -19,7 +20,7 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
 
 @lru_cache(maxsize=1)
 def stations() -> list[dict]:
-    r = httpx.get(f"{BASE}/mdapi/prod/webapi/stations.json", params={"type": "waterlevels"}, timeout=30)
+    r = httpx.get(f"{BASE}/mdapi/prod/webapi/stations.json", params={"type": "waterlevels"}, timeout=TIMEOUT)
     r.raise_for_status()
     return [{**s, "id": text(s.get("id", ""), 40), "name": text(s.get("name", ""), NAME)} for s in r.json()["stations"]]
 
