@@ -37,6 +37,7 @@ The web page calls the same functions through `/api/variables`, `/api/series` an
 | Hottest day of the month (2 m air temperature) | `air_temp_max` | °C | NASA POWER, ERA5, GHCN-Daily weather station | 1981 on |
 | Precipitation | `precip` | mm/day | NASA POWER, ERA5, GHCN-Daily weather station | 1981 on |
 | Sea level (monthly mean, relative to land) | `sea_level` | mm | NOAA CO-OPS tide gauge (US coasts), PSMSL tide gauge (worldwide) | The gauge's whole record (CO-OPS is asked for data from 1900 on) |
+| Land water storage (change from its 2004 to 2009 average) | `water_storage` | cm of water | NASA GSFC GRACE and GRACE-FO mascons | April 2002 to June 2026 |
 
 - All series are monthly values of past observations. There are no forecasts.
 - NASA POWER and ERA5 are grids (cells about 50 km and about 25 km wide), so they cover any point.
@@ -44,6 +45,7 @@ The web page calls the same functions through `/api/variables`, `/api/series` an
 - A tide gauge is used only if it is within 100 km of the point. Sea level uses NOAA CO-OPS first. If CO-OPS has no gauge that close, the nearest usable PSMSL gauge is used, and the result says so. A PSMSL gauge is usable if it has at least 30 years of valid monthly values and its last valid month is no more than 5 years before the end of last year.
 - A place with no tide gauge nearby gets a plain "no data" answer, never an estimate.
 - Sea level is relative to the land at the gauge, so land that sinks or rises is included.
+- Land water storage comes from the GRACE satellites, which measure gravity. A value is the average over the land about 400 km across around the point, not the exact spot. It is all water on land together (soil moisture, groundwater, snow and ice, lakes and rivers), so it cannot tell groundwater from surface water. There is no data from mid-2017 to mid-2018, between the two satellite pairs. Open ocean, ice sheets, small islands and the large glacier regions get a plain message, not a value.
 
 ## How it decides
 
@@ -63,7 +65,7 @@ The agent is told to give only numbers that come from a tool result, and our eva
 
 ## How we know it is right
 
-- **Offline tests.** `uv run pytest -q` runs 447 tests (447 passed on 2026-11-14). They use saved provider responses in `tests/fixtures/`, so they need no network and no key. The statistics tests check that pure noise, a seasonal cycle alone and autocorrelated noise all come back as "no clear change", and that a known slope is recovered inside its range.
+- **Offline tests.** `uv run pytest -q` runs 501 tests (501 passed on 2026-11-14). They use saved provider responses in `tests/fixtures/`, so they need no network and no key. The statistics tests check that pure noise, a seasonal cycle alone and autocorrelated noise all come back as "no clear change", and that a known slope is recovered inside its range.
 - **NOAA truth check.** `tests/test_truth.py` compares our result for the Atlantic City tide gauge (NOAA station 8534720) with the trend NOAA publishes for the same gauge. From `docs/PLAN.md`: "our Atlantic City sea-level trend 4.25 mm per year against NOAA's 4.24 ± 0.08". NOAA gives it as 1.67 ± 0.03 inches per decade. The figures were read on 2026-11-14 from NOAA's own API, https://api.tidesandcurrents.noaa.gov/dpapi/prod/webapi/product/sealvltrends.json?station=8534720, which is where [NOAA's sea level trends page for station 8534720](https://tidesandcurrents.noaa.gov/sltrends/sltrends_station.shtml?id=8534720) now draws them from.
 - **Evaluation runner.** `evals/run.py` asks the agent every question in `evals/cases.toml` (15 questions today) and checks each answer in code: the right tool, measurement, place and source, the verdict, no invented numbers, the source named. Only a plain-language score uses a model as judge, and it never decides pass or fail. The expected verdicts come from independent references, never from our own tool.
 - **Saved results.** `evals/results/2026-11-14-model-comparison.md` (table) and `.json` (every answer) hold one run of nine models. Each model ran 12 questions. Two more questions were left out because their measurement is not in the catalog. The default model (Claude Haiku 5.5 through OpenRouter) passed 11 of 12; the one it failed was the Delhi question where the sources disagree. That run is from commit `3805f25`, before the PSMSL source was added and before the question list last changed, so it does not cover them.
@@ -109,15 +111,16 @@ uv run --env-file ~/.config/trend-detective/dev.env python -m evals.run --models
 | NOAA NCEI GHCN-Daily | Daily records from the nearest weather station (`TAVG`, or `TMAX` and `TMIN`; `TMAX`; `PRCP`), from NCEI's `daily-summaries` data service. We turn them into monthly values. | https://www.ncei.noaa.gov/ | Menne, M.J., I. Durre, B. Korzeniewski, S. McNeill, K. Thomas, X. Yin, S. Anthony, R. Ray, R.S. Vose, B.E.Gleason, and T.G. Houston, 2012: Global Historical Climatology Network - Daily (GHCN-Daily), Version 3.35. NOAA National Climatic Data Center. http://doi.org/10.7289/V5D21VHZ, accessed 2026-11-14. Also: Menne, M.J., I. Durre, R.S. Vose, B.E. Gleason, and T.G. Houston, 2012: An overview of the Global Historical Climatology Network-Daily Database. Journal of Atmospheric and Oceanic Technology, 29, 897-910, doi:10.1175/JTECH-D-11-00103.1. |
 | NOAA CO-OPS tide gauges | The list of water-level stations and the monthly mean sea level (`MSL` datum) of the nearest gauge, requested from 1900 on. | https://tidesandcurrents.noaa.gov/ | NOAA's page says the information is "in the public domain, unless specifically annotated otherwise" and that "NOS requests that attribution be given whenever NOS material is reproduced and re-disseminated." It sets no wording. Ours: data from the NOAA National Ocean Service, Center for Operational Oceanographic Products and Services (CO-OPS). |
 | PSMSL | The station list and the RLR monthly mean sea level file of the nearest usable gauge. Months that PSMSL flags as doubtful or interpolated are left out. | https://psmsl.org/ | PSMSL asks for both of these. Permanent Service for Mean Sea Level (PSMSL), 2026, "Tide Gauge Data", Retrieved 19 Oct 2026 from http://www.psmsl.org/data/obtaining/. And: Simon J. Holgate, Andrew Matthews, Philip L. Woodworth, Lesley J. Rickards, Mark E. Tamisiea, Elizabeth Bradshaw, Peter R. Foden, Kathleen M. Gordon, Svetlana Jevrejeva, and Jeff Pugh (2013) New Data Systems and Products at the Permanent Service for Mean Sea Level. Journal of Coastal Research: Volume 29, Issue 3: pp. 493 – 504. doi:10.2112/JCOASTRES-D-12-00175.1. |
+| NASA GSFC GRACE and GRACE-FO mascons | Monthly land water storage (equivalent water height) for the mascons the provider flags as land, RL06 v2.0, April 2002 to June 2026. The live site does not fetch this: it reads `earthtrends/data/grace_gsfc_land.npz`, a small file made from the provider's public files by `scripts/build_grace.py`. | https://earth.gsfc.nasa.gov/geo/data/grace-mascons | The provider asks users to cite: Loomis, B.D., Luthcke, S.B., Sabaka, T.J. (2019). Regularization and error characterization of GRACE mascons. Journal of Geodesy, 93, 1381-1398. doi:10.1007/s00190-019-01252-y. Its page states no licence. |
 
 Notes on the credits:
 
-- The dates above are for the files saved in this repository on 2026-11-14. The live site fetches from each provider when a question is asked.
+- The dates above are for the files saved in this repository on 2026-11-14. The live site fetches from each provider when a question is asked, except land water storage, which it reads from the file stored in this repository (built on 2026-11-14).
 - PSMSL asks that the "Retrieved" date in its citation match the "Extracted from Database" date on its data page. 19 Oct 2026 is the "Extracted from Database" date PSMSL showed on 2026-11-14, the day our files were downloaded. It is not our download date.
 - GHCN-Daily asks for the version used. "Version 3.35" is as given in NCEI's readme (https://www.ncei.noaa.gov/pub/data/ghcn/daily/readme.txt) on 2026-11-14. The repository itself does not record a version.
 - Open-Meteo's terms say the free API may be used for non-commercial purposes only. Commercial use of the ERA5 source needs one of Open-Meteo's paid plans.
 - Open-Meteo also encourages this citation: Zippenfenig, P. (2023). Open-Meteo.com Weather API [Computer software]. Zenodo. https://doi.org/10.5281/ZENODO.7970649
-- We changed the data only as described: daily values were turned into monthly ones, and flagged or missing values were left out. Nothing here is official government material.
+- We changed the data only as described: daily values were turned into monthly ones, flagged or missing values were left out, and land water storage is averaged over the land cells around the point. Nothing here is official government material.
 
 Pages read for these credits, on 2026-11-14:
 
@@ -127,6 +130,7 @@ Pages read for these credits, on 2026-11-14:
 - GHCN-Daily: https://www.ncei.noaa.gov/pub/data/ghcn/daily/readme.txt and https://www.ncei.noaa.gov/metadata/geoportal/rest/metadata/item/gov.noaa.ncdc:C00861/html
 - NOAA CO-OPS: https://tidesandcurrents.noaa.gov/disclaimers.html
 - PSMSL: https://psmsl.org/data/obtaining/reference.php and https://psmsl.org/data/obtaining/
+- NASA GSFC GRACE mascons: https://earth.gsfc.nasa.gov/geo/data/grace-mascons
 
 Data files in this repository, by provider:
 
@@ -137,6 +141,7 @@ Data files in this repository, by provider:
 | NOAA NCEI GHCN-Daily | `ghcn_search_delhi.json`, `ghcn_daily_tmax_safdarjung.json.gz` |
 | NOAA CO-OPS | `coops_monthly.json`, `coops_8534720_msl.json`, `coops_stations.json`, `coops_error.json` |
 | PSMSL | `psmsl_filelist.txt`, `psmsl_43.rlrdata`, `psmsl_212.rlrdata` |
+| NASA GSFC GRACE mascons | `grace_placement.txt`, `grace_main.txt`, `grace_times.txt` (small cuts of the provider's text files) |
 
 The saved evaluation answers in `evals/results/` quote values from the same sources.
 
@@ -157,7 +162,7 @@ Built with AI assistance. The full statement is in `docs/SI.md`. In short:
 
 ## Licence
 
-Apache-2.0. See `LICENSE` and `NOTICE`. The data files in this repository (test fixtures, evaluation results) keep their providers' terms and are credited above.
+Apache-2.0. See `LICENSE` and `NOTICE`. The data files in this repository (test fixtures, the land water storage file under `earthtrends/data/`, evaluation results) keep their providers' terms and are credited above.
 
 Not affiliated with or endorsed by NASA. This project uses no NASA logos or branding.
 
