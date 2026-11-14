@@ -1038,11 +1038,12 @@ def test_build_grace_fails_loudly():
 
 def test_grace_glacier_regions_give_the_error_and_land_still_answers():
     for name, lat, lon in (("Svalbard", 78.5, 16), ("Novaya Zemlya", 75, 58), ("Ellesmere", 80, -80), ("Patagonia", -49, -73.5),
-                           ("Iceland", 64.9, -18.6), ("Devon Island", 75, -83), ("Reykjavik", 64.15, -21.94)):
+                           ("Iceland", 64.9, -18.6), ("Devon Island", 75, -83), ("Reykjavik", 64.15, -21.94),
+                           ("Gobernador Gregores", -48.75, -70.25)):
         with pytest.raises(ValueError) as e:
             data.get_series("water_storage", lat, lon)
         assert str(e.value) == grace.GLACIER, name
-    for name, lat, lon in (("Tromso", 69.65, 18.96), ("Punta Arenas", -53.16, -70.91), ("Fairbanks", 64.84, -147.72), ("Delhi", 28.61, 77.21)):
+    for name, lat, lon in (("Tromso", 69.65, 18.96), ("Punta Arenas", -53.16, -70.91), ("Bariloche", -41.13, -71.31), ("Fairbanks", 64.84, -147.72), ("Delhi", 28.61, 77.21)):
         assert data.get_series("water_storage", lat, lon)["source"]["id"] == "grace", name
     # Anchorage: the provider flags the whole south Alaska coast as Gulf of Alaska (GOA), so only 1 land cell is near: the
     # too-few-cells error (not the glacier one), as it should be

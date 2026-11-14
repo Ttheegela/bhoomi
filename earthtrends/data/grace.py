@@ -31,7 +31,7 @@ GLACIER_BOXES = [
     (72, 84, -100, -60),   # Canadian Arctic islands (Ellesmere, Axel Heiberg, Devon, north Baffin)
     (65, 72, -80, -61),    # Baffin Island ice caps
     (63, 67, -25, -13),    # Iceland
-    (-52, -46, -76, -72),  # Patagonian icefields
+    (-52, -46, -76, -69),  # Patagonian icefields
 ]
 
 
