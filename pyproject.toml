@@ -3,6 +3,8 @@ name = "trend-detective"
 version = "0.1.0"
 description = "AI agent and MCP server that answers 'is this really changing here?' from NASA and NOAA Earth data. NASA Space Apps 2026."
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115",
