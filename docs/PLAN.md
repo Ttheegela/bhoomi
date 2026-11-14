@@ -1,6 +1,6 @@
 # Run sheet: Sat Nov 14 to Sun Nov 15
 
-Venue: Princeton Public Library, Tech Center and Spark Lab, 65 Witherspoon St. Local lead: Venu Sri Sabbavarapu.
+Venue: Princeton Public Library, Tech Center and Spark Lab, 65 Witherspoon St.
 
 **Hard times:** local judging presentations **Sun 14:00**. Final submission **Sun 23:59**. There is no feature freeze: work continues until the submission deadline. The one protected window is the presentation: **no merges to `main` on Sun from 13:00 to 15:00** (a merge deploys to production).
 
