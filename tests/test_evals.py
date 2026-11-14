@@ -486,6 +486,18 @@ def test_source_named_without_www():
     assert not run._named({"name": "X", "url": "https://www.ncei.noaa.gov/"}, "see noaa.gov")
 
 
+def test_no_data_anywhere_answer_must_have_no_numbers():
+    case = {"id": "delhi-sea-level", "question": "Is sea level rising in Delhi?", "expect_tool": "detect_trend",
+            "expect_variable": "sea_level", "expect_place": [28.61, 77.21], "must_say": [], "must_not_say": []}
+    calls = [{"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 28.61, "lon": 77.21, "source": s},
+              "result": None, "error": "No tide gauge within 100 km of this point."} for s in ("coops", "psmsl")]
+    ok = fake_run("Delhi is far from the sea and has no tide gauge nearby, so sea level cannot be measured there.", calls)
+    out = run.check(case, ok)
+    assert out["numbers"] and out["answered"] and "wording" not in out and "source_named" not in out
+    bad = fake_run("The nearest tide gauge is more than 100 km away, so there is no answer.", calls)
+    assert run.check(case, bad)["numbers"] is False  # error text is not a tool result: no distance quoted
+
+
 def test_errored_source_need_not_be_named():
     calls = multi([POWER, ERA5]) + [{"name": "detect_trend", "arguments": {**D_ARGS, "source": "ghcn"}, "result": None,
                                      "error": "No weather station within 50 km of this point."}]
