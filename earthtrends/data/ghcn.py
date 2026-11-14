@@ -6,7 +6,6 @@ from math import cos, isfinite, radians
 
 import httpx
 
-from .catalog import CATALOG
 from .coops import haversine_km
 
 SEARCH = "https://www.ncei.noaa.gov/access/services/search/v1/data"
@@ -23,6 +22,8 @@ DEADLINE_S = 40
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)
 # Data types that give each variable; the first group a station has enough record for is used.
 NEED = {"air_temp": [("TAVG",), ("TMAX", "TMIN")], "air_temp_max": [("TMAX",)], "precip": [("PRCP",)]}
+# Plain names for sentences users read (ghcn.py is imported by __init__.py, so the shared mapping lives here).
+PLAIN_NAME = {"air_temp": "air temperature", "air_temp_max": "daily high temperature", "precip": "rainfall"}
 HOW = {"air_temp": "mean", "air_temp_max": "max", "precip": "mean"}  # daily -> monthly rule
 NOTES = {"air_temp_max": "Each monthly value is the hottest single day of that month, not the average of the daily highs."}
 
@@ -98,8 +99,7 @@ def _years(span: tuple[str, str, float]) -> float:
 
 def _no_station(variable: str, nearest: tuple[float, dict] | None) -> ValueError:
     """One wording for every measurement, using the catalog's plain name. `nearest` is (km, station)."""
-    name = next(v["name"] for v in CATALOG if v["id"] == variable).lower()
-    msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {name} data since 1981."
+    msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {PLAIN_NAME[variable]} data since 1981."
     if nearest:
         msg += f" The nearest is {nearest[1]['name']}, {nearest[0]:.0f} km away."
     return ValueError(msg)

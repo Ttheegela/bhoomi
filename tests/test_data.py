@@ -15,14 +15,6 @@ def load(name):
     return json.loads((FX / name).read_text())
 
 
-@pytest.fixture(autouse=True)
-def empty_cache():
-    """Every test starts with no cached series, so patched fetchers are really called."""
-    data._cache.clear()
-    yield
-    data._cache.clear()
-
-
 @pytest.fixture
 def offline(monkeypatch):
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: load("power_monthly.json"))
@@ -78,7 +70,7 @@ def test_errors(offline):
         data.get_series("air_temp", 95, 0)
     with pytest.raises(ValueError, match="Longitude"):
         data.get_series("air_temp", 0, 200)
-    with pytest.raises(ValueError, match="No air_temp data"):
+    with pytest.raises(ValueError, match="No air temperature data"):
         data.get_series("air_temp", 39.36, -74.42, start="2090")
 
 
@@ -185,9 +177,9 @@ def test_ghcn_station_rule():
     st, km, types = ghcn.ranked(28.567, 77.117, found, "air_temp_max")[0]  # Palam is on top of the point but its TMAX starts in 2009
     assert st["id"] == "IN022021900" and 5 < km < 15 and types == ("TMAX",)
     assert ghcn.ranked(28.58, 77.21, found, "air_temp")[0][2] == ("TAVG",)
-    with pytest.raises(ValueError, match=r"has 30 years of hottest day of the month .* data since 1981\. The nearest is NEW DELHI SAFDARJUN, IN, \d+ km away"):
+    with pytest.raises(ValueError, match=r"has 30 years of daily high temperature data since 1981\. The nearest is NEW DELHI SAFDARJUN, IN, \d+ km away"):
         ghcn.ranked(29.2, 77.2, found, "air_temp_max")[0]
-    with pytest.raises(ValueError, match=r"^No weather station within 50 km has 30 years of precipitation data since 1981\.$"):
+    with pytest.raises(ValueError, match=r"^No weather station within 50 km has 30 years of rainfall data since 1981\.$"):
         ghcn.ranked(0, -30, [], "precip")[0]
     palam_only = [s for s in found if s["id"] == "IN022023000"]
     with pytest.raises(ValueError, match=r"The nearest is NEW DELHI PALAM, IN, 0 km away"):
@@ -413,6 +405,23 @@ def test_cache_second_call_and_periods_share_one_fetch(counted):
     assert len(counted) == 2
 
 
+def test_cache_is_cleared_between_tests_part_1(counted):
+    data.get_series("air_temp", 39.36, -74.42)
+    assert len(data._cache) == 1
+
+
+def test_cache_is_cleared_between_tests_part_2(counted):
+    # runs right after part 1: fails if the suite-wide fixture in conftest.py stops clearing the cache
+    assert data._cache == {}
+    data.get_series("air_temp", 39.36, -74.42)
+    assert len(counted) == 1  # a leaked entry would have served this call without any upstream request
+
+
+def test_no_data_message_uses_plain_names(offline):
+    with pytest.raises(ValueError, match=r"^No air temperature data for that place and period\.$"):
+        data.get_series("air_temp", 39.36, -74.42, start="1950", end="1951")
+
+
 def test_cache_place_key_is_rounded_to_two_decimals(counted):
     data.get_series("air_temp", 39.360, -74.420)
     s = data.get_series("air_temp", 39.364, -74.416)  # 0.004 degrees away: same entry
@@ -517,6 +526,17 @@ def test_station_period_notes(offline2, monkeypatch):
     assert not any("record ends" in n for n in s["notes"])
 
 
+def test_station_period_notes_only_count_the_fetched_years(offline2, monkeypatch):
+    last = ghcn.last_day()
+    # the station really goes back to 1940, but we only fetch from 1981: asking from 1950 must not say "starts in 1981"
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: list(_daily_rows("1981-01-01", last)))
+    s = data.get_series("air_temp_max", 28.58, 77.21, start="1950", source="ghcn")
+    assert not any("record starts" in n for n in s["notes"]), s["notes"]
+    # asking to 2030 must not say "ends in <last year>" for a station that is up to date
+    s = data.get_series("air_temp_max", 28.58, 77.21, end="2030", source="ghcn")
+    assert not any("record ends" in n for n in s["notes"]), s["notes"]
+
+
 def test_station_period_notes_skip_short_gaps(offline2, monkeypatch):
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: list(_daily_rows("1982-03-01", f"{int(ghcn.last_day()[:4]) - 1}-12-31")))
     s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")  # starts 14 months late, ends 12 months early
@@ -525,8 +545,8 @@ def test_station_period_notes_skip_short_gaps(offline2, monkeypatch):
 
 def test_station_error_wording_is_the_same_for_every_measurement():
     far = {"id": "X", "name": "FARAWAY", "lat": 30.0, "lon": 77.2, "types": {}}
-    for variable, plain in (("precip", "precipitation"), ("air_temp", "air temperature (2 m)"),
-                            ("air_temp_max", "hottest day of the month (2 m air temperature)")):
+    for variable, plain in (("precip", "rainfall"), ("air_temp", "air temperature"),
+                            ("air_temp_max", "daily high temperature")):
         with pytest.raises(ValueError) as e:
             ghcn.ranked(28.58, 77.21, [far], variable)
         assert str(e.value).startswith(f"No weather station within 50 km has 30 years of {plain} data since 1981. The nearest is FARAWAY, ")
