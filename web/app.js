@@ -610,6 +610,13 @@ function renderVerdict(t, series) {
   const big = $('verdict-big');
   clear(big);
   big.append(el('span', { class: 'big-n' }, fmtVal(t.slope_per_decade, t.units)), ' ', el('span', { class: 'big-u' }, 'per decade'));
+  // The picture is extra: if it fails, hide it and keep the answer.
+  try {
+    const ms = series.times.map(monthIndex);
+    window.renderScene($('scene'), t, yearlyAverages(ms, deseasonalize(series.times, series.values)), placeOf(t), nameOf(t.variable));
+  } catch (e) {
+    $('scene').hidden = true;
+  }
   $('verdict-lean').textContent = c.lean || '';
   $('verdict-lean').hidden = !c.lean;
   $('verdict-p1').textContent = c.p1;
