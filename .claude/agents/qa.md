@@ -18,7 +18,7 @@ You are QA for Trend Detective. You don't fix product code, and you write files 
    - Check contrast against WCAG AA in both themes, dark included: 4.5:1 for text, 3:1 for borders, icons and chart lines. Report the ratios you measured.
 5. **Demo and eval cases** (once the feature exists):
    - Atlantic City sea level (NOAA station 8534720): `rising`, with the source named.
-   - Delhi days at or above 40 °C: the agent says the sources disagree. Over 1981 to 2015, NASA POWER gives −4.4/decade, ERA5 −2.9/decade and the Safdarjung station +2.0/decade.
+   - Delhi hottest day of the month (`air_temp_max` at 28.58, 77.21), 1981 to 2015: the agent says the sources disagree and names each one with its own result. When this was written the tool gave NASA POWER −0.22 °C/decade (no clear change), ERA5 +0.11 (no clear change) and the Safdarjung station (GHCN) +0.29 (rising). Check the answer against the tool's output on the day, not against these figures.
    - A noisy series with no trend gives `no_clear_change`.
    - Bad input (lat 200, an unknown variable, a point with no data) gives a clear 4xx error, never a 500.
 6. Remove your worktree when done: `git worktree remove $TMPDIR/qa/src`.
