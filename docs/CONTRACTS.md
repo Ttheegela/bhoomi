@@ -14,6 +14,7 @@ One variable can come from several sources. Tools take an optional `source`; res
 | `era5` | ERA5 reanalysis via Open-Meteo archive, https://open-meteo.com/ | any point, 1940 on |
 | `ghcn` | NOAA NCEI GHCN-Daily, nearest station, https://www.ncei.noaa.gov/ | weather stations worldwide |
 | `coops` | NOAA CO-OPS tide gauges, nearest station, https://tidesandcurrents.noaa.gov/ | US coasts |
+| `psmsl` | Permanent Service for Mean Sea Level (PSMSL), RLR monthly means, nearest tide gauge, https://psmsl.org/ | tide gauges worldwide |
 | `grace` | GRACE/GRACE-FO JPL mascon CRI RL06.3 v4 (PO.DAAC), https://podaac.jpl.nasa.gov/ | land, 2002 on |
 
 ## TimeSeries — data lane produces, stats lane consumes
@@ -76,6 +77,6 @@ One variable can come from several sources. Tools take an optional `source`; res
 | `get_series` | `variable`, `lat`, `lon`, `start?`, `end?`, `source?` | `TimeSeries` |
 | `detect_trend` | `variable`, `lat`, `lon`, `start?`, `end?`, `source?` | `TrendResult` |
 
-- `source` left out: use the variable's default source. A source the variable doesn't have, an unknown variable, a bad lat/lon, or a point with no data gives a clear 4xx error, never a 500.
+- `source` left out: use the variable's default source; for `sea_level`, if the default source has no tide gauge within 100 km of the point, the next source in the variable's list is used. A point with no gauge in any source gives a clear 4xx. A source the variable doesn't have, an unknown variable, a bad lat/lon, or a point with no data gives a clear 4xx error, never a 500.
 
 The UI calls the same functions through FastAPI routes under `/api/`, so the UI and outside agents see identical results.

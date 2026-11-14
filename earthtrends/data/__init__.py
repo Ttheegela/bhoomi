@@ -4,7 +4,7 @@ import copy
 import threading
 import time
 
-from . import coops, era5, ghcn, monthly, power
+from . import coops, era5, ghcn, monthly, power, psmsl
 from .catalog import CATALOG
 
 __all__ = ["list_variables", "get_series"]
@@ -62,6 +62,9 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
         if types == ("TMAX", "TMIN"):
             notes.append("This station has no daily average temperature, so each day is the mean of its highest and lowest reading.")
         notes += [ghcn.NOTES[variable]] if variable in ghcn.NOTES else []
+    elif source == "psmsl":
+        times, values, place, notes = psmsl.series(lat, lon)
+        src = psmsl.SOURCE
     else:
         st, km = coops.nearest(lat, lon, coops.stations())
         times, values = coops.parse(coops.fetch(st["id"]), st["name"])
@@ -114,6 +117,7 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
     entry = next((v for v in CATALOG if v["id"] == variable), None)
     if entry is None:
         raise ValueError(f"Unknown variable {variable!r}. Choose one of: {', '.join(v['id'] for v in CATALOG)}.")
+    auto = source is None
     source = source or entry["sources"][0]
     if source not in entry["sources"]:
         raise ValueError(f"{variable} is not available from {source!r}. Available: {', '.join(entry['sources'])}.")
@@ -129,7 +133,18 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
     if lo and hi and lo > hi:
         raise ValueError("start must not be after end.")
 
-    r = _cached_full(entry, variable, source, round(lat, 2) + 0.0, round(lon, 2) + 0.0)  # + 0.0 turns -0.0 into 0.0
+    lat, lon = round(lat, 2) + 0.0, round(lon, 2) + 0.0  # + 0.0 turns -0.0 into 0.0
+    fell_back = False
+    if variable == "sea_level" and auto and source == "coops":
+        gauges = coops.stations()  # outside the try: a CO-OPS failure must reach the caller, not switch the source
+        try:
+            coops.nearest(lat, lon, gauges)
+        except ValueError:  # no CO-OPS gauge within 100 km: the next source in the list
+            source, fell_back = "psmsl", True
+
+    r = _cached_full(entry, variable, source, lat, lon)
+    if fell_back:  # per request, never stored in the cache: the caller may also ask for source="psmsl"
+        r["notes"] = r["notes"] + ["NOAA CO-OPS has no tide gauge within 100 km of this point, so the nearest PSMSL gauge was used."]
 
     times, values = r["times"], r["values"]
     keep = [i for i, t in enumerate(times) if (not lo or t >= lo) and (not hi or t <= hi)]

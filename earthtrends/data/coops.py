@@ -1,13 +1,16 @@
 """NOAA CO-OPS monthly mean sea level, no key."""
 from datetime import date
 from functools import lru_cache
-from math import asin, cos, radians, sin, sqrt
+from math import asin, cos, isfinite, radians, sin, sqrt
 
 import httpx
+
+from .upstream import NAME, fit, text
 
 BASE = "https://api.tidesandcurrents.noaa.gov"
 SOURCE = {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"}
 MAX_KM = 100
+TIMEOUT = httpx.Timeout(30, connect=5, write=10)  # the station-list fetch: at most 5 + 10 + 30 = 45 s
 
 
 def haversine_km(lat1, lon1, lat2, lon2) -> float:
@@ -17,9 +20,23 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
 
 @lru_cache(maxsize=1)
 def stations() -> list[dict]:
-    r = httpx.get(f"{BASE}/mdapi/prod/webapi/stations.json", params={"type": "waterlevels"}, timeout=30)
+    r = httpx.get(f"{BASE}/mdapi/prod/webapi/stations.json", params={"type": "waterlevels"}, timeout=TIMEOUT)
     r.raise_for_status()
-    return r.json()["stations"]
+    reply = r.json()
+    rows = reply.get("stations") if isinstance(reply, dict) else None
+    out = []
+    for s in rows if isinstance(rows, list) else []:
+        try:  # a row without an id, or with a lat/lng that is not a finite number in range, is dropped
+            lat, lng = float(s["lat"]), float(s["lng"])
+            sid = text(s["id"], 40) if isinstance(s["id"], str) else ""  # a null or numeric id is not an id
+            if isfinite(lat) and isfinite(lng) and abs(lat) <= 90 and abs(lng) <= 180 and sid:
+                name = text(s["name"], NAME) if isinstance(s.get("name"), str) else ""
+                out.append({**s, "id": sid, "name": name or sid})  # no name: the id stands in, never an empty string
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    if not out:  # not cached: lru_cache keeps only returns
+        raise httpx.DecodingError("NOAA CO-OPS' station list was not in the documented format.")
+    return out
 
 
 def nearest(lat: float, lon: float, station_list: list[dict]) -> tuple[dict, float]:
@@ -27,21 +44,27 @@ def nearest(lat: float, lon: float, station_list: list[dict]) -> tuple[dict, flo
     km = haversine_km(lat, lon, float(st["lat"]), float(st["lng"]))
     if km > MAX_KM:
         raise ValueError(
-            f"No tide gauge within {MAX_KM} km of ({lat}, {lon}); the nearest is {st['name']}, {km:.0f} km away."
+            f"No tide gauge within {MAX_KM} km of ({lat}, {lon}); the nearest is {text(st['name'], NAME)}, {km:.0f} km away."
         )
     return st, km
 
 
 def parse(resp: dict, name: str = "this station") -> tuple[list[str], list[float | None]]:
+    if not isinstance(resp, dict):
+        raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.")
     if "error" in resp or "data" not in resp:
-        msg = resp.get("error", {}).get("message", "no data returned")
-        raise ValueError(f"No monthly sea level at {name}: {msg}")
+        err = resp.get("error")
+        msg = (err.get("message") if isinstance(err, dict) else err) or "no data returned"
+        raise ValueError(fit(f"No monthly sea level at {text(name, NAME)}: ", msg))
     by_month = {}
-    for row in resp["data"]:
-        v = row["MSL"]
-        by_month[(int(row["year"]), int(row["month"]))] = round(float(v) * 1000, 1) if v != "" else None  # m -> mm
+    for row in resp["data"] if isinstance(resp["data"], list) else []:
+        try:  # a malformed row is skipped
+            v = row["MSL"]
+            by_month[(int(row["year"]), int(row["month"]))] = round(float(v) * 1000, 1) if v not in ("", None) else None  # m -> mm
+        except (KeyError, TypeError, ValueError):
+            continue
     if not by_month:
-        raise ValueError(f"No monthly sea level at {name}: no rows returned")
+        raise ValueError(f"No monthly sea level at {text(name, NAME)}: no rows returned")
     (y0, m0), (y1, m1) = min(by_month), max(by_month)
     times, values = [], []
     for k in range(y0 * 12 + m0 - 1, y1 * 12 + m1):  # regular monthly axis, None for gaps
