@@ -118,6 +118,14 @@ def test_int_dates_and_order(offline):
         data.get_series("air_temp", 39.36, -74.42, start="2020", end="2010")
 
 
+def test_tmax_label_and_note(offline):
+    name = {v["id"]: v["name"] for v in data.list_variables()}["air_temp_max"]
+    assert name == "Hottest day of the month (2 m air temperature)"
+    note = power.NOTES["air_temp_max"]
+    assert note in data.get_series("air_temp_max", 39.36, -74.42)["notes"]
+    assert note not in data.get_series("air_temp", 39.36, -74.42)["notes"]
+
+
 def test_catalog():
     assert {v["id"]: v["sources"][0] for v in data.list_variables()} == {
         "air_temp": "power", "air_temp_max": "power", "precip": "power", "sea_level": "coops"}

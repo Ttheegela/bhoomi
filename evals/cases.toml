@@ -1,11 +1,12 @@
 # Golden eval questions for the agent (issue #16).
+# Variable ids match earthtrends/data/catalog.py as of PR #24, except water_storage (GRACE not built yet).
 # Read by `uv run python -m evals.run` (agent lane). Python reads TOML with tomllib, no new dependency.
 #
 # Fields:
 #   id               unique slug
 #   question         what a student types
 #   expect_tool      tool the agent must call; "none" = it must NOT call a data tool (can't-answer / clarify cases)
-#   expect_variable  best guess; final ids come from list_variables once #3 lands
+#   expect_variable  id from list_variables (earthtrends/data/catalog.py)
 #   expect_place     [lat, lon]; the agent's call must be within 50 km
 #   expect_source    source id from docs/CONTRACTS.md, if a specific source must be used
 #   expect_verdict   rising | falling | no_clear_change. ONLY set from an independent reference, never from our own tool.
@@ -71,8 +72,10 @@ reference = "https://tidesandcurrents.noaa.gov/sltrends/sltrends_station.shtml?i
 id = "delhi-hot-days-sources-disagree"
 question = "Are there more days above 40 °C in Delhi than there used to be?"
 expect_tool = "detect_trend"
-expect_variable = "hot_days_40c"
+expect_variable = "air_temp_max"   # closest catalog variable (hottest day of the month); no "days above 40 °C" variable yet
 expect_place = [28.58, 77.21]
+# The reference slopes below count days at or above 40 °C, so they don't apply directly to air_temp_max.
+# This case needs era5 and ghcn sources (not built yet) to show the disagreement.
 # No expect_verdict: sources disagree for 1981-2015 (POWER -4.4/decade, ERA5 -2.9, Safdarjung station +2.0).
 # A correct answer checks more than one source and says they disagree.
 must_say = ["disagree"]
@@ -105,7 +108,7 @@ reference = ""
 id = "chennai-rain"
 question = "Is Chennai getting more rain than before?"
 expect_tool = "detect_trend"
-expect_variable = "precipitation"
+expect_variable = "precip"
 expect_place = [13.08, 80.27]
 # Behaviour only. Rain trends are noisy; the answer must not overclaim.
 must_say = []
@@ -129,7 +132,7 @@ reference = ""
 id = "northwest-india-groundwater"
 question = "Is groundwater running out in Punjab and Haryana?"
 expect_tool = "detect_trend"
-expect_variable = "water_storage"
+expect_variable = "water_storage"   # guess: GRACE not in the catalog yet
 expect_place = [29.8, 75.8]
 expect_source = "grace"
 expect_verdict = "falling"          # Rodell et al. 2009 (Nature) and 2018 (Nature): NW India among the strongest GRACE declines
@@ -141,7 +144,7 @@ reference = "https://doi.org/10.1038/s41586-018-0123-1"
 id = "central-valley-groundwater"
 question = "Is California's Central Valley losing groundwater?"
 expect_tool = "detect_trend"
-expect_variable = "water_storage"
+expect_variable = "water_storage"   # guess: GRACE not in the catalog yet
 expect_place = [36.60, -119.80]
 expect_source = "grace"
 expect_verdict = "falling"          # Famiglietti et al. 2011 (GRL); Rodell et al. 2018 (Nature)
