@@ -230,9 +230,8 @@ def compose(text: str, calls: list[dict]) -> str:
         if c["name"] == "detect_trend" and c.get("error") is None and isinstance(c.get("result"), dict):
             src = c["result"].get("source") or {}
             srcs.setdefault(src.get("id"), src)
-    # ponytail: a host without a dot ("https://x", test fakes) is not a link and is skipped
     missing = [f"Source: {s['name'].split(',')[0].strip()}, {s['url']}." for s in srcs.values()
-               if "." in _host(s.get("url")) and _host(s.get("url")) not in out.lower() and s.get("name")]
+               if _host(s.get("url")) not in out.lower() and s.get("name")]  # no URL: "" is always "in"
     if missing:
         body = out.rstrip()
         out = body + (" " if body else "") + " ".join(missing) + out[len(body):]

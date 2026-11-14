@@ -9,7 +9,7 @@ import pytest
 
 from earthtrends.agent import loop, providers, tools
 
-TREND = {"variable": "sea_level", "verdict": "rising", "source": {"id": "coops", "name": "NOAA CO-OPS", "url": "https://x"}}
+TREND = {"variable": "sea_level", "verdict": "rising", "source": {"id": "coops", "name": "NOAA CO-OPS", "url": "https://example.org/"}}
 ARGS = {"variable": "sea_level", "lat": 39.36, "lon": -74.42}
 
 
@@ -67,9 +67,9 @@ def sdk(monkeypatch):
 def test_request_and_history(sdk):
     sent, replies, made = sdk
     replies += [msg(THINK, tool_use("t1"), tool_use("t2", {**ARGS, "lat": 39.0}), stop="tool_use"),
-                msg(text("Sea level is rising."))]
+                msg(text("Sea level is rising. Source: NOAA CO-OPS, https://example.org/."))]
     r = loop.ask("Is sea level rising in Atlantic City?", model="anthropic:claude-haiku-5-5")
-    assert r["answer"] == "Sea level is rising." and (r["provider"], r["model"]) == ("anthropic", "claude-haiku-5-5")
+    assert r["answer"] == "Sea level is rising. Source: NOAA CO-OPS, https://example.org/." and (r["provider"], r["model"]) == ("anthropic", "claude-haiku-5-5")
     assert made == [{"api_key": "test-not-a-key", "timeout": 60, "max_retries": 0}]
     for s in sent:
         assert s["model"] == "claude-haiku-5-5" and s["max_tokens"] == providers.MAX_TOKENS == 2000
@@ -92,8 +92,8 @@ def test_request_and_history(sdk):
 def test_cut_off_retry_uses_low_effort_and_no_tools(sdk):
     sent, replies, _ = sdk
     replies += [msg(tool_use("t1"), stop="tool_use"), msg(THINK, stop="max_tokens", out=2000),
-                msg(text("Sea level is rising."))]
-    assert loop.ask("q", model="anthropic:claude-haiku-5-5")["answer"] == "Sea level is rising."
+                msg(text("Sea level is rising. Source: NOAA CO-OPS, https://example.org/."))]
+    assert loop.ask("q", model="anthropic:claude-haiku-5-5")["answer"] == "Sea level is rising. Source: NOAA CO-OPS, https://example.org/."
     assert [s["output_config"]["effort"] for s in sent] == [providers.ANTHROPIC_EFFORT] * 2 + ["low"]
     assert "tools" in sent[1] and not {"tools", "tool_choice"} & sent[2].keys()
 

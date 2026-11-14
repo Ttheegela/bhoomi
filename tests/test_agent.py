@@ -12,7 +12,7 @@ from earthtrends.app import app
 
 client = TestClient(app)
 TREND = {"variable": "sea_level", "units": "mm", "verdict": "rising", "slope_per_decade": 41.0, "ci_low": 38.0,
-         "ci_high": 44.0, "p_value": 0.0001, "source": {"id": "coops", "name": "NOAA CO-OPS", "url": "https://x"}}
+         "ci_high": 44.0, "p_value": 0.0001, "source": {"id": "coops", "name": "NOAA CO-OPS"}}  # no URL: no link added
 ARGS = {"variable": "sea_level", "lat": 39.36, "lon": -74.42}
 
 
