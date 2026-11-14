@@ -28,10 +28,10 @@ Venue: Princeton Public Library, Tech Center and Spark Lab, 65 Witherspoon St. L
 | **14:00** | **Local judging presentation** |
 | after judging | Fill the project page: title, summary, demo (7 slides or video of 30 s or less), repo link, SI disclosure. Aim to submit by 18:00, deadline 23:59 |
 
-## Proposed lanes (confirm at 10:45 once we know Sairam's strengths)
+## Lanes (decided at hour 0)
 
-- Tarun: agent (#5) + stats (#4), merges and deploys
-- Sairam: data (#3) + UI and story (#6)
+- Tarun: all four lanes for now (data #3, stats #4, agent #5, UI and story #6), merges and deploys
+- Sairam: set up and ready; picks up a lane when we split the work
 
 ## How we work: agent team
 
@@ -43,5 +43,6 @@ Venue: Princeton Public Library, Tech Center and Spark Lab, 65 Witherspoon St. L
 ## Rules that cost points if missed
 
 - SI disclosure: every PR ends with `SI used: ...`; collect them for the submission.
+- AI-made images and video (UI screens, slides, demo video) carry a visible "Built with AI assistance" label. AI audio (voiceover) is disclosed in the description text and file metadata.
 - No NASA logos or branding in anything we make.
 - Every number on screen names its data source.
