@@ -17,7 +17,22 @@ HALF_BOX_DEG = 2.0  # the box is 4 degrees of latitude tall (about 444 km) and a
 # A box holds about 16 one-degree cells (cells are equal-area, so this holds at every latitude). At least 8 must be land:
 # below half, ocean (or ice sheet) cells outweigh the land and the value would be mostly not land water.
 MIN_CELLS = 8
-NO_DATA = "There is no land water storage measurement for this place: the GRACE cells here are ocean or ice."
+NO_DATA = ("There is no land water storage measurement for this place: too little land within about 200 km "
+           "(open ocean, an ice sheet or a small island).")
+GLACIER = "There is no land water storage measurement for this place: here the satellites mostly see glacier ice, not land water."
+# The provider flags glaciated land outside the ice sheets as plain land, so its mass loss would pass as water storage.
+# ponytail: hand-drawn boxes (lat south, lat north, lon west, lon east), checked on the asked point only; a place just
+# outside a box can still average in glacier cells, which the "snow and ice" note covers. Upgrade: a glacier mask per cell.
+GLACIER_BOXES = [
+    (76, 81, 10, 34),      # Svalbard
+    (79.5, 82, 44, 66),    # Franz Josef Land
+    (70, 77.5, 51, 70),    # Novaya Zemlya
+    (77.5, 81.5, 89, 108),  # Severnaya Zemlya
+    (72, 84, -100, -60),   # Canadian Arctic islands (Ellesmere, Axel Heiberg, Devon, north Baffin)
+    (65, 72, -80, -61),    # Baffin Island ice caps
+    (63, 67, -25, -13),    # Iceland
+    (-52, -46, -76, -72),  # Patagonian icefields
+]
 
 
 @lru_cache(maxsize=1)
@@ -34,6 +49,8 @@ def _axis(months: list[str]) -> list[str]:
 
 def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str]]:
     """Land cells in the box around the point -> (times, cm or None, place, notes). No land cells: ValueError."""
+    if any(s <= lat <= n and w <= lon <= e for s, n, w, e in GLACIER_BOXES):
+        raise ValueError(GLACIER)
     d = load()
     # longitude half-width grows as 1 / cos(latitude) so the box stays about as wide as it is tall; past 180 it is the whole circle
     half_lon = min(180.0, HALF_BOX_DEG / max(cos(radians(lat)), 1e-6))
@@ -50,7 +67,7 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
     place = {"name": f"Average of {len(inside)} land cells about 400 km across", "lat": lat, "lon": lon}
     notes = ["GRACE satellites measure the pull of gravity, so one value stands for an area a few hundred kilometres wide, "
              "not for the exact spot you asked about.",
-             "The number is how much water is stored on land (soil moisture, groundwater, snow, lakes and rivers together) "
+             "The number is how much water is stored on land (soil moisture, groundwater, snow and ice, lakes and rivers together) "
              "compared with its 2004 to 2009 average, in centimetres of water.",
              "It is a change, not a total, and it cannot tell groundwater from surface water.",
              "There is no data between mid-2017 and mid-2018, when one satellite pair ended and the next began, "

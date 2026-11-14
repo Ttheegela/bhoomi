@@ -57,7 +57,7 @@ def parse_placement(lines) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarr
 def parse_times(lines) -> list[str]:
     """Time file lines -> "YYYY-MM" per solution. A solution goes to the calendar month that holds the middle day of
     its window (columns 1 and 2: year, day of year), so a window straddling two months goes to the month with its
-    middle day. Two solutions in one month are averaged later (to_months)."""
+    middle day. Two solutions in one month make to_months fail."""
     head, rows = split_header(lines)
     n = int(header_value(head, "Number of monthly solutions (rows)"))
     months = []
@@ -98,10 +98,12 @@ def read_land_rows(lines, flags: np.ndarray, n_cols: int) -> np.ndarray:
 
 
 def to_months(cm: np.ndarray, solution_months: list[str]) -> tuple[list[str], np.ndarray]:
-    """Average solutions that share a month; returns (sorted distinct months, mm as int16 [mascon, month])."""
+    """Solutions -> (sorted months, mm as int16 [mascon, month]). Two solutions in one month fail: the real data has none."""
     months = sorted(set(solution_months))
-    cols = [[j for j, m in enumerate(solution_months) if m == t] for t in months]
-    mm = np.stack([cm[:, c].mean(axis=1) for c in cols], axis=1) * 10
+    if len(months) != len(solution_months):
+        twice = sorted({m for m in solution_months if solution_months.count(m) > 1})
+        raise ValueError(f"two solutions fall in one month: {', '.join(twice)}")
+    mm = cm[:, np.argsort(solution_months, kind="stable")] * 10
     if not np.isfinite(mm).all() or np.abs(mm).max() > 32000:
         raise ValueError(f"values do not fit int16 millimetres (max {np.nanmax(np.abs(mm))})")
     return months, np.rint(mm).astype(np.int16)
@@ -156,6 +158,8 @@ if __name__ == "__main__":
             p = Path(tmp) / "gsfc.zip"
             with httpx.stream("GET", URL, follow_redirects=True, timeout=120) as r, open(p, "wb") as f:
                 r.raise_for_status()
+                if r.url.host != "earth.gsfc.nasa.gov":
+                    raise ValueError(f"the download ended on {r.url.host}, not earth.gsfc.nasa.gov")
                 for chunk in r.iter_bytes():
                     f.write(chunk)
             build(p, OUT)

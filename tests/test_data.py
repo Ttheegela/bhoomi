@@ -942,7 +942,7 @@ def test_grace_box_and_area_weighting(fake_grace):
     assert s["units"] == "cm" and s["freq"] == "monthly" and s["variable"] == "water_storage"
     assert s["place"] == {"name": "Average of 10 land cells about 400 km across", "lat": 0.0, "lon": 0.0}
     assert s["source"]["id"] == "grace" and s["source"]["url"].startswith("https://earth.gsfc.nasa.gov/")
-    assert "2004 to 2009 average" in " ".join(s["notes"]) and any("10 land cells" in n for n in s["notes"])
+    assert "2004 to 2009 average" in " ".join(s["notes"]) and "snow and ice" in " ".join(s["notes"]) and any("10 land cells" in n for n in s["notes"])
     assert any("mid-2017 and mid-2018" in n for n in s["notes"])
 
 
@@ -967,7 +967,7 @@ def test_grace_too_few_land_cells(fake_grace):
     for lat, lon in ((0.5, 1.5), (40, 100)):  # one cell short; none at all
         with pytest.raises(ValueError) as e:
             data.get_series("water_storage", lat, lon)
-        assert str(e.value) == grace.NO_DATA and "ocean or ice" in str(e.value)
+        assert str(e.value) == grace.NO_DATA and "too little land within about 200 km" in str(e.value)
 
 
 def test_grace_start_end_and_all_empty(fake_grace):
@@ -994,7 +994,7 @@ def test_grace_committed_file():
     assert s["values"][s["times"].index("2017-12")] is None
     assert max(len(n) for n in s["notes"]) <= 200
     for lat, lon in ((0, -30), (-80, 0)):  # mid-ocean, Antarctica
-        with pytest.raises(ValueError, match="ocean or ice"):
+        with pytest.raises(ValueError, match="too little land"):
             data.get_series("water_storage", lat, lon)
 
 
@@ -1013,9 +1013,11 @@ def test_build_grace_parsers_on_real_layout():
     assert build_grace.check_main_header(head) == (6, 4)
     cm = build_grace.read_land_rows(rows, flag, 4)
     assert cm.shape == (3, 4)  # only the three land rows
-    months, mm = build_grace.to_months(cm, ["2002-04", "2002-04", "2002-08", "2002-09"])  # two solutions in April: averaged
-    assert months == ["2002-04", "2002-08", "2002-09"] and mm.dtype == np.int16 and mm.shape == (3, 3)
-    assert mm[0, 0] == round((cm[0, 0] + cm[0, 1]) / 2 * 10)
+    months, mm = build_grace.to_months(cm, ["2002-04", "2002-05", "2002-08", "2002-09"])  # a gap: no 06 or 07
+    assert months == ["2002-04", "2002-05", "2002-08", "2002-09"] and mm.dtype == np.int16 and mm.shape == (3, 4)
+    assert mm[0, 0] == round(cm[0, 0] * 10)
+    with pytest.raises(ValueError, match="one month: 2002-04"):  # two solutions in April
+        build_grace.to_months(cm, ["2002-04", "2002-04", "2002-08", "2002-09"])
 
 
 def test_build_grace_fails_loudly():
@@ -1032,3 +1034,17 @@ def test_build_grace_fails_loudly():
         build_grace.to_months(np.array([[4000.0]]), ["2020-01"])
     with pytest.raises(ValueError, match="unexpected units"):
         build_grace.check_main_header(["Units: m"])
+
+
+def test_grace_glacier_regions_give_the_error_and_land_still_answers():
+    for name, lat, lon in (("Svalbard", 78.5, 16), ("Novaya Zemlya", 75, 58), ("Ellesmere", 80, -80), ("Patagonia", -49, -73.5),
+                           ("Iceland", 64.9, -18.6), ("Devon Island", 75, -83), ("Reykjavik", 64.15, -21.94)):
+        with pytest.raises(ValueError) as e:
+            data.get_series("water_storage", lat, lon)
+        assert str(e.value) == grace.GLACIER, name
+    for name, lat, lon in (("Tromso", 69.65, 18.96), ("Punta Arenas", -53.16, -70.91), ("Fairbanks", 64.84, -147.72), ("Delhi", 28.61, 77.21)):
+        assert data.get_series("water_storage", lat, lon)["source"]["id"] == "grace", name
+    # Anchorage: the provider flags the whole south Alaska coast as Gulf of Alaska (GOA), so only 1 land cell is near: the
+    # too-few-cells error (not the glacier one), as it should be
+    with pytest.raises(ValueError, match="too little land"):
+        data.get_series("water_storage", 61.22, -149.9)
