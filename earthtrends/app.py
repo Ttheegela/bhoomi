@@ -4,12 +4,14 @@ import os
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import BaseModel, ConfigDict
 
-from earthtrends.agent import tools
+from earthtrends.agent import loop, ratelimit, tools
+from earthtrends.agent.providers import NotConfigured, UpstreamError
 from earthtrends.mcp_server import SOURCE_DOWN, mcp
 
 # Remote MCP endpoint (streamable HTTP) for agents that connect over the network.
@@ -36,7 +38,8 @@ app = FastAPI(title="Trend Detective", lifespan=lifespan)
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok"}
+    """Cheap: tells the web page whether to show the question box. No outbound call, no key value."""
+    return {"status": "ok", "ask": bool(os.environ.get("OPENROUTER_API_KEY"))}
 
 
 app.mount("/mcp", mcp_app)
@@ -96,6 +99,38 @@ def trend(response: Response, variable: str, lat: float, lon: float,
     out = tools.detect_trend(variable, lat, lon, start, end, source)
     response.headers["Cache-Control"] = CACHE
     return out
+
+
+class AskBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question: str
+
+
+def client_id(request: Request) -> str:
+    """Who to count for the rate limit only; never trust it for anything else. Vercel overwrites x-forwarded-for
+    with one address. Behind another proxy the last entry is the one the nearest proxy saw (earlier ones are
+    caller-supplied). Capped at 64 characters so a giant header cannot become a giant dict key."""
+    h = request.headers
+    key = (h.get("x-forwarded-for") or "").split(",")[-1].strip()
+    return (key or h.get("x-real-ip") or (request.client.host if request.client else "unknown"))[:64]
+
+
+@app.post("/api/ask")
+def ask(body: AskBody, request: Request) -> dict:
+    q = body.question.strip()
+    if not q:
+        raise HTTPException(400, "Please type a question.")
+    if len(q) > 500:
+        raise HTTPException(400, "Please keep your question under 500 characters.")
+    if wait := ratelimit.check(client_id(request)):  # after validation, so a 400 uses no quota
+        raise HTTPException(429, f"Too many questions right now. Please wait {wait} seconds and try again.",
+                            headers={"Retry-After": str(wait)})
+    try:
+        return loop.ask(q)
+    except NotConfigured:
+        raise HTTPException(503, "The assistant is not set up on this server.") from None
+    except UpstreamError:
+        raise HTTPException(502, "The assistant could not be reached. Please try again.") from None
 
 
 def mount_web(app: FastAPI, web: Path) -> None:
