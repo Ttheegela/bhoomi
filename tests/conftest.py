@@ -1,7 +1,17 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from earthtrends import data
 from earthtrends.app import app
+
+
+@pytest.fixture(autouse=True)
+def empty_cache():
+    """Every test in the suite starts and ends with no cached series, so patched fetchers are really called
+    and an entry cached by one test cannot answer a later one."""
+    data._cache.clear()
+    yield
+    data._cache.clear()
 
 
 # The MCP session manager's lifespan can only start once per app instance, so the whole

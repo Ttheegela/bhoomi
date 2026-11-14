@@ -7,7 +7,7 @@ from math import cos, isfinite, radians
 import httpx
 
 from .coops import haversine_km
-from .upstream import NAME, fit, text
+from .upstream import LIMIT, NAME, fit, text
 
 SEARCH = "https://www.ncei.noaa.gov/access/services/search/v1/data"
 DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
@@ -23,11 +23,14 @@ DEADLINE_S = 40
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)
 # Data types that give each variable; the first group a station has enough record for is used.
 NEED = {"air_temp": [("TAVG",), ("TMAX", "TMIN")], "air_temp_max": [("TMAX",)], "precip": [("PRCP",)]}
+# Plain names for sentences users read (ghcn.py is imported by __init__.py, so the shared mapping lives here).
+PLAIN_NAME = {"air_temp": "air temperature", "air_temp_max": "daily high temperature", "precip": "rainfall",
+              "sea_level": "sea level"}
 HOW = {"air_temp": "mean", "air_temp_max": "max", "precip": "mean"}  # daily -> monthly rule
 NOTES = {"air_temp_max": "Each monthly value is the hottest single day of that month, not the average of the daily highs."}
 
 
-def _last_day() -> str:
+def last_day() -> str:
     return f"{date.today().year - 1}-12-31"
 
 
@@ -55,7 +58,7 @@ def parse_search(resp: dict) -> list[dict]:
             lat, lon = float(lat), float(lon)
             if not (isfinite(lat) and isfinite(lon) and abs(lat) <= 90 and abs(lon) <= 180 and isinstance(st["id"], str) and isinstance(st["name"], str)):
                 continue
-            out.append({"id": st["id"], "name": text(st["name"], NAME), "lat": lat, "lon": lon, "types": types})
+            out.append({"id": text(st["id"], 40), "name": text(st["name"], NAME), "lat": lat, "lon": lon, "types": types})
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             continue
     return out
@@ -81,7 +84,7 @@ def search(lat: float, lon: float, types: tuple[str, ...]) -> list[dict]:
     dlon = min(180.0, dlat / max(cos(radians(lat)), 0.01))
     box = (min(90, lat + dlat), max(-180, lon - dlon), max(-90, lat - dlat), min(180, lon + dlon))  # N,W,S,E
     r = _get(SEARCH, {"dataset": "daily-summaries", "bbox": ",".join(f"{x:.3f}" for x in box), "dataTypes": ",".join(types),
-                      "startDate": FIRST_DAY, "endDate": _last_day(), "limit": 1000})
+                      "startDate": FIRST_DAY, "endDate": last_day(), "limit": 1000})
     return parse_search(r.json())
 
 
@@ -90,10 +93,18 @@ def _years(span: tuple[str, str, float]) -> float:
     ponytail: the search service gives one coverage number for the whole record, so a station with
     plenty of old data and a thin recent record can still pass; check the returned rows if that bites."""
     start, end, coverage = span
-    lo, hi = max(start, FIRST_DAY), min(end, _last_day())
+    lo, hi = max(start, FIRST_DAY), min(end, last_day())
     since = (date.fromisoformat(hi) - date.fromisoformat(lo)).days / 365.25 if hi > lo else 0.0
     whole = (date.fromisoformat(end) - date.fromisoformat(start)).days / 365.25
     return min(since, whole * coverage / 100)
+
+
+def _no_station(variable: str, nearest: tuple[float, dict] | None) -> ValueError:
+    """One wording for every measurement, using the catalog's plain name. `nearest` is (km, station)."""
+    msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {PLAIN_NAME.get(variable, variable.replace("_", " "))} data since 1981."
+    if nearest:
+        msg += f" The nearest is {text(nearest[1]['name'], NAME)}, {nearest[0]:.0f} km away."
+    return ValueError(text(msg, LIMIT))
 
 
 def ranked(lat: float, lon: float, candidates: list[dict], variable: str) -> list[tuple[dict, float, tuple[str, ...]]]:
@@ -109,12 +120,7 @@ def ranked(lat: float, lon: float, candidates: list[dict], variable: str) -> lis
                 break
     if out:
         return out
-    if not seen:
-        raise ValueError(f"No GHCN-Daily station with {variable} data within {MAX_KM} km of ({lat}, {lon}).")
-    km, s = seen[0]
-    why = (f"it is {km:.0f} km away (limit {MAX_KM} km)" if km > MAX_KM
-           else f"it has under {MIN_YEARS} years of {variable} record since 1981")
-    raise ValueError(f"No usable GHCN-Daily station near ({lat}, {lon}); the nearest, {s['name']} ({s['id']}), was not used: {why}.")
+    raise _no_station(variable, seen[0] if seen else None)
 
 
 def _good_years(days: list[str], values: list[float | None]) -> int:
@@ -147,9 +153,7 @@ def load(lat: float, lon: float, variable: str) -> tuple[dict, float, tuple[str,
             return st, km, types, days, vals
     if timed_out:
         raise timed_out
-    st, km, _ = cands[0]
-    raise ValueError(f"No usable GHCN-Daily station near ({lat}, {lon}); the nearest, {st['name']} ({st['id']}), was not used: "
-                     f"it has under {MIN_YEARS} years of {variable} data since 1981.")
+    raise _no_station(variable, (cands[0][1], cands[0][0]))
 
 
 def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[float | None]]:
@@ -170,7 +174,7 @@ def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[flo
             return None
         return v if isfinite(v) else None  # "NaN" and "inf" are not readings
     by_day: dict[str, dict[str, float]] = {}
-    last = _last_day()
+    last = last_day()
     for row in resp:
         if not isinstance(row, dict) or not isinstance(row.get("DATE"), str):
             continue
@@ -193,5 +197,5 @@ def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[flo
 
 def fetch(station_id: str, types: tuple[str, ...]) -> list[dict]:
     r = _get(DATA, {"dataset": "daily-summaries", "stations": station_id, "dataTypes": ",".join(types), "units": "metric",
-                    "format": "json", "includeAttributes": "true", "startDate": FIRST_DAY, "endDate": _last_day()})
+                    "format": "json", "includeAttributes": "true", "startDate": FIRST_DAY, "endDate": last_day()})
     return r.json()
