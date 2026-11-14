@@ -61,11 +61,11 @@
         <label for="variable">Measurement</label>
         <select id="variable" aria-describedby="variable-help"></select>
       </div>
+      <p id="variable-help" class="help span2"></p>
       <div class="field" id="source-field" hidden>
         <label for="source">Data source</label>
         <select id="source" aria-describedby="source-help"></select>
       </div>
-      <p id="variable-help" class="help span2"></p>
       <p id="source-help" class="help span2"></p>
     </div>
   </form>
@@ -84,10 +84,10 @@
           <h2 id="verdict-heading" tabindex="-1" class="verdict-head"></h2>
           <div class="card-body">
             <p id="verdict-big" class="big"></p>
-            <p id="verdict-lean" class="source" hidden></p>
+            <p id="verdict-calc" class="source"></p>
             <div id="verdict-source" class="srcline"></div>
             <p id="verdict-p1"></p>
-            <p id="verdict-calc" class="source"></p>
+            <p id="verdict-lean" class="source" hidden></p>
             <p id="verdict-p2"></p>
             <p id="verdict-evidence"></p>
             <dl id="facts" class="facts"></dl>
@@ -107,20 +107,20 @@
       <div class="col-chart" id="chart-wrap" hidden>
         <figure id="chart-fig">
           <p id="chart-head" class="chart-head"></p>
+          <div id="chart-source" class="srcline"></div>
           <p class="source t-only">Trend and range: our calculation.</p>
           <div id="chart-box"></div>
-          <div id="chart-source" class="srcline"></div>
           <div id="legend" class="legend">
             <div class="legend-group" role="group" aria-labelledby="lg-data">
               <p id="lg-data" class="legend-label">From the dataset</p>
               <ul>
-                <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-raw"/></svg>Raw monthly value</li>
+                <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-raw"/></svg>Raw monthly value (upper chart)</li>
               </ul>
             </div>
             <div class="legend-group" role="group" aria-labelledby="lg-calc">
               <p id="lg-calc" class="legend-label">Our calculation</p>
               <ul>
-                <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-des"/></svg>Seasons removed</li>
+                <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-des"/></svg>Seasons removed (lower chart)</li>
                 <li><svg width="32" height="12" aria-hidden="true"><circle cx="16" cy="6" r="3.5" class="s-year"/></svg>Yearly average, seasons removed</li>
                 <li class="t-only"><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-trend"/></svg>Trend line</li>
                 <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="c-zero"/></svg>No-change line</li>

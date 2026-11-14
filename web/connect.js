@@ -59,6 +59,11 @@ function addCopyButtons() {
     const fail = el('p', { class: 'small copy-fail', hidden: '' });
     row.append(btn);
     row.after(fail);
+    if (node.tagName === 'PRE') { // a hint only while the text is actually cut off (the panel is hidden until its tab is chosen; the observer fires when it shows or resizes)
+      const hint = el('p', { class: 'small scroll-hint', hidden: '' }, scrollHintText(matchMedia('(pointer: coarse)').matches));
+      fail.after(hint);
+      new ResizeObserver(() => { hint.hidden = !(node.scrollWidth > node.clientWidth + 1); }).observe(node);
+    }
     let timer = 0;
     btn.addEventListener('click', async () => {
       const text = node.value !== undefined ? node.value : node.textContent;

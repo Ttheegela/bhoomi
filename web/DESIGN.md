@@ -140,6 +140,12 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Grey labels stay at 14 px. This overrides the 'about 12 px' label rule from the Konam checklist.
 - Use in your AI: framed as 'use Trend Detective in your own AI agent'; example agents (Claude, ChatGPT, GitHub Copilot) named in one line only when their docs confirm remote MCP support; detailed tabs only for apps with verified steps; one 'Any other AI agent' tab; no ChatGPT tab.
 - MCP page: both, tabs per AI app with steps, then a config block for developers.
+- Visual choices (his words, 2026-11-14: "go with the leans": 1B 2C 3C 4B 5C, picked from screenshots):
+  1. Tabs versus chips (1B): the three main tabs are plain text on a thin line; the selected tab is bold with a 3 px underline and no fill. Example-place chips keep their filled pressed state. The app picker on "Use in your AI" follows the same tab style (his addition).
+  2. Answer card (2C): same order as before; "Trend, range and verdict: our calculation." sits directly under the big number (the Mann-Kendall wording stays only in the Method row of the facts list); the source link has a grey "Raw data:" label.
+  3. The AI's message on Ask (3C): no edge line; a quiet box in the page's surface tone. The "Written by an AI model" label and the AI badge stay.
+  4. Code and settings blocks (4B): no wrapping; each block scrolls sideways inside itself with a visible scroll bar; a hint line shows only when text is cut off ("Swipe sideways to see the whole line." on touch screens, "Scroll sideways to see the whole line." otherwise). Copy copies the whole text. The server address field stays on one line.
+  5. Chart (5C): the source link sits under the chart headline; the legend follows the chart closely (6 px margin); the "No change" label goes to the end of the dashed line the trend line is clear of; the legend lines say "(upper chart)" and "(lower chart)".
 
 ### Chosen by the agent (swappable)
 - Single-page flow: place chips, then measurement, then verdict and chart.
@@ -177,3 +183,8 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Ask sends no `history` until the backend history PR lands.
 - Per-app MCP steps taken from each app's official docs (checked 2026-11-14).
 - Period-first sentence 1 and a separate wording when the range misses zero but p is 0.05 or more.
+- The settings-file picker on "Use in your AI" uses the same tab style as the app picker (same kind of control; his 1B addition named only the app picker).
+- One source label, "Raw data:", on every link that names where numbers came from (answer card, chart, table, Ask answers), in grey before the name. This reconciles 2C ("Raw data:") with 5C (whose patch said "Data:"). Error cards keep "Source:". The plain-text line "Raw values: {source}." in the chart caption and table caption is unchanged.
+- Under 360 px the help line of each select sits directly under its own select (markup order: field, help, field, help); from 360 px the two fields share a row and both help lines run full width below.
+- The footer lists a source only when the catalog (`/api/variables`) lists it. The ERA5 entry carries Open-Meteo's attribution: "Weather data by Open-Meteo.com" (link), "ERA5 reanalysis", "CC BY 4.0" (link to creativecommons.org).
+- A 429 from the data routes shows the API's own sentence in the problem card with "Try again".

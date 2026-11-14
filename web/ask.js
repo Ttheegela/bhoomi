@@ -146,8 +146,8 @@ function answerBlock(d) {
     let line = `Looked up: ${nameOf(d.variable)} at ${d.place}, ${d.y0} to ${d.y1}.`;
     if (d.count > 1) line += ` The assistant checked ${d.count} places. The first is shown here.`;
     block.append(el('p', { class: 'small' }, line));
-    d.sources.forEach((s) => { const src = el('div', { class: 'srcline' }); srcBlock(src, 'Data', s); block.append(src); });
-    if (!d.sources.length) { const src = el('div', { class: 'srcline' }); srcBlock(src, 'Data', null); block.append(src); }
+    d.sources.forEach((s) => { const src = el('div', { class: 'srcline' }); srcBlock(src, 'Raw data', s); block.append(src); });
+    if (!d.sources.length) { const src = el('div', { class: 'srcline' }); srcBlock(src, 'Raw data', null); block.append(src); }
     block.append(el('p', { class: 'small' }, 'The AI wrote the text above. The trend, range and verdict are our calculation from public data. To see them, open the chart.'));
     const target = d.chart && fixExplore(d.chart, state.variables);
     if (target) {

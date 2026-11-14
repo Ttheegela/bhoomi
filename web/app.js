@@ -17,10 +17,14 @@ const PRESETS = [
 ];
 const SOURCES = {
   power: { name: 'NASA POWER (MERRA-2)', url: 'https://power.larc.nasa.gov/' },
-  era5: { name: 'ERA5 reanalysis via Open-Meteo archive', url: 'https://open-meteo.com/' },
+  era5: { name: 'ERA5 reanalysis via Open-Meteo archive', url: 'https://open-meteo.com/',
+    // the footer carries the attribution Open-Meteo asks for: its credit line, the dataset, and the licence
+    credit: 'Weather data by Open-Meteo.com', dataset: 'ERA5 reanalysis', licence: { name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' } },
   ghcn: { name: 'NOAA NCEI GHCN-Daily', url: 'https://www.ncei.noaa.gov/' },
   coops: { name: 'NOAA CO-OPS tide gauges', url: 'https://tidesandcurrents.noaa.gov/' },
   psmsl: { name: 'Permanent Service for Mean Sea Level (PSMSL)', url: 'https://psmsl.org/' },
+  // Used only when /api/variables lists it (the footer and the pickers follow the catalog).
+  grace: { name: 'NASA GSFC GRACE and GRACE-FO mascons', url: 'https://earth.gsfc.nasa.gov/geo/data/grace-mascons' },
 };
 // One plain-words line under the source control (grid sizes as in the catalog's resolution text).
 const SOURCE_HELP = {
@@ -29,10 +33,11 @@ const SOURCE_HELP = {
   ghcn: 'Readings from the nearest weather station.',
   coops: 'Readings from the nearest NOAA tide gauge (US coasts).',
   psmsl: 'Readings from the nearest tide gauge in a worldwide collection.',
+  grace: 'Satellite measurements of water stored on land, averaged over an area about 400 km wide.',
 };
 // Names in the source select (every width); SOURCE_LABELS are the full names used in text elsewhere.
-const SOURCE_SHORT = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'GHCN-Daily', coops: 'CO-OPS', psmsl: 'PSMSL' };
-const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'GRACE/GRACE-FO', psmsl: 'PSMSL tide gauges' };
+const SOURCE_SHORT = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'GHCN-Daily', coops: 'CO-OPS', psmsl: 'PSMSL', grace: 'GRACE' };
+const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'NASA GSFC GRACE mascons', psmsl: 'PSMSL tide gauges' };
 
 /* ---------- pure helpers (no DOM; exported for a node check) ---------- */
 
@@ -117,6 +122,17 @@ function dotRadius(xs, rmax) {
 }
 
 function unitLabel(u) { return u === 'degC' ? '°C' : u; }
+// Source name for a picker: short name, then the long label, then the raw id.
+function sourceShort(id) { return SOURCE_SHORT[id] || SOURCE_LABELS[id] || id; }
+// Where the "No change" label goes: the end of the dashed line the trend line is clear of.
+// yl, yr = trend line's screen y at the left and right ends; zy = the dashed line's screen y (larger y = lower).
+function noChangeLabel(yl, yr, zy) {
+  if (yl > zy) return { end: 'left', below: false };   // trend is under the line on the left: clear above it
+  if (yr > zy) return { end: 'right', below: false };  // under it on the right
+  return { end: 'left', below: true };                 // above it at both ends: clear below it
+}
+// The sideways-scroll hint wording: touch screens swipe, others scroll.
+function scrollHintText(coarse) { return (coarse ? 'Swipe' : 'Scroll') + ' sideways to see the whole line.'; }
 function lcName(n) { return /^[A-Z]{2,}/.test(n) ? n : n.charAt(0).toLowerCase() + n.slice(1); }
 
 function fixed(x, d) {
@@ -286,12 +302,14 @@ function selectTab(tabs, panels, i) {
 }
 
 const isHttps = (src) => !!src && typeof src.url === 'string' && src.url.startsWith('https://');
-// One block-level 48 px line: "<label>: <name> ↗" as a link (https URLs only), plain text without the arrow otherwise.
+// One block-level 48 px line: grey "<label>:" then "<name> ↗" as a link (https URLs only), plain text without the arrow otherwise.
+// The text sits in one inner span so a long name wraps across the full line, not beside the label.
 function srcBlock(node, label, source) {
   clear(node);
   const name = source ? source.name : 'unknown';
-  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, `${label}: ${name}\u00a0↗`));
-  else node.append(el('span', { class: 'srclink' }, `${label}: ${name}`));
+  const inner = (arrow) => el('span', {}, el('span', { class: 'src-label' }, label + ':'), ` ${name}` + (arrow ? '\u00a0↗' : ''));
+  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, inner(true)));
+  else node.append(el('span', { class: 'srclink' }, inner(false)));
 }
 // Link with the name only (footer list).
 function srcLink(node, source, arrow) {
@@ -360,7 +378,7 @@ function applyPreset(i) {
   submit(true);
 }
 // Both selects use short names at every width, open or closed (full names clip in the closed select).
-const VAR_SHORT = { air_temp_max: 'Hottest day' };
+const VAR_SHORT = { air_temp_max: 'Hottest day', water_storage: 'Water storage' };
 function fillVariables() {
   const sel = $('variable');
   clear(sel);
@@ -372,7 +390,7 @@ function syncVariableUI() {
   const src = $('source');
   clear(src);
   const many = !!v && Array.isArray(v.sources) && v.sources.length > 1;
-  if (many) v.sources.forEach((s) => src.append(el('option', { value: s }, SOURCE_SHORT[s] || s)));
+  if (many) v.sources.forEach((s) => src.append(el('option', { value: s }, sourceShort(s))));
   // keep the source the user chose when this measurement has it; otherwise the default
   if (many) src.value = v.sources.includes(state.userSource) ? state.userSource : v.sources[0];
   $('source-field').hidden = !many;
@@ -516,6 +534,10 @@ function show(sr, tr, params, user) {
 
 function problemFor(r, params) {
   const again = [{ label: 'Try again', fn: () => run(state.params, true, true) }];
+  if (r.status === 429) { // rate limit: show the API's own sentence
+    const d = r.body && typeof r.body.detail === 'string' && r.body.detail ? r.body.detail : 'Too many requests right now. Please wait a little and try again.';
+    return { heading: 'Too many requests.', paras: [d], buttons: again };
+  }
   if (r.net || r.status !== 400 && r.status !== 422 && r.status !== 502) {
     return { heading: "We can't reach the server.", paras: ['Check your connection and try again.'], buttons: again };
   }
@@ -593,8 +615,8 @@ function renderVerdict(t, series) {
   $('verdict-p1').textContent = c.p1;
   $('verdict-p2').textContent = c.p2;
   $('verdict-evidence').textContent = `p-value: ${fmtP(t.p_value)}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change.`;
-  srcBlock($('verdict-source'), 'Data', t.source);
-  $('verdict-calc').textContent = "Trend, range and verdict: our calculation (Mann-Kendall test, Sen's slope).";
+  srcBlock($('verdict-source'), 'Raw data', t.source);
+  $('verdict-calc').textContent = 'Trend, range and verdict: our calculation.';
 
   const facts = $('facts');
   clear(facts);
@@ -635,7 +657,7 @@ function renderMore(t) {
 function renderTable(s, withTrend) {
   const name = nameOf(s.variable);
   $('table-col').textContent = `${name} (${unitLabel(s.units)})`;
-  srcBlock($('table-source'), 'Source', s.source);
+  srcBlock($('table-source'), 'Raw data', s.source);
   $('table-caption').textContent = rawLine(s.source, withTrend);
   const body = $('table-body');
   clear(body);
@@ -702,7 +724,8 @@ function renderChart(s, t) {
   });
   root.append(svg('text', { x: ml + pw / 2, y: B.bot + 2 * fs + 6, 'text-anchor': 'middle', class: 'c-text' }, 'Year'));
   root.append(svg('line', { x1: ml, x2: vw - mr, y1: B.yS(0), y2: B.yS(0), class: 'c-zero' }));
-  root.append(svg('text', { x: vw - mr - 2, y: B.yS(0) - 5, 'text-anchor': 'end', class: 'c-text c-halo' }, 'No change'));
+  const noText = svg('text', { class: 'c-text c-halo' }, 'No change'); // placed once the trend line is known
+  root.append(noText);
 
   const path = (P, arr) => {
     let d = '', pen = false;
@@ -736,6 +759,11 @@ function renderChart(s, t) {
     root.append(clip, g);
   }
 
+  const nc = trendLine ? noChangeLabel(trendLine.y1, trendLine.y2, B.yS(0)) : { end: 'right', below: false };
+  noText.setAttribute('x', nc.end === 'left' ? ml + 4 : vw - mr - 2);
+  noText.setAttribute('text-anchor', nc.end === 'left' ? 'start' : 'end');
+  noText.setAttribute('y', nc.below ? B.yS(0) + fs + 3 : B.yS(0) - 5);
+
   // Yearly averages (dots) sit over the faint monthly line; the solid trend line goes on top. Drawing only: never printed.
   const dots = yearlyAverages(ms, des);
   const r = dotRadius(dots.map((d) => xS(d.x)), Math.max(2.5, fs * 0.22));
@@ -748,7 +776,7 @@ function renderChart(s, t) {
 
   $('chart-head').textContent = t ? chartHead(t, name, place) : `${name} at ${place}`;
   $('chart-caption').textContent = t ? captionText(t, name, place) : `${name} at ${place}.`;
-  srcBlock($('chart-source'), 'Source', t ? t.source : s.source);
+  srcBlock($('chart-source'), 'Raw data', t ? t.source : s.source);
   $('chart-raw').textContent = rawLine(t ? t.source : s.source, !!t);
 
   // readout
@@ -790,10 +818,21 @@ function renderChart(s, t) {
 
 /* ---------- start ---------- */
 
-function fillFooter() {
+// One entry per source the catalog lists (all known sources if there is no catalog yet).
+function fillFooter(vars) {
   const ul = $('footer-sources');
   clear(ul); // init() can run again ("Try again")
-  Object.values(SOURCES).forEach((src) => { const li = el('li', {}); srcLink(li, src); ul.append(li); });
+  const used = vars ? new Set(vars.flatMap((v) => v.sources || [])) : null;
+  Object.entries(SOURCES).forEach(([id, src]) => {
+    if (used && !used.has(id)) return;
+    if (!used && id === 'grace') return; // known only through the catalog
+    const li = el('li', {});
+    if (src.credit) {
+      li.className = 'multi';
+      li.append(el('a', { href: src.url, class: 'srclink' }, src.credit), `${src.dataset},`, el('a', { href: src.licence.url, class: 'srclink' }, src.licence.name));
+    } else srcLink(li, src);
+    ul.append(li);
+  });
 }
 
 /* ---------- the tab bar ---------- */
@@ -879,6 +918,7 @@ async function init() {
     return;
   }
   state.variables = r.body;
+  fillFooter(state.variables);
   fillVariables();
   const h = parseHash(location.hash).explore;
   applyExplore((h && fixExplore(h, state.variables)) || fixExplore(PRESETS[0], state.variables), false);
