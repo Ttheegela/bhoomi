@@ -4,7 +4,7 @@ import copy
 import threading
 import time
 
-from . import coops, era5, ghcn, monthly, power, psmsl
+from . import coops, era5, ghcn, grace, monthly, power, psmsl
 from .catalog import CATALOG
 
 __all__ = ["list_variables", "get_series"]
@@ -65,6 +65,9 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
     elif source == "psmsl":
         times, values, place, notes = psmsl.series(lat, lon)
         src = psmsl.SOURCE
+    elif source == "grace":
+        times, values, place, notes = grace.series(lat, lon)
+        src = grace.SOURCE
     else:
         st, km = coops.nearest(lat, lon, coops.stations())
         times, values = coops.parse(coops.fetch(st["id"]), st["name"])

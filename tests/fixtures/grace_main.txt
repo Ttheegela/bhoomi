@@ -1,0 +1,17 @@
+NASA GSFC mascons solution file: GSFC.glb.200204_202606_RL06v2.0_OBP-ICE6GD
+Citation: https://doi.org/10.1007/s00190-019-01252-y
+Contact: Bryant.D.Loomis@nasa.gov
+Number of monthly solutions (columns): 4
+Number of mascons (rows): 6
+Units: cm equivalent water height
+Ocean mascons: Ocean bottom pressure
+Geocenter correction: JPL TN-13
+C20 & C30 correction: TN-14
+GIA correction: ICE-6G_D
+END OF HEADER
+57.7178 67.6450 48.8340 43.3832
+54.7223 63.3301 39.4670 35.8770
+3.6095 1.1378 -16.0795 -15.7963
+3.2553 -2.2305 -12.8409 -12.6934
+1.2249 -5.6326 -10.0745 -9.8572
+-1.5026 -1.3444 2.6911 4.5381

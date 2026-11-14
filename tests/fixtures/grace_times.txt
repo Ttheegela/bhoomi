@@ -1,0 +1,18 @@
+NASA GSFC mascons: Time array file
+Citation: https://doi.org/10.1007/s00190-019-01252-y
+Contact: Bryant.D.Loomis@nasa.gov
+Date span: April 2002 - June 2026
+Number of monthly solutions (rows): 4
+Column 1: Middle day in solution window [integer year]
+Column 2: Middle day in solution window [day of year]
+Column 3: Middle day in solution window [decimal year]
+Column 4: Middle day in solution window [days past Jan 0, 2002]
+Column 5: First day in solution window [days past Jan 0, 2002]
+Column 6: Last day in solution window [days past Jan 0, 2002]
+Column 7: Number of days in solution window
+Column 8: Number of days of GRACE L1B data used in solution
+END OF HEADER
+2002 108.0 2002.2932  108.0   95.0  120.0 26 26
+2002 130.5 2002.3548  131.0  123.0  137.0 15 15
+2002 228.5 2002.6233  229.0  213.0  243.0 31 31
+2002 259.0 2002.7068  259.0  244.0  273.0 30 30
