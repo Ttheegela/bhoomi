@@ -466,6 +466,39 @@ def test_sea_level_fallback(offline, psmsl_offline):
     assert data.get_series("sea_level", 39.36, -74.42, source="coops")["source"]["id"] == "coops"
 
 
+def _row_of_gauges(monkeypatch, usable_id, n=13):
+    """n gauges 1..n, nearer first; only usable_id has a usable record. Returns the list of fetched ids."""
+    monkeypatch.setattr(psmsl, "stations", lambda: [{"id": i, "name": f"G{i}", "lat": 10 + i * 0.01, "lon": 20.0} for i in range(1, n + 1)])
+    fetched = []
+
+    def fetch(sid):
+        fetched.append(sid)
+        return _record(date.today().year - 41, date.today().year - 1, 12) if sid == usable_id else _record(1950, 1989, 12)
+    monkeypatch.setattr(psmsl, "fetch", fetch)
+    return fetched
+
+
+def test_psmsl_finds_usable_gauge_sixth_nearest(monkeypatch):
+    fetched = _row_of_gauges(monkeypatch, 6)
+    assert psmsl.series(10.0, 20.0)[2]["name"] == "G6" and fetched == [1, 2, 3, 4, 5, 6]
+
+
+def test_psmsl_gives_up_after_12_tries(monkeypatch):
+    fetched = _row_of_gauges(monkeypatch, 13)
+    with pytest.raises(ValueError, match="no usable tide gauge within 100 km") as e:
+        psmsl.series(10.0, 20.0)
+    assert len(fetched) == 12 and _plain(e.value, ValueError)
+
+
+def test_psmsl_deadline_is_a_provider_failure(monkeypatch):
+    fetched = _row_of_gauges(monkeypatch, 13)
+    clock = iter([0.0, 1.0, 2.0, 41.0, 42.0, 43.0])  # start, check 1, check 2, then past the 40 s deadline
+    monkeypatch.setattr(psmsl.time, "monotonic", lambda: next(clock))
+    with pytest.raises(httpx.HTTPError) as e:
+        psmsl.series(10.0, 20.0)
+    assert not isinstance(e.value, ValueError) and fetched == [1, 2]
+
+
 def test_psmsl_provider_failures_are_httpx_errors(psmsl_offline, monkeypatch):
     def boom(sid):
         raise httpx.ReadTimeout("slow")

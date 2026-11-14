@@ -3,6 +3,7 @@
 Station list: semicolon rows "id; lat; lon; name; coastline; station code; qc flag".
 Gauge file: rows "decimal year; mean sea level (mm); missing days; flag", -99999 = no value.
 """
+import time
 from datetime import date
 from functools import lru_cache
 from math import isfinite
@@ -18,7 +19,8 @@ MAX_KM = 100
 MIN_YEARS = 30  # valid monthly values needed to support a trend test
 MAX_STALE_YEARS = 5  # last valid month at most this long before the end of last year
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)
-MAX_TRIES = 4  # gauge files fetched at most, to stay well inside the request limit
+MAX_TRIES = 12  # gauge files fetched at most
+DEADLINE_S = 40  # the lookup starts no new request after this; one request can still take up to 5 + 10 + 30 s
 MISSING = -99999
 RULE = (f"The gauge used is the nearest one within {MAX_KM} km with at least {MIN_YEARS} years of valid monthly values "
         f"and a last valid month no more than {MAX_STALE_YEARS} years before the end of last year.")
@@ -109,7 +111,11 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
         raise ValueError(text(f"There is no tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
                               f"The nearest gauge is {s['name']}, {km:.0f} km away.", LIMIT))
     skipped = []
+    deadline = time.monotonic() + DEADLINE_S
     for km, s in close[:MAX_TRIES]:
+        if time.monotonic() > deadline:
+            # a provider problem, not the caller's: an httpx error, so the API answers 502 like for every other source
+            raise httpx.TimeoutException("PSMSL is slow right now. Try again in a minute.")
         times, values, dropped = parse(fetch(s["id"]))
         if (why := why_not(times, values)) is None:
             notes = [f"Tide gauge {s['name']} (PSMSL id {s['id']}), {km:.0f} km from the point you asked about.",
