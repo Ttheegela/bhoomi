@@ -43,9 +43,9 @@ Is it really changing here?      [Question line]
 - Geolocation denied or unavailable: "We couldn't get your location. Type coordinates or pick an example place."
 - Verdict card. Label (small caps, 14 px): "Our answer". Headline H2 with shape (shapes are `aria-hidden` inline SVG, word carries meaning): `▲ Rising` / `▼ Falling` / `≈ No clear change`. All three cards are the same size, weight and position; no clear change is not styled as weaker.
   - Terms: `name` = catalog name without trailing parentheses; `place` = `place.name` (or "lat, lon" if empty); years = first 4 chars of `period.start` / `period.end`; `slope`, `lo`, `hi` = `slope_per_decade`, `ci_low`, `ci_high` with sign (use "+" and the minus sign "−"), up to 2 decimals if |x| < 1 else 1 decimal, then `units`.
-  - rising: "{name} at {place} is going up: {slope} per decade, from {y0} to {y1}." Then: "The 95% range is {lo} to {hi} per decade. Even the low end is above zero, so this is a clear rise."
-  - falling: "{name} at {place} is going down: {slope} per decade, from {y0} to {y1}." Then: "The 95% range is {lo} to {hi} per decade. Even the high end is below zero, so this is a clear fall."
-  - no_clear_change: "We can't tell {name} at {place} apart from no change, {y0} to {y1}." Then: "The data lean {up|down}: {slope} per decade. But the 95% range ({lo} to {hi}) {includes zero|is too wide to rule out no change}. That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs." ("includes zero" if lo <= 0 <= hi, else "is too wide...".) Lean word comes from the sign of the slope.
+  - rising: "{name} at {place} is going up: {slope, no sign} per decade, from {y0} to {y1}." Then: "The 95% range is {lo} to {hi} per decade. Even the low end is above zero, so this is a clear rise."
+  - falling: "{name} at {place} is going down: {slope, no sign} per decade, from {y0} to {y1}." Then: "The 95% range is {lo} to {hi} per decade. Even the high end is below zero, so this is a clear fall."
+  - no_clear_change: "We can't tell {name} at {place} apart from no change, {y0} to {y1}." Then: "The data lean {up|down}: {slope, no sign} per decade. But the 95% range ({lo} to {hi}) {includes zero|is too wide to rule out no change}. That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs." ("includes zero" if lo <= 0 <= hi, else "is too wide...".) Lean word comes from the sign of the slope.
   - Last line for all: "Source: {source.name}" (link to `source.url`, opens in same tab, text "NASA POWER (MERRA-2)" etc.). If `period` is short, nothing extra.
 - Evidence line (all verdicts): "p-value: {p_value}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change." Show "p < 0.001" if under 0.001, else 3 decimals. Never write "% chance it's real".
 - "The numbers" (dl; plain label, then stats term in grey): "How fast it's changing (Sen's slope)": {slope} per decade. "Range we're 95% sure it falls in (confidence interval)": {lo} to {hi}. "How easily luck explains it (p-value)": {p_value}. "Period": {period.start} to {period.end}. "Months used (n)": {n}. "Seasons removed (deseasonalized)": Yes/No. "Adjusted for neighbouring months (autocorrelation)": Yes/No. "Test": "Mann-Kendall test with Sen's slope" when `method` is `mann_kendall_sen`, else the raw `method`. Caption: "Source: {source.name}" (link).
@@ -115,7 +115,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 ## 9. Review checklist (apply after every UI change)
 1. No sample data is shown as real. A demo value is labelled "sample" or not shown. Every number names its source with a link, including numbers inside error cards.
 2. What we computed is marked. The verdict, trend line, shaded band, yearly averages and "seasons removed" line carry a grey label: "Trend, range and verdict: our calculation." directly under the big number, then a "Raw data: {source} ↗" link. The legend groups "From the dataset" and "Our calculation".
-3. The verdict sentence holds the number and the uncertainty in plain words, for example "about +42.5 mm per decade; the shaded band shows where the true trend likely sits". Never "X% chance it's real" or "95% sure". Never claim more than the data show.
+3. The verdict sentence holds the number and the uncertainty in plain words, for example "rose by about 42.5 mm per decade; the shaded band shows where the true trend likely sits". Never "X% chance it's real" or "95% sure". Never claim more than the data show.
 4. Contrast meets WCAG AA in light and dark. Text is at least 4.5:1. Borders, icons and chart lines are at least 3:1. Recompute from the tokens after any token change, and measure muted text on the surface and the inverted verdict header in both themes.
 5. Labels are sentence case, grey, 14 px (12 px minimum), regular weight. No ALL CAPS, no small caps, no letter-spacing.
 6. Colour appears only inside the data and always with a legend. Today there is none; everything is monochrome.
@@ -126,6 +126,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 
 ## 10. Decisions
 ### Decided by Tarun
+- In sentences, the verb gives the direction and the number has no sign: "fell by about 0.25 °C per decade". The big number and the range keep their signs.
 - A visible "Built with AI assistance" label.
 - Every number names its data source with a link.
 - No NASA logos or branding.
