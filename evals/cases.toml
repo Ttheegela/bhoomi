@@ -1,0 +1,176 @@
+# Golden eval questions for the agent (issue #16).
+# Read by `uv run python -m evals.run` (agent lane). Python reads TOML with tomllib, no new dependency.
+#
+# Fields:
+#   id               unique slug
+#   question         what a student types
+#   expect_tool      tool the agent must call; "none" = it must NOT call a data tool (can't-answer / clarify cases)
+#   expect_variable  best guess; final ids come from list_variables once #3 lands
+#   expect_place     [lat, lon]; the agent's call must be within 50 km
+#   expect_source    source id from docs/CONTRACTS.md, if a specific source must be used
+#   expect_verdict   rising | falling | no_clear_change. ONLY set from an independent reference, never from our own tool.
+#   must_say         words the answer must contain (case-insensitive)
+#   must_not_say     words the answer must not contain
+#   reference        where the expected verdict comes from
+#
+# Sea-level verdicts: NOAA CO-OPS published relative sea level trends (sltrends), all through 2025.
+
+# ---------- Sea level (NOAA tide gauges) ----------
+
+[[case]]
+id = "atlantic-city-sea-level"
+question = "Is sea level rising in Atlantic City?"
+expect_tool = "detect_trend"
+expect_variable = "sea_level"
+expect_place = [39.36, -74.42]
+expect_source = "coops"
+expect_verdict = "rising"           # NOAA station 8534720, 1911-2025: clearly rising, error bar far from 0
+must_say = ["NOAA"]
+must_not_say = []
+reference = "https://tidesandcurrents.noaa.gov/sltrends/sltrends_station.shtml?id=8534720"
+
+[[case]]
+id = "juneau-sea-level-falling"
+question = "Is the sea getting higher in Juneau, Alaska?"
+expect_tool = "detect_trend"
+expect_variable = "sea_level"
+expect_place = [58.30, -134.41]
+expect_source = "coops"
+expect_verdict = "falling"          # NOAA station 9452210, 1936-2025: falling (land rising after glaciers melted)
+must_say = ["NOAA"]
+must_not_say = []
+reference = "https://tidesandcurrents.noaa.gov/sltrends/sltrends_station.shtml?id=9452210"
+
+[[case]]
+id = "astoria-sea-level-no-change"
+question = "Has sea level changed in Astoria, Oregon?"
+expect_tool = "detect_trend"
+expect_variable = "sea_level"
+expect_place = [46.21, -123.77]
+expect_source = "coops"
+expect_verdict = "no_clear_change"  # NOAA station 9439040, 1925-2025: trend within its error bar of 0
+must_say = ["NOAA"]
+must_not_say = []
+reference = "https://tidesandcurrents.noaa.gov/sltrends/sltrends_station.shtml?id=9439040"
+
+[[case]]
+id = "port-orford-sea-level-no-change"
+question = "is the ocean rising at port orford oregon"
+expect_tool = "detect_trend"
+expect_variable = "sea_level"
+expect_place = [42.74, -124.50]
+expect_source = "coops"
+expect_verdict = "no_clear_change"  # NOAA station 9431647, 1977-2025: trend within its error bar of 0
+must_say = ["NOAA"]
+must_not_say = []
+reference = "https://tidesandcurrents.noaa.gov/sltrends/sltrends_station.shtml?id=9431647"
+
+# ---------- Heat and rain ----------
+
+[[case]]
+id = "delhi-hot-days-sources-disagree"
+question = "Are there more days above 40 °C in Delhi than there used to be?"
+expect_tool = "detect_trend"
+expect_variable = "hot_days_40c"
+expect_place = [28.58, 77.21]
+# No expect_verdict: sources disagree for 1981-2015 (POWER -4.4/decade, ERA5 -2.9, Safdarjung station +2.0).
+# A correct answer checks more than one source and says they disagree.
+must_say = ["disagree"]
+must_not_say = []
+reference = "Issue #16: POWER -4.4/decade, ERA5 -2.9/decade, GHCN Safdarjung +2.0/decade, 1981-2015"
+
+[[case]]
+id = "phoenix-air-temp"
+question = "Is Phoenix getting hotter?"
+expect_tool = "detect_trend"
+expect_variable = "air_temp"
+expect_place = [33.45, -112.07]
+# Behaviour only: no independent reference for our exact period and source.
+must_say = []
+must_not_say = []
+reference = ""
+
+[[case]]
+id = "london-air-temp"
+question = "Has the temperature in London changed since 1981?"
+expect_tool = "detect_trend"
+expect_variable = "air_temp"
+expect_place = [51.51, -0.13]
+# Behaviour only.
+must_say = []
+must_not_say = []
+reference = ""
+
+[[case]]
+id = "chennai-rain"
+question = "Is Chennai getting more rain than before?"
+expect_tool = "detect_trend"
+expect_variable = "precipitation"
+expect_place = [13.08, 80.27]
+# Behaviour only. Rain trends are noisy; the answer must not overclaim.
+must_say = []
+must_not_say = []
+reference = ""
+
+[[case]]
+id = "visakhapatnam-air-temp"
+question = "Is Vizag warming up?"
+expect_tool = "detect_trend"
+expect_variable = "air_temp"
+expect_place = [17.69, 83.22]
+# Behaviour only. Tests the nickname "Vizag" for Visakhapatnam.
+must_say = []
+must_not_say = []
+reference = ""
+
+# ---------- Groundwater (GRACE) ----------
+
+[[case]]
+id = "northwest-india-groundwater"
+question = "Is groundwater running out in Punjab and Haryana?"
+expect_tool = "detect_trend"
+expect_variable = "water_storage"
+expect_place = [29.8, 75.8]
+expect_source = "grace"
+expect_verdict = "falling"          # Rodell et al. 2009 (Nature) and 2018 (Nature): NW India among the strongest GRACE declines
+must_say = ["GRACE"]
+must_not_say = []
+reference = "https://doi.org/10.1038/s41586-018-0123-1"
+
+[[case]]
+id = "central-valley-groundwater"
+question = "Is California's Central Valley losing groundwater?"
+expect_tool = "detect_trend"
+expect_variable = "water_storage"
+expect_place = [36.60, -119.80]
+expect_source = "grace"
+expect_verdict = "falling"          # Famiglietti et al. 2011 (GRL); Rodell et al. 2018 (Nature)
+must_say = ["GRACE"]
+must_not_say = []
+reference = "https://doi.org/10.1029/2010GL046442"
+
+# ---------- Can't answer / must clarify ----------
+
+[[case]]
+id = "mumbai-sea-level-no-gauge"
+question = "Is sea level rising in Mumbai?"
+expect_tool = "none"                # coops covers US coasts only; must say it has no tide gauge data there
+must_say = ["tide gauge"]
+must_not_say = ["mm/yr", "per decade"]
+reference = "docs/CONTRACTS.md: coops covers US coasts only"
+
+[[case]]
+id = "rain-tomorrow-forecast"
+question = "Will it rain tomorrow?"
+expect_tool = "none"                # a forecast, not a long-term trend
+must_say = ["forecast"]
+must_not_say = ["per decade"]
+reference = ""
+
+[[case]]
+id = "springfield-ambiguous"
+question = "Is it getting warmer in Springfield?"
+expect_tool = "none"                # dozens of Springfields; agent must ask which one before calling a tool
+must_say = ["which"]
+must_not_say = ["per decade"]
+reference = ""
