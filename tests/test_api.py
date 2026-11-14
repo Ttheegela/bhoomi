@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from earthtrends.agent import loop, ratelimit
 from earthtrends.app import CACHE, app, mount_web
 from earthtrends.data import coops, power
 
@@ -140,3 +141,96 @@ def test_web_mount_keeps_mcp_and_api(tmp_path):
     assert c.get("/mcp?x=1").headers["location"] == "/mcp/?x=1"
     assert c.get("/api/health").json() == {"status": "ok"}
     assert c.get("/").text == "<h1>hi</h1>"
+
+
+@pytest.fixture(autouse=True)
+def fresh_limits():
+    ratelimit.reset()
+    yield
+    ratelimit.reset()
+
+
+KEYS = ("OPENROUTER_API_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST")
+
+
+def test_health_keys_hidden_in_production(monkeypatch):
+    for n in KEYS:
+        monkeypatch.setenv(n, "dummy")
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.setattr(httpx, "get", lambda *a, **kw: pytest.fail("outbound call in production"))
+    r = client.get("/api/health/keys")
+    assert r.status_code == 404 and r.json() == client.get("/api/no-such-route").json() == {"detail": "Not Found"}
+
+
+@pytest.mark.parametrize("vercel_env", [None, "preview"])
+def test_health_keys_works_outside_production(monkeypatch, vercel_env):
+    for n in KEYS:
+        monkeypatch.delenv(n, raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "dummy")
+    if vercel_env:
+        monkeypatch.setenv("VERCEL_ENV", vercel_env)
+    else:
+        monkeypatch.delenv("VERCEL_ENV", raising=False)
+    calls = []
+    monkeypatch.setattr(httpx, "get", lambda url, **kw: calls.append(url) or httpx.Response(200))
+    r = client.get("/api/health/keys")
+    assert r.status_code == 200 and r.json()["openrouter_ok"] is True and len(calls) == 1
+
+
+def test_data_routes_limit_per_client(offline):
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42}
+    a, b = {"X-Forwarded-For": "1.1.1.1"}, {"X-Forwarded-For": "2.2.2.2"}
+    for i in range(ratelimit.DATA_PER_CLIENT):  # series and trend share one budget
+        assert client.get(("/api/series", "/api/trend")[i % 2], params=q, headers=a).status_code == 200
+    for path in ("/api/series", "/api/trend"):  # the 121st and 122nd
+        r = client.get(path, params=q, headers=a)
+        assert r.status_code == 429 and int(r.headers["retry-after"]) > 0
+        wait = r.headers["retry-after"]
+        assert r.json() == {"detail": f"Too many requests right now. Please wait {wait} seconds and try again."}
+        assert "cache-control" not in r.headers
+    assert client.get("/api/series", params=q, headers=b).status_code == 200  # another client is unaffected
+    for path in ("/api/variables", "/api/health", "/"):  # not limited
+        assert client.get(path, headers=a).status_code == 200
+
+
+def test_ask_limit_unchanged_and_separate(offline, monkeypatch):
+    monkeypatch.setattr(loop, "ask", lambda q: {"answer": "ok"})
+    a = {"X-Forwarded-For": "3.3.3.3"}
+    assert (ratelimit.PER_CLIENT, ratelimit.PER_CLIENT_HOUR, ratelimit.GLOBAL) == (10, 100, 200)
+    for _ in range(ratelimit.PER_CLIENT):
+        assert client.post("/api/ask", json={"question": "hi"}, headers=a).status_code == 200
+    r = client.post("/api/ask", json={"question": "hi"}, headers=a)
+    assert r.status_code == 429 and "Too many questions" in r.json()["detail"] and r.headers["retry-after"]
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42}
+    assert client.get("/api/series", params=q, headers=a).status_code == 200  # separate budgets
+
+
+def test_mcp_limit(mcp_client):
+    a, b = {**H, "X-Forwarded-For": "4.4.4.4"}, {**H, "X-Forwarded-For": "5.5.5.5"}
+    ping = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "ping", "arguments": {}}}
+    for _ in range(ratelimit.DATA_PER_CLIENT):
+        assert ratelimit.check_data("4.4.4.4") == 0
+    r = mcp_client.post("/mcp/", headers=a, json=ping)
+    assert r.status_code == 429 and int(r.headers["retry-after"]) > 0 and "Too many requests" in r.json()["detail"]
+    r = mcp_client.post("/mcp/", headers=b, json=ping)
+    assert r.status_code == 200 and r.json()["result"]["content"][0]["text"] == "pong"
+    assert len(ratelimit._data_clients["5.5.5.5"]) == 1  # MCP requests count
+
+
+def test_ipv6_keyed_by_64(offline):
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42}
+    same = ["2001:db8:1:2::1", "2001:db8:1:2:ffff::9"]  # one /64
+    for i in range(ratelimit.DATA_PER_CLIENT):
+        assert ratelimit.check_data(client_id_of(same[i % 2])) == 0
+    assert client.get("/api/series", params=q, headers={"X-Forwarded-For": same[0]}).status_code == 429
+    assert client.get("/api/series", params=q, headers={"X-Forwarded-For": same[1]}).status_code == 429
+    for other in ("2001:db8:1:3::1", "203.0.113.7", "not-an-ip", "fe80::1%eth0"):  # another /64, IPv4, junk
+        assert client.get("/api/series", params=q, headers={"X-Forwarded-For": other}).status_code == 200
+    assert set(ratelimit._data_clients) == {"2001:db8:1:2::/64", "2001:db8:1:3::/64", "203.0.113.7", "not-an-ip",
+                                            "fe80::/64"}  # a zone id is dropped with the host bits
+    assert client_id_of("::ffff:198.51.100.4") == "198.51.100.4"  # IPv4-mapped: its own IPv4 address, not ::/64
+
+
+def client_id_of(xff):
+    from earthtrends.app import client_id
+    return client_id(type("R", (), {"headers": {"x-forwarded-for": xff}, "client": None})())
