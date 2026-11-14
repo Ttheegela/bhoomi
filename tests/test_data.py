@@ -173,22 +173,22 @@ def test_daily_to_monthly_rules():
 
 def test_ghcn_station_rule():
     found = ghcn.parse_search(load("ghcn_search_delhi.json"))
-    st, km, types = ghcn.pick(28.567, 77.117, found, "air_temp_max")  # Palam is on top of the point but its TMAX starts in 2009
+    st, km, types = ghcn.ranked(28.567, 77.117, found, "air_temp_max")[0]  # Palam is on top of the point but its TMAX starts in 2009
     assert st["id"] == "IN022021900" and 5 < km < 15 and types == ("TMAX",)
-    assert ghcn.pick(28.58, 77.21, found, "air_temp")[2] == ("TAVG",)
+    assert ghcn.ranked(28.58, 77.21, found, "air_temp")[0][2] == ("TAVG",)
     with pytest.raises(ValueError, match="not used: it is .* km away"):
-        ghcn.pick(29.2, 77.2, found, "air_temp_max")
+        ghcn.ranked(29.2, 77.2, found, "air_temp_max")[0]
     with pytest.raises(ValueError, match="within 50 km"):
-        ghcn.pick(0, -30, [], "precip")
+        ghcn.ranked(0, -30, [], "precip")[0]
     palam_only = [s for s in found if s["id"] == "IN022023000"]
     with pytest.raises(ValueError, match=r"PALAM.*under 30 years"):
-        ghcn.pick(28.567, 77.117, palam_only, "air_temp_max")
+        ghcn.ranked(28.567, 77.117, palam_only, "air_temp_max")[0]
 
 
 def test_ghcn_station_rule_thin_record():
     thin = {"id": "X", "name": "THIN", "lat": 40.7, "lon": -74.0, "types": {"TMAX": ("1871-07-01", "2024-06-17", 1.5)}}
     with pytest.raises(ValueError, match="THIN.*under 30 years"):
-        ghcn.pick(40.71, -74.0, [thin], "air_temp_max")
+        ghcn.ranked(40.71, -74.0, [thin], "air_temp_max")[0]
 
 
 def test_ghcn_checks_the_rows(offline2, monkeypatch):
@@ -196,6 +196,48 @@ def test_ghcn_checks_the_rows(offline2, monkeypatch):
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: [{"DATE": f"2022-{m:02d}-{d:02d}", "TMAX": "30"} for m in range(1, 13) for d in range(1, 29)])
     with pytest.raises(ValueError, match="IN022021900.*under 30 years"):
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+
+
+def test_ghcn_search_malformed():
+    good = ghcn.parse_search(load("ghcn_search_delhi.json"))[0]
+    assert ghcn.parse_search({"results": [{"stations": []}, ["x"], None]}) == []  # bad rows are skipped
+    bad_type = {"stations": [{"id": "A", "name": "A", "dataTypes": [{"id": "TMAX", "endDate": "2020-01-01"}]}],
+                "boundingPoints": [{"coordinates": [1.0, 2.0]}]}
+    assert ghcn.parse_search({"results": [bad_type]})[0]["types"] == {}  # no startDate: that type is skipped
+    assert good["id"] == "IN022021900"
+    for reply in ([], "oops", {"results": {"a": 1}}):  # not the shape we expect at all
+        with pytest.raises(ValueError, match="station search returned an unexpected reply"):
+            ghcn.parse_search(reply)
+
+
+def test_ghcn_parse_malformed_and_quality_flags():
+    for reply in ({"errorMessage": "Station not found"}, "oops", None):
+        with pytest.raises(ValueError, match="data service returned an unexpected reply"):
+            ghcn.parse(reply, ("TMAX",))
+    with pytest.raises(ValueError, match="Station not found"):
+        ghcn.parse({"errorMessage": "Station not found"}, ("TMAX",))
+    rows = [{"TMAX": "20"}, "x", {"DATE": "2000-01-01", "TMAX": "20", "TMAX_ATTRIBUTES": ",,S"},
+            {"DATE": "2000-01-02", "TMAX": "99", "TMAX_ATTRIBUTES": ",O,S"}]  # no DATE, not a dict, flagged
+    assert ghcn.parse(rows, ("TMAX",)) == (["2000-01-01", "2000-01-02"], [20.0, None])
+
+
+def test_ghcn_deadline(offline2, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(ghcn.time, "monotonic", lambda: clock[0])
+    found = ghcn.parse_search(load("ghcn_search_delhi.json"))
+
+    def slow_search(la, lo, types):
+        clock[0] += 61  # the search itself took longer than the 60 s deadline
+        return found
+    monkeypatch.setattr(ghcn, "search", slow_search)
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: pytest.fail("no request may start after the deadline"))
+    with pytest.raises(ValueError, match="slow right now"):
+        data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+
+
+def test_era5_length_mismatch():
+    with pytest.raises(ValueError, match="different lengths"):
+        era5.parse({"daily": {"time": ["2015-06-01", "2015-06-02"], "precipitation_sum": [0.2]}}, "precipitation_sum")
 
 
 def test_era5_series(offline2):

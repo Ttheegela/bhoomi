@@ -1,4 +1,5 @@
 """NOAA NCEI GHCN-Daily (nearest station) through the Access Data Service, no key."""
+import time
 from datetime import date
 from functools import lru_cache
 from math import cos, radians
@@ -12,6 +13,10 @@ DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
 SOURCE = {"id": "ghcn", "name": "NOAA NCEI GHCN-Daily", "url": "https://www.ncei.noaa.gov/"}
 MAX_KM = 50
 MIN_YEARS = 30  # of the needed data type, since 1981
+# The agent gives one question 120 s. One call stops starting requests after DEADLINE_S, and a request waits at
+# most TIMEOUT_S, so the worst case is about 80 s.
+DEADLINE_S = 60
+TIMEOUT_S = 20
 # Data types that give each variable; the first group a station has enough record for is used.
 NEED = {"air_temp": [("TAVG",), ("TMAX", "TMIN")], "air_temp_max": [("TMAX",)], "precip": [("PRCP",)]}
 HOW = {"air_temp": "mean", "air_temp_max": "max", "precip": "mean"}  # daily -> monthly rule
@@ -23,28 +28,50 @@ def _last_day() -> str:
 
 
 def parse_search(resp: dict) -> list[dict]:
+    """Search reply -> stations. A malformed station or data type is skipped; a malformed reply is a ValueError."""
+    results = resp.get("results", []) if isinstance(resp, dict) else None
+    if not isinstance(results, list):
+        raise ValueError("NOAA's station search returned an unexpected reply.")
     out = []
-    for res in resp.get("results", []):
-        st = res["stations"][0]
-        lon, lat = res["boundingPoints"][0]["coordinates"]
-        out.append({"id": st["id"], "name": st["name"], "lat": lat, "lon": lon,
-                    "types": {d["id"]: (d["startDate"][:10], d["endDate"][:10], d.get("coverage", 100.0)) for d in st["dataTypes"]}})
+    for res in results:
+        try:
+            st = res["stations"][0]
+            lon, lat = res["boundingPoints"][0]["coordinates"]
+            types = {}
+            for d in st["dataTypes"]:
+                try:
+                    types[d["id"]] = (d["startDate"][:10], d["endDate"][:10], float(d.get("coverage", 100.0)))
+                except (KeyError, TypeError, ValueError, AttributeError):
+                    continue
+            out.append({"id": st["id"], "name": st["name"], "lat": float(lat), "lon": float(lon), "types": types})
+        except (KeyError, IndexError, TypeError, ValueError, AttributeError):
+            continue
     return out
+
+
+def _check(deadline: float) -> None:
+    if time.monotonic() > deadline:
+        raise ValueError("NOAA's station service is slow right now. Try again in a minute.")
+
+
+def _get(url: str, params: dict) -> httpx.Response:
+    try:
+        r = httpx.get(url, params=params, timeout=TIMEOUT_S)
+        r.raise_for_status()
+    except httpx.HTTPError as e:
+        raise ValueError(f"NOAA's station service did not answer ({type(e).__name__}). Try again in a minute.") from None
+    return r
 
 
 @lru_cache(maxsize=256)
 def search(lat: float, lon: float, types: tuple[str, ...]) -> list[dict]:
     """Stations that have ALL of `types`, in a box a bit bigger than MAX_KM around the point."""
     dlat = MAX_KM / 111 * 1.05
+    # ponytail: the box does not wrap at +-180 degrees longitude; near there it is cut off. Query a second box on the other side to fix.
     dlon = min(180.0, dlat / max(cos(radians(lat)), 0.01))
     box = (min(90, lat + dlat), max(-180, lon - dlon), max(-90, lat - dlat), min(180, lon + dlon))  # N,W,S,E
-    r = httpx.get(
-        SEARCH,
-        params={"dataset": "daily-summaries", "bbox": ",".join(f"{x:.3f}" for x in box), "dataTypes": ",".join(types),
-                "startDate": "1981-01-01", "endDate": _last_day(), "limit": 1000},
-        timeout=30,
-    )
-    r.raise_for_status()
+    r = _get(SEARCH, {"dataset": "daily-summaries", "bbox": ",".join(f"{x:.3f}" for x in box), "dataTypes": ",".join(types),
+                      "startDate": "1981-01-01", "endDate": _last_day(), "limit": 1000})
     return parse_search(r.json())
 
 
@@ -80,10 +107,6 @@ def ranked(lat: float, lon: float, candidates: list[dict], variable: str) -> lis
     raise ValueError(f"No usable GHCN-Daily station near ({lat}, {lon}); the nearest, {s['name']} ({s['id']}), was not used: {why}.")
 
 
-def pick(lat: float, lon: float, candidates: list[dict], variable: str) -> tuple[dict, float, tuple[str, ...]]:
-    return ranked(lat, lon, candidates, variable)[0]
-
-
 def _good_years(days: list[str], values: list[float | None]) -> int:
     n: dict[str, int] = {}
     for d, v in zip(days, values):
@@ -95,9 +118,14 @@ def _good_years(days: list[str], values: list[float | None]) -> int:
 def load(lat: float, lon: float, variable: str) -> tuple[dict, float, tuple[str, ...], list[str], list[float | None]]:
     """Nearest usable station and its daily values. The search service only describes the whole record, so the
     rows themselves are checked too (MIN_YEARS years with 200+ valid days); the next station is tried if they fail."""
-    found = {s["id"]: s for group in NEED[variable] for s in search(lat, lon, group)}
+    deadline = time.monotonic() + DEADLINE_S
+    found = {}
+    for group in NEED[variable]:
+        _check(deadline)
+        found.update({s["id"]: s for s in search(lat, lon, group)})
     cands = ranked(lat, lon, list(found.values()), variable)
-    for st, km, types in cands[:3]:  # ponytail: 3 fetches at most, to stay inside the 300 s function limit
+    for st, km, types in cands[:3]:  # ponytail: 3 fetches at most, to stay inside the agent's 120 s per question
+        _check(deadline)
         days, vals = parse(fetch(st["id"], types), types)
         if _good_years(days, vals) >= MIN_YEARS:
             return st, km, types, days, vals
@@ -107,14 +135,25 @@ def load(lat: float, lon: float, variable: str) -> tuple[dict, float, tuple[str,
 
 
 def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[float | None]]:
-    """Rows -> daily values: the one type, or the mean of TMAX and TMIN (None unless both are there)."""
+    """Rows -> daily values: the one type, or the mean of TMAX and TMIN (None unless both are there).
+    A value that failed NOAA's quality checks is dropped: with includeAttributes the attribute string is
+    "measurement flag,quality flag,source flag[,time]", and a non-blank quality flag means it failed."""
+    if not isinstance(resp, list):
+        msg = resp.get("errorMessage") if isinstance(resp, dict) else None
+        raise ValueError(f"NOAA's data service returned an unexpected reply{': ' + str(msg) if msg else ''}.")
+
     def num(row, k):
+        parts = str(row.get(f"{k}_ATTRIBUTES") or "").split(",")
+        if len(parts) > 1 and parts[1].strip():
+            return None
         try:
             return float(row[k])
         except (KeyError, ValueError, TypeError):
             return None
     by_day = {}
     for row in resp:
+        if not isinstance(row, dict) or not row.get("DATE"):
+            continue
         vals = [num(row, t) for t in types]
         by_day[row["DATE"]] = None if None in vals else sum(vals) / len(vals)
     days = sorted(by_day)
@@ -122,11 +161,6 @@ def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[flo
 
 
 def fetch(station_id: str, types: tuple[str, ...]) -> list[dict]:
-    r = httpx.get(
-        DATA,
-        params={"dataset": "daily-summaries", "stations": station_id, "dataTypes": ",".join(types), "units": "metric",
-                "format": "json", "startDate": "1981-01-01", "endDate": _last_day()},
-        timeout=30,
-    )
-    r.raise_for_status()
+    r = _get(DATA, {"dataset": "daily-summaries", "stations": station_id, "dataTypes": ",".join(types), "units": "metric",
+                    "format": "json", "includeAttributes": "true", "startDate": "1981-01-01", "endDate": _last_day()})
     return r.json()

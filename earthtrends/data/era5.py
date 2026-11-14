@@ -14,6 +14,8 @@ def parse(resp: dict, param: str) -> tuple[list[str], list[float | None]]:
     daily = resp.get("daily") or {}
     if param not in daily or "time" not in daily:
         raise ValueError(f"Open-Meteo returned no {param} data: {resp.get('reason') or 'unknown reason'}")
+    if len(daily["time"]) != len(daily[param]):
+        raise ValueError("Open-Meteo returned times and values of different lengths.")
     return list(daily["time"]), list(daily[param])
 
 
