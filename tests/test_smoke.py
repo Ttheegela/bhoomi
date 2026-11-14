@@ -1,3 +1,5 @@
+import importlib.metadata
+
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 PING = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "ping", "arguments": {}}}
 
@@ -10,6 +12,10 @@ def test_health_and_mcp(mcp_client, monkeypatch):
     r = c.post("/mcp/", headers=H, json=PING)
     assert r.status_code == 200, r.text
     assert "pong" in r.text
+
+    init = {"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}}
+    assert c.post("/mcp/", headers=H, json=init).json()["result"]["serverInfo"]["version"] == importlib.metadata.version("trend-detective")
 
     r = c.post("/mcp/", headers={**H, "Host": "evil.example"}, json=PING)
     assert r.status_code == 421  # DNS-rebinding protection rejects unknown hosts

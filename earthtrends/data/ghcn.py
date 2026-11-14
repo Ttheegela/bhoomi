@@ -104,7 +104,12 @@ def _years(span: tuple[str, str, float]) -> float:
 
 def _no_station(variable: str, nearest: tuple[float, dict] | None) -> ValueError:
     """One wording for every measurement, using the catalog's plain name. `nearest` is (km, station)."""
-    msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {PLAIN_NAME.get(variable, variable.replace("_", " "))} data since 1981."
+    what = PLAIN_NAME.get(variable, variable.replace("_", " "))
+    if nearest and nearest[0] <= MAX_KM:  # a station is in range but too short: say that, so it does not read as a contradiction
+        msg = (f"The nearest weather station, {text(nearest[1]['name'], NAME)} ({nearest[0]:.0f} km away), does not have "
+               f"{MIN_YEARS} years of {what} data since 1981, and no other station within {MAX_KM} km does either.")
+        return ValueError(text(msg, LIMIT))
+    msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {what} data since 1981."
     if nearest:
         msg += f" The nearest is {text(nearest[1]['name'], NAME)}, {nearest[0]:.0f} km away."
     return ValueError(text(msg, LIMIT))

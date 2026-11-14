@@ -236,3 +236,12 @@ def test_ipv6_keyed_by_64(offline):
 def client_id_of(xff):
     from earthtrends.app import client_id
     return client_id(type("R", (), {"headers": {"x-forwarded-for": xff}, "client": None})())
+
+
+def test_wrong_address_is_a_friendly_page_but_api_stays_json():
+    r = client.get("/nope")
+    assert r.status_code == 404 and r.headers["content-type"].startswith("text/html")
+    assert "We can't find that page." in r.text and "Built with AI assistance" in r.text
+    r = client.get("/api/nope")
+    assert r.status_code == 404 and r.json() == {"detail": "Not Found"}
+    assert client.get("/favicon.svg").headers["content-type"].startswith("image/svg+xml")
