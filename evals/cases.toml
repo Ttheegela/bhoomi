@@ -1,5 +1,5 @@
 # Golden eval questions for the agent (issue #16).
-# Variable ids match earthtrends/data/catalog.py as of PR #24, except water_storage (GRACE not built yet).
+# Variable ids match earthtrends/data/catalog.py as of PR #60 (water_storage from grace, sea_level from coops and psmsl).
 # Read by `uv run python -m evals.run` (agent lane). Python reads TOML with tomllib, no new dependency.
 #
 # Fields:
@@ -14,9 +14,10 @@
 #   must_not_say     words the answer must not contain
 #   reference        where the expected verdict comes from
 #
-# Sea-level verdicts: NOAA CO-OPS published relative sea level trends (sltrends), all through 2025.
+# Sea-level verdicts: NOAA CO-OPS published relative sea level trends (sltrends), all through 2025;
+# Mumbai (PSMSL) from a published study of the Indian gauges.
 
-# ---------- Sea level (NOAA tide gauges) ----------
+# ---------- Sea level (tide gauges: NOAA CO-OPS, PSMSL) ----------
 
 [[case]]
 id = "atlantic-city-sea-level"
@@ -65,6 +66,18 @@ expect_verdict = "no_clear_change"  # NOAA station 9431647, 1977-2025: trend wit
 must_say = ["NOAA"]
 must_not_say = []
 reference = "https://tidesandcurrents.noaa.gov/sltrends/sltrends_station.shtml?id=9431647"
+
+[[case]]
+id = "mumbai-sea-level-psmsl"
+question = "Is sea level rising in Mumbai?"
+expect_tool = "detect_trend"
+expect_variable = "sea_level"
+expect_place = [18.92, 72.83]
+expect_source = "psmsl"             # coops is US only; Mumbai's gauge is PSMSL id 43, Apollo Bandar, since 1878
+expect_verdict = "rising"           # Unnikrishnan & Shankar 2007: Mumbai tide gauge shows a long-term rise
+must_say = ["tide gauge"]
+must_not_say = []
+reference = "https://doi.org/10.1016/j.gloplacha.2006.11.029"
 
 # ---------- Heat and rain ----------
 
@@ -132,8 +145,10 @@ reference = ""
 id = "northwest-india-groundwater"
 question = "Is groundwater running out in Punjab and Haryana?"
 expect_tool = "detect_trend"
-expect_variable = "water_storage"   # guess: GRACE not in the catalog yet
-expect_place = [29.8, 75.8]
+expect_variable = "water_storage"
+# Central Punjab/Haryana: within 50 km of both the old point (29.8, 75.8) and the
+# point the agent picks (30.5, 75.5, issue #18 comment, Sat 14 Nov). GRACE averages ~400 km anyway.
+expect_place = [30.2, 75.7]
 expect_source = "grace"
 expect_verdict = "falling"          # Rodell et al. 2009 (Nature) and 2018 (Nature): NW India among the strongest GRACE declines
 must_say = ["GRACE"]
@@ -144,7 +159,7 @@ reference = "https://doi.org/10.1038/s41586-018-0123-1"
 id = "central-valley-groundwater"
 question = "Is California's Central Valley losing groundwater?"
 expect_tool = "detect_trend"
-expect_variable = "water_storage"   # guess: GRACE not in the catalog yet
+expect_variable = "water_storage"
 expect_place = [36.60, -119.80]
 expect_source = "grace"
 expect_verdict = "falling"          # Famiglietti et al. 2011 (GRL); Rodell et al. 2018 (Nature)
@@ -153,15 +168,6 @@ must_not_say = []
 reference = "https://doi.org/10.1029/2010GL046442"
 
 # ---------- Can't answer / must clarify ----------
-
-[[case]]
-id = "mumbai-sea-level-no-gauge"
-question = "Is sea level rising in Mumbai?"
-expect_tool = "none"                # coops covers US coasts only; must say it has no tide gauge data there
-# Change when the worldwide PSMSL source lands (#46): Mumbai will then have a real trend (Apollo Bandar gauge).
-must_say = ["tide gauge"]
-must_not_say = ["mm/yr", "per decade"]
-reference = "docs/CONTRACTS.md: coops covers US coasts only"
 
 [[case]]
 id = "delhi-sea-level-inland"
