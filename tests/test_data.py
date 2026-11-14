@@ -15,6 +15,14 @@ def load(name):
     return json.loads((FX / name).read_text())
 
 
+@pytest.fixture(autouse=True)
+def empty_cache():
+    """Every test starts with no cached series, so patched fetchers are really called."""
+    data._cache.clear()
+    yield
+    data._cache.clear()
+
+
 @pytest.fixture
 def offline(monkeypatch):
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: load("power_monthly.json"))
@@ -177,25 +185,25 @@ def test_ghcn_station_rule():
     st, km, types = ghcn.ranked(28.567, 77.117, found, "air_temp_max")[0]  # Palam is on top of the point but its TMAX starts in 2009
     assert st["id"] == "IN022021900" and 5 < km < 15 and types == ("TMAX",)
     assert ghcn.ranked(28.58, 77.21, found, "air_temp")[0][2] == ("TAVG",)
-    with pytest.raises(ValueError, match="not used: it is .* km away"):
+    with pytest.raises(ValueError, match=r"has 30 years of hottest day of the month .* data since 1981\. The nearest is NEW DELHI SAFDARJUN, IN, \d+ km away"):
         ghcn.ranked(29.2, 77.2, found, "air_temp_max")[0]
-    with pytest.raises(ValueError, match="within 50 km"):
+    with pytest.raises(ValueError, match=r"^No weather station within 50 km has 30 years of precipitation data since 1981\.$"):
         ghcn.ranked(0, -30, [], "precip")[0]
     palam_only = [s for s in found if s["id"] == "IN022023000"]
-    with pytest.raises(ValueError, match=r"PALAM.*under 30 years"):
+    with pytest.raises(ValueError, match=r"The nearest is NEW DELHI PALAM, IN, 0 km away"):
         ghcn.ranked(28.567, 77.117, palam_only, "air_temp_max")[0]
 
 
 def test_ghcn_station_rule_thin_record():
     thin = {"id": "X", "name": "THIN", "lat": 40.7, "lon": -74.0, "types": {"TMAX": ("1871-07-01", "2024-06-17", 1.5)}}
-    with pytest.raises(ValueError, match="THIN.*under 30 years"):
+    with pytest.raises(ValueError, match=r"The nearest is THIN, 1 km away"):
         ghcn.ranked(40.71, -74.0, [thin], "air_temp_max")[0]
 
 
 def test_ghcn_checks_the_rows(offline2, monkeypatch):
     # the search says 1944-2025, but the rows only cover 2022 on: not enough, and the error names the station
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: [{"DATE": f"2022-{m:02d}-{d:02d}", "TMAX": "30"} for m in range(1, 13) for d in range(1, 29)])
-    with pytest.raises(ValueError, match="IN022021900.*under 30 years"):
+    with pytest.raises(ValueError, match=r"The nearest is NEW DELHI SAFDARJUN, IN, 1 km away"):
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
 
 
@@ -296,6 +304,7 @@ def test_ghcn_next_station_after_timeout(offline2, monkeypatch):
     s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
     assert calls == ["N", "F"] and s["place"]["name"] == "FAR"
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: (_ for _ in ()).throw(httpx.ReadTimeout("slow")))
+    data._cache.clear()
     with pytest.raises(httpx.ReadTimeout):  # every station timed out: a provider problem
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
 
@@ -378,3 +387,147 @@ def test_hot_days_trend_directions():
     assert slopes["era5"] < 0 < slopes["ghcn"]
     assert slopes["era5"] == pytest.approx(-1.9, abs=0.3) and slopes["ghcn"] == pytest.approx(2.0, abs=0.5), slopes
     # Pinned loosely to what this code gives. Issue #16 quoted ERA5 -2.9 and GHCN +2.0 per decade; ERA5 differs by about 1.
+
+
+# ---- series cache, 429, station period notes, error wording ----
+
+@pytest.fixture
+def counted(monkeypatch):
+    """power.fetch served from a fixture, counting upstream calls."""
+    calls = []
+
+    def fetch(param, lat, lon):
+        calls.append((param, lat, lon))
+        return load("power_monthly.json")
+    monkeypatch.setattr(power, "fetch", fetch)
+    return calls
+
+
+def test_cache_second_call_and_periods_share_one_fetch(counted):
+    a = data.get_series("air_temp", 39.36, -74.42)
+    b = data.get_series("air_temp", 39.36, -74.42)
+    c = data.get_series("air_temp", 39.36, -74.42, start="1990", end="1991")
+    d = data.get_series("air_temp", 39.36, -74.42, start="2000")
+    assert len(counted) == 1 and a == b and c["times"][0] == "1990-01" and c["times"][-1] == "1991-12" and d["times"][0] == "2000-01"
+    data.get_series("air_temp_max", 39.36, -74.42)  # another variable is another entry
+    assert len(counted) == 2
+
+
+def test_cache_place_key_is_rounded_to_two_decimals(counted):
+    data.get_series("air_temp", 39.360, -74.420)
+    s = data.get_series("air_temp", 39.364, -74.416)  # 0.004 degrees away: same entry
+    assert len(counted) == 1 and counted[0][1:] == (39.36, -74.42)
+    assert s["place"] == {"name": "39.36, -74.42", "lat": 39.36, "lon": -74.42}  # the point that was fetched
+    data.get_series("air_temp", 39.38, -74.42)  # 0.02 degrees away: a new fetch
+    assert len(counted) == 2 and counted[1][1] == 39.38
+    assert data.get_series("air_temp", -0.004, 0.004)["place"]["name"] == "0.0, 0.0"  # no "-0.0"
+
+
+def test_cache_expires_after_12_hours(counted, monkeypatch):
+    clock = [5000.0]
+    monkeypatch.setattr(data.time, "monotonic", lambda: clock[0])
+    data.get_series("air_temp", 39.36, -74.42)
+    clock[0] += data.TTL_S - 1
+    data.get_series("air_temp", 39.36, -74.42)
+    assert len(counted) == 1
+    clock[0] += 2
+    data.get_series("air_temp", 39.36, -74.42)
+    assert len(counted) == 2
+
+
+def test_cache_size_cap_drops_oldest(counted, monkeypatch):
+    monkeypatch.setattr(data, "MAX_ENTRIES", 3)
+    for i in range(5):
+        data.get_series("air_temp", 10 + i, 20)
+    assert len(data._cache) == 3 and len(counted) == 5
+    data.get_series("air_temp", 14, 20)  # newest is still there
+    assert len(counted) == 5
+    data.get_series("air_temp", 10, 20)  # oldest was dropped
+    assert len(counted) == 6
+
+
+def test_cache_does_not_keep_failures(monkeypatch):
+    calls = []
+
+    def fetch(param, lat, lon):
+        calls.append(1)
+        if len(calls) == 1:
+            raise httpx.ConnectError("down")
+        return load("power_monthly.json")
+    monkeypatch.setattr(power, "fetch", fetch)
+    with pytest.raises(httpx.ConnectError):
+        data.get_series("air_temp", 39.36, -74.42)
+    assert data.get_series("air_temp", 39.36, -74.42)["times"]  # the next call tries again
+    assert len(calls) == 2
+
+
+def test_cache_returns_copies(counted):
+    a = data.get_series("air_temp", 39.36, -74.42)
+    a["values"][0] = 12345.0
+    a["times"].clear()
+    a["notes"].append("junk")
+    a["place"]["lat"] = 0.0
+    a["source"]["id"] = "nope"
+    b = data.get_series("air_temp", 39.36, -74.42)
+    assert b["values"][0] != 12345.0 and b["times"] and "junk" not in b["notes"]
+    assert b["place"]["lat"] == 39.36 and b["source"]["id"] == "power"
+
+
+def test_cache_threads(counted):
+    from concurrent.futures import ThreadPoolExecutor
+    places = [(39.36, -74.42), (10.0, 20.0), (-33.9, 151.2)]
+    with ThreadPoolExecutor(8) as ex:
+        out = list(ex.map(lambda i: (places[i % 3], data.get_series("air_temp", *places[i % 3], start="1990", end="1991")), range(60)))
+    for (lat, lon), s in out:
+        assert s["place"]["lat"] == lat and s["times"][0] == "1990-01" and len(s["values"]) == 24
+    assert 3 <= len(counted) <= 24  # a race may fetch twice, never more than the number of threads per place
+
+
+def test_era5_429_is_a_provider_failure(monkeypatch):
+    body = {"error": True, "reason": "Hourly API request limit exceeded. Please try again in the next hour."}
+    monkeypatch.setattr(era5.httpx, "get", lambda *a, **k: httpx.Response(429, json=body, request=httpx.Request("GET", era5.URL)))
+    with pytest.raises(httpx.HTTPError) as e:  # not a ValueError: the API answers 502, not 400
+        data.get_series("air_temp_max", 28.58, 77.21, source="era5")
+    assert not isinstance(e.value, ValueError)
+
+
+def _daily_rows(first: str, last: str):
+    from datetime import date, timedelta
+    d, end = date.fromisoformat(first), date.fromisoformat(last)
+    while d <= end:
+        yield {"DATE": d.isoformat(), "TMAX": "30.0"}
+        d += timedelta(days=1)
+
+
+def test_station_period_notes(offline2, monkeypatch):
+    last = ghcn.last_day()
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: list(_daily_rows("1986-10-01", last)))
+    s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    assert "This station's record starts in October 1986." in s["notes"]
+    assert not any("record ends" in n for n in s["notes"])
+    data._cache.clear()
+    s = data.get_series("air_temp_max", 28.58, 77.21, start="1990", source="ghcn")  # asked from 1990: no start note
+    assert not any("record starts" in n for n in s["notes"])
+    data._cache.clear()
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: load_gz("ghcn_daily_tmax_safdarjung.json.gz"))  # ends December 2015
+    s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    assert "This station's record ends in December 2015." in s["notes"]
+    assert not any("record starts" in n for n in s["notes"])
+    s = data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="2016", source="ghcn")  # gap is 12 months: no note
+    assert not any("record ends" in n for n in s["notes"])
+
+
+def test_station_period_notes_skip_short_gaps(offline2, monkeypatch):
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: list(_daily_rows("1982-03-01", f"{int(ghcn.last_day()[:4]) - 1}-12-31")))
+    s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")  # starts 14 months late, ends 12 months early
+    assert not any("record starts" in n or "record ends" in n for n in s["notes"])
+
+
+def test_station_error_wording_is_the_same_for_every_measurement():
+    far = {"id": "X", "name": "FARAWAY", "lat": 30.0, "lon": 77.2, "types": {}}
+    for variable, plain in (("precip", "precipitation"), ("air_temp", "air temperature (2 m)"),
+                            ("air_temp_max", "hottest day of the month (2 m air temperature)")):
+        with pytest.raises(ValueError) as e:
+            ghcn.ranked(28.58, 77.21, [far], variable)
+        assert str(e.value).startswith(f"No weather station within 50 km has 30 years of {plain} data since 1981. The nearest is FARAWAY, ")
+        assert "air_temp" not in str(e.value) and "PRCP" not in str(e.value)  # no raw ids
