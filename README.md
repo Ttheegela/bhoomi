@@ -82,7 +82,7 @@ uv run uvicorn earthtrends.app:app --reload
 
 Then open `http://127.0.0.1:8000`.
 
-No key is needed for the Explore tab, the data routes (`/api/variables`, `/api/series`, `/api/trend`) or the MCP endpoint at `/mcp/`. None of the five data sources needs a key.
+No key is needed for the Explore tab, the data routes (`/api/variables`, `/api/series`, `/api/trend`) or the MCP endpoint at `/mcp/`. None of the six data sources needs a key.
 
 Only the Ask tab needs one. `POST /api/ask` calls a paid AI model through OpenRouter and needs `OPENROUTER_API_KEY`. Without it the route answers 503 and the Ask tab says that asking is not available.
 
