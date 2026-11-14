@@ -218,3 +218,13 @@ Chosen by the agent here: hash `tab=` key and Explore keeping a key-less hash; p
 
 # For Tarun's call (the frontend builds the default)
 1. ChatGPT tab. Default: show the steps from the official page with a "may differ on your plan" note. Alternative: drop the ChatGPT tab for now and let ChatGPT users use "Other" until someone checks it on a live account.
+
+# Deviations from the design (frontend build)
+- Ask, follow-up hint: shown only when `ASK_HISTORY` is on. With it off, only the "For now each question is answered on its own" line shows, because the hint ("What about Delhi?") would not work without history.
+- Ask, "health off": the lead line is hidden together with the composer, examples and privacy line, because it invites a question that cannot be asked.
+- Explore, no clear change grey line: when the range excludes zero it reads "The data lean up, but the p-value is not below 0.05." (the design text says "range includes zero", which would be false there). On phones the line sits under sentence 1 instead of under the big value, so the heading, source link and sentence 1 stay on the first screen.
+- Explore, the "Raw values: {source}" line is plain text without an arrow: the source link sits directly under the chart, and a link inside a sentence breaks the "source links are their own 48 px lines" rule.
+- Explore, the closed measurement select shows the short name by swapping option text on focus, pointerdown and blur (a native select cannot style the closed state alone). Untested on a real phone picker.
+- Explore, the phone gap between sections is 8 px (was 12) and the tab bar margins are 8 px, to keep the first screen.
+- "Use in your AI": the Cursor note says we could not confirm menu names; VS Code lists both docs links. Each config block has a one-line file note above it so it reads without the tabs (no JavaScript).
+- Not built: "Show on chart" for answers that only used `get_series` (no `detect_trend`); those show the "No data was looked up" line.
