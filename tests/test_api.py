@@ -73,13 +73,32 @@ def test_missing_lat_is_422():
     assert client.get("/api/trend", params={"variable": "air_temp", "lon": 0}).status_code == 422
 
 
-def test_source_down_is_502(monkeypatch):
-    def down(*a):
-        raise httpx.ConnectError("boom")
-    monkeypatch.setattr(power, "fetch", down)
+def connect_error(*a, **kw):
+    raise httpx.ConnectError("boom")
+
+
+def html_page(*a):  # upstream answers 200 with a maintenance page, so r.json() fails
+    return json.loads("<html>down for maintenance</html>")
+
+
+@pytest.mark.parametrize("fetch", [connect_error, html_page])
+def test_source_down_is_502(monkeypatch, fetch):
+    monkeypatch.setattr(power, "fetch", fetch)
     r = client.get("/api/trend", params={"variable": "air_temp", "lat": 0, "lon": 0})
     assert r.status_code == 502 and r.json() == {"detail": "The data source did not answer. Please try again."}
     assert "cache-control" not in r.headers
+
+
+def test_health_keys_unreachable_is_not_ok(monkeypatch):
+    from earthtrends.app import health_keys
+
+    for n in ("OPENROUTER_API_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"):
+        monkeypatch.setenv(n, "dummy")
+    monkeypatch.setenv("LANGFUSE_HOST", "https://langfuse.invalid")
+    monkeypatch.setattr(httpx, "get", connect_error)
+    out = health_keys()
+    assert out["openrouter_ok"] is False and out["langfuse_ok"] is False
+    assert "dummy" not in json.dumps(out)
 
 
 def mcp_call(c, method, params=None):
@@ -99,16 +118,25 @@ def test_mcp_tools(mcp_client, offline, monkeypatch):
     res = mcp_call(mcp_client, "tools/call", {"name": "detect_trend", "arguments": {**args, "variable": "nope"}})
     assert res["isError"] and "Unknown variable 'nope'" in res["content"][0]["text"]
 
-    monkeypatch.setattr(coops, "fetch", lambda sid: (_ for _ in ()).throw(httpx.ConnectError("boom")))
-    res = mcp_call(mcp_client, "tools/call", {"name": "detect_trend", "arguments": args})
-    assert res["isError"] and "did not answer" in res["content"][0]["text"]
+    for fetch in (connect_error, html_page):
+        monkeypatch.setattr(coops, "fetch", fetch)
+        res = mcp_call(mcp_client, "tools/call", {"name": "detect_trend", "arguments": args})
+        assert res["isError"] and "The data source did not answer" in res["content"][0]["text"]
 
 
-def test_web_mount(tmp_path):
+def test_web_mount_keeps_mcp_and_api(tmp_path):
+    # A fresh app shaped like the real one (no lifespan), so no second MCP session manager starts.
     a = FastAPI()
+    a.get("/api/health")(lambda: {"status": "ok"})
+    a.mount("/mcp", FastAPI())
     mount_web(a, tmp_path / "missing")
     assert TestClient(a).get("/").status_code == 404
+
     (tmp_path / "index.html").write_text("<h1>hi</h1>")
     mount_web(a, tmp_path)
-    assert TestClient(a).get("/").text == "<h1>hi</h1>"
-    assert client.get("/api/health").json() == {"status": "ok"}
+    c = TestClient(a, follow_redirects=False)
+    r = c.post("/mcp", json={})
+    assert r.status_code == 307 and r.headers["location"] == "/mcp/"
+    assert c.get("/mcp?x=1").headers["location"] == "/mcp/?x=1"
+    assert c.get("/api/health").json() == {"status": "ok"}
+    assert c.get("/").text == "<h1>hi</h1>"

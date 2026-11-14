@@ -1,4 +1,5 @@
 import contextlib
+import json
 
 import httpx
 from mcp.server.mcpserver import MCPServer
@@ -16,6 +17,8 @@ def _as_tool_error():
     # Bad input and upstream outages reach the client as readable tool errors, not crashes.
     try:
         yield
+    except json.JSONDecodeError as e:  # a ValueError, but it means upstream sent a non-JSON page
+        raise ToolError(SOURCE_DOWN) from e
     except ValueError as e:
         raise ToolError(str(e)) from e
     except httpx.HTTPError as e:
