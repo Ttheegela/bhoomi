@@ -1,6 +1,6 @@
 """NOAA NCEI GHCN-Daily (nearest station) through the Access Data Service, no key."""
 import time
-from datetime import date
+from datetime import date, datetime
 from functools import lru_cache
 from math import cos, isfinite, radians
 
@@ -15,9 +15,9 @@ MAX_KM = 50
 MIN_YEARS = 30  # of the needed data type, since 1981
 # The agent gives one question 120 s. One lookup stops starting requests after DEADLINE_S. httpx timeouts are per
 # phase (connect 5 s, write 10 s, read 30 s; a server that trickles bytes can restart the read clock), so one
-# request is not hard-capped: a normal worst case is the deadline plus one request, about 60 + 5 + 10 + 30 = 105 s.
+# request is not hard-capped: a normal worst case is the deadline plus one request, about 40 + 5 + 10 + 30 = 85 s, which leaves the agent time to answer.
 # NOAA's first call for a place can be slow (21 s seen live), hence the 30 s read.
-DEADLINE_S = 60
+DEADLINE_S = 40
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)
 # Data types that give each variable; the first group a station has enough record for is used.
 NEED = {"air_temp": [("TAVG",), ("TMAX", "TMIN")], "air_temp_max": [("TMAX",)], "precip": [("PRCP",)]}
@@ -31,7 +31,7 @@ def _last_day() -> str:
 
 def parse_search(resp: dict) -> list[dict]:
     """Search reply -> stations. A malformed station or data type is skipped; a malformed reply is a ValueError."""
-    results = resp.get("results", []) if isinstance(resp, dict) else None
+    results = resp.get("results") if isinstance(resp, dict) else None  # a real empty box has "results": []
     if not isinstance(results, list):
         raise ValueError("NOAA's station search returned an unexpected reply.")
     out = []
@@ -171,11 +171,14 @@ def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[flo
     for row in resp:
         if not isinstance(row, dict) or not isinstance(row.get("DATE"), str):
             continue
+        d = row["DATE"][:10]  # "2000-01-01T00:00" is the day 2000-01-01
         try:
-            date.fromisoformat(row["DATE"][:10])  # one junk row must not fail the whole question later
+            if len(d) != 10:
+                raise ValueError
+            datetime.strptime(d, "%Y-%m-%d")  # exactly YYYY-MM-DD: fromisoformat also takes week dates and 20000101
         except ValueError:
             continue
-        got = by_day.setdefault(row["DATE"], {})
+        got = by_day.setdefault(d, {})
         for t in types:
             if t not in got and (v := num(row, t)) is not None:  # on a duplicate DATE the first real value wins
                 got[t] = v

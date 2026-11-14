@@ -242,12 +242,32 @@ def test_ghcn_deadline(offline2, monkeypatch):
     found = ghcn.parse_search(load("ghcn_search_delhi.json"))
 
     def slow_search(la, lo, types):
-        clock[0] += 61  # the search itself took longer than the 60 s deadline
+        clock[0] += 41  # the search itself took longer than the 40 s deadline
         return found
     monkeypatch.setattr(ghcn, "search", slow_search)
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: pytest.fail("no request may start after the deadline"))
     with pytest.raises(httpx.TimeoutException, match="slow right now"):  # a provider problem: the API answers 502
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+
+
+def test_ghcn_search_without_results_key():
+    assert ghcn.parse_search({"results": []}) == []  # what NOAA sends for a real empty box: "no station"
+    with pytest.raises(ValueError, match="unexpected reply"):
+        ghcn.parse_search({"errorMessage": "maintenance"})  # an error object is not "zero stations" (and is not cached)
+
+
+def test_ghcn_other_http_error_is_not_retried(offline2, monkeypatch):
+    near = {"id": "N", "name": "NEAR", "lat": 28.58, "lon": 77.21, "types": {"TMAX": ("1950-01-01", "2024-12-31", 100.0)}}
+    monkeypatch.setattr(ghcn, "search", lambda la, lo, types: [near, dict(near, id="F", name="FAR")])
+    calls = []
+
+    def fetch(sid, types):
+        calls.append(sid)
+        raise httpx.HTTPStatusError("503", request=httpx.Request("GET", "https://x"), response=httpx.Response(503))
+    monkeypatch.setattr(ghcn, "fetch", fetch)
+    with pytest.raises(httpx.HTTPStatusError):
+        data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    assert calls == ["N"]
 
 
 def test_ghcn_provider_timeout_is_an_httpx_error(monkeypatch):
@@ -282,12 +302,17 @@ def test_ghcn_next_station_after_timeout(offline2, monkeypatch):
 
 def test_ghcn_parse_junk_and_duplicate_dates():
     rows = [{"DATE": "garbage", "TMAX": "1"}, {"DATE": "2000-13-45", "TMAX": "1"},
+            {"DATE": "2000-W01-1", "TMAX": "1"}, {"DATE": "20000101", "TMAX": "1"}, {"DATE": "2000-1-01", "TMAX": "1"},
+            {"DATE": "2000-01-01T00:00", "TMAX": "55"},  # the same day as 2000-01-01, counted once (first value wins)
+            {"DATE": "2000-01-01junk", "TMAX": "56"},
             {"DATE": "2000-01-01", "TMAX": "10", "TMIN": "2"},
             {"DATE": "2000-01-01", "TMAX": "99", "TMIN": "4"},  # duplicate: first real value per type wins
             {"DATE": "2000-01-02", "TMAX": "NaN", "TMIN": "3"},
             {"DATE": "2000-01-02", "TMAX": "8"}]  # duplicate fills the missing TMAX, TMIN stays from the first row
-    assert ghcn.parse(rows, ("TMAX",)) == (["2000-01-01", "2000-01-02"], [10.0, 8.0])
-    assert ghcn.parse(rows, ("TMAX", "TMIN")) == (["2000-01-01", "2000-01-02"], [6.0, 5.5])
+    # TMAX 55 comes first for 2000-01-01 in the list above, so it wins; TMIN 2 comes from the next row
+    assert ghcn.parse(rows, ("TMAX",)) == (["2000-01-01", "2000-01-02"], [55.0, 8.0])
+    assert ghcn.parse(rows, ("TMAX", "TMIN")) == (["2000-01-01", "2000-01-02"], [28.5, 5.5])
+    monthly.daily_to_monthly(*ghcn.parse(rows, ("TMAX",)), "max")  # the monthly step copes with what is left
 
 
 def test_ghcn_station_coordinates_and_ids():
