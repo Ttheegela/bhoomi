@@ -3,6 +3,8 @@ from datetime import date
 
 import httpx
 
+from .upstream import fit
+
 URL = "https://archive-api.open-meteo.com/v1/archive"
 SOURCE = {"id": "era5", "name": "ERA5 reanalysis via Open-Meteo archive", "url": "https://open-meteo.com/"}
 PARAMS = {"air_temp": "temperature_2m_mean", "air_temp_max": "temperature_2m_max", "precip": "precipitation_sum"}
@@ -13,7 +15,7 @@ NOTES = {"air_temp_max": "Each monthly value is the hottest single day of that m
 def parse(resp: dict, param: str) -> tuple[list[str], list[float | None]]:
     daily = resp.get("daily") or {}
     if param not in daily or "time" not in daily:
-        raise ValueError(f"Open-Meteo returned no {param} data: {resp.get('reason') or 'unknown reason'}")
+        raise ValueError(fit(f"Open-Meteo returned no {param} data: ", resp.get("reason") or "unknown reason"))
     if len(daily["time"]) != len(daily[param]):
         raise ValueError("Open-Meteo returned times and values of different lengths.")
     return list(daily["time"]), list(daily[param])

@@ -7,6 +7,7 @@ from math import cos, isfinite, radians
 import httpx
 
 from .coops import haversine_km
+from .upstream import LIMIT, NAME, fit, text
 
 SEARCH = "https://www.ncei.noaa.gov/access/services/search/v1/data"
 DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
@@ -57,7 +58,10 @@ def parse_search(resp: dict) -> list[dict]:
             lat, lon = float(lat), float(lon)
             if not (isfinite(lat) and isfinite(lon) and abs(lat) <= 90 and abs(lon) <= 180 and isinstance(st["id"], str) and isinstance(st["name"], str)):
                 continue
-            out.append({"id": st["id"], "name": st["name"], "lat": lat, "lon": lon, "types": types})
+            sid = text(st["id"], 40)
+            if not sid:
+                continue
+            out.append({"id": sid, "name": text(st["name"], NAME) or sid, "lat": lat, "lon": lon, "types": types})
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             continue
     return out
@@ -102,8 +106,8 @@ def _no_station(variable: str, nearest: tuple[float, dict] | None) -> ValueError
     """One wording for every measurement, using the catalog's plain name. `nearest` is (km, station)."""
     msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {PLAIN_NAME.get(variable, variable.replace("_", " "))} data since 1981."
     if nearest:
-        msg += f" The nearest is {nearest[1]['name']}, {nearest[0]:.0f} km away."
-    return ValueError(msg)
+        msg += f" The nearest is {text(nearest[1]['name'], NAME)}, {nearest[0]:.0f} km away."
+    return ValueError(text(msg, LIMIT))
 
 
 def ranked(lat: float, lon: float, candidates: list[dict], variable: str) -> list[tuple[dict, float, tuple[str, ...]]]:
@@ -161,7 +165,7 @@ def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[flo
     "measurement flag,quality flag,source flag[,time]", and a non-blank quality flag means it failed."""
     if not isinstance(resp, list):
         msg = resp.get("errorMessage") if isinstance(resp, dict) else None
-        raise ValueError(f"NOAA's data service returned an unexpected reply{': ' + str(msg) if msg else ''}.")
+        raise ValueError(fit("NOAA's data service returned an unexpected reply: ", msg, ".") if msg else "NOAA's data service returned an unexpected reply.")
 
     def num(row, k):
         parts = str(row.get(f"{k}_ATTRIBUTES") or "").split(",")
