@@ -70,19 +70,21 @@ def run_tool(name: str, args: dict) -> tuple[dict | list | None, str | None]:
 STATION_REASON = "No weather station near this place has a long enough record."
 GAUGE_REASON = "No tide gauge near this place has a usable record."
 FALLBACK_REASON = "This source has no usable record for this place."
-CATALOG_REASON = "That variable or source id is not in the catalog; use the ids listed in your instructions."
+CATALOG_REASON = ("That variable, or that source for this variable, is not in the catalog; "
+                  "use the ids listed in your instructions.")
 
 
 def model_reason(error: str) -> str:
     """What the model reads for a failed call. Never a digit, so an error's distances, years or coordinates can't
     reach an answer (the owner's rule: no numbers where no data exist). Digit-free messages pass unchanged; the API
     response, logs and traces keep the full text."""
-    if not any(ch.isdigit() or ch.isnumeric() for ch in error):  # superscripts and other numerals count too
+    if not any(ch.isnumeric() for ch in error):  # every digit, plus superscripts and other numerals
         return error
     low = error.lower()
     # The model's own bad call first: it must learn to fix it, not hear "no data". A wrong-source error lists
     # "era5" and "ghcn", so it would otherwise match the station words below.
-    if "not available from" in low or low.startswith("unknown variable"):
+    # The catalog's own wording only ("x is not available from 'y'. Available: ..."), so quoted provider text can't hit it.
+    if (" is not available from '" in low and "available:" in low) or low.startswith("unknown variable"):
         return CATALOG_REASON
     if low.startswith("unknown tool"):
         return "That tool does not exist; use only the tools you were given."

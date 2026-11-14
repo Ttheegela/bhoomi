@@ -393,6 +393,18 @@ def test_wrong_catalog_id_gets_catalog_reason(message):
     assert reason == loop.CATALOG_REASON and not any(ch.isdigit() for ch in reason)
 
 
+def test_wrong_pairing_of_real_ids_gets_true_reason():
+    reason = loop.model_reason("sea_level is not available from 'era5'. Available: coops.")
+    assert reason == ("That variable, or that source for this variable, is not in the catalog; "
+                      "use the ids listed in your instructions.")
+    assert "or source id is not in the catalog" not in reason  # both ids exist; only the pairing is wrong
+
+
+def test_data_text_saying_not_available_from_is_not_a_catalog_error():
+    reason = loop.model_reason("No monthly sea level at Station 8518750: data not available from 2020")
+    assert reason != loop.CATALOG_REASON and reason == loop.GAUGE_REASON
+
+
 def test_unknown_tool_and_superscript_digit():
     assert loop.model_reason("Unknown tool 'get_series2'.") == "That tool does not exist; use only the tools you were given."
     assert loop.model_reason("Rainfall rose by x² here.") == loop.FALLBACK_REASON  # only a superscript two
