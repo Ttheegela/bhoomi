@@ -1,7 +1,11 @@
 """The agent loop: identical for every model; it talks to the model only through a provider."""
+import contextvars
 import json
+import logging
 import os
+import re
 import time
+from concurrent.futures import ThreadPoolExecutor, wait
 
 import httpx
 
@@ -11,15 +15,21 @@ from earthtrends.agent.tracing import Trace
 
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
 MAX_CALLS = 6
-BUDGET_S = 120  # total per question, checked before each model call and each tool; keeps us inside the serverless limit
+BUDGET_S = 120  # total per question, checked before each model call and each step's tools; keeps us inside the serverless limit
+MAX_TOOLS = 6  # tool calls run in one step; more get an error, so one step can't flood the data sources
+STEP_WAIT_S = 40  # longest wait for one step's tool calls (or the budget left, if less); later ones count as late
 SOURCE_DOWN = "The data source did not answer."
+LATE = "The data source did not answer in time."
+log = logging.getLogger(__name__)
 GAVE_UP = ("Sorry, I could not finish working this out, so I have no answer to give you. "
            "Please try asking again, maybe in a simpler way.")
 RETRY = ("\n\nYour first answer to this question was cut off because it was too long. Give the same answer again "
          "in fewer words, following every rule. Do not call a tool: these are the tool results you already got:\n")
 MAX_WORDS = 120  # longest answer we return without asking for a shorter one
-RETRY_LONG = (f"\n\nYour first answer to this question was over {MAX_WORDS} words. Give the same answer again in at "
-              "most 100 words, following every rule: one short sentence per caveat, no unit explained twice, and "
+MAX_WORDS_MULTI = 180  # the same, when results from two or more sources are reported
+SHORTER = {MAX_WORDS: 100, MAX_WORDS_MULTI: 150}  # what the length retry asks for
+RETRY_LONG = ("\n\nYour first answer to this question was over {limit} words. Give the same answer again in at "
+              "most {target} words, following every rule: one short sentence per caveat, no unit explained twice, and "
               "any declined request in a few words. Do not call a tool: these are the tool results you already got:\n")
 
 TOOLS = [
@@ -58,6 +68,52 @@ def run_tool(name: str, args: dict) -> tuple[dict | list | None, str | None]:
         return None, str(e)
 
 
+STATION_REASON = "No weather station near this place has a long enough record."
+GAUGE_REASON = "No tide gauge near this place has a usable record."
+FALLBACK_REASON = "This source has no usable record for this place."
+CATALOG_REASON = ("That variable, or that source for this variable, is not in the catalog; "
+                  "use the ids listed in your instructions.")
+
+
+def model_reason(error: str) -> str:
+    """What the model reads for a failed call. Never a digit, so an error's distances, years or coordinates can't
+    reach an answer (the owner's rule: no numbers where no data exist). Digit-free messages pass unchanged; the API
+    response, logs and traces keep the full text."""
+    if not any(ch.isnumeric() for ch in error):  # every digit, plus superscripts and other numerals
+        return error
+    low = error.lower()
+    # The model's own bad call first: it must learn to fix it, not hear "no data". A wrong-source error lists
+    # "era5" and "ghcn", so it would otherwise match the station words below.
+    # The catalog's own wording only: "<variable> is not available from <source repr>. Available: ...". Anchored on
+    # the start (the variable is one catalog token), since the model controls how the source is quoted, if at all.
+    if re.match(r"\S+ is not available from ", low) or low.startswith("unknown variable"):
+        return CATALOG_REASON
+    if low.startswith("unknown tool"):
+        return "That tool does not exist; use only the tools you were given."
+    if low.startswith(("latitude", "longitude")):
+        return "The latitude or longitude given is not a valid place."
+    if "must look like" in low:
+        return "start and end must be a year, or a year and a month."
+    if low.startswith("too many tool calls"):
+        return "Too many tool calls at once; ask for fewer in one step."
+    if "weather station" in low or "ghcn" in low:
+        return STATION_REASON
+    if "tide gauge" in low or "sea level" in low:
+        return GAUGE_REASON
+    return FALLBACK_REASON
+
+
+def for_model(calls: list[dict]) -> list[dict]:
+    return [{**c, "error": model_reason(c["error"])} if c["error"] else c for c in calls]
+
+
+def word_limit(calls: list[dict]) -> int:
+    """120 words, or 180 when detect_trend results came back from two or more distinct sources."""
+    srcs = {(c["result"].get("source") or {}).get("id") for c in calls
+            if c["name"] == "detect_trend" and c["error"] is None and isinstance(c["result"], dict)}
+    return MAX_WORDS_MULTI if len(srcs) >= 2 else MAX_WORDS
+
+
 def ask(question: str, model: str | None = None) -> dict:
     t0 = time.monotonic()
     try:
@@ -87,11 +143,11 @@ def ask(question: str, model: str | None = None) -> dict:
             if not step["tool_calls"]:
                 # Cut off at the output cap: never show partial text. The token check covers providers without "stop".
                 cut = step.get("stop") == "length" or step["usage"]["completion_tokens"] >= MAX_TOKENS
-                text = step["text"]
+                text, limit = step["text"], word_limit(calls)
                 if not cut:
                     if not (text or "").strip():
                         break  # empty text (e.g. reasoning spent the cap): falls through to too_long or GAVE_UP
-                    if len(text.split()) <= MAX_WORDS:
+                    if len(text.split()) <= limit:
                         answer = text
                         break
                     if too_long is None or len(text.split()) < len(too_long.split()):
@@ -101,23 +157,48 @@ def ask(question: str, model: str | None = None) -> dict:
                 # One fresh, shorter try per question, for either reason. The seam has no "add a user message", so
                 # restart with the results inline; the call limit and the budget still apply through the loop.
                 retried = True
-                provider.start(system, question + (RETRY if cut else RETRY_LONG) + json.dumps(calls), TOOLS)
+                again = RETRY if cut else RETRY_LONG.format(limit=limit, target=SHORTER[limit])
+                provider.start(system, question + again + json.dumps(for_model(calls)), TOOLS)
                 continue
             if i == MAX_CALLS - 1:  # no model call left to read the results, so don't fetch data for nothing
                 break
-            results = []
-            for c in step["tool_calls"]:
-                if time.monotonic() - t0 >= BUDGET_S:  # a data fetch can take 30 s; don't start one we can't afford
-                    break
+            spent = time.monotonic() - t0
+            if spent >= BUDGET_S:  # a data fetch can take 30 s; don't start any we can't afford
+                break  # answer stays None, so GAVE_UP
+            todo = step["tool_calls"]
+
+            def run_one(c):
                 args = c["arguments"] if c["arguments"] is not None else {}
                 with trace.child("tool", c["name"], input=args) as span:
-                    result, error = (None, c["arguments_error"]) if c["arguments_error"] else run_tool(c["name"], args)
+                    if c["arguments_error"]:
+                        result, error = None, c["arguments_error"]
+                    else:
+                        try:
+                            result, error = run_tool(c["name"], args)
+                        except Exception as e:  # one broken source must not sink the others' results
+                            # Type only: the message or traceback can carry a provider URL with coordinates.
+                            log.error("Tool %s failed (%s)", c["name"], type(e).__name__)
+                            result, error = None, SOURCE_DOWN
                     span.update(output=result if error is None else {"error": error}, **({"level": "ERROR"} if error else {}))
-                calls.append({"name": c["name"], "arguments": args, "result": result, "error": error})
-                results.append({"id": c["id"], "content": result if error is None else {"error": error}})
-            if len(results) < len(step["tool_calls"]):  # budget spent mid-step: answer stays None, so GAVE_UP
-                break
-            provider.add_tool_results(results)
+                return {"name": c["name"], "arguments": args, "result": result, "error": error}
+
+            def failed(c, error):
+                return {"name": c["name"], "arguments": c["arguments"] if c["arguments"] is not None else {},
+                        "result": None, "error": error}
+
+            # One step's calls (e.g. one per source) fetch at the same time, so the slowest source sets the wait, not
+            # the sum. The wait is bounded: a source still fetching after it is reported as late, and its thread is
+            # left to finish on its own (shutdown without waiting), so the answer goes on with what arrived.
+            run = todo[:MAX_TOOLS]
+            pool = ThreadPoolExecutor(max_workers=max(1, len(run)))
+            futs = [pool.submit(contextvars.copy_context().run, run_one, c) for c in run]  # keeps trace attributes
+            wait(futs, timeout=min(STEP_WAIT_S, BUDGET_S - spent))
+            pool.shutdown(wait=False, cancel_futures=True)
+            done = [f.result() if f.done() and not f.cancelled() else failed(c, LATE) for f, c in zip(futs, run)]
+            done += [failed(c, f"Too many tool calls at once; at most {MAX_TOOLS} per step.") for c in todo[MAX_TOOLS:]]
+            calls += done
+            provider.add_tool_results([{"id": c["id"], "content": d["result"] if d["error"] is None
+                                        else {"error": model_reason(d["error"])}} for c, d in zip(todo, done)])
         answer = answer or too_long or GAVE_UP
     finally:
         trace_id = trace.end(answer)

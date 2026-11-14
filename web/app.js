@@ -6,16 +6,33 @@ const MINUS = '−';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const PRESETS = [
-  { label: 'Atlantic City, NJ', lat: 39.36, lon: -74.42, variable: 'sea_level' },
-  { label: 'Delhi', lat: 28.61, lon: 77.21, variable: 'air_temp' },
-  { label: 'Visakhapatnam', lat: 17.69, lon: 83.22, variable: 'air_temp' },
+  { label: 'New York', lat: 40.71, lon: -74.01, variable: 'sea_level' },
   { label: 'Princeton, NJ', lat: 40.35, lon: -74.66, variable: 'air_temp' },
+  { label: 'Delhi', lat: 28.58, lon: 77.21, variable: 'air_temp_max' },
+  { label: 'Visakhapatnam', lat: 17.69, lon: 83.22, variable: 'air_temp' },
+  { label: 'Mumbai', lat: 19.08, lon: 72.88, variable: 'air_temp_max' },
+  { label: 'Chennai', lat: 13.08, lon: 80.27, variable: 'air_temp' },
+  { label: 'London', lat: 51.51, lon: -0.13, variable: 'air_temp' },
+  { label: 'Seattle', lat: 47.61, lon: -122.33, variable: 'sea_level' },
 ];
 const SOURCES = {
   power: { name: 'NASA POWER (MERRA-2)', url: 'https://power.larc.nasa.gov/' },
+  era5: { name: 'ERA5 reanalysis via Open-Meteo archive', url: 'https://open-meteo.com/' },
+  ghcn: { name: 'NOAA NCEI GHCN-Daily', url: 'https://www.ncei.noaa.gov/' },
   coops: { name: 'NOAA CO-OPS tide gauges', url: 'https://tidesandcurrents.noaa.gov/' },
+  psmsl: { name: 'Permanent Service for Mean Sea Level (PSMSL)', url: 'https://psmsl.org/' },
 };
-const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'GRACE/GRACE-FO' };
+// One plain-words line under the source control (grid sizes as in the catalog's resolution text).
+const SOURCE_HELP = {
+  power: 'A NASA record of past weather on a grid about 50 km wide.',
+  era5: 'A European record of past weather on a grid about 25 km wide.',
+  ghcn: 'Readings from the nearest weather station.',
+  coops: 'Readings from the nearest NOAA tide gauge (US coasts).',
+  psmsl: 'Readings from the nearest tide gauge in a worldwide collection.',
+};
+// Shorter names for the closed select on phones; the open list keeps SOURCE_LABELS.
+const SOURCE_SHORT = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'GHCN-Daily', coops: 'CO-OPS', psmsl: 'PSMSL' };
+const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'GRACE/GRACE-FO', psmsl: 'PSMSL tide gauges' };
 
 /* ---------- pure helpers (no DOM; exported for a node check) ---------- */
 
@@ -133,31 +150,26 @@ function placeFor(lat, lon, apiName, sourceId) {
 function monthLabel(t) { const m = monthIndex(t); return MONTHS[m % 12] + ' ' + Math.floor(m / 12); }
 
 function verdictCopy(t, name, place) {
-  const y0 = t.period.start.slice(0, 4), y1 = t.period.end.slice(0, 4);
+  const y0 = t.period.start.slice(0, 4), y1 = t.period.end.slice(0, 4), n = lcName(name);
   const s = fmtVal(t.slope_per_decade, t.units), lo = fmtVal(t.ci_low, t.units), hi = fmtVal(t.ci_high, t.units);
-  const band = `The shaded band on the chart, ${lo} to ${hi} per decade, shows where the true trend likely sits.`;
-  if (t.verdict === 'rising') {
-    return { head: 'Rising', shape: 'up',
-      p1: `${name} at ${place} is going up, about ${s} per decade from ${y0} to ${y1}. ${band}`,
-      p2: 'Even the low end of the band is above zero, so this is a clear rise.' };
+  const sl = t.slope_per_decade;
+  if (t.verdict === 'rising' || t.verdict === 'falling') {
+    const up = t.verdict === 'rising';
+    return { head: up ? 'Rising' : 'Falling', shape: up ? 'up' : 'down', lean: null,
+      p1: `From ${y0} to ${y1}, ${n} at ${place} ${up ? 'rose' : 'fell'} about ${s} per decade, and the data support a range of ${lo} to ${hi}.`,
+      p2: up ? 'Even the low end of the range is above zero, so this is a clear rise.' : 'Even the high end of the range is below zero, so this is a clear fall.' };
   }
-  if (t.verdict === 'falling') {
-    return { head: 'Falling', shape: 'down',
-      p1: `${name} at ${place} is going down, about ${s} per decade from ${y0} to ${y1}. ${band}`,
-      p2: 'Even the high end of the band is below zero, so this is a clear fall.' };
-  }
-  const sl = t.slope_per_decade, abs = fmtAbs(sl, t.units);
-  const lean = sl === 0 ? `The data show no lean either way (${s} per decade)` : `The data lean ${sl > 0 ? 'up' : 'down'} by ${abs} per decade`;
-  const head = `We can't tell ${lcName(name)} at ${place} apart from no change, ${y0} to ${y1}.`;
-  let p1;
-  if (t.ci_low > 0 || t.ci_high < 0) {
-    const side = t.ci_low > 0 ? 'above' : 'below';
-    p1 = `${head} ${lean} and the shaded band (${lo} to ${hi}) stays ${side} zero, but the test is not sure enough to call it a clear change (p-value ${fmtP(t.p_value)}).`;
-  } else {
-    p1 = `${head} ${lean}, but the shaded band (${lo} to ${hi}) includes zero.`;
-  }
-  return { head: 'No clear change', shape: 'flat', p1,
-    p2: 'That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs.' };
+  const zeroIn = t.ci_low <= 0 && t.ci_high >= 0;
+  const dir = sl > 0 ? 'up' : 'down';
+  const p1 = sl === 0
+    ? `From ${y0} to ${y1}, we can't tell ${n} at ${place} apart from no change: the data show no lean either way, and the range runs from ${lo} to ${hi}.`
+    : `From ${y0} to ${y1}, we can't tell ${n} at ${place} apart from no change: the data lean ${dir} about ${s} per decade, but the range runs from ${lo} to ${hi}.`;
+  const lean = sl === 0 ? `The data show no lean either way, and the range includes zero.`
+    : `The data lean ${dir}, but ${zeroIn ? 'the range includes zero' : 'the p-value is not below 0.05'}.`;
+  const p2 = zeroIn
+    ? 'That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs.'
+    : `The 95% range (${lo} to ${hi}) stays ${t.ci_low > 0 ? 'above' : 'below'} zero, but the p-value is ${fmtP(t.p_value)}, which is not below 0.05. We go by the stricter test, so we don't call this a clear change. Treat it as a hint, not a finding.`;
+  return { head: 'No clear change', shape: 'flat', lean, p1, p2 };
 }
 
 function captionText(t, name, place) {
@@ -169,7 +181,8 @@ function captionText(t, name, place) {
   return `${name} at ${place}, ${t.period.start} to ${t.period.end}. The trend line ${y} ${range}. Verdict: ${v}.`;
 }
 
-function rawLine(source) { return `Raw values: ${source ? source.name : 'unknown'}. Trend and range: our calculation.`; }
+function rawLine(source, withTrend) { return `Raw values: ${source ? source.name : 'unknown'}.` + (withTrend ? " Trend and range: our calculation, the Mann-Kendall test with Sen's slope on monthly values with seasons removed." : ''); }
+function chartHead(t, name, place) { return `${name} at ${place}: ${fmtVal(t.slope_per_decade, t.units)} per decade, ${t.period.start.slice(0, 4)} to ${t.period.end.slice(0, 4)}`; }
 
 function layoutFor(w) {
   if (w <= 599) return { vw: 340, hA: 126, hB: 206 };
@@ -181,6 +194,57 @@ function nearestIndex(ms, m) {
   let lo = 0, hi = ms.length - 1;
   while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (ms[mid] < m) lo = mid; else hi = mid; }
   return Math.abs(ms[lo] - m) <= Math.abs(ms[hi] - m) ? lo : hi;
+}
+
+/* ---------- tabs and the URL hash (pure) ---------- */
+
+const TABS = [
+  { id: 'explore', label: 'Explore', title: 'Trend Detective' },
+  { id: 'ask', label: 'Ask', title: 'Trend Detective: Ask' },
+  { id: 'connect', label: 'Use in your AI', title: 'Trend Detective: Use in your AI' },
+];
+const APPS = ['claude', 'claude-code', 'cursor', 'vscode', 'other'];
+
+// Hash -> { tab, app, explore }. Missing or unknown tab = explore; unknown app = claude.
+// explore is set only for a complete, in-range variable/lat/lon (old share links); else null.
+function parseHash(raw) {
+  const h = new URLSearchParams(String(raw).replace(/^#/, ''));
+  const t = h.get('tab'), a = h.get('app');
+  const num = (k) => { const r = (h.get(k) || '').trim(); return r === '' ? NaN : Number(r); };
+  const lat = num('lat'), lon = num('lon');
+  const ok = !!h.get('variable') && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  return {
+    exploreBad: !ok && (h.has('variable') || h.has('lat') || h.has('lon')), // looks like a place link but is not usable
+    tab: t === 'ask' || t === 'connect' ? t : 'explore',
+    app: APPS.includes(a) ? a : 'claude',
+    explore: ok ? { variable: h.get('variable'), lat, lon, source: h.get('source') || null } : null,
+  };
+}
+// { tab, app, explore } -> hash text without '#'. Explore keeps its old key-less form.
+function writeHash(st) {
+  if (st.tab === 'ask') return 'tab=ask';
+  if (st.tab === 'connect') return 'tab=connect' + (st.app && st.app !== 'claude' ? '&app=' + st.app : '');
+  const e = st.explore;
+  if (!e) return '';
+  return `variable=${e.variable}&lat=${Number(e.lat).toFixed(2)}&lon=${Number(e.lon).toFixed(2)}` + (e.source ? '&source=' + encodeURIComponent(e.source) : '');
+}
+
+// A place from a link or an answer, made safe for the catalog: null for an unknown measurement; the source
+// is kept only when the measurement offers it and it is not the default one (the default is never written).
+function fixExplore(e, vars) {
+  const v = vars.find((x) => x.id === e.variable);
+  if (!v) return null;
+  const ok = !!e.source && Array.isArray(v.sources) && v.sources.includes(e.source) && e.source !== v.sources[0];
+  return { variable: e.variable, lat: e.lat, lon: e.lon, source: ok ? e.source : null };
+}
+
+// The source the page sends: only one the user chose by hand, offered by the measurement, and not its default.
+function sourceToSend(v, userSource) {
+  return v && Array.isArray(v.sources) && v.sources.length > 1 && userSource && v.sources.includes(userSource) && userSource !== v.sources[0] ? userSource : undefined;
+}
+// The source the control shows after a result: the one the result came from, when the measurement lists it.
+function pickShown(v, resultSourceId) {
+  return v && Array.isArray(v.sources) && v.sources.includes(resultSourceId) ? resultSourceId : null;
 }
 
 /* ---------- DOM helpers ---------- */
@@ -202,23 +266,43 @@ function svg(tag, attrs, text) {
 }
 function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
 
+// Standard tabs pattern (automatic activation): arrows wrap, Home/End jump, one tab stop.
+function wireTablist(tabs, activate) {
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => activate(i, false));
+    t.addEventListener('keydown', (e) => {
+      const n = tabs.length;
+      const j = e.key === 'ArrowRight' ? (i + 1) % n : e.key === 'ArrowLeft' ? (i + n - 1) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
+      if (j < 0) return;
+      e.preventDefault();
+      tabs[j].focus();
+      activate(j, true);
+    });
+  });
+}
+function selectTab(tabs, panels, i) {
+  tabs.forEach((t, k) => { t.setAttribute('aria-selected', String(k === i)); t.tabIndex = k === i ? 0 : -1; });
+  panels.forEach((p, k) => { p.hidden = k !== i; });
+}
+
 const isHttps = (src) => !!src && typeof src.url === 'string' && src.url.startsWith('https://');
 // One block-level 48 px line: "<label>: <name> ↗" as a link (https URLs only), plain text without the arrow otherwise.
 function srcBlock(node, label, source) {
   clear(node);
   const name = source ? source.name : 'unknown';
-  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, `${label}: ${name} ↗`));
+  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, `${label}: ${name}\u00a0↗`));
   else node.append(el('span', { class: 'srclink' }, `${label}: ${name}`));
 }
 // Link with the name only (footer list).
-function srcLink(node, source) {
-  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, source.name));
-  else node.append(source.name);
+function srcLink(node, source, arrow) {
+  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, source.name + (arrow ? '\u00a0↗' : '')));
+  else node.append(source ? source.name : 'unknown');
 }
 
 /* ---------- state ---------- */
 
-const state = { variables: [], req: 0, series: null, trend: null, selIdx: null, fromGeo: false, params: null, slowTimer: 0, chart: null };
+const tabState = { tab: 'explore', app: 'claude' };
+const state = { userSource: null, variables: [], req: 0, series: null, trend: null, selIdx: null, fromGeo: false, params: null, slowTimer: 0, chart: null };
 
 function placeOf(t) {
   const q = state.params || {};
@@ -250,6 +334,7 @@ function buildChips() {
   PRESETS.forEach((p, i) => {
     const b = el('button', { type: 'button', class: 'chip', 'aria-pressed': 'false', 'data-i': String(i) }, p.label);
     b.addEventListener('click', () => applyPreset(i));
+    b.addEventListener('focus', () => b.scrollIntoView({ inline: 'nearest', block: 'nearest' }));
     box.append(b);
   });
 }
@@ -257,7 +342,12 @@ function markChips() {
   const lat = Number($('lat').value), lon = Number($('lon').value);
   document.querySelectorAll('.chip').forEach((b) => {
     const p = PRESETS[+b.dataset.i];
-    b.setAttribute('aria-pressed', String(p.lat === lat && p.lon === lon));
+    const on = p.lat === lat && p.lon === lon && p.variable === $('variable').value;
+    b.setAttribute('aria-pressed', String(on));
+    if (on) { // keep the pressed chip in view inside the sideways row (phones)
+      const row = $('chips'), r = row.getBoundingClientRect(), c = b.getBoundingClientRect();
+      if (c.left < r.left || c.right > r.right) row.scrollLeft += c.left - r.left - (r.width - c.width) / 2;
+    }
   });
 }
 function openCoords() { $('coords').open = true; }
@@ -269,19 +359,58 @@ function applyPreset(i) {
   syncVariableUI();
   submit(true);
 }
+// At phone width the closed select shows the short name; the open list keeps full names.
+const narrowQ = window.matchMedia('(max-width: 599px)');
+const VAR_SHORT = { air_temp_max: 'Hottest day' }; // the closed select on phones; the open list keeps the catalog name
+let fullNames = false;
+function nameMode(full) {
+  if (full !== undefined) fullNames = full;
+  const short = narrowQ.matches && !fullNames;
+  [...$('variable').options].forEach((o) => { const v = varById(o.value); o.textContent = short ? (VAR_SHORT[v.id] || stripParens(v.name)) : v.name; });
+  [...$('source').options].forEach((o) => { o.textContent = (short ? SOURCE_SHORT[o.value] : SOURCE_LABELS[o.value]) || o.value; });
+}
 function fillVariables() {
   const sel = $('variable');
   clear(sel);
   state.variables.forEach((v) => sel.append(el('option', { value: v.id }, v.name)));
+  nameMode(false);
+  sel.addEventListener('focus', () => nameMode(true));
+  sel.addEventListener('pointerdown', () => nameMode(true));
+  sel.addEventListener('blur', () => nameMode(false));
+  const src = $('source');
+  src.addEventListener('focus', () => nameMode(true));
+  src.addEventListener('pointerdown', () => nameMode(true));
+  src.addEventListener('blur', () => nameMode(false));
+  narrowQ.addEventListener('change', () => nameMode());
 }
 function syncVariableUI() {
   const v = varById($('variable').value);
   $('variable-help').textContent = v ? `Good for: ${v.good_for}.` : '';
   const src = $('source');
   clear(src);
-  const many = v && Array.isArray(v.sources) && v.sources.length > 1;
+  const many = !!v && Array.isArray(v.sources) && v.sources.length > 1;
   if (many) v.sources.forEach((s) => src.append(el('option', { value: s }, SOURCE_LABELS[s] || s)));
+  // keep the source the user chose when this measurement has it; otherwise the default
+  if (many) src.value = v.sources.includes(state.userSource) ? state.userSource : v.sources[0];
   $('source-field').hidden = !many;
+  $('pick').classList.toggle('one', !many);
+  nameMode();
+  sourceHelp();
+}
+// After a result the control shows the source the result came from (a fallback is not the user's choice).
+function showResultSource(res) {
+  const id = pickShown(varById($('variable').value), res && res.source && res.source.id);
+  if (id) { $('source').value = id; sourceHelp(); }
+}
+// After a request that gave no result the control shows the source that was sent, or the default.
+function showSentSource(params) {
+  const v = varById(params.variable);
+  if (!v || $('source-field').hidden) return;
+  $('source').value = params.source && v.sources.includes(params.source) ? params.source : v.sources[0];
+  sourceHelp();
+}
+function sourceHelp() {
+  $('source-help').textContent = $('source-field').hidden ? '' : (SOURCE_HELP[$('source').value] || '');
 }
 
 function readParams() {
@@ -305,7 +434,8 @@ function readParams() {
   }
   const v = varById($('variable').value);
   const p = { variable: $('variable').value, lat, lon };
-  if (v && !$('source-field').hidden && $('source').value !== v.sources[0]) p.source = $('source').value;
+  const sent = sourceToSend(v, state.userSource);
+  if (sent) p.source = sent;
   return p;
 }
 
@@ -318,7 +448,7 @@ function submit(user) {
     state.series = null; state.trend = null;
     return;
   }
-  if (!state.fromGeo) history.replaceState(null, '', `#variable=${p.variable}&lat=${p.lat.toFixed(2)}&lon=${p.lon.toFixed(2)}`);
+  if (!state.fromGeo && tabState.tab === 'explore') history.replaceState(null, '', '#' + writeHash({ tab: 'explore', explore: p }));
   markChips();
   run(p, user);
 }
@@ -352,10 +482,12 @@ function setBusy(on, first) {
   }
 }
 
-async function run(params, user) {
+// keep = "Try again" on the same request: the old card stays, dimmed. Any new request clears the old answer.
+async function run(params, user, keep) {
   const id = ++state.req;
   state.params = params;
-  const first = !state.series && $('problem').hidden && $('verdict-card').hidden;
+  const first = !keep;
+  if (first) { ['chart-wrap', 'more', 'verdict-card'].forEach((i) => { $(i).hidden = true; }); state.series = null; state.trend = null; }
   $('problem').hidden = true;
   setBusy(true, first);
   const [sr, tr] = await Promise.all([api('/api/series', params), api('/api/trend', params)]);
@@ -373,22 +505,25 @@ function show(sr, tr, params, user) {
   state.series = null; state.trend = null;
 
   if (!sr.ok) {
+    showSentSource(params);
     heading = showProblem(problemFor(sr, params));
   } else {
     const s = sr.body;
     const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
     if (!has) {
+      showSentSource(params);
       heading = showProblem({ heading: 'No data for this place.', paras: [`${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement. Try another place or measurement.`] });
     } else {
       state.series = s;
       state.trend = tr.ok ? tr.body : null;
+      showResultSource(state.trend || s);
       $('chart-wrap').hidden = false;
       renderChart(s, state.trend);
-      document.querySelectorAll('#legend .t-only').forEach((li) => { li.hidden = !state.trend; });
-      renderTable(s);
+      document.querySelectorAll('#chart-fig .t-only').forEach((li) => { li.hidden = !state.trend; });
+      renderTable(s, !!state.trend);
       if (state.trend) {
-        heading = renderVerdict(state.trend);
-        renderMore(state.trend, s);
+        heading = renderVerdict(state.trend, s);
+        renderMore(state.trend);
       } else {
         heading = showProblem(problemFor(tr, params));
       }
@@ -398,7 +533,7 @@ function show(sr, tr, params, user) {
 }
 
 function problemFor(r, params) {
-  const again = [{ label: 'Try again', fn: () => run(state.params, true) }];
+  const again = [{ label: 'Try again', fn: () => run(state.params, true, true) }];
   if (r.net || r.status !== 400 && r.status !== 422 && r.status !== 502) {
     return { heading: "We can't reach the server.", paras: ['Check your connection and try again.'], buttons: again };
   }
@@ -411,12 +546,20 @@ function problemFor(r, params) {
   const detail = r.body && typeof r.body.detail === 'string' ? r.body.detail : 'The request was not accepted.';
   const out = { heading: "We can't answer that for this place.", paras: [detail] };
   if (params.variable === 'sea_level') {
-    out.paras.push('Tide gauges sit along US coasts.');
-    out.source = SOURCES.coops;
-    out.buttons = [{ label: 'Try Atlantic City, NJ', fn: () => applyPreset(0) }];
+    // The US-coast sentence is only true while CO-OPS is the only tide-gauge source.
+    if (!(varById('sea_level') && varById('sea_level').sources.length > 1)) out.paras.push('Tide gauges sit along US coasts.');
+    // Name the source that was asked for; with none sent and several offered, no source line (it would guess).
+    const sv = varById('sea_level'), single = !sv || sv.sources.length < 2;
+    const named = params.source ? SOURCES[params.source] : (single ? SOURCES[sv ? sv.sources[0] : 'coops'] : null);
+    if (named) out.source = named;
+    out.buttons = [{ label: 'Try New York', fn: () => applyPreset(0) }];
     if (varById('air_temp')) {
       out.buttons.push({ label: 'Show air temperature here', fn: () => { $('variable').value = 'air_temp'; syncVariableUI(); submit(true); } });
     }
+  }
+  const v = varById(params.variable), def = v && v.sources && v.sources[0];
+  if (params.source && def && params.source !== def) {
+    out.buttons = (out.buttons || []).concat([{ label: `Use ${SOURCE_LABELS[def] || def} for this place`, fn: () => { state.userSource = null; syncVariableUI(); submit(true); } }]);
   }
   out.paras.push('Try another place or measurement.');
   return out;
@@ -453,58 +596,65 @@ function shapeSvg(kind) {
   return s;
 }
 
-function renderVerdict(t) {
+function fact(label, node) { return el('div', {}, el('dt', {}, label), el('dd', {}, node)); }
+
+function renderVerdict(t, series) {
   const c = verdictCopy(t, nameOf(t.variable), placeOf(t));
   const h = $('verdict-heading');
   clear(h);
   h.append(shapeSvg(c.shape), c.head);
+  const big = $('verdict-big');
+  clear(big);
+  big.append(el('span', { class: 'big-n' }, fmtVal(t.slope_per_decade, t.units)), ' ', el('span', { class: 'big-u' }, 'per decade'));
+  $('verdict-lean').textContent = c.lean || '';
+  $('verdict-lean').hidden = !c.lean;
   $('verdict-p1').textContent = c.p1;
   $('verdict-p2').textContent = c.p2;
   $('verdict-evidence').textContent = `p-value: ${fmtP(t.p_value)}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change.`;
   srcBlock($('verdict-source'), 'Data', t.source);
   $('verdict-calc').textContent = "Trend, range and verdict: our calculation (Mann-Kendall test, Sen's slope).";
-  $('verdict-card').hidden = false;
-  return h;
-}
 
-function renderMore(t, s) {
-  const dl = $('numbers-list');
-  clear(dl);
-  const rows = [
-    ["How fast it's changing", "Sen's slope", fmtVal(t.slope_per_decade, t.units) + ' per decade'],
-    ['Range of trends the data support', 'confidence interval', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
-    ['How easily luck explains it', 'p-value', fmtP(t.p_value)],
-    ['Period', null, `${t.period.start} to ${t.period.end}`],
-    ['Months used', 'n', String(t.n)],
-    ['Seasons removed', 'deseasonalized', t.deseasonalized ? 'Yes' : 'No'],
-    ['Adjusted for neighbouring months', 'autocorrelation', t.autocorrelation_adjusted ? 'Yes' : 'No'],
-    ['Test', null, t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
-  ];
-  rows.forEach(([label, term, val]) => {
-    const dt = el('dt', {}, label);
-    if (term) dt.append(' ', el('span', { class: 'term' }, `(${term})`));
-    dl.append(el('div', {}, dt, el('dd', {}, val)));
+  const facts = $('facts');
+  clear(facts);
+  [
+    ['Period', `${t.period.start} to ${t.period.end}`],
+    ['Months of data', String(t.n)],
+    ['Range of trends the data support', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
+    ['p-value', fmtP(t.p_value)],
+    ['Seasons removed', t.deseasonalized ? 'Yes' : 'No'],
+    ['Adjusted for neighbouring months', t.autocorrelation_adjusted ? 'Yes' : 'No'],
+    ['Source', 'src'],
+    ['Method', t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
+  ].forEach(([l, v]) => {
+    if (v !== 'src') { facts.append(fact(l, v)); return; }
+    const dd = el('dd', {});
+    srcLink(dd, t.source, true);
+    facts.append(el('div', {}, el('dt', {}, l), dd));
   });
-  srcBlock($('numbers-source'), 'Source', t.source);
 
   const list = $('notes-list');
   clear(list);
   const notes = [];
-  (t.caveats || []).concat(s.notes || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
+  (t.caveats || []).concat(series.notes || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
   if (!notes.length) notes.push('No extra caveats from the source.');
   notes.forEach((n) => list.append(el('li', {}, n)));
 
+  $('verdict-card').hidden = false;
+  return h;
+}
+
+function renderMore(t) {
   $('howto-ac').textContent = t.autocorrelation_adjusted
     ? 'We adjusted for months that resemble their neighbours; without that the result would look surer than it is.'
     : 'We did not adjust for months that resemble their neighbours, so treat the result as less certain.';
   $('more').hidden = false;
 }
 
-function renderTable(s) {
+function renderTable(s, withTrend) {
   const name = nameOf(s.variable);
   $('table-col').textContent = `${name} (${unitLabel(s.units)})`;
   srcBlock($('table-source'), 'Source', s.source);
-  $('table-caption').textContent = rawLine(s.source);
+  $('table-caption').textContent = rawLine(s.source, withTrend);
   const body = $('table-body');
   clear(body);
   const frag = document.createDocumentFragment();
@@ -570,6 +720,7 @@ function renderChart(s, t) {
   });
   root.append(svg('text', { x: ml + pw / 2, y: B.bot + 2 * fs + 6, 'text-anchor': 'middle', class: 'c-text' }, 'Year'));
   root.append(svg('line', { x1: ml, x2: vw - mr, y1: B.yS(0), y2: B.yS(0), class: 'c-zero' }));
+  root.append(svg('text', { x: vw - mr - 2, y: B.yS(0) - 5, 'text-anchor': 'end', class: 'c-text c-halo' }, 'No change'));
 
   const path = (P, arr) => {
     let d = '', pen = false;
@@ -613,9 +764,10 @@ function renderChart(s, t) {
   root.append(rule);
   box.append(root);
 
+  $('chart-head').textContent = t ? chartHead(t, name, place) : `${name} at ${place}`;
   $('chart-caption').textContent = t ? captionText(t, name, place) : `${name} at ${place}.`;
   srcBlock($('chart-source'), 'Source', t ? t.source : s.source);
-  $('chart-raw').textContent = rawLine(t ? t.source : s.source);
+  $('chart-raw').textContent = rawLine(t ? t.source : s.source, !!t);
 
   // readout
   const readout = $('readout');
@@ -656,18 +808,83 @@ function renderChart(s, t) {
 
 /* ---------- start ---------- */
 
-// Only a complete, in-range hash is used; anything else is ignored and the default preset loads.
-function readHash() {
-  const h = new URLSearchParams(location.hash.slice(1));
-  const num = (k) => { const r = (h.get(k) || '').trim(); return r === '' ? NaN : Number(r); };
-  const lat = num('lat'), lon = num('lon');
-  if (!h.get('variable') || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-  return { variable: h.get('variable'), lat, lon };
-}
-
 function fillFooter() {
   const ul = $('footer-sources');
+  clear(ul); // init() can run again ("Try again")
   Object.values(SOURCES).forEach((src) => { const li = el('li', {}); srcLink(li, src); ul.append(li); });
+}
+
+/* ---------- the tab bar ---------- */
+
+let tabEls = [], panelEls = [];
+function hashFor(id) {
+  if (id === 'explore') return state.params && !state.fromGeo ? writeHash({ tab: 'explore', explore: state.params }) : '';
+  return writeHash({ tab: id, app: tabState.app });
+}
+function showTab(id, push) {
+  tabState.tab = id;
+  const i = TABS.findIndex((t) => t.id === id);
+  selectTab(tabEls, panelEls, i);
+  document.title = TABS[i].title;
+  $('skip').setAttribute('href', '#h-' + id);
+  if (push) {
+    const h = hashFor(id);
+    if (h !== location.hash.slice(1)) history.pushState(null, '', h ? '#' + h : location.pathname + location.search);
+  }
+}
+function buildTabbar() {
+  const bar = $('tabbar');
+  bar.setAttribute('role', 'tablist');
+  bar.setAttribute('aria-label', 'Sections');
+  TABS.forEach((t) => {
+    const b = el('button', { type: 'button', role: 'tab', id: 'tab-' + t.id, 'aria-controls': 'panel-' + t.id, class: 'tab' }, t.label);
+    bar.append(b);
+    const p = $('panel-' + t.id);
+    p.setAttribute('role', 'tabpanel');
+    p.setAttribute('aria-labelledby', 'tab-' + t.id);
+    tabEls.push(b); panelEls.push(p);
+  });
+  wireTablist(tabEls, (i) => showTab(TABS[i].id, true));
+}
+
+// The hash changed (Back, Forward, or an edited address): show what it says.
+function sameExplore(a, b) {
+  return !!a && !!b && a.variable === b.variable && Number(a.lat).toFixed(2) === Number(b.lat).toFixed(2)
+    && Number(a.lon).toFixed(2) === Number(b.lon).toFixed(2) && (a.source || null) === (b.source || null);
+}
+function onLocation() {
+  const h = parseHash(location.hash);
+  if (typeof setApp === 'function' && h.app !== tabState.app) setApp(h.app);
+  showTab(h.tab, false);
+  if ((h.explore || h.exploreBad) && state.variables.length) {
+    // An unusable link (unknown measurement, bad number) falls back to the default place and the hash is
+    // rewritten, as on a fresh load. A repeat call (popstate, then hashchange) finds a good hash and
+    // state.params already set, so it starts no second request.
+    const fixed = h.explore && fixExplore(h.explore, state.variables);
+    const e = fixed || fixExplore(PRESETS[0], state.variables);
+    if (!fixed || !sameExplore(e, state.params)) applyExplore(e, false);
+    if (!fixed && tabState.tab !== 'explore') history.replaceState(null, '', '#' + writeHash({ tab: h.tab, app: h.app }));
+  }
+}
+
+// Put a place, measurement and source into the controls and run it.
+function applyExplore(e, user) {
+  state.fromGeo = false;
+  state.userSource = e.source || null;
+  $('lat').value = e.lat; $('lon').value = e.lon;
+  $('variable').value = e.variable;
+  syncVariableUI();
+  if (!PRESETS.some((p) => Math.abs(p.lat - e.lat) <= 0.005 && Math.abs(p.lon - e.lon) <= 0.005)) openCoords();
+  markChips();
+  submit(user);
+}
+// "Show on chart" from an Ask answer: a normal Explore hash entry, then the normal Explore flow.
+function showOnChart(e0) {
+  const e = fixExplore(e0, state.variables);
+  if (!e) return;
+  history.pushState(null, '', '#' + writeHash({ tab: 'explore', explore: e }));
+  showTab('explore', false);
+  applyExplore(e, true);
 }
 
 async function init() {
@@ -681,19 +898,19 @@ async function init() {
   }
   state.variables = r.body;
   fillVariables();
-  const h = readHash();
-  const start = h && varById(h.variable) ? h : PRESETS[0];
-  $('lat').value = start.lat; $('lon').value = start.lon; $('variable').value = start.variable;
-  if (!PRESETS.some((p) => Math.abs(p.lat - start.lat) <= 0.005 && Math.abs(p.lon - start.lon) <= 0.005)) openCoords();
-  syncVariableUI();
-  markChips();
-  submit(false);
+  const h = parseHash(location.hash).explore;
+  applyExplore((h && fixExplore(h, state.variables)) || fixExplore(PRESETS[0], state.variables), false);
 }
 
 buildChips();
 $('controls').addEventListener('submit', (e) => { e.preventDefault(); if ($('go').getAttribute('aria-disabled') !== 'true') submit(true); });
 $('variable').addEventListener('change', () => { syncVariableUI(); submit(true); });
-$('source').addEventListener('change', () => submit(true));
+$('source').addEventListener('change', () => {
+  const v = varById($('variable').value);
+  state.userSource = v && $('source').value !== v.sources[0] ? $('source').value : null;
+  sourceHelp();
+  submit(true);
+});
 $('locate').addEventListener('click', locate);
 ['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => { state.fromGeo = false; markChips(); }));
 let lastBand = layoutFor(window.innerWidth).vw;
@@ -701,5 +918,10 @@ window.addEventListener('resize', () => {
   const b = layoutFor(window.innerWidth).vw;
   if (b !== lastBand && state.series && !$('chart-wrap').hidden) { lastBand = b; renderChart(state.series, state.trend); }
 });
+$('skip').addEventListener('click', (e) => { e.preventDefault(); $('h-' + tabState.tab).focus(); });
+buildTabbar();
+showTab(parseHash(location.hash).tab, false);
+window.addEventListener('popstate', onLocation);
+window.addEventListener('hashchange', onLocation);
 init();
 

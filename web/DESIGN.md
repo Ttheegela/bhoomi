@@ -3,12 +3,12 @@
 Build: `web/index.html`, `web/style.css`, `web/app.js`. No build step, no libraries, no CDN, no web fonts. Chart is hand-written SVG. Same-origin calls to `/api/...`. No NASA logos or branding; dataset names are plain text.
 
 ## 1. Flow and first load
-1. Page opens already showing a real answer: Atlantic City NJ (39.36, -74.42), Sea level, source from the API. Fetch `/api/variables`, then `/api/series` and `/api/trend` in parallel.
+1. Page opens already showing a real answer: New York (40.71, -74.01), Sea level, source from the API. Fetch `/api/variables`, then `/api/series` and `/api/trend` in parallel.
 2. User picks an example place chip, or types lat/lon and presses "Show trend", or presses "Use my location".
 3. User may change the measurement (select). Chip click and measurement change run at once. Typed coordinates run on button or Enter.
 4. Page shows: verdict, chart, numbers, caveats, how to read it. A student gets the answer from the first card in under a minute.
 5. Optional share state: write `#variable=..&lat=..&lon=..` (2 decimals) to the URL hash and read it on load. Never write the hash after "Use my location".
-6. Presets (chip label, lat, lon, default measurement): Atlantic City, NJ 39.36 -74.42 sea_level; Delhi 28.61 77.21 air_temp; Visakhapatnam 17.69 83.22 air_temp; Princeton, NJ 40.35 -74.66 air_temp. A chip sets place and its default measurement; the user can change the measurement after.
+6. Presets (chip label, lat, lon, default measurement): New York 40.71 -74.01 sea_level; Princeton, NJ 40.35 -74.66 air_temp; Delhi 28.58 77.21 air_temp_max; Visakhapatnam 17.69 83.22 air_temp; Mumbai 19.08 72.88 air_temp_max; Chennai 13.08 80.27 air_temp; London 51.51 -0.13 air_temp; Seattle 47.61 -122.33 sea_level. An old link to Atlantic City (`#variable=sea_level&lat=39.36&lon=-74.42`) still opens, with no chip pressed; a bad link falls back to New York. A chip sets place and its default measurement; the user can change the measurement after.
 7. Keep the last good result on screen (dimmed, `aria-busy`) while a new request runs. Ignore stale responses (use an incrementing request id).
 
 ## 2. Layout
@@ -56,7 +56,7 @@ Is it really changing here?      [Question line]
 ## 4. States (all replace the verdict + chart area; controls stay usable; use `role="status"` for loading, `role="alert"` for errors)
 - Loading: verdict card text "Looking up the data…", chart area a flat grey block (no shimmer; no motion at all if `prefers-reduced-motion`). After 4 s add "Still working. This source can take a few seconds." Button reads "Working…" and is `aria-disabled`.
 - 400 (any): heading "We can't answer that for this place." Body = the API `detail`, verbatim. Hint: "Try another place or measurement." Chips stay visible.
-- 400 with `variable=sea_level` (no tide gauge within 100 km, or other): after `detail`, add "Tide gauges sit along US coasts." plus buttons "Try Atlantic City, NJ" and "Show air temperature here" (same lat/lon, switches measurement).
+- 400 with `variable=sea_level` (no tide gauge within 100 km, or other): after `detail`, add "Tide gauges sit along US coasts." (only while sea level has a single source) plus buttons "Try New York" and "Show air temperature here" (same lat/lon, switches measurement).
 - 422: heading "Something in the form isn't right." Body "Check the latitude and longitude and try again."
 - 502: heading "The data source isn't answering." Body "That's on their end, not yours. Try again in a minute." Button "Try again" (repeats the same request, then moves focus to the new heading).
 - Network failure or other 5xx: heading "We can't reach the server." Body "Check your connection and try again." Button "Try again".
@@ -98,7 +98,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - [ ] Every number block has "Source: {name}" with a working link; "Built with AI assistance" visible in header and footer.
 
 ## 8. Done-check for QA (screenshots at 375 px and 1280 px, light and dark)
-- [ ] First load shows Atlantic City sea level with a verdict and chart, no empty form. Verdict names its dataset (from the API) as a link.
+- [ ] First load shows New York sea level with a verdict and chart, no empty form. Verdict names its dataset (from the API) as a link.
 - [ ] Visakhapatnam air temperature shows "No clear change" in a card the same size as the others, with the range and p-value in words.
 - [ ] Delhi + Sea level shows the 400 `detail` text verbatim plus the two recovery buttons.
 - [ ] Forced 502, network failure, empty series and bad latitude each show their exact copy above.
@@ -131,6 +131,15 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - No NASA logos or branding.
 - Only public data.
 - Monochrome tokens (black, white, greys; no gradients).
+- Structure: tabs Explore, Ask, Use in your AI (his words, 2026-11-14, picked from visual options).
+- Theme: follow the device setting (light or dark); no theme switch.
+- Ask box: a chat thread with follow-up questions.
+- Eight example places: New York, Princeton, Delhi, Visakhapatnam, Mumbai, Chennai, London and Seattle (his words, 2026-11-14: "instead of atlantic city add princeton,new york,vizag,delhi,bombay,chennai", plus London and Seattle).
+- First load shows New York sea level instead of Atlantic City (follows from "instead of atlantic city").
+- Tab bar on desktop: left-aligned.
+- Grey labels stay at 14 px. This overrides the 'about 12 px' label rule from the Konam checklist.
+- Use in your AI: framed as 'use Trend Detective in your own AI agent'; example agents (Claude, ChatGPT, GitHub Copilot) named in one line only when their docs confirm remote MCP support; detailed tabs only for apps with verified steps; one 'Any other AI agent' tab; no ChatGPT tab.
+- MCP page: both, tabs per AI app with steps, then a config block for developers.
 
 ### Chosen by the agent (swappable)
 - Single-page flow: place chips, then measurement, then verdict and chart.
@@ -143,8 +152,10 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Readout line under the chart instead of a tooltip.
 - Keyboard chart control: arrows, shift-arrows, Home, End and Esc.
 - Chart x ticks chosen by screen spacing (at least 56 px).
-- Four preset places: Atlantic City, Delhi, Visakhapatnam, Princeton.
-- First load shows Atlantic City sea level.
+- Chip order (New York, Princeton, Delhi, Visakhapatnam, Mumbai, Chennai, London, Seattle); which measurement each chip opens (table in section 1 item 6); Delhi at 28.58 (matches the eval case and the Safdarjung station). A chip is pressed only while both its place and its measurement are shown.
+- Phone first screen (375 x 812): example places in one sideways-scrolling row (5 px padding so the focus ring shows, a chip cut off at the right edge); measurement and data source side by side in one row (1.4 fr / 1 fr) with short names in the closed selects; "Good for" and the source help line as full-width grey lines under that row; header top padding 8 px; section gaps and tab bar margins 8 px; the grey "no clear change" lean line under sentence 1. Expected ends at 375 x 812: heading 561.0, source link 660.6, sentence 1 780.6 at worst (see the round 2 report).
+- Desktop: measurement select (400 px) and source select (220 px) side by side, left-aligned; help lines under them.
+- The source control shows the result's source; only a hand-chosen non-default source is written to the link or sent.
 - Coordinates in a closed "Type coordinates or use my location" section.
 - Hash state `#variable=..&lat=..&lon=..` (two decimals).
 - Breakpoints 600 and 900 px; 960 px container; 16/24 px side padding.
@@ -158,6 +169,10 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Temperature shown as °C.
 - Error and empty-state copy.
 - Loading placeholder is a flat grey block with no motion.
-- Labels at 14 px instead of 12 px.
 - Show trend button inside the coordinates section.
 - Source links as their own 48 px lines.
+- Tabs live in one page; URL hash `tab=ask|connect` (Explore keeps the key-less hash), push for tab changes, replace for app sub-tabs; details in `web/DESIGN-ask-mcp.md`.
+- Chat thread kept in memory only, rendered in page flow with no inner scroll box; "Show on chart" opens Explore.
+- Ask sends no `history` until the backend history PR lands.
+- Per-app MCP steps taken from each app's official docs (checked 2026-11-14).
+- Period-first sentence 1 and a separate wording when the range misses zero but p is 0.05 or more.
