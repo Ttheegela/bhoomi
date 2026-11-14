@@ -5,6 +5,6 @@ CATALOG = [
      "sources": ["power", "era5", "ghcn"], "start_year": 1981, "resolution": "~50 km grid (NASA POWER), ~25 km grid (ERA5), a weather station (GHCN)", "good_for": "heat extremes"},
     {"id": "precip", "name": "Precipitation", "units": "mm/day", "sources": ["power", "era5", "ghcn"],
      "start_year": 1981, "resolution": "~50 km grid (NASA POWER), ~25 km grid (ERA5), a weather station (GHCN)", "good_for": "rainfall, drought, floods"},
-    {"id": "sea_level", "name": "Sea level (monthly mean, relative to land)", "units": "mm", "sources": ["coops"],
-     "start_year": 1900, "resolution": "tide gauge (US coasts)", "good_for": "sea level rise"},
+    {"id": "sea_level", "name": "Sea level (monthly mean, relative to land)", "units": "mm", "sources": ["coops", "psmsl"],
+     "start_year": 1900, "resolution": "tide gauge (US coasts: NOAA CO-OPS; worldwide: PSMSL)", "good_for": "sea level rise"},
 ]

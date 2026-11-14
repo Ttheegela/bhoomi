@@ -1,5 +1,5 @@
 """Data lane: fetchers that return the TimeSeries shape from docs/CONTRACTS.md."""
-from . import coops, era5, ghcn, monthly, power
+from . import coops, era5, ghcn, monthly, power, psmsl
 from .catalog import CATALOG
 
 __all__ = ["list_variables", "get_series"]
@@ -27,6 +27,7 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
     entry = next((v for v in CATALOG if v["id"] == variable), None)
     if entry is None:
         raise ValueError(f"Unknown variable {variable!r}. Choose one of: {', '.join(v['id'] for v in CATALOG)}.")
+    auto = source is None
     source = source or entry["sources"][0]
     if source not in entry["sources"]:
         raise ValueError(f"{variable} is not available from {source!r}. Available: {', '.join(entry['sources'])}.")
@@ -41,6 +42,12 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
     lo, hi = _bound(start, "start"), _bound(end, "end", last=True)
     if lo and hi and lo > hi:
         raise ValueError("start must not be after end.")
+
+    if variable == "sea_level" and auto and source == "coops":
+        try:
+            coops.nearest(lat, lon, coops.stations())
+        except ValueError:  # no CO-OPS gauge within 100 km: the next source in the list
+            source = "psmsl"
 
     if source == "power":
         param = power.PARAMS[variable]
@@ -65,6 +72,9 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
         if types == ("TMAX", "TMIN"):
             notes.append("This station has no daily average temperature, so each day is the mean of its highest and lowest reading.")
         notes += [ghcn.NOTES[variable]] if variable in ghcn.NOTES else []
+    elif source == "psmsl":
+        times, values, place, notes = psmsl.series(lat, lon)
+        src = psmsl.SOURCE
     else:
         st, km = coops.nearest(lat, lon, coops.stations())
         times, values = coops.parse(coops.fetch(st["id"]), st["name"])

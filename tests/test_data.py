@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from earthtrends import data
-from earthtrends.data import coops, era5, ghcn, monthly, power
+from earthtrends.data import coops, era5, ghcn, monthly, power, psmsl
 
 FX = Path(__file__).parent / "fixtures"
 
@@ -105,7 +105,7 @@ def test_string_latlon_and_strict_dates(offline):
             data.get_series("air_temp", 39.36, -74.42, start=bad)
 
 
-def test_sea_level_mid_ocean_via_get_series(offline):
+def test_sea_level_mid_ocean_via_get_series(offline, psmsl_offline):
     with pytest.raises(ValueError, match="tide gauge"):
         data.get_series("sea_level", 0, -30)
 
@@ -378,3 +378,87 @@ def test_hot_days_trend_directions():
     assert slopes["era5"] < 0 < slopes["ghcn"]
     assert slopes["era5"] == pytest.approx(-1.9, abs=0.3) and slopes["ghcn"] == pytest.approx(2.0, abs=0.5), slopes
     # Pinned loosely to what this code gives. Issue #16 quoted ERA5 -2.9 and GHCN +2.0 per decade; ERA5 differs by about 1.
+
+
+# ---- PSMSL ----
+def raw(name):
+    return (FX / name).read_text()
+
+
+@pytest.fixture
+def psmsl_offline(monkeypatch):
+    monkeypatch.setattr(psmsl, "stations", lambda: psmsl.parse_stations(raw("psmsl_filelist.txt")))
+    monkeypatch.setattr(psmsl, "fetch", lambda sid: raw(f"psmsl_{sid}.rlrdata"))
+
+
+def test_psmsl_parse_gauge():
+    times, values, dropped = psmsl.parse(raw("psmsl_43.rlrdata"))
+    assert times[0] == "1878-01" and times[-1] == "2024-12" and values[0] == 6874 and dropped == 7  # 7 interpolated months (missing days 99)
+    assert len(times) == len(values) and len(set(times)) == len(times)
+
+
+def test_psmsl_parse_gaps_flags_and_junk():
+    text = "\n".join(["1900.0417; 7000; 0;000", "garbage", "1900.1250; -99999; 0;000", "1900.2083; 7100; 0;001",
+                      "1900.2917; 7200; 99;000", "1900.4583; 7300; 0;010", "x;y;z;w"])
+    times, values, dropped = psmsl.parse(text)
+    # Jan ok, Feb missing, Mar flag 001 dropped, Apr interpolated dropped, May gap, Jun flag 010 kept
+    assert times == ["1900-01", "1900-02", "1900-03", "1900-04", "1900-05", "1900-06"]
+    assert values == [7000, None, None, None, None, 7300] and dropped == 2
+    with pytest.raises(ValueError):
+        psmsl.parse("1900.0417; -99999; 0;000")
+    with pytest.raises(ValueError):
+        psmsl.parse("<html>nope</html>")
+
+
+def test_psmsl_parse_stations():
+    st = psmsl.parse_stations(raw("psmsl_filelist.txt") + "\nbroken line\n")
+    assert len(st) == 8 and st[3] == {"id": 43, "name": "MUMBAI / BOMBAY (APOLLO BANDAR)", "lat": 18.916667, "lon": 72.833333}
+    with pytest.raises(ValueError):
+        psmsl.parse_stations("<html></html>")
+
+
+def test_psmsl_skips_short_gauge_for_next_one(psmsl_offline):
+    # Princes Dock (212, 1916-1920) is nearer to this point than Apollo Bandar (43) but cannot support a trend test
+    s = data.get_series("sea_level", 18.95, 72.83, source="psmsl")
+    assert s["place"]["name"].startswith("MUMBAI") and "PSMSL id 43" in s["notes"][0]
+    assert s["times"][0] == "1878-01" and s["units"] == "mm" and s["freq"] == "monthly"
+    assert s["source"]["id"] == "psmsl" and s["source"]["url"] == "https://psmsl.org/"
+    assert any("revised local reference" in n for n in s["notes"]) and any("30 years" in n for n in s["notes"])
+    assert len(s["times"]) == len(s["values"])
+
+
+def test_psmsl_stale_record_skipped(psmsl_offline, monkeypatch):
+    old = "\n".join(f"{1950 + i // 12 + (i % 12 + 0.5) / 12:.4f}; 7000; 0;000" for i in range(12 * 40))  # 1950-1989
+    monkeypatch.setattr(psmsl, "fetch", lambda sid: old if sid == 43 else raw(f"psmsl_{sid}.rlrdata"))
+    with pytest.raises(ValueError, match="long and recent enough"):
+        psmsl.series(18.92, 72.83)
+
+
+def test_psmsl_no_gauge_nearby_is_value_error(psmsl_offline):
+    with pytest.raises(ValueError, match=r"no tide gauge within 100 km.*nearest gauge is .*km away"):
+        data.get_series("sea_level", 28.58, 77.21, source="psmsl")
+
+
+def test_sea_level_fallback(offline, psmsl_offline):
+    assert data.get_series("sea_level", 39.36, -74.42)["source"]["id"] == "coops"  # CO-OPS has a gauge
+    s = data.get_series("sea_level", 19.08, 72.88)  # none in CO-OPS: PSMSL
+    assert s["source"]["id"] == "psmsl" and "APOLLO" in s["place"]["name"]
+    with pytest.raises(ValueError, match="no tide gauge within 100 km"):
+        data.get_series("sea_level", 28.58, 77.21)  # neither: error, no value
+    with pytest.raises(ValueError, match="No tide gauge within 100 km"):
+        data.get_series("sea_level", 19.08, 72.88, source="coops")  # explicit coops never falls back
+    assert data.get_series("sea_level", 39.36, -74.42, source="coops")["source"]["id"] == "coops"
+
+
+def test_psmsl_provider_failures_are_httpx_errors(psmsl_offline, monkeypatch):
+    def boom(sid):
+        raise httpx.ReadTimeout("slow")
+    monkeypatch.setattr(psmsl, "fetch", boom)
+    with pytest.raises(httpx.HTTPError):
+        psmsl.series(19.08, 72.88)
+    monkeypatch.undo()
+    monkeypatch.setattr(psmsl, "_get", lambda url: (_ for _ in ()).throw(httpx.ConnectError("down")))
+    psmsl.stations.cache_clear()
+    with pytest.raises(httpx.HTTPError):
+        psmsl.stations()
+    psmsl.stations.cache_clear()
