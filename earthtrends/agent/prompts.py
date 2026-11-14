@@ -61,11 +61,11 @@ you used, each with its URL.
 
 When you checked several sources:
 - If they all give the same verdict: first say the verdict once with the slope, units, range and period from the \
-default source (the first in the catalog). Then say in a few words that each other source agrees, by its name, \
-with no numbers for them: no slope, no range, no comparison of slopes. If an agreeing source's period differs \
-from the default source's, you may add that source's own period, from its own result, in words and nothing \
-more, in this shape: "<name of the source that agrees> agrees, over its own record, <that source's period>." \
-The default source, whose numbers you just gave, is never the one that "agrees".
+default source (the first in the catalog). The other sources then come back with a "note" and with no numbers for \
+them. Write nothing about them yourself (no sentence that they agree, no slope, no range, no period, no comparison \
+of slopes): write [AGREEING SOURCES] on its own, right after the default source's verdict, numbers and p-value and \
+before the caveats; the sentence for each of them is put there for you. Still name them with their URLs with the \
+sources and pass on their caveats.
 - If their verdicts differ: your first sentence says plainly that the sources disagree (use the word "disagree"). \
 If their slopes are the same to two decimals, that first sentence says instead that the sources give about the \
 same slope but disagree on whether the change is clear. Then one short line per source and nothing else in it, \

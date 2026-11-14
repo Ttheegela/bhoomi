@@ -1,4 +1,5 @@
 """The agent loop: identical for every model; it talks to the model only through a provider."""
+import calendar
 import contextvars
 import json
 import logging
@@ -103,8 +104,119 @@ def model_reason(error: str) -> str:
     return FALLBACK_REASON
 
 
+# ---- sources that agree: the code writes their sentence, the model never sees their numbers ----
+
+MARKER = "[AGREEING SOURCES]"  # the model writes it where the agreeing sources' sentences go
+_MARK = r"\[\s*agreeing\s+sources\s*\]"
+# A sentence (up to . ! or ? before a space or the end), or the marker on its own.
+_UNIT = re.compile(rf"{_MARK}|\S.*?(?:[.!?](?=\s|$)|(?={_MARK})|\Z)", re.S | re.I)
+AGREE_NOTE = ("Same verdict as the default source, so its own numbers are left out. Write nothing about this source "
+              f"except its name and URL with the sources and its caveats; write {MARKER} where the agreeing sources "
+              "belong.")
+
+
+def agree_plan(calls: list[dict]) -> tuple[dict, list[dict]] | None:
+    """(default result, the other results) when two or more sources returned a result for one variable and all
+    gave the same verdict, all of them sources the catalog lists for it; else None. Failed calls don't count. The default is the first source in the catalog
+    among those that returned (so if the catalog default failed, the next one leads). A source called twice
+    counts once, with its last result."""
+    by_src = {}
+    for c in calls:
+        if c["name"] == "detect_trend" and c.get("error") is None and isinstance(c.get("result"), dict):
+            by_src[(c["result"].get("source") or {}).get("id")] = c["result"]
+    rs = list(by_src.values())
+    if len(rs) < 2 or len({r.get("variable") for r in rs}) != 1 or len({r.get("verdict") for r in rs}) != 1:
+        return None
+    order = next((v["sources"] for v in tools.list_variables() if v["id"] == rs[0].get("variable")), [])
+    if not set(by_src) <= set(order):  # no catalog order, no default source
+        return None
+    rs.sort(key=lambda r: order.index(r["source"]["id"]))
+    return rs[0], rs[1:]
+
+
+def _month(ym: str) -> str:
+    y, m = ym.split("-")
+    return f"{calendar.month_name[int(m)]} {y}"
+
+
+def agree_sentence(result: dict, default: dict) -> str:
+    """The one sentence about an agreeing non-default source. The eval scorer imports it."""
+    name = result["source"]["name"].split(",")[0].strip()
+    p = result.get("period")
+    if not p or p == default.get("period"):
+        return f"{name} agrees."
+    return f"{name} agrees, over its own record, {_month(p['start'])} to {_month(p['end'])}."
+
+
+def _forms(src: dict) -> set[str]:
+    """Ways an answer names a source: id, name, name cut at "," or "(", a short form in brackets."""
+    name = (src.get("name") or "").lower()
+    return {f for f in {src.get("id") or "", name, name.split(",")[0].strip(), name.split("(")[0].strip(),
+                        *re.findall(r"\(([^)]+)\)", name)} if f}
+
+
+def compose(text: str, calls: list[dict]) -> str:
+    """The final text. With agreeing sources: the marker is replaced by their sentences (or, if it is missing,
+    they go in front of the sources sentence, the first with a URL, else at the end), and the model's own
+    sentences about them are dropped (with "agree", naming one, no URL, not carrying the default's slope).
+    A leftover marker never stays. Text with neither is returned unchanged."""
+    plan = agree_plan(calls)
+    if not plan and not re.search(_MARK, text, re.I):
+        return text
+    lead, others = plan or ({}, [])
+    sents = [agree_sentence(r, lead) for r in others]
+    names = set().union(*(_forms(r["source"]) for r in others))
+    hosts = {re.sub(r"^https?://(www\.)?|/.*$", "", (r.get("source") or {}).get("url", "")).lower()
+             for r in [lead, *others]} - {""}
+    slope = lead.get("slope_per_decade")
+    slope = f"{abs(slope):.2f}" if isinstance(slope, (int, float)) else None
+
+    def has_url(u):
+        return "://" in u or any(h in u.lower() for h in hosts)
+
+    def about_other(u):
+        low = u.lower()
+        return (re.search(r"\bagree", low) and any(re.search(rf"\b{re.escape(f)}(?!\w)", low) for f in names)
+                and not has_url(u) and not (slope and slope in u))
+
+    out, pos, at, url_at = [], 0, None, None
+    for m in _UNIT.finditer(text):
+        out.append(text[pos:m.start()])
+        pos, u = m.end(), m.group()
+        if re.fullmatch(_MARK, u, re.I):
+            at = len(out) if at is None else at
+            u = ""
+        elif sents and about_other(u):
+            u = ""
+        else:
+            for s in sents:  # an exact copy inside a kept sentence would make it twice
+                u = u.replace(s, "")
+            if url_at is None and has_url(u):
+                url_at = len(out)
+        out.append(u)
+    out.append(text[pos:])
+    if sents:
+        joined = " ".join(sents)
+        if at is not None:
+            out[at] = joined
+        elif url_at is not None:
+            out[url_at] = joined + " " + out[url_at]
+        else:
+            out.append(" " + joined)
+    s = re.sub(r"[ \t]+", " ", "".join(out))
+    s = re.sub(r" *\n *", "\n", s)
+    return re.sub(r"\n{3,}", "\n\n", s).strip()
+
+
 def for_model(calls: list[dict]) -> list[dict]:
-    return [{**c, "error": model_reason(c["error"])} if c["error"] else c for c in calls]
+    """What the model reads: digit-free error reasons, and each agreeing non-default source without its numbers."""
+    others = (agree_plan(calls) or (None, []))[1]
+
+    def brief(r):
+        return {"variable": r.get("variable"), "verdict": r.get("verdict"), "source": r.get("source"),
+                "caveats": r.get("caveats", []), "note": AGREE_NOTE}
+    return [{**c, "error": model_reason(c["error"])} if c["error"]
+            else {**c, "result": brief(c["result"])} if any(c["result"] is r for r in others) else c for c in calls]
 
 
 def word_limit(calls: list[dict]) -> int:
@@ -150,6 +262,7 @@ def ask(question: str, model: str | None = None) -> dict:
                 if not cut:
                     if not (text or "").strip():
                         break  # empty text (e.g. reasoning spent the cap): falls through to too_long or GAVE_UP
+                    text = compose(text, calls)  # before the length check: the limit holds for what the user sees
                     if len(text.split()) <= limit:
                         answer = text
                         break
@@ -207,8 +320,9 @@ def ask(question: str, model: str | None = None) -> dict:
             done = [f.result() if f.done() and not f.cancelled() else failed(c, LATE) for f, c in zip(futs, run)]
             done += [failed(c, f"Too many tool calls at once; at most {MAX_TOOLS} per step.") for c in todo[MAX_TOOLS:]]
             calls += done
+            seen = for_model(calls)[len(calls) - len(done):]  # agreement judged over every result so far
             provider.add_tool_results([{"id": c["id"], "content": d["result"] if d["error"] is None
-                                        else {"error": model_reason(d["error"])}} for c, d in zip(todo, done)])
+                                        else {"error": d["error"]}} for c, d in zip(todo, seen)])
         answer = answer or too_long or GAVE_UP
     finally:
         trace_id = trace.end(answer)

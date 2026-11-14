@@ -354,8 +354,12 @@ def test_three_sources_agree(fake, monkeypatch):
     by_source(monkeypatch, {"power": "rising", "era5": "rising", "ghcn": "rising"})
     fake.script = [step(tool_calls=three_calls()), step("All three agree: rising.", cost=0.002)]
     r = loop.ask("Is Delhi getting hotter?", model="fake:m")
-    assert r["answer"] == "All three agree: rising."
+    # the code adds one sentence per agreeing source (same period: the short form)
+    assert r["answer"] == ("All three agree: rising. ERA5 reanalysis via Open-Meteo archive agrees. "
+                           "NOAA NCEI GHCN-Daily agrees.")
     assert [c["result"]["source"]["id"] for c in r["tool_calls"]] == ["power", "era5", "ghcn"]
+    assert all(c["result"]["slope_per_decade"] == 41.0 for c in r["tool_calls"])  # the caller keeps full results
+    assert ["slope_per_decade" in x["content"] for x in fake.results[0]] == [True, False, False]
     assert [x["id"] for x in fake.results[0]] == ["power", "era5", "ghcn"]  # one model step reads all three
     assert r["usage"] == {"prompt_tokens": 200, "completion_tokens": 40, "cost_usd": 0.003}
 
@@ -382,7 +386,125 @@ def test_one_source_errors_two_answer(fake, monkeypatch):
     r = loop.ask("q", model="fake:m")
     assert r["tool_calls"][2]["error"] == "No weather station within 50 km of this point."
     assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.STATION_REASON}}  # the model sees no digit
-    assert r["answer"] == words(150)  # two sources returned results, so 180 applies
+    # two sources returned results, so 180 applies; they agree, so the code adds ERA5's sentence
+    assert r["answer"] == words(150) + " ERA5 reanalysis via Open-Meteo archive agrees."
+    assert "slope_per_decade" not in fake.results[0][1]["content"]  # the failed one doesn't stop the agree rule
+
+
+# ---- agreeing sources: the code writes their sentence, the model never sees their numbers ----
+
+from earthtrends.data import coops as coops_src, psmsl as psmsl_src  # noqa: E402
+
+NY = {"variable": "sea_level", "lat": 40.70, "lon": -74.01}
+NY_COOPS = {"variable": "sea_level", "units": "mm", "place": {"name": "The Battery", "lat": 40.7, "lon": -74.01},
+            "period": {"start": "1900-01", "end": "2026-10"}, "n": 1520, "deseasonalized": True,
+            "method": "mann_kendall_sen", "slope_per_decade": 31.787, "ci_low": 30.616, "ci_high": 32.9559,
+            "p_value": 1e-12, "autocorrelation_adjusted": True, "verdict": "rising", "source": coops_src.SOURCE,
+            "caveats": ["Tide gauge The Battery (8518750), 0 km from the point you asked about."]}
+NY_PSMSL = {**NY_COOPS, "place": {"name": "NEW YORK (THE BATTERY)", "lat": 40.7, "lon": -74.01},
+            "period": {"start": "1856-01", "end": "2025-12"}, "n": 1980, "slope_per_decade": 29.6154,
+            "ci_low": 28.7611, "ci_high": 30.4702, "p_value": 3e-11, "source": psmsl_src.SOURCE,
+            "caveats": ["Tide gauge NEW YORK (THE BATTERY) (PSMSL id 12), 1 km from the point you asked about."]}
+NY_SENT = "Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, January 1856 to December 2025."
+NY_HEAD = ("Sea level at The Battery in New York is clearly rising, by 31.79 mm per decade (95% range 30.62 to "
+           "32.96), January 1900 to October 2026. A rise this steady would be very unlikely if nothing were really "
+           "changing.")
+NY_CAVEAT = "The NOAA gauge is 0 km from the point and the PSMSL gauge 1 km."
+NY_SOURCES = ("Sources: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/, and Permanent Service for Mean "
+              "Sea Level (PSMSL), https://psmsl.org/.")
+WRONG_NY8 = ("NOAA CO-OPS tide gauges agrees with this, using the Permanent Service for Mean Sea Level (PSMSL) data, "
+             "over its own record, January 1856 to December 2025.")
+WRONG_NY1 = "The PSMSL record agrees, over its own record, January 1856 to December 2025."
+
+
+def ny_sources(monkeypatch, psmsl=NY_PSMSL, coops=NY_COOPS):
+    monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, source=None, **kw:
+                        {"coops": coops, "psmsl": psmsl}[source or "coops"])
+    return [call(arguments={**NY, "source": s}, id=s) for s in ("coops", "psmsl")]
+
+
+def no_trend_numbers(content):
+    text = json.dumps(content)
+    return (not {"slope_per_decade", "ci_low", "ci_high", "p_value", "period"} & set(content)
+            and not any(x in text for x in ("29.6", "28.7", "30.4", "1856")))
+
+
+@pytest.mark.parametrize("model_text,want", [
+    # (a) the marker, in the line or on its own line
+    (f"{NY_HEAD} [AGREEING SOURCES] {NY_CAVEAT} {NY_SOURCES}", f"{NY_HEAD} {NY_SENT} {NY_CAVEAT} {NY_SOURCES}"),
+    (f"{NY_HEAD}\n[AGREEING SOURCES]\n{NY_CAVEAT} {NY_SOURCES}", f"{NY_HEAD}\n{NY_SENT}\n{NY_CAVEAT} {NY_SOURCES}"),
+    ("[agreeing sources]" + f" {NY_HEAD} {NY_SOURCES}", f"{NY_SENT} {NY_HEAD} {NY_SOURCES}"),  # any case
+    # (b) nothing about PSMSL: the sentence goes in front of the sources sentence
+    (f"{NY_HEAD} {NY_CAVEAT} {NY_SOURCES}", f"{NY_HEAD} {NY_CAVEAT} {NY_SENT} {NY_SOURCES}"),
+    (f"{NY_HEAD}\n\n{NY_SOURCES}", f"{NY_HEAD}\n\n{NY_SENT} {NY_SOURCES}"),
+    (NY_HEAD, f"{NY_HEAD} {NY_SENT}"),  # no URL at all: at the end
+    # (c) its own sentence as well: the model's is dropped, the code's stays, once
+    (f"{NY_HEAD} {WRONG_NY1} [AGREEING SOURCES] {NY_CAVEAT} {NY_SOURCES}",
+     f"{NY_HEAD} {NY_SENT} {NY_CAVEAT} {NY_SOURCES}"),
+    (f"{NY_HEAD} {WRONG_NY8} {NY_CAVEAT} {NY_SOURCES}", f"{NY_HEAD} {NY_CAVEAT} {NY_SENT} {NY_SOURCES}"),
+    (f"{NY_HEAD} {NY_SENT} [AGREEING SOURCES] {NY_SOURCES}", f"{NY_HEAD} {NY_SENT} {NY_SOURCES}"),
+    (f"{NY_HEAD} PSMSL agrees. {NY_SOURCES}", f"{NY_HEAD} {NY_SENT} {NY_SOURCES}"),
+])
+def test_two_sources_agree_code_writes_the_sentence(fake, monkeypatch, model_text, want):
+    fake.script = [step(tool_calls=ny_sources(monkeypatch)), step(model_text)]
+    r = loop.ask("Is sea level rising in New York?", model="fake:m")
+    assert r["answer"] == want and r["answer"].count(NY_SENT) == 1 and "[" not in r["answer"]
+    coops_seen, psmsl_seen = (x["content"] for x in fake.results[0])
+    assert coops_seen == NY_COOPS  # the default source: full result
+    assert no_trend_numbers(psmsl_seen)
+    assert psmsl_seen["source"] == psmsl_src.SOURCE and psmsl_seen["caveats"] == NY_PSMSL["caveats"]
+    assert loop.MARKER in psmsl_seen["note"]
+    assert [c["result"] for c in r["tool_calls"]] == [NY_COOPS, NY_PSMSL]  # the caller gets full results
+
+
+def test_marker_in_prompt_is_the_one_the_code_replaces():
+    assert loop.MARKER in prompts.SYSTEM
+
+
+def test_same_period_gives_the_short_form(fake, monkeypatch):
+    calls = ny_sources(monkeypatch, psmsl={**NY_PSMSL, "period": NY_COOPS["period"]})
+    fake.script = [step(tool_calls=calls), step(f"{NY_HEAD} [AGREEING SOURCES] {NY_SOURCES}")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == f"{NY_HEAD} Permanent Service for Mean Sea Level (PSMSL) agrees. {NY_SOURCES}"
+
+
+def test_two_agree_one_disagrees_is_unchanged(fake, monkeypatch):
+    by_source(monkeypatch, {"power": "rising", "era5": "rising", "ghcn": "falling"})
+    text = "The sources disagree. NASA POWER (MERRA-2): clearly rising, by 41.00 mm per decade."
+    fake.script = [step(tool_calls=three_calls()), step(text)]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == text
+    assert all(x["content"]["slope_per_decade"] == 41.0 for x in fake.results[0])  # full results to the model
+
+
+def test_default_failed_next_source_leads(fake, monkeypatch):
+    by_source(monkeypatch, {"era5": "rising", "ghcn": "rising"}, fail={"power"})
+    fake.script = [step(tool_calls=three_calls()), step("Rising. [AGREEING SOURCES]")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == "Rising. NOAA NCEI GHCN-Daily agrees."
+    assert "slope_per_decade" in fake.results[0][1]["content"] and "slope_per_decade" not in fake.results[0][2]["content"]
+
+
+@pytest.mark.parametrize("cut", [True, False])
+def test_retry_keeps_the_reduction_and_the_sentence(fake, monkeypatch, cut):
+    first = step("x", stop="length") if cut else step(words(200))
+    fake.script = [step(tool_calls=ny_sources(monkeypatch)), first, step(f"{NY_HEAD} {NY_SOURCES}")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == f"{NY_HEAD} {NY_SENT} {NY_SOURCES}"
+    inline = json.loads(fake.started[1][fake.started[1].index("[{"):])
+    assert inline[0]["result"] == NY_COOPS and no_trend_numbers(inline[1]["result"])
+
+
+@pytest.mark.parametrize("text", ["Rising. [AGREEING SOURCES] Source: x.", "[ Agreeing Sources ]Rising."])
+def test_no_leftover_marker_without_agreeing_sources(fake, text):
+    fake.script = [step(tool_calls=[call()]), step(text)]
+    answer = loop.ask("q", model="fake:m")["answer"]
+    assert "[" not in answer and "agreeing" not in answer.lower() and answer.startswith(("Rising.", "Rising"))
+
+
+def test_text_without_marker_or_agreement_is_untouched():
+    text = "Rising  fast.\n\n\nSources: x."
+    assert loop.compose(text, []) == text
 
 
 # ---- error reasons the model reads: never a digit ----
@@ -682,7 +804,9 @@ def test_budget_spent_before_a_three_source_step(fake, monkeypatch):
     "Give no numbers at all in that answer (not a distance, not coordinates, not a year) and no estimate",
     "Do not switch to another measurement or another place to have something to report, unless the user asks",
     "offer, in one short sentence, what could be checked instead",
-    "say in a few words that each other source agrees, by its name",
+    "write [AGREEING SOURCES] on its own, right after the default source's verdict, numbers and p-value",
+    "Write nothing about them yourself (no sentence that they agree",
+    "Still name them with their URLs with the sources and pass on their caveats",
     "name every source you used, each with its URL",
     "stay at or under 180 words, never more",
     "without repeating their number",
@@ -712,7 +836,9 @@ def test_prompt_rules(phrase):
 
 @pytest.mark.parametrize("phrase", ["Never pick the most dramatic one", "the verdict already says whether it is clear",
                                     "If 120 words cannot hold everything", "has no data for this place",
-                                    "using the reason in its error", "US tide gauges", "US coasts"])
+                                    "using the reason in its error", "US tide gauges", "US coasts",
+                                    "agrees, over its own record, <that source's period>",
+                                    "is never the one that \"agrees\""])
 def test_prompt_rules_removed(phrase):
     assert phrase not in prompts.SYSTEM
 
