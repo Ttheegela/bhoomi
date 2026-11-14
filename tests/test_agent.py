@@ -474,6 +474,11 @@ def test_budget_spent_before_a_three_source_step(fake, monkeypatch):
     "name every source you used, each with its URL",
     "stay at or under 180 words, never more",
     "without repeating their number",
+    "Never repeat a number from the question either",
+    "Leave the p-value out of these lines",
+    "with no numbers for them",
+    'never the word "minus"',
+    "say each caveat only once",
     # rules that must survive
     "Never state a number that is not in a tool result",
     "Never call a \"no_clear_change\" result rising or falling",
