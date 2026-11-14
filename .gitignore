@@ -7,3 +7,11 @@ __pycache__/
 data/raw/
 *.nc
 .vercel
+.claude/worktrees/
+.claude/settings.local.json
+evals/results/*.jsonl
+*.env
+*.pem
+*.key
+*.log
+.DS_Store

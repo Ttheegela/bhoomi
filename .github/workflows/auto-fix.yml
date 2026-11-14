@@ -3,7 +3,8 @@ name: auto-fix
 # smallest fix and pushes it to the same branch. The push comes from the Claude GitHub App,
 # so `ci` runs again and auto-merge lands the PR once it is green.
 # One attempt per failure: if a commit Claude made still fails, humans take over.
-# Runs PR-branch code with secrets available, so only trusted collaborators get write access.
+# Runs PR-branch code with secrets available. It therefore runs only for branches of this repository,
+# never for a pull request from a fork, and only trusted collaborators get write access.
 on:
   workflow_run:
     workflows: [ci]
@@ -20,16 +21,17 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'failure' &&
       github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
       github.event.workflow_run.pull_requests[0] &&
       github.event.workflow_run.head_commit.author.name != 'claude[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
-      - uses: anthropics/claude-code-action@v1
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+      - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc  # v1.0.276
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

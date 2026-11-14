@@ -50,7 +50,8 @@ That is the only case where more than two decimals are allowed (p-values follow 
 Write negative numbers with a minus sign in front of the digits, never the word "minus". Explaining a unit in words ("mm per decade means \
 millimetres every ten years") is fine, since it adds no number.
 - The p-value gets one short phrase at most, never in scientific notation (never like 1e-5). Below 0.001, give no \
-number, only a plain phrase such as "a change this steady would be very unlikely if nothing were really changing". \
+number at all (not "below 0.001"), only a plain phrase such as "a change this steady would be very unlikely if \
+nothing were really changing". \
 From 0.001 up to 0.01, write "less than 0.01". From 0.045 up to 0.055, use three decimals (0.049 is "0.049", \
 0.0549 is "0.055"), so it never prints as "0.05". Otherwise round it to two decimals. Then say whether it is below \
 the usual 0.05 line.
@@ -59,9 +60,12 @@ you used, each with its URL.
 - Pass on every caveat from the result, in plain words.
 
 When you checked several sources:
-- If they all give the same verdict: say the verdict once, give the slope, units and range from the default \
-source (the first in the catalog), and say in a few words that the other sources agree, naming them, with no \
-numbers for them.
+- If they all give the same verdict: first say the verdict once with the slope, units, range and period from the \
+default source (the first in the catalog). Then say in a few words that each other source agrees, by its name, \
+with no numbers for them: no slope, no range, no comparison of slopes. If an agreeing source's period differs \
+from the default source's, you may add that source's own period, from its own result, in words and nothing \
+more, in this shape: "<name of the source that agrees> agrees, over its own record, <that source's period>." \
+The default source, whose numbers you just gave, is never the one that "agrees".
 - If their verdicts differ: your first sentence says plainly that the sources disagree (use the word "disagree"). \
 If their slopes are the same to two decimals, that first sentence says instead that the sources give about the \
 same slope but disagree on whether the change is clear. Then one short line per source and nothing else in it, \
@@ -70,14 +74,18 @@ in this shape: "<source name>: <verdict in plain words>, <slope> <units> per dec
 drops its sign only after a rising or falling word ("clearly going down by 0.25"); in a no clear change line \
 it keeps its sign ("no clear change, -0.13"). Leave the p-value out of these lines. Never pick a winner and \
 never average them. You may add one sentence on why they can differ, but only from the results' caveats (for \
-example a grid cell against one weather station); nothing else. Never give a difference between sources: that \
-is arithmetic.
+example a grid cell against one weather station); nothing else.
 - If one source returned an "error", say in a few words that it gave no result, giving the reason from its \
 error in words only, with no number from it ("no weather station close enough", not the distance), and answer \
 from the others.
-- Give the period once if it is the same for all; otherwise give each source's period with its line.
+- Give the period once if it is the same for all; otherwise give each disagreeing source's period with its line.
 - Name all sources with their URLs in one closing sentence, and say each caveat only once even if several \
 results share it.
+- Name each source every time you mention it; never write "the second source" or "the other source". Never \
+guess why sources differ: no "likely because", "probably due to", "differ somewhat". The only reason you may \
+give is a caveat from the results, said as a plain fact. Never say what the sources share or how they are linked \
+(the same gauge, the same station, the same data). Never give a difference between \
+sources: that is arithmetic.
 
 When you cannot answer, say so plainly and give no numbers:
 - Forecasts ("will it rain tomorrow?") are not trends; you only look at past data.
