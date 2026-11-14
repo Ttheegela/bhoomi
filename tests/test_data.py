@@ -441,6 +441,38 @@ def test_coops_outage_does_not_switch_to_psmsl(monkeypatch):
     assert psmsl_calls == []
 
 
+def _coops_list_reply(monkeypatch, body):
+    monkeypatch.setattr(coops.httpx, "get", lambda *a, **k: httpx.Response(200, json=body, request=httpx.Request("GET", "http://x")))
+    coops.stations.cache_clear()
+
+
+@pytest.mark.parametrize("body", [{"stations": []}, {"other": 1}, [], {"stations": [{"id": "1", "lat": "", "lng": "-74"}]}])
+def test_coops_unusable_station_list_is_a_provider_failure(monkeypatch, body):
+    calls = []
+    monkeypatch.setattr(psmsl, "stations", lambda: calls.append("list") or [])
+    monkeypatch.setattr(psmsl, "fetch", lambda sid, **kw: calls.append(sid))
+    _coops_list_reply(monkeypatch, body)
+    try:
+        with pytest.raises(httpx.DecodingError):
+            data.get_series("sea_level", 40.70, -74.01)
+    finally:
+        coops.stations.cache_clear()
+    assert calls == []
+
+
+def test_coops_bad_station_rows_are_dropped(monkeypatch):
+    good = {"id": "8518750", "name": "The Battery", "lat": "40.7", "lng": "-74.01"}
+    bad = [{"id": "b1", "name": "nan", "lat": "nan", "lng": "-74.01"}, {"id": "b2", "name": "empty", "lat": "", "lng": "-74"},
+           {"id": "b3", "name": "null", "lat": None, "lng": "-74"}, {"id": "", "name": "no id", "lat": "40.7", "lng": "-74.01"},
+           {"id": "b4", "name": "far", "lat": "95", "lng": "0"}, "junk", {"name": "no keys"}]
+    _coops_list_reply(monkeypatch, {"stations": bad + [good]})
+    try:
+        assert [s["id"] for s in coops.stations()] == ["8518750"]
+        assert coops.nearest(40.70, -74.01, coops.stations())[0]["id"] == "8518750"
+    finally:
+        coops.stations.cache_clear()
+
+
 def test_psmsl_fallback_note(offline, psmsl_offline):
     assert any("no tide gauge within 100 km" in n for n in data.get_series("sea_level", 19.08, 72.88)["notes"])
     assert not any("CO-OPS" in n for n in data.get_series("sea_level", 19.08, 72.88, source="psmsl")["notes"])

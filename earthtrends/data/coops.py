@@ -1,7 +1,7 @@
 """NOAA CO-OPS monthly mean sea level, no key."""
 from datetime import date
 from functools import lru_cache
-from math import asin, cos, radians, sin, sqrt
+from math import asin, cos, isfinite, radians, sin, sqrt
 
 import httpx
 
@@ -22,7 +22,19 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
 def stations() -> list[dict]:
     r = httpx.get(f"{BASE}/mdapi/prod/webapi/stations.json", params={"type": "waterlevels"}, timeout=TIMEOUT)
     r.raise_for_status()
-    return [{**s, "id": text(s.get("id", ""), 40), "name": text(s.get("name", ""), NAME)} for s in r.json()["stations"]]
+    reply = r.json()
+    rows = reply.get("stations") if isinstance(reply, dict) else None
+    out = []
+    for s in rows if isinstance(rows, list) else []:
+        try:  # a row without an id, or with a lat/lng that is not a finite number in range, is dropped
+            lat, lng = float(s["lat"]), float(s["lng"])
+            if isfinite(lat) and isfinite(lng) and abs(lat) <= 90 and abs(lng) <= 180 and text(s["id"], 40):
+                out.append({**s, "id": text(s["id"], 40), "name": text(s.get("name", ""), NAME)})
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    if not out:  # not cached: lru_cache keeps only returns
+        raise httpx.DecodingError("NOAA CO-OPS' station list was not in the documented format.")
+    return out
 
 
 def nearest(lat: float, lon: float, station_list: list[dict]) -> tuple[dict, float]:
