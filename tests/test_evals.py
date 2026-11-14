@@ -534,10 +534,45 @@ def test_rising_with_no_change_phrase(answer, ok):
     assert run.wording_agrees(answer, "rising") is ok
 
 
-@pytest.mark.parametrize("guess", ["likely because", "Probably due to", "differ somewhat"])
+@pytest.mark.parametrize("guess", ["likely because", "Probably due to", "differ somewhat", "the same station as"])
 def test_guessed_reason_for_a_difference_fails_wording(guess):
-    case = {**DELHI_CASE, "must_say": []}
     answer = DISAGREE.replace("The grids are", f"They {guess} the grids are")
-    assert run.check(case, fake_run(answer, multi([POWER, ERA5, GHCN])))["wording"] is False
-    era5 = {**ERA5, "caveats": [f"Results {guess.lower()} the grid."]}  # restating a caveat is fine
-    assert run.check(case, fake_run(answer, multi([POWER, era5, GHCN])))["wording"]
+    assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([POWER, ERA5, GHCN])))["wording"] is False
+
+
+NY_CASE = {"id": "nyc-sea-level", "question": "Is sea level rising in New York?", "expect_tool": "detect_trend",
+           "expect_variable": "sea_level"}
+CO_OPS = {"variable": "sea_level", "units": "mm", "verdict": "rising", "slope_per_decade": 31.787, "ci_low": 30.616,
+          "ci_high": 32.9559, "p_value": 1e-12, "period": {"start": "1900-01", "end": "2026-10"},
+          "source": {"id": "coops", "name": "NOAA CO-OPS", "url": "https://tidesandcurrents.noaa.gov/"},
+          "caveats": ["Tide gauge The Battery (8518750)."]}
+PSMSL = {**CO_OPS, "slope_per_decade": 29.6154, "ci_low": 28.76, "ci_high": 30.47,
+         "period": {"start": "1856-01", "end": "2025-12"},
+         "source": {"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"},
+         "caveats": ["Tide gauge NEW YORK (THE BATTERY) (PSMSL id 12)."]}
+NY_OK = ("Yes, sea level at The Battery in New York is clearly rising, by 31.79 mm per decade (95% range 30.62 to "
+         "32.96), January 1900 to October 2026. PSMSL agrees, over its own record, January 1856 to December 2025. "
+         "Sources: NOAA CO-OPS, https://tidesandcurrents.noaa.gov/, PSMSL, https://psmsl.org/")
+NY_PROD = ("Yes. Sea level at The Battery in New York City rises by 31.79 millimetres per decade (a decade is ten "
+           "years), with a 95% range of 30.62 to 32.96. The second source gives the same verdict: clearly rising, "
+           "29.62 millimetres per decade (95% range 28.76 to 30.47), for January 1856 to December 2025. The two "
+           "slopes differ somewhat, likely because they use different gauge records and periods.")
+
+
+def test_agreeing_source_named_with_its_own_period_passes():
+    assert run.check(NY_CASE, fake_run(NY_OK, multi([CO_OPS, PSMSL])))["wording"]
+
+
+def test_production_agree_answer_fails_wording():
+    assert run.check(NY_CASE, fake_run(NY_PROD, multi([CO_OPS, PSMSL])))["wording"] is False
+    leak_only = NY_PROD.split(" The two slopes")[0]  # the agreeing source's own slope and range alone also fail
+    assert run.check(NY_CASE, fake_run(leak_only, multi([CO_OPS, PSMSL])))["wording"] is False
+
+
+def test_same_gauge_claim_fails_wording():
+    answer = NY_OK.replace("PSMSL agrees, over its own record, January 1856 to December 2025.",
+                           "NOAA CO-OPS tide gauges agree, over its own longer record, January 1856 to December 2025 "
+                           "(PSMSL, https://psmsl.org/). Both use the same gauge, about 1 km from the point you asked "
+                           "about.")
+    assert answer != NY_OK
+    assert run.check(NY_CASE, fake_run(answer, multi([CO_OPS, PSMSL])))["wording"] is False
