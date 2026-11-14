@@ -1,0 +1,5401 @@
+[
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "atlantic-city-sea-level",
+  "answer": "Yes, sea level at Atlantic City is rising. The data show a clear rise of 42.54 millimetres every ten years (a decade is ten years), with a 95% range of 41.11 to 43.96. The period covered runs from September 1911 to October 2026. A change this steady would be very unlikely if nothing were really changing, far below the usual 0.05 line.\n\nThe measurements come from a tide gauge right at Atlantic City. The gauge records sea level relative to the land, so any sinking or rising of the land there is included. Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 39.36,
+     "lon": -74.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0010413,
+  "latency_s": 7.588,
+  "trace_id": "907770edea33fe1321be8886bf58251a",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "juneau-sea-level-falling",
+  "answer": "The data show sea level at Juneau is falling, but it is measured against the land, so any rising or sinking of the land is included.\n\nFrom June 1936 to September 2026, the level falls by 136.14 mm per decade (millimetres every ten years). The 95% range (the span where the true value likely sits) is -139.00 to -133.27 mm per decade. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. Caveat: the Juneau gauge (station 9452210) sits 1 km from the point you asked about.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 58.3,
+     "lon": -134.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Juneau",
+      "lat": 58.2988,
+      "lon": -134.4106
+     },
+     "period": {
+      "start": "1936-06",
+      "end": "2026-09"
+     },
+     "n": 1020,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.1448,
+     "ci_low": -139.004,
+     "ci_high": -133.2692,
+     "p_value": 4.45e-160,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Juneau (9452210), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0012509,
+  "latency_s": 40.133,
+  "trace_id": "043723ba8196aac3956662c013529066",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "astoria-sea-level-no-change",
+  "answer": "Sea level at Astoria shows no clear change in the NOAA tide gauge record. The estimated trend is -1.53 mm per decade (millimetres every ten years), with a 95% range of -4.20 to 1.16. Because that range includes zero, we can't rule out no change. The p-value is 0.27, above the usual 0.05 line. The record covers February 1925 to October 2026.\n\nThe data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/). The gauge is at Astoria (station 9439040), about 5 km from the point you asked about. It measures sea level relative to the land, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 46.19,
+     "lon": -123.83
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Astoria",
+      "lat": 46.207306,
+      "lon": -123.7683
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2026-10"
+     },
+     "n": 1199,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.5319,
+     "ci_low": -4.1977,
+     "ci_high": 1.1649,
+     "p_value": 0.265,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Astoria (9439040), 5 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.0009532,
+  "latency_s": 5.069,
+  "trace_id": "488631864182e7f2e517ca3f78542970",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "port-orford-sea-level-no-change",
+  "answer": "The data do not show a clear change in sea level at Port Orford. The best estimate points to a rise of 3.01 mm per decade (millimetres every ten years), but the 95% range (the span of likely values) runs from -4.67 to 10.53. Because that range includes zero, no change is plausible. The period is October 1977 to October 2026, using monthly values. The p-value (the chance of a trend this strong appearing if nothing were changing) is 0.44, above the usual 0.05 line.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. The gauge is at Port Orford, 0 km from your spot. Sea level is measured relative to the land there, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 42.74,
+     "lon": -124.5
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Port Orford",
+      "lat": 42.739,
+      "lon": -124.4983
+     },
+     "period": {
+      "start": "1977-10",
+      "end": "2026-10"
+     },
+     "n": 527,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 3.0057,
+     "ci_low": -4.6652,
+     "ci_high": 10.5263,
+     "p_value": 0.44,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Port Orford (9431647), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.0011249,
+  "latency_s": 7.015,
+  "trace_id": "67f1cfff5718dac6200bc06dbf68d7c7",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "We can't answer this one. Our tools do not count days above 40 \u00b0C, so we can't tell whether that count is rising in Delhi.\n\nThe closest things we have are \"Hottest day of the month\" (the highest air temperature reached in each month) and \"Air temperature (2 m)\" (the monthly average). Both come from NASA POWER, a public NASA climate dataset. The hottest-day measure shows how extreme peak heat is, but it doesn't show how many days pass 40 \u00b0C, so it can't settle your question by itself.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": false,
+   "variable": false,
+   "place": false,
+   "numbers": false,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": 3,
+  "cost_usd": 0.0007667,
+  "latency_s": 5.353,
+  "trace_id": "f9af3e94441ad9564071de93702fd37c",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "phoenix-air-temp",
+  "answer": "Yes. The data show Phoenix's air temperature rising by 0.47 degrees Celsius every ten years (a decade is ten years). The 95% range, the span where the true rate most likely falls, is 0.35 to 0.59. The period covered is January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveat: the data come from a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 33.45,
+     "lon": -112.07
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0010119,
+  "latency_s": 9.0,
+  "trace_id": "25bee266dd8eec3aa3b59c959c70453c",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "london-air-temp",
+  "answer": "Yes, the air temperature in London has clearly risen since 1981. The data show a rise of 0.34 degrees Celsius per decade (a decade is ten years). The 95% range is 0.24 to 0.45, so the rise is consistent across that range. The tool looked at all months of the year together. A change this steady would be very unlikely if nothing were really changing.\n\nThe period covered is January 1981 to December 2025. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveat: the grid cell is about 50 km wide, so it is an average over a large area, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 51.51,
+     "lon": -0.13,
+     "start": "1981"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.51, -0.13",
+      "lat": 51.51,
+      "lon": -0.13
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.0008905,
+  "latency_s": 5.114,
+  "trace_id": "3a27ca8226a9d740eae3c1dd4a52af11",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "chennai-rain",
+  "answer": "Yes, the data show Chennai's rainfall clearly going up. From January 1981 to December 2025, average rain per day (measured monthly, in millimetres per day) increased by 0.16 millimetres per day every ten years. The 95% range is 0.07 to 0.26. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveat: the data come from a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "precip",
+     "lat": 13.08,
+     "lon": 80.27
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.001022,
+  "latency_s": 38.817,
+  "trace_id": "8db8a065c8b69b53a25cfc36f622fc7e",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "visakhapatnam-air-temp",
+  "answer": "Vizag shows no clear warming trend in this data. The tool looked at monthly air temperatures from January 1981 to December 2025. It estimated a change of 0.05 degrees Celsius every ten years (a decade is ten years), with a 95% range of -0.001 to 0.09. That range includes zero, so we can't rule out no change. The p-value is 0.055, just above the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveat: the grid cell is about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.69,
+     "lon": 83.22
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.69, 83.22",
+      "lat": 17.69,
+      "lon": 83.22
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0010899,
+  "latency_s": 7.925,
+  "trace_id": "0801e731d4781a25e2c3f2bfca4abecf",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "mumbai-sea-level-no-gauge",
+  "answer": "We can't check sea level in Mumbai. Our sea level records come only from tide gauges on US coasts, and Mumbai is in India, so I have no data for it.\n\nI also can't forecast future sea level. I can only look at past records.\n\nIf you're curious about a US coastal city, send me its name and I can check the record there. For Mumbai, I can check past air temperature, the hottest day of each month, or rainfall, using NASA's POWER data (https://power.larc.nasa.gov).",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.0004719,
+  "latency_s": 3.718,
+  "trace_id": "22edcce8329b59be09bcc7c837e1af60",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "rain-tomorrow-forecast",
+  "answer": "I can't forecast the weather, so I can't say whether it will rain tomorrow. I only look at past observations to see whether things like rainfall have been changing over time. For a forecast, a weather service or weather app is the right place to check.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 5,
+  "cost_usd": 0.0003786,
+  "latency_s": 2.494,
+  "trace_id": "0e134737c667f102337ac794dcf9c781",
+  "error": null
+ },
+ {
+  "model": "openrouter:anthropic/claude-haiku-5.5",
+  "case": "springfield-ambiguous",
+  "answer": "Springfield exists in many places, so I need to know which one you mean. Which state or country is it in? Some examples are Springfield, Illinois, Springfield, Missouri, or Springfield, Massachusetts. Once you tell me, I can check whether its air temperature has been changing over the past decades.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0003489,
+  "latency_s": 2.158,
+  "trace_id": "466adffab7981b39a38757fd362a1927",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "atlantic-city-sea-level",
+  "answer": "Yes, sea level is clearly rising in Atlantic City. It goes up by 42.54 millimetres every ten years, with a 95% range of 41.11 to 43.96 millimetres per decade. The data runs from September 1911 to October 2026. A change this steady would be very unlikely if nothing were really changing, so it is well below the usual 0.05 line.\n\nThe source is the NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/). This is the Atlantic City gauge, right at the point you asked about. The measurement is sea level relative to the land, so any sinking or rising of the land itself is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 39.36,
+     "lon": -74.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00473493,
+  "latency_s": 4.361,
+  "trace_id": "fe877261f003b88e37dc01961bb6c2e3",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "juneau-sea-level-falling",
+  "answer": "Yes, at the Juneau tide gauge the sea level relative to the land is actually falling, by 136.14 millimetres every ten years. The 95% range is -139.00 to -133.27 millimetres per decade, from June 1936 to September 2026. A change this steady would be very unlikely if nothing were really changing.\n\nThe data come from the NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/). Two things to keep in mind: this gauge is about 1 kilometre from the point you asked about, and sea level here is measured relative to the land, so land rising (which happens in Alaska as old glacier ice melts off) is included in the number.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 58.3019,
+     "lon": -134.4197
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Juneau",
+      "lat": 58.2988,
+      "lon": -134.4106
+     },
+     "period": {
+      "start": "1936-06",
+      "end": "2026-09"
+     },
+     "n": 1020,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.1448,
+     "ci_low": -139.004,
+     "ci_high": -133.2692,
+     "p_value": 4.45e-160,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Juneau (9452210), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00406125,
+  "latency_s": 8.11,
+  "trace_id": "ddc8680f72323a89978c93f35140ae44",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "astoria-sea-level-no-change",
+  "answer": "Looking at monthly sea level from February 1925 to October 2026, the data does not show a clear change. A no-change outcome is plausible. The slope is -1.53 mm per decade (millimetres every ten years), with a 95% range from -4.20 to 1.16, and the range including zero is why the verdict is not a clear rise or fall. The p-value is 0.27, well above the usual 0.05 line. Source: NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/). The gauge is about 5 km from Astoria, and sea level is measured relative to the land, so any land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 46.19,
+     "lon": -123.83
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Astoria",
+      "lat": 46.207306,
+      "lon": -123.7683
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2026-10"
+     },
+     "n": 1199,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.5319,
+     "ci_low": -4.1977,
+     "ci_high": 1.1649,
+     "p_value": 0.265,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Astoria (9439040), 5 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00210937,
+  "latency_s": 3.73,
+  "trace_id": "914db55e1ec8bea8c6b67ff7d7af4098",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "port-orford-sea-level-no-change",
+  "answer": "At Port Orford, Oregon, the data does not show a clear change in sea level. Rising or falling could be statistical noise; no change is plausible.\n\nThe trend is 3.01 mm per decade, with a 95% range of -4.67 to 10.53 mm per decade. That range includes zero, which is why the change is not clearly upward or downward. The period is October 1977 to October 2026. The p-value is 0.44, above the usual 0.05 line.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. The gauge is about 1 km from Port Orford. It measures sea level relative to the land, so any land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 42.7458,
+     "lon": -124.4978
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Port Orford",
+      "lat": 42.739,
+      "lon": -124.4983
+     },
+     "period": {
+      "start": "1977-10",
+      "end": "2026-10"
+     },
+     "n": 527,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 3.0057,
+     "ci_low": -4.6652,
+     "ci_high": 10.5263,
+     "p_value": 0.44,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Port Orford (9431647), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.00575687,
+  "latency_s": 5.417,
+  "trace_id": "edfcab8feee70dfce41877d23d018ad1",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "I'm sorry, I can't answer that one. I only have air temperature, hottest-day-of-the-month temperature, precipitation, and sea level, and I look at trends in those values, not counts of days above a temperature.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": false,
+   "variable": false,
+   "place": false,
+   "numbers": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": 3,
+  "cost_usd": 0.00064146,
+  "latency_s": 39.93,
+  "trace_id": "7fbb7cffe20aae1b579a93d7b641b3c5",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "phoenix-air-temp",
+  "answer": "Yes, Phoenix is clearly getting hotter. Air temperature there has risen by 0.47 degrees Celsius per decade, with a 95% range of 0.35 to 0.59, from January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, so it is well past the usual 0.05 line.\n\nThese are monthly NASA POWER (MERRA-2) data, from https://power.larc.nasa.gov/. One caveat: the value is for a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 33.4484,
+     "lon": -112.074
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.4484, -112.074",
+      "lat": 33.4484,
+      "lon": -112.074
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.00142761,
+  "latency_s": 4.752,
+  "trace_id": "56a8cbba2b8272b0adb25f554f5d64fe",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "london-air-temp",
+  "answer": "Yes, the temperature in London has clearly risen since 1981. The data shows it going up by 0.34 degrees Celsius every ten years (about 0.34 degC per decade), with a 95% range from 0.24 to 0.45 degrees Celsius per decade. This covers January 1981 to December 2025.\n\nA change this steady would be very unlikely if nothing were really changing, so it is firmly below the usual 0.05 line. The data come from NASA POWER (MERRA-2), at https://power.larc.nasa.gov/. One caveat: this is a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 51.5072,
+     "lon": -0.1276,
+     "start": "1981"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.5072, -0.1276",
+      "lat": 51.5072,
+      "lon": -0.1276
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.00241027,
+  "latency_s": 4.139,
+  "trace_id": "b64db5b9f68b27fd252f04beaca8116d",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "chennai-rain",
+  "answer": "Chennai's rain is rising: it goes up by 0.16 mm/day every ten years, with a 95% range of 0.07 to 0.26. The data runs from January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, so it is below the usual 0.05 line. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveat: the reading comes from a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "precip",
+     "lat": 13.08,
+     "lon": 80.27
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00256414,
+  "latency_s": 5.16,
+  "trace_id": "f91aedf04a1a193f6b3f32b3a44ba4c1",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "visakhapatnam-air-temp",
+  "answer": "For Visakhapatnam, the data does not show a clear change in air temperature. From January 1981 to December 2025, the trend is 0.05 degrees Celsius per decade. The 95% range runs from -0.0008 to 0.09 degrees Celsius per decade, and because that range includes zero, no clear warming or cooling is shown. The p-value is 0.06, above the usual 0.05 line. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveat: the grid cell is about 50 km wide, not a single station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.6868,
+     "lon": 83.2185
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.6868, 83.2185",
+      "lat": 17.6868,
+      "lon": 83.2185
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00665289,
+  "latency_s": 20.971,
+  "trace_id": "37712a71493f77ff68cb6a693cc0d998",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "mumbai-sea-level-no-gauge",
+  "answer": "I need to check sea level near Mumbai, but sea level data in my tools comes only from US tide gauges, so it works only near US coasts. I can't answer about sea level in Mumbai.\n\nI do have data for air temperature and precipitation in Mumbai if you'd like to ask about those instead.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.00088077,
+  "latency_s": 8.872,
+  "trace_id": "16ba12b2e8f4d89a16e643cd49429e3c",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "rain-tomorrow-forecast",
+  "answer": "I can't answer that. Weather forecasts for a specific day are not the kind of thing I check. I only look at long-term trends in past data, like whether rainfall has been slowly changing over decades at a place.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.0008028,
+  "latency_s": 0.951,
+  "trace_id": "865a9ca77fa2481d88486cfaf03dc72a",
+  "error": null
+ },
+ {
+  "model": "openrouter:deepseek/deepseek-v4-pro-0813",
+  "case": "springfield-ambiguous",
+  "answer": "There are several Springfields in the United States. Which one do you mean, for example Springfield, Illinois, or Springfield, Missouri?",
+  "tool_calls": [
+   {
+    "name": "list_variables",
+    "arguments": {},
+    "error": null,
+    "result": null
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 5,
+  "cost_usd": 0.00159072,
+  "latency_s": 3.38,
+  "trace_id": "2cc36e5896ab835b5849ee9f6e4c0f66",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "atlantic-city-sea-level",
+  "answer": "Yes. Sea level in Atlantic City is clearly rising. Monthly measurements from September 1911 to October 2026 show a rise of 42.54 mm per decade, with a 95% range of 41.11 to 43.96 mm per decade. A change this steady would be very unlikely if nothing were really changing; the test is below the usual 0.05 line.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. The gauge is Atlantic City (8534720), 1 km from the point you asked about. This is sea level relative to the land at the gauge, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 39.364,
+     "lon": -74.423
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0187779,
+  "latency_s": 17.695,
+  "trace_id": "155d7b4add29eeaea955f66b4e2c9e88",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "juneau-sea-level-falling",
+  "answer": "No. Monthly tide-gauge data show sea level relative to the land at Juneau is clearly falling, by 136.14 mm per decade from June 1936 to September 2026. The 95% range is -139.00 to -133.27 mm per decade. A change this steady would be very unlikely if nothing were really changing; the p-value is below the usual 0.05 line.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. The Juneau gauge (9452210) is 1 km from your point. It measures sea level relative to land, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 58.3019,
+     "lon": -134.4197
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Juneau",
+      "lat": 58.2988,
+      "lon": -134.4106
+     },
+     "period": {
+      "start": "1936-06",
+      "end": "2026-09"
+     },
+     "n": 1020,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.1448,
+     "ci_low": -139.004,
+     "ci_high": -133.2692,
+     "p_value": 4.45e-160,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Juneau (9452210), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.046922,
+  "latency_s": 28.758,
+  "trace_id": "31eb14d8c9ae25dab838b3a02ba76764",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "astoria-sea-level-no-change",
+  "answer": "Monthly tide-gauge data from February 1925 to October 2026 show no clear change in sea level at Astoria. The long-term estimate is -1.53 mm per decade, with a 95% range of -4.20 to 1.16 mm per decade. The p-value is 0.27, above the usual 0.05 line, so no change is plausible. Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. The Astoria gauge (9439040) is 5 km from your point, and measurements are relative to land, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 46.1879,
+     "lon": -123.8313
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Astoria",
+      "lat": 46.207306,
+      "lon": -123.7683
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2026-10"
+     },
+     "n": 1199,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.5319,
+     "ci_low": -4.1977,
+     "ci_high": 1.1649,
+     "p_value": 0.265,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Astoria (9439040), 5 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.015552,
+  "latency_s": 8.83,
+  "trace_id": "f34434a1d91d2faff28ea6e0203d390e",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "port-orford-sea-level-no-change",
+  "answer": "At Port Orford, the data do not show a clear change in sea level; no change is plausible. The estimated trend is 3.01 mm per decade, with a 95% range of -4.67 to 10.53 mm per decade, for October 1977 to October 2026. The p-value is 0.44, above the usual 0.05 line. Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. Tide gauge Port Orford (9431647) is 1 km from the point asked about. Sea level is relative to the land, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 42.7457,
+     "lon": -124.4973
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Port Orford",
+      "lat": 42.739,
+      "lon": -124.4983
+     },
+     "period": {
+      "start": "1977-10",
+      "end": "2026-10"
+     },
+     "n": 527,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 3.0057,
+     "ci_low": -4.6652,
+     "ci_high": 10.5263,
+     "p_value": 0.44,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Port Orford (9431647), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0242382,
+  "latency_s": 9.101,
+  "trace_id": "36ef74934d083b31b1d041e0cf5dd995",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "This test does not count days above 40 \u00b0C; it tracks the hottest day in each month. In Delhi, that temperature is clearly falling, by 0.25 \u00b0C per decade, with a 95% range of \u22120.47 to \u22120.04 \u00b0C per decade, from January 1981 to December 2025. The p-value (a check against a chance pattern) is 0.02, below the usual 0.05 line. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. The grid cell is about 50 km wide, not one station. Each monthly value is the hottest single day, not an average of daily highs, so this cannot tell us whether the count of days above 40 \u00b0C has changed.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp_max",
+     "lat": 28.61,
+     "lon": 77.21
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.61, 77.21",
+      "lat": 28.61,
+      "lon": 77.21
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -0.2512,
+     "ci_low": -0.4667,
+     "ci_high": -0.0363,
+     "p_value": 0.0224,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": false,
+   "source_named": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.01878192,
+  "latency_s": 13.376,
+  "trace_id": "572b6349f19da552937b98ce0b64f7bd",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "phoenix-air-temp",
+  "answer": "Yes. Monthly air-temperature observations near Phoenix are clearly rising. After removing the normal seasonal cycle, the estimated increase is 0.47\u00b0C per decade, with a 95% range of 0.35 to 0.59\u00b0C per decade, from January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, and the test is below the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. The data cover a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 33.45,
+     "lon": -112.07
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0183498,
+  "latency_s": 11.039,
+  "trace_id": "c042daff5ec4d47dfee2478a2738cbb8",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "london-air-temp",
+  "answer": "Yes, London\u2019s monthly air temperature is clearly rising. From January 1981 to December 2025, it rose by 0.34 degC per decade, with a 95% range of 0.24 to 0.45 degC per decade. A change this steady would be very unlikely if nothing were really changing; the p-value is below the usual 0.05 line. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. The data cover a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 51.5074,
+     "lon": -0.1278,
+     "start": "1981",
+     "variable": "air_temp"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.5074, -0.1278",
+      "lat": 51.5074,
+      "lon": -0.1278
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.01550496,
+  "latency_s": 13.415,
+  "trace_id": "f9c535a4e3735a00975f7bc9d1275a6e",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "chennai-rain",
+  "answer": "Yes. Monthly rainfall data for Chennai show a clear rising trend. Rainfall rises by 0.16 mm/day per decade, with a 95% range of 0.07 to 0.26 mm/day per decade, from January 1981 to December 2025. Here, mm/day is the rainfall rate used for each monthly value. The evidence is below the usual 0.05 line: a change this steady would be very unlikely if nothing were really changing.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. The data cover a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "precip",
+     "lat": 13.08,
+     "lon": 80.27
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.01801896,
+  "latency_s": 16.318,
+  "trace_id": "0cd85e0ea3177bc15ed05132c93cf0cd",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "visakhapatnam-air-temp",
+  "answer": "Vizag\u2019s air-temperature data does not show a clear change, so we can\u2019t rule out no change. The estimated trend is 0.05 degC per decade, with a 95% range from -0.001 to 0.09 degC per decade, for January 1981 to December 2025. The p-value (a measure of how unusual the pattern would be with no real trend) is 0.06, above the usual 0.05 line. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. The data cover a grid cell about 50 km wide, not a single station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.6868,
+     "lon": 83.2185
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.6868, 83.2185",
+      "lat": 17.6868,
+      "lon": 83.2185
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.02486625,
+  "latency_s": 13.27,
+  "trace_id": "a5708fe336099013e688c0b340c08b95",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "mumbai-sea-level-no-gauge",
+  "answer": "I can\u2019t check whether sea level is rising in Mumbai with this tool. Its sea-level data come only from US tide gauges, so it works only near US coasts. Mumbai is outside that coverage, so I have no suitable observations here to test for a trend.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.007612,
+  "latency_s": 3.589,
+  "trace_id": "c84c063537e1db0dcbfee8d0f9380f57",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "rain-tomorrow-forecast",
+  "answer": "I can\u2019t forecast tomorrow\u2019s rain. I only test long-term trends in past observations, such as whether rainfall at a place has clearly risen or fallen over time.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 5,
+  "cost_usd": 0.0055962,
+  "latency_s": 2.032,
+  "trace_id": "82625a184d01835e9a81ee87fd4007de",
+  "error": null
+ },
+ {
+  "model": "openrouter:moonshotai/kimi-k3.1-pro",
+  "case": "springfield-ambiguous",
+  "answer": "Which Springfield do you mean? Please tell me the state or country, since many places share that name.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 5,
+  "cost_usd": 0.0015534,
+  "latency_s": 1.512,
+  "trace_id": "35558f01045669b4bd552a74f60f543c",
+  "error": null
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "atlantic-city-sea-level",
+  "answer": "Yes, sea level there is clearly going up. From September 1911 to October 2026 it rose by 42.54 mm per decade, with a 95% range of 41.11 to 43.96 mm per decade. A change this steady would be very unlikely if nothing were really changing. The data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/).\n\nTwo things to keep in mind. The gauge is the Atlantic City station, about 1 km from the spot asked about. And it measures sea level relative to the land, so any sinking or rising of the land is included in that number.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 39.3643,
+     "lon": -74.4229
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.008048,
+  "latency_s": 11.822,
+  "trace_id": "596106892703fd37cbdff334a7c3a8a4",
+  "error": null
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "juneau-sea-level-falling",
+  "answer": null,
+  "tool_calls": [],
+  "checks": {
+   "answered": false,
+   "tool": false,
+   "variable": false,
+   "place": false,
+   "source": false,
+   "verdict": false,
+   "numbers": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": null,
+  "latency_s": null,
+  "trace_id": null,
+  "error": "OpenRouter failed: ConnectError"
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "astoria-sea-level-no-change",
+  "answer": null,
+  "tool_calls": [],
+  "checks": {
+   "answered": false,
+   "tool": false,
+   "variable": false,
+   "place": false,
+   "source": false,
+   "verdict": false,
+   "numbers": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": null,
+  "latency_s": null,
+  "trace_id": null,
+  "error": "OpenRouter failed: ConnectError"
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "port-orford-sea-level-no-change",
+  "answer": null,
+  "tool_calls": [],
+  "checks": {
+   "answered": false,
+   "tool": false,
+   "variable": false,
+   "place": false,
+   "source": false,
+   "verdict": false,
+   "numbers": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": null,
+  "latency_s": null,
+  "trace_id": null,
+  "error": "OpenRouter failed: ConnectError"
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "We can't count individual days above a temperature cut-off here. Our data holds the hottest single day of each month, not a tally of scorchers.\n\nFor Delhi that peak-day heat is clearly going down: it falls by 0.25 degrees C every ten years, from January 1981 to December 2025. The 95% range is -0.47 to -0.04. The p-value is 0.02, below the usual 0.05 line. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/.\n\nTwo things to keep in mind. The numbers come from a grid cell about 50 km wide, not a single weather station. And each monthly value is the hottest day of that month, not the average of the daily highs.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp_max",
+     "lat": 28.61,
+     "lon": 77.21
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.61, 77.21",
+      "lat": 28.61,
+      "lon": 77.21
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -0.2512,
+     "ci_low": -0.4667,
+     "ci_high": -0.0363,
+     "p_value": 0.0224,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": 3,
+  "cost_usd": 0.012124,
+  "latency_s": 29.663,
+  "trace_id": "370c2fbafe0a45aaaf747eea84bdfeae",
+  "error": null
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "phoenix-air-temp",
+  "answer": "Yes, Phoenix is clearly getting warmer. Air temperature is rising by 0.47 degrees Celsius every ten years, and the 95% range is 0.35 to 0.59 degrees per decade. That is from January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, so it sits well below the usual 0.05 line.\n\nThe data come from NASA POWER (MERRA-2), https://power.larc.nasa.gov/. One thing to keep in mind: these readings come from a grid cell about 50 km wide, not one weather station, so they give a broad picture of the area rather than an exact street-level one.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 33.4484,
+     "lon": -112.074
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.4484, -112.074",
+      "lat": 33.4484,
+      "lon": -112.074
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.004514,
+  "latency_s": 40.793,
+  "trace_id": "973743c7f0ccba60343cc481a6f83365",
+  "error": null
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "london-air-temp",
+  "answer": "Yes, the temperature near London is clearly going up. From January 1981 to December 2025 it rises by 0.34 degC per decade (a decade is ten years). The 95% range is 0.24 to 0.45 degC per decade. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line. The data come from NASA POWER (MERRA-2), https://power.larc.nasa.gov/. These are monthly values spread over a grid cell about 50 km wide, so it is an average for the area, not one station in the city.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 51.51,
+     "lon": -0.13
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.51, -0.13",
+      "lat": 51.51,
+      "lon": -0.13
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.009178,
+  "latency_s": 45.939,
+  "trace_id": "02d7371c771f270ecaee22212fcc4f8f",
+  "error": null
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "chennai-rain",
+  "answer": "Yes, rain around Chennai is clearly going up. Over January 1981 to December 2025, rainfall rose by 0.16 mm per day every ten years, with a 95% range from 0.07 to 0.26. A change this steady would be very unlikely if nothing were really changing, and it sits below the usual 0.05 line. These are monthly rainfall figures in millimetres per day, measured across all months. The data come from NASA POWER (MERRA-2), https://power.larc.nasa.gov/. One caution: the values represent a grid cell about 50 km wide, not one single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "precip",
+     "lat": 13.08,
+     "lon": 80.27
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.00415,
+  "latency_s": 11.602,
+  "trace_id": "61b142e83b7f33629a6838af05b88cf4",
+  "error": null
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "visakhapatnam-air-temp",
+  "answer": "For Vizag (Visakhapatnam), the monthly temperature data does not show a clear change. Temperatures drift up by 0.05 degC every ten years, but the 95% range runs from -0.001 to 0.09 degC per decade, and because that range includes zero we can't rule out no change at all. The p-value is 0.06, which is above the usual 0.05 line. This covers January 1981 to December 2025, from NASA POWER (MERRA-2), https://power.larc.nasa.gov/. One thing to keep in mind: the values come from a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.69,
+     "lon": 83.22
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.69, 83.22",
+      "lat": 17.69,
+      "lon": 83.22
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.005236,
+  "latency_s": 15.73,
+  "trace_id": "6fa883346156df165c5c5e0f93a1f7aa",
+  "error": null
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "mumbai-sea-level-no-gauge",
+  "answer": "I can't check that for Mumbai. The sea level records I use come only from tide gauges along United States coasts, so places outside the US, including Mumbai, have no sea level data here.\n\nThat means I have no result to give you for Mumbai's coast, and I won't guess at one.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.002684,
+  "latency_s": 9.408,
+  "trace_id": "42560caa2a9f1a093677dd146c606b1d",
+  "error": null
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "rain-tomorrow-forecast",
+  "answer": "I only look at past observations, so I can't tell you tomorrow's weather. What I can do is test whether things have really been changing at a place over many years.\n\nI can check air temperature, the hottest day of the month, rainfall, or sea level near US coasts. Just tell me the place you have in mind, and which of those you want.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": 3,
+  "cost_usd": 0.001276,
+  "latency_s": 4.246,
+  "trace_id": "96885e0d29fc1081b3ff040fb89ae10d",
+  "error": null
+ },
+ {
+  "model": "openrouter:qwen/qwen3.8-max-0902",
+  "case": "springfield-ambiguous",
+  "answer": "There are many towns called Springfield, in Illinois, Massachusetts, Missouri, Oregon and elsewhere. Which one do you mean? Tell me the state or country and I will check the temperature record there.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.001136,
+  "latency_s": 3.106,
+  "trace_id": "27ffeb19a6347485dfcde449e48ceb48",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "atlantic-city-sea-level",
+  "answer": "Yes, sea level in Atlantic City is clearly rising. It goes up by 42.54 millimetres every ten years, with a 95% range of 41.11 to 43.96, based on monthly measurements from September 1911 to October 2026. A change this steady would be very unlikely if nothing were really changing, and it is far below the usual 0.05 line. The data come from the NOAA CO-OPS tide gauge in Atlantic City itself. One caveat: this is sea level relative to the land, so if the land is sinking, that is included too. Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 39.36,
+     "lon": -74.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00085961,
+  "latency_s": 3.266,
+  "trace_id": "e9411928df782e0d2077bd9ef4ed275c",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "juneau-sea-level-falling",
+  "answer": "No, the sea level in Juneau is clearly falling, not rising. The water level relative to the land falls by 136.14 mm per decade, with a 95% range from -139.00 to -133.27 mm, over the period June 1936 to September 2026. A change this steady would be very unlikely if nothing were really changing. This is measured relative to the land, so the land itself rising is included, which likely explains it. Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. Caveat: the gauge (9452210) is 1 km from the point asked about.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 58.3,
+     "lon": -134.4
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Juneau",
+      "lat": 58.2988,
+      "lon": -134.4106
+     },
+     "period": {
+      "start": "1936-06",
+      "end": "2026-09"
+     },
+     "n": 1020,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.1448,
+     "ci_low": -139.004,
+     "ci_high": -133.2692,
+     "p_value": 4.45e-160,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Juneau (9452210), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00060047,
+  "latency_s": 2.448,
+  "trace_id": "ad72aca5742ff3534ebbdab579a5c6a3",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "astoria-sea-level-no-change",
+  "answer": "Astoria's sea level data does not show a clear change: the data are flat enough that no change is plausible. The best estimate is that sea level falls by 1.53 mm per decade, but the 95% range is -4.20 to 1.16 mm, which includes zero. The p-value is 0.27, above the usual 0.05 line. The data cover February 1925 to October 2026. Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. Notes: the gauge is about 5 km from the point asked about, and the level is relative to the land, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 46.19,
+     "lon": -123.83
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Astoria",
+      "lat": 46.207306,
+      "lon": -123.7683
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2026-10"
+     },
+     "n": 1199,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.5319,
+     "ci_low": -4.1977,
+     "ci_high": 1.1649,
+     "p_value": 0.265,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Astoria (9439040), 5 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00056659,
+  "latency_s": 2.96,
+  "trace_id": "f94edf0021650276469883bb2ec96d11",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "port-orford-sea-level-no-change",
+  "answer": "I checked the tide gauge right at Port Orford, and the data does not show a clear change. The average sea level there moves up by about 3.01 mm every ten years, but the 95% range runs from -4.67 to 10.53 mm per decade, which includes zero, so no change is plausible. The p-value is 0.44, well above the usual 0.05 line. The record covers October 1977 to October 2026, from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/). Note this is sea level relative to the land at the gauge, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 42.74,
+     "lon": -124.5
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Port Orford",
+      "lat": 42.739,
+      "lon": -124.4983
+     },
+     "period": {
+      "start": "1977-10",
+      "end": "2026-10"
+     },
+     "n": 527,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 3.0057,
+     "ci_low": -4.6652,
+     "ci_high": 10.5263,
+     "p_value": 0.44,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Port Orford (9431647), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.00058213,
+  "latency_s": 2.785,
+  "trace_id": "da3b86e31f6b9e9ace95659a611b1ac8",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "I can't count days above 40 \u00b0C directly, but I can test the hottest single day of each month, which hints at extreme heat in Delhi.\n\nSurprisingly, the data shows this is falling, by 0.25 \u00b0C per decade, with a 95% range of -0.47 to -0.04, from January 1981 to December 2025. The p-value is 0.02, below the usual 0.05 line, but the range only barely excludes zero, so this is a weak signal.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveats: the grid cell is about 50 km wide, not a single station, and each value is one hot day per month, not the average daily high \u2014 so this may miss changes in how many days pass 40 \u00b0C.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp_max",
+     "lat": 28.61,
+     "lon": 77.21
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.61, 77.21",
+      "lat": 28.61,
+      "lon": 77.21
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -0.2512,
+     "ci_low": -0.4667,
+     "ci_high": -0.0363,
+     "p_value": 0.0224,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": false,
+   "source_named": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.00071982,
+  "latency_s": 2.851,
+  "trace_id": "0e98ad54569db3eb1aec62bf80e8f1cc",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "phoenix-air-temp",
+  "answer": "Yes, Phoenix is clearly getting hotter. Looking at monthly temperatures from January 1981 to December 2025, the average rises by 0.47 degrees Celsius every ten years, with a 95% range of 0.35 to 0.59. A change this steady would be very unlikely if nothing were really changing, so the trend is well below the usual 0.05 line.\n\nThe data come from NASA POWER (MERRA-2) at https://power.larc.nasa.gov/. One caveat: the numbers are for a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 33.45,
+     "lon": -112.07
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.00191831,
+  "latency_s": 3.456,
+  "trace_id": "4c51b4afb901b5090467e15c61a56b12",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "london-air-temp",
+  "answer": "Yes, the temperature in London has clearly gone up since 1981. Based on monthly data from January 1981 to December 2025, the warming is 0.34 degrees Celsius per decade, with a 95% range of 0.24 to 0.45. A change this steady would be very unlikely if nothing were really changing, so it is well below the usual 0.05 line. The data come from NASA POWER (MERRA-2), at https://power.larc.nasa.gov/. One caveat: the data come from a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 51.51,
+     "lon": -0.13,
+     "start": "1981"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.51, -0.13",
+      "lat": 51.51,
+      "lon": -0.13
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00312072,
+  "latency_s": 7.862,
+  "trace_id": "b10b86bf5a50b9e982b0f36c54413bad",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "chennai-rain",
+  "answer": "Yes, the data shows rainfall at Chennai is rising. Monthly records from January 1981 to December 2025 give a rise of 0.16 millimetres per day each decade, with a 95% range of 0.07 to 0.26. A change this steady would be very unlikely if nothing were really changing, so it is well below the usual 0.05 line for confidence. The data come from NASA POWER (MERRA-2) at https://power.larc.nasa.gov/. One caveat: each value covers a grid cell about 50 km wide, not a single rain gauge in the city.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 13.08,
+     "lon": 80.27,
+     "variable": "precip"
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.00368661,
+  "latency_s": 5.091,
+  "trace_id": "d8d74779446f3710498805ddfb0ea49b",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "visakhapatnam-air-temp",
+  "answer": "I tested monthly air temperature data for Visakhapatnam (Vizag) from January 1981 to December 2025. The data do not show a clear change: temperature may be rising slightly, about 0.05 degrees Celsius every ten years, but no change is plausible too. The 95% range runs from -0.0008 to 0.09, which includes zero, so we can't rule out no change. The p-value is 0.055, just above the usual 0.05 line. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveat: this is a roughly 50 km wide grid, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.69,
+     "lon": 83.22
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.69, 83.22",
+      "lat": 17.69,
+      "lon": 83.22
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.00057822,
+  "latency_s": 2.195,
+  "trace_id": "c957c1267cd82e6981234e465400892b",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "mumbai-sea-level-no-gauge",
+  "answer": "I can't answer that one, I'm afraid. My sea level tool only works with tide gauges on United States coasts, and Mumbai has no gauge in that dataset, so there's no sea level record I can test for you.\n\nI can still check past trends for Mumbai in other things: air temperature, the hottest day of each month, or rainfall (in millimetres per day, measured monthly). Just tell me which you'd like.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.00050406,
+  "latency_s": 1.158,
+  "trace_id": "b73d9a4d521f6b3ceef851a3c12d0957",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "rain-tomorrow-forecast",
+  "answer": "I can't answer that. Weather forecasts are about the future, but I only look at past observations to see whether something has been slowly changing at a place over many years.\n\nIf you tell me a town or city, I can check past rainfall there and say whether the data show rainfall rising, falling, or no clear change over recent decades. A forecast for tomorrow is a different job, best answered by a weather service.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.00050542,
+  "latency_s": 1.802,
+  "trace_id": "f7bf34982d395ac0d6fbaca0a0b9797e",
+  "error": null
+ },
+ {
+  "model": "openrouter:z-ai/glm-5.3",
+  "case": "springfield-ambiguous",
+  "answer": "Springfield is a name shared by many places \u2014 there are Springfields in Illinois, Missouri, Massachusetts, Ohio, and other states. Which Springfield do you mean? Once you tell me, I'll check the long-term air temperature record there and say whether it's really getting warmer.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.0014048,
+  "latency_s": 1.746,
+  "trace_id": "a89d9a0a1083cd4283892437f4a96bc2",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "atlantic-city-sea-level",
+  "answer": "Yes, the sea level at Atlantic City is clearly rising. From September 1911 to October 2026 it rose by 42.54 mm per decade (a decade is ten years), with a 95% range of 41.11 to 43.96 mm. A change this steady would be very unlikely if nothing were really changing.\n\nThe data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/), gauge 8534720 at the point you asked about. One caveat: this is sea level relative to the land at the gauge, so any sinking or rising of the land itself is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 39.36,
+     "lon": -74.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.00119344,
+  "latency_s": 38.491,
+  "trace_id": "141b8e55c5a73b01ca0fe7e5febce8ee",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "juneau-sea-level-falling",
+  "answer": "Actually, at Juneau the sea level is going down relative to the land, not up. From June 1936 to September 2026, the measured level falls by 136.14 mm per decade (a decade is ten years), with a 95% range of -139.00 to -133.27 mm per decade. A change this steady would be very unlikely if nothing were really changing.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/ . The gauge is 1 km from the point asked about, and it measures sea level relative to the land, so any rising or sinking of the land is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 58.3,
+     "lon": -134.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Juneau",
+      "lat": 58.2988,
+      "lon": -134.4106
+     },
+     "period": {
+      "start": "1936-06",
+      "end": "2026-09"
+     },
+     "n": 1020,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.1448,
+     "ci_low": -139.004,
+     "ci_high": -133.2692,
+     "p_value": 4.45e-160,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Juneau (9452210), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00173919,
+  "latency_s": 8.707,
+  "trace_id": "570ae86d0a74988e452f303eeef4c0f7",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "astoria-sea-level-no-change",
+  "answer": "The sea level near Astoria shows no clear change. From February 1925 to October 2026, the change is estimated at a fall of 1.53 mm every ten years (a decade is ten years), but the 95% range runs from -4.20 to 1.16 mm per decade. Because that range includes zero, no change is plausible. The p-value is 0.27, well above the usual 0.05 line.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. Caveats: the reading comes from the Astoria tide gauge, 5 km from the point asked about, and it measures sea level relative to the land, so any sinking or rising of the land is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 46.19,
+     "lon": -123.83
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Astoria",
+      "lat": 46.207306,
+      "lon": -123.7683
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2026-10"
+     },
+     "n": 1199,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.5319,
+     "ci_low": -4.1977,
+     "ci_high": 1.1649,
+     "p_value": 0.265,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Astoria (9439040), 5 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0005161,
+  "latency_s": 11.374,
+  "trace_id": "5b0c84cb2c7bbe2219f9def27922068b",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "port-orford-sea-level-no-change",
+  "answer": "The ocean level at Port Orford shows no clear change. The best estimate is a rise of 3.01 mm every ten years (a decade is ten years), but the 95% range runs from -4.67 to 10.53 mm, so no change is plausible. From October 1977 to October 2026, this is not below the usual 0.05 line (p = 0.44).\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/ \u2014 tide gauge Port Orford, right at the point you asked about. Note the measurement is relative to the land, so any sinking or rising of the land is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 42.74,
+     "lon": -124.5
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Port Orford",
+      "lat": 42.739,
+      "lon": -124.4983
+     },
+     "period": {
+      "start": "1977-10",
+      "end": "2026-10"
+     },
+     "n": 527,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 3.0057,
+     "ci_low": -4.6652,
+     "ci_high": 10.5263,
+     "p_value": 0.44,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Port Orford (9431647), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.0003834,
+  "latency_s": 5.946,
+  "trace_id": "09947398128e15131e11678de6034964",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "We cannot count days above 40 \u00b0C directly, but the closest measure we have is the hottest day of each month in Delhi. Surprisingly, that has been falling, not rising. From January 1981 to December 2025, the hottest day of the month falls by 0.25 degC every ten years, with a 95% range of -0.47 to -0.04. The p-value is 0.02, below the usual 0.05 line. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveats: the grid cell is about 50 km wide, not one station, and each value is that month's single hottest day, not an average.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp_max",
+     "lat": 28.61,
+     "lon": 77.21
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.61, 77.21",
+      "lat": 28.61,
+      "lon": 77.21
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -0.2512,
+     "ci_low": -0.4667,
+     "ci_high": -0.0363,
+     "p_value": 0.0224,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": false,
+   "source_named": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.0012068,
+  "latency_s": 22.066,
+  "trace_id": "6f2956bb52dff599562eb3d8c6dd3d62",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "phoenix-air-temp",
+  "answer": "Yes, Phoenix is clearly getting hotter. The data show air temperature rising by 0.47 degrees Celsius every ten years (a decade is ten years), with a 95% range of 0.35 to 0.59, from January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line. The data come from NASA POWER (MERRA-2) at https://power.larc.nasa.gov/. Keep in mind this is a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 33.45,
+     "lon": -112.07
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00082052,
+  "latency_s": 9.539,
+  "trace_id": "53e9ae0eaca09384bcf730139ce41db6",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "london-air-temp",
+  "answer": "Yes, the temperature in London is clearly rising. From January 1981 to December 2025, the average air temperature went up by 0.34 degC every ten years (a decade is ten years), with a 95% range of 0.24 to 0.45 degC. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line.\n\nThe data come from NASA POWER (MERRA-2), https://power.larc.nasa.gov/. One caveat: it uses a grid cell about 50 km wide, not a single weather station in the city.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 51.5,
+     "lon": -0.13,
+     "start": "1981"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.5, -0.13",
+      "lat": 51.5,
+      "lon": -0.13
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00040579,
+  "latency_s": 7.008,
+  "trace_id": "c29b8191b1c79775669ab86090cba612",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "chennai-rain",
+  "answer": "Yes \u2014 Chennai's rainfall is clearly going up. The long-term rise is 0.16 mm/day per decade (a decade is ten years), with a 95% range of 0.07 to 0.26, from January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, and it sits well below the usual 0.05 line. Precipitation here means rainfall in millimetres per day, measured monthly. The data come from NASA POWER (MERRA-2), https://power.larc.nasa.gov/. One caveat: this is a grid cell about 50 km wide, not a single rain gauge, so it reflects the whole area around the city.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "precip",
+     "lat": 13.08,
+     "lon": 80.27
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00041173,
+  "latency_s": 10.516,
+  "trace_id": "105a17764472fd6bed605b15ac3b8caa",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "visakhapatnam-air-temp",
+  "answer": "For Vizag (Visakhapatnam), the monthly air temperature data does not show a clear change: no change is plausible, because the 95% range includes zero. The trend looks like it rises by 0.05 degC every ten years, with a 95% range from -0.001 to 0.09, over January 1981 to December 2025. The p-value is 0.055, just above the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Note the values come from a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.69,
+     "lon": 83.22
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.69, 83.22",
+      "lat": 17.69,
+      "lon": 83.22
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.00041369,
+  "latency_s": 8.836,
+  "trace_id": "efae65e2432d06b566532a89007f3e39",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "mumbai-sea-level-no-gauge",
+  "answer": "Sorry, I can't check that one. Sea level data here comes only from tide gauges around US coasts, and Mumbai is in India, so there is no sea level record for it in these datasets.\n\nI do have other variables I can test for Mumbai, such as air temperature, the hottest day of the month, and rainfall, all from the POWER dataset.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.00016097,
+  "latency_s": 5.912,
+  "trace_id": "1c50d1a7a73f59c365f8de8294dfca3c",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "rain-tomorrow-forecast",
+  "answer": "I can't answer that. I only look at past observations to test for long-term trends, not forecasts. Tomorrow's rain is a weather forecast, which is a different job. I have no tool that can look ahead.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 5,
+  "cost_usd": 0.00093177,
+  "latency_s": 4.891,
+  "trace_id": "8eb2d33b3489ecd1a5492763bc2c3356",
+  "error": null
+ },
+ {
+  "model": "openrouter:xiaomi/mimo-v2.6-pro",
+  "case": "springfield-ambiguous",
+  "answer": "Springfield is a place name used in many US states (and other countries), so I don't know which one you mean. Could you tell me which Springfield \u2014 for example, the one in Illinois, Missouri, Massachusetts, or Ohio? Once you say which one, I'll run the temperature test there.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 8.802e-05,
+  "latency_s": 3.294,
+  "trace_id": "6de3525ef03ea30e5e3d7cbf5c5136cf",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "atlantic-city-sea-level",
+  "answer": "Sorry, I could not finish working this out, so I have no answer to give you. Please try asking again, maybe in a simpler way.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 39.36,
+     "lon": -74.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": false,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": false,
+   "numbers": true,
+   "source_named": false,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.00724065,
+  "latency_s": 42.673,
+  "trace_id": "0e4f8e81382311dd798d84512871860a",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "juneau-sea-level-falling",
+  "answer": "Sorry, I could not finish working this out, so I have no answer to give you. Please try asking again, maybe in a simpler way.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 58.3,
+     "lon": -134.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Juneau",
+      "lat": 58.2988,
+      "lon": -134.4106
+     },
+     "period": {
+      "start": "1936-06",
+      "end": "2026-09"
+     },
+     "n": 1020,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.1448,
+     "ci_low": -139.004,
+     "ci_high": -133.2692,
+     "p_value": 4.45e-160,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Juneau (9452210), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": false,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": false,
+   "numbers": true,
+   "source_named": false,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.00726775,
+  "latency_s": 40.342,
+  "trace_id": "e09af53bca0851c4d4e8995c70a71032",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "astoria-sea-level-no-change",
+  "answer": "Sorry, I could not finish working this out, so I have no answer to give you. Please try asking again, maybe in a simpler way.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 46.19,
+     "lon": -123.83
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Astoria",
+      "lat": 46.207306,
+      "lon": -123.7683
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2026-10"
+     },
+     "n": 1199,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.5319,
+     "ci_low": -4.1977,
+     "ci_high": 1.1649,
+     "p_value": 0.265,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Astoria (9439040), 5 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": false,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": false,
+   "numbers": true,
+   "source_named": false,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.00655661,
+  "latency_s": 43.605,
+  "trace_id": "826c40cdd3a3df62702d77d3df778895",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "port-orford-sea-level-no-change",
+  "answer": "Sorry, I could not finish working this out, so I have no answer to give you. Please try asking again, maybe in a simpler way.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 42.745,
+     "lon": -124.497
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Port Orford",
+      "lat": 42.739,
+      "lon": -124.4983
+     },
+     "period": {
+      "start": "1977-10",
+      "end": "2026-10"
+     },
+     "n": 527,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 3.0057,
+     "ci_low": -4.6652,
+     "ci_high": 10.5263,
+     "p_value": 0.44,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Port Orford (9431647), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": false,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": false,
+   "numbers": true,
+   "source_named": false,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.00644324,
+  "latency_s": 41.69,
+  "trace_id": "3c33a29f2ae901ac293dda616e1f448b",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "Sorry, I could not finish working this out, so I have no answer to give you. Please try asking again, maybe in a simpler way.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp_max",
+     "lat": 28.6139,
+     "lon": 77.209
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.6139, 77.209",
+      "lat": 28.6139,
+      "lon": 77.209
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -0.2512,
+     "ci_low": -0.4667,
+     "ci_high": -0.0363,
+     "p_value": 0.0224,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": false,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": false,
+   "numbers": true,
+   "source_named": false,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.00743862,
+  "latency_s": 61.003,
+  "trace_id": "a8001a5a9375d282db89a2c7e25370ab",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "phoenix-air-temp",
+  "answer": "Sorry, I could not finish working this out, so I have no answer to give you. Please try asking again, maybe in a simpler way.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 33.45,
+     "lon": -112.07
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": false,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": false,
+   "numbers": true,
+   "source_named": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.00593009,
+  "latency_s": 45.465,
+  "trace_id": "b382daafd1d85c3177faf9504202a57c",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "london-air-temp",
+  "answer": "Sorry, I could not finish working this out, so I have no answer to give you. Please try asking again, maybe in a simpler way.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 51.5074,
+     "lon": -0.1278,
+     "start": "1981"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.5074, -0.1278",
+      "lat": 51.5074,
+      "lon": -0.1278
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": false,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": false,
+   "numbers": true,
+   "source_named": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.00612601,
+  "latency_s": 46.809,
+  "trace_id": "4ab7e536457c21ed5f030421281f0c74",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "chennai-rain",
+  "answer": "Sorry, I could not finish working this out, so I have no answer to give you. Please try asking again, maybe in a simpler way.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "precip",
+     "lat": 13.08,
+     "lon": 80.27
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": false,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": false,
+   "numbers": true,
+   "source_named": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.00576711,
+  "latency_s": 45.423,
+  "trace_id": "7307eba853d56f082fafcc5f76b79a4b",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "visakhapatnam-air-temp",
+  "answer": "Sorry, I could not finish working this out, so I have no answer to give you. Please try asking again, maybe in a simpler way.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.6868,
+     "lon": 83.2185
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.6868, 83.2185",
+      "lat": 17.6868,
+      "lon": 83.2185
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": false,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": false,
+   "numbers": true,
+   "source_named": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.00640861,
+  "latency_s": 45.364,
+  "trace_id": "01372225366339b734490e8f4b58eab6",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "mumbai-sea-level-no-gauge",
+  "answer": "I can\u2019t test this here. The sea-level tool found no tide gauge near Mumbai and reported the closest one at Apra Harbor, Guam. Sea-level data comes only from US tide gauges, so this test works only near US coasts.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 19.076,
+     "lon": 72.8777
+    },
+    "error": "No tide gauge within 100 km of (19.076, 72.8777); the nearest is Apra Harbor, Guam, 7638 km away.",
+    "result": null
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": false,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": false,
+  "plain_language": 3,
+  "cost_usd": 0.00131701,
+  "latency_s": 11.839,
+  "trace_id": "dcaf4658c232dd5ea2aca5262b4e3c0b",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "rain-tomorrow-forecast",
+  "answer": "I can\u2019t answer that here. Tomorrow\u2019s rain is a forecast, and I only look at past monthly observations to test whether something is changing over time.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 5,
+  "cost_usd": 0.00033879,
+  "latency_s": 3.91,
+  "trace_id": "4ea734a1fbc99d64bdc351ae4993499a",
+  "error": null
+ },
+ {
+  "model": "openrouter:tencent/hy4",
+  "case": "springfield-ambiguous",
+  "answer": "Which Springfield do you mean? There are several places with that name, so please tell me the state or country. Once I know which one, I can check the monthly temperature record for that spot.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 5,
+  "cost_usd": 0.00042841,
+  "latency_s": 4.257,
+  "trace_id": "32c4fd918e968613462e861faa44c09a",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "atlantic-city-sea-level",
+  "answer": "Yes, sea level in Atlantic City is clearly rising. The monthly tide gauge data run from September 1911 to October 2026.\n\nThe rise is 42.54 mm per decade (a decade is ten years, so that means millimetres every ten years). The 95% range is 41.11 to 43.96. A change this steady would be very unlikely if nothing were really changing. That is well below the usual 0.05 line.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/\n\nCaveat: the gauge measures sea level relative to the land, so sinking or rising land is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 39.36,
+     "lon": -74.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.01573,
+  "latency_s": 3.926,
+  "trace_id": "2458a0b3c1b6ae290e22a7435dc6e4c0",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "juneau-sea-level-falling",
+  "answer": "No. At Juneau the sea level is clearly going down, not up, relative to the land. It falls by 136.14 mm per decade (a decade is ten years). The 95% range is -139.00 to -133.27. The data run from June 1936 to September 2026. A change this steady would be very unlikely if nothing were really changing.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/\n\nCaveats: the gauge is 1 km from the point you asked about. It measures sea level relative to the land, so land rising or sinking is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 58.3,
+     "lon": -134.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Juneau",
+      "lat": 58.2988,
+      "lon": -134.4106
+     },
+     "period": {
+      "start": "1936-06",
+      "end": "2026-09"
+     },
+     "n": 1020,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.1448,
+     "ci_low": -139.004,
+     "ci_high": -133.2692,
+     "p_value": 4.45e-160,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Juneau (9452210), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.015148,
+  "latency_s": 3.74,
+  "trace_id": "97b5ffdb34d8fdaf32fc0192c8015c16",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "astoria-sea-level-no-change",
+  "answer": "Sea level at Astoria does not show a clear change. The monthly tide gauge data run from February 1925 to October 2026. They give a slope of -1.53 mm per decade (millimetres every ten years). The 95% range is -4.20 to 1.16. That range includes zero, so no change is plausible. The p-value is 0.27, which is above the usual 0.05 line.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/\n\nCaveats: the gauge is 5 km from the point you asked about. It measures sea level relative to the land, so land rising or sinking is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 46.19,
+     "lon": -123.83
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Astoria",
+      "lat": 46.207306,
+      "lon": -123.7683
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2026-10"
+     },
+     "n": 1199,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.5319,
+     "ci_low": -4.1977,
+     "ci_high": 1.1649,
+     "p_value": 0.265,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Astoria (9439040), 5 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.015648,
+  "latency_s": 4.377,
+  "trace_id": "d84791e2f5af910bdfbcf32084242ea0",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "port-orford-sea-level-no-change",
+  "answer": "At Port Orford, the data does not show a clear change in sea level. We can't rule out no change. The slope is 3.01 mm per decade (a decade is ten years). The 95% range runs from -4.67 to 10.53, and it includes zero. The p-value is 0.44, which is above the usual 0.05 line.\n\nThe period is October 1977 to October 2026. These are monthly values.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/\n\nCaveats: The gauge is at Port Orford, right at the place you asked about. It measures sea level relative to the land, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 42.74,
+     "lon": -124.5
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Port Orford",
+      "lat": 42.739,
+      "lon": -124.4983
+     },
+     "period": {
+      "start": "1977-10",
+      "end": "2026-10"
+     },
+     "n": 527,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 3.0057,
+     "ci_low": -4.6652,
+     "ci_high": 10.5263,
+     "p_value": 0.44,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Port Orford (9431647), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.015714,
+  "latency_s": 5.028,
+  "trace_id": "92713bc7402f9e6c54fa0bead41fcfb7",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "I can't count days above 40 \u00b0C. I can only check the hottest day of each month, and that has been going down, not up.\n\nThe hottest day of the month in Delhi is clearly falling by 0.25 \u00b0C per decade (a decade is ten years). The 95% range is -0.47 to -0.04. The period is January 1981 to December 2025. The p-value is 0.02, below the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/\n\nCaveats: the data cover a grid cell about 50 km wide, not a single weather station. Each monthly value is the hottest single day of that month, not the average of the daily highs.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp_max",
+     "lat": 28.61,
+     "lon": 77.21
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.61, 77.21",
+      "lat": 28.61,
+      "lon": 77.21
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -0.2512,
+     "ci_low": -0.4667,
+     "ci_high": -0.0363,
+     "p_value": 0.0224,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": false,
+   "source_named": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.016922,
+  "latency_s": 4.892,
+  "trace_id": "d400e5c4b411b9c1f77ac65c7c7536cf",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "phoenix-air-temp",
+  "answer": "Yes. For Phoenix, Arizona, the data show air temperature clearly going up. The monthly records run from January 1981 to December 2025.\n\nThe rise is 0.47 degC per decade (a decade is ten years). The 95% range is 0.35 to 0.59 degC per decade. A change this steady would be very unlikely if nothing were really changing, so it is well below the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/\n\nCaveat: the data cover a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 33.45,
+     "lon": -112.07
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.016672,
+  "latency_s": 4.868,
+  "trace_id": "f55127d9f902a3cc77e73c90ef34a8ee",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "london-air-temp",
+  "answer": "Yes. Using London, UK, the temperature is clearly going up. The monthly data run from January 1981 to December 2025.\n\nThe trend is 0.34 degC per decade (a decade is ten years). The 95% range is 0.24 to 0.45 degC per decade. A change this steady would be very unlikely if nothing were really changing.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/\n\nCaveat: the data cover a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 51.5,
+     "lon": -0.12
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.5, -0.12",
+      "lat": 51.5,
+      "lon": -0.12
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.016976,
+  "latency_s": 5.41,
+  "trace_id": "e0de8c81d5530cb032e323eb23174e09",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "chennai-rain",
+  "answer": "Yes, Chennai's rainfall is clearly going up. The data are monthly values of rainfall in millimetres per day, from January 1981 to December 2025.\n\nThe trend is 0.16 mm per day for every ten years (a decade is ten years). The 95% range is 0.07 to 0.26. A change this steady would be very unlikely if nothing were really changing, so the p-value is below the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/\n\nCaveat: the data cover a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "precip",
+     "lat": 13.08,
+     "lon": 80.27
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0151,
+  "latency_s": 4.413,
+  "trace_id": "7566918f2a8200a6c1b951dec8e78f8d",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "visakhapatnam-air-temp",
+  "answer": "Vizag's air temperature does not show a clear change. The data are monthly values from January 1981 to December 2025. The slope is 0.05 \u00b0C per decade (a decade is ten years). The 95% range runs from -0.001 to 0.09 \u00b0C per decade. That range includes zero, so we can't rule out no change. The p-value is 0.055, just above the usual 0.05 line.\n\nThe data come from NASA POWER (MERRA-2): https://power.larc.nasa.gov/\n\nCaveat: the data cover a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.69,
+     "lon": 83.22
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.69, 83.22",
+      "lat": 17.69,
+      "lon": 83.22
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.015344,
+  "latency_s": 4.428,
+  "trace_id": "7ecb8c86903af2d326bef3757dc7e095",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "mumbai-sea-level-no-gauge",
+  "answer": "I can't answer this for Mumbai. Our sea level data come only from US tide gauges (instruments that measure the water level along the coast), so they work only near US coasts. Mumbai is in India, so we have no sea level record for it.\n\nThe variables we do have are air temperature, the hottest day of the month, and precipitation (rainfall in millimetres per day, measured monthly). I can test any of those for Mumbai.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.007038,
+  "latency_s": 2.091,
+  "trace_id": "aa2c72d468537010111d070c22730ad3",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "rain-tomorrow-forecast",
+  "answer": "I can't tell you if it will rain tomorrow. I only look at past data to see whether something has been changing over time, and I don't make forecasts.\n\nI can check whether rainfall, temperature, hottest days or sea level have changed in a place. Sea level works only near US coasts.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 4,
+  "cost_usd": 0.006582,
+  "latency_s": 2.145,
+  "trace_id": "57ce3a70fc4f60c9fe7f10142cbe0088",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-sonnet-5-5",
+  "case": "springfield-ambiguous",
+  "answer": "Which Springfield do you mean? There are many in the US, for example in Illinois, Massachusetts, Missouri, Ohio and Oregon. Tell me the state (or country) and I'll check whether it's getting warmer there.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 5,
+  "cost_usd": 0.006458,
+  "latency_s": 1.997,
+  "trace_id": "e30bc671fa32ef2d10881daff70ee6f1",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "atlantic-city-sea-level",
+  "answer": "Yes, sea level in Atlantic City is rising clearly. It rises by 42.54 millimetres every ten years (a decade is ten years). The 95% range (the span where the true rise most likely falls) is 41.11 to 43.96. The data cover September 1911 to October 2026. A change this steady would be very unlikely if nothing were really changing, and it is well below the usual 0.05 line.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. The measuring station is Atlantic City (8534720), right at the spot you asked about. Sea level is measured relative to the land there, so any land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 39.36,
+     "lon": -74.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0010461,
+  "latency_s": 5.347,
+  "trace_id": "260467fd99ff3e4a9876cdec24a6e6a5",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "juneau-sea-level-falling",
+  "answer": "No, the sea is not getting higher at Juneau. Relative to the land there, sea level is clearly going down. It falls by 136.14 millimetres per decade (a decade is ten years), with a 95% range of -139.00 to -133.27. The record runs from June 1936 to September 2026. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/. The data come from gauge 9452210, about 1 km from Juneau. Because it measures sea level relative to the land, any sinking or rising of the land is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 58.3,
+     "lon": -134.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Juneau",
+      "lat": 58.2988,
+      "lon": -134.4106
+     },
+     "period": {
+      "start": "1936-06",
+      "end": "2026-09"
+     },
+     "n": 1020,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.1448,
+     "ci_low": -139.004,
+     "ci_high": -133.2692,
+     "p_value": 4.45e-160,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Juneau (9452210), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.001175,
+  "latency_s": 8.492,
+  "trace_id": "3bcd9bac4a24b03f98949929daab6bf7",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "astoria-sea-level-no-change",
+  "answer": "No clear change in sea level shows up at Astoria. The slope is -1.53 millimetres per decade (a decade is ten years), with a 95% range of -4.20 to 1.16. Because that range includes zero, no change is plausible. The p-value is 0.27, above the usual 0.05 line, which means a trend this steady could easily appear if nothing were really changing.\n\nThe period is February 1925 to October 2026, using monthly values. The source is NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/), from the Astoria gauge 5 km from the point you asked about. Sea level is measured relative to the land at the gauge, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 46.19,
+     "lon": -123.83
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Astoria",
+      "lat": 46.207306,
+      "lon": -123.7683
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2026-10"
+     },
+     "n": 1199,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.5319,
+     "ci_low": -4.1977,
+     "ci_high": 1.1649,
+     "p_value": 0.265,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Astoria (9439040), 5 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0011014,
+  "latency_s": 6.313,
+  "trace_id": "456fb6f5c39698bc75f48cf28281c941",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "port-orford-sea-level-no-change",
+  "answer": "The data do not show a clear change in sea level at Port Orford. The best estimate is a rise of 3.01 millimetres per decade (a decade is ten years), but the 95% range (the span of likely values) runs from -4.67 to 10.53. That range includes zero, so we can't rule out no change. The p-value is 0.44, above the usual 0.05 line.\n\nThe period is October 1977 to October 2026, using monthly averages from the Port Orford tide gauge, which sits 0 km from the spot checked. Sea level is measured relative to the land there, so any land sinking or rising is included.\n\nSource: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lat": 42.74,
+     "lon": -124.5
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Port Orford",
+      "lat": 42.739,
+      "lon": -124.4983
+     },
+     "period": {
+      "start": "1977-10",
+      "end": "2026-10"
+     },
+     "n": 527,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 3.0057,
+     "ci_low": -4.6652,
+     "ci_high": 10.5263,
+     "p_value": 0.44,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Port Orford (9431647), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.0012187,
+  "latency_s": 6.411,
+  "trace_id": "ee6b7bfd550b508f7cbcfe40c7c4701f",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "We can't count days above 40 \u00b0C directly. Our data gives only the hottest day of each month, so it shows how that peak has changed, not how many hot days there were.\n\nThat peak is clearly falling in Delhi. It falls by 0.25 degrees Celsius per decade (every ten years), with a 95% range of -0.47 to -0.04, over January 1981 to December 2025. The p-value is 0.02, below the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveat: the grid cell is about 50 km wide, not one weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp_max",
+     "lat": 28.61,
+     "lon": 77.21
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.61, 77.21",
+      "lat": 28.61,
+      "lon": 77.21
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -0.2512,
+     "ci_low": -0.4667,
+     "ci_high": -0.0363,
+     "p_value": 0.0224,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": false,
+   "source_named": true,
+   "must_say": false
+  },
+  "passed": false,
+  "plain_language": 3,
+  "cost_usd": 0.0023509,
+  "latency_s": 13.591,
+  "trace_id": "4b79551600c1628471c13997b48bb9f8",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "phoenix-air-temp",
+  "answer": "Yes, the data show Phoenix's air temperature rising. Using monthly air temperature 2 metres above the ground, from January 1981 to December 2025, the rise is 0.47 degrees Celsius per decade (a decade is ten years). The 95% range (the span of likely values) is 0.35 to 0.59. A change this steady would be very unlikely if nothing were really changing, so the p-value (a measure of how surprising the data would be if nothing had changed) is well below the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/\n\nCaveat: each data point covers a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 33.45,
+     "lon": -112.07
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.0010128,
+  "latency_s": 5.289,
+  "trace_id": "00ebeec8353fee5d510f60cf0f38f5a3",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "london-air-temp",
+  "answer": "Yes, the air temperature in London has clearly risen since 1981. The data show a rise of 0.34 degrees Celsius every ten years (a decade is ten years). The 95% range, which is the span where the true rate most likely sits, is 0.24 to 0.45. The data cover January 1981 to December 2025, using monthly values. A change this steady would be very unlikely if nothing were really changing, and this is well below the usual 0.05 line.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/\n\nCaveat: the data come from a grid cell about 50 km wide, not a single weather station, so local readings can differ.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 51.51,
+     "lon": -0.13,
+     "start": "1981"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.51, -0.13",
+      "lat": 51.51,
+      "lon": -0.13
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0008933,
+  "latency_s": 3.943,
+  "trace_id": "4373dc7e78a0fc413526c4e9e2d62a40",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "chennai-rain",
+  "answer": "Yes. Rainfall in Chennai shows a clear rise. It goes up by 0.16 millimetres per day every ten years (millimetres per day is the average daily rainfall for each month). The 95% range, the span of likely values, is 0.07 to 0.26. The data cover January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, and it is well below the usual 0.05 line for surprising results.\n\nSource: NASA POWER (MERRA-2), https://power.larc.nasa.gov/\n\nCaveat: the data come from a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "precip",
+     "lat": 13.08,
+     "lon": 80.27
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.0010049,
+  "latency_s": 4.693,
+  "trace_id": "626a53fec7ea0f3bd44bef9507929161",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "visakhapatnam-air-temp",
+  "answer": "The data do not show a clear change in air temperature for Visakhapatnam (Vizag). The estimated trend is 0.05 degrees Celsius per decade (a decade is ten years), with a 95% range of -0.001 to 0.09. That range includes zero, so we can't rule out no change. The p-value is 0.055, just above the usual 0.05 line.\n\nThe period is January 1981 to December 2025. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. Caveat: the data come from a grid cell about 50 km wide, not a single weather station.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.69,
+     "lon": 83.22
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.69, 83.22",
+      "lat": 17.69,
+      "lon": 83.22
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0011517,
+  "latency_s": 6.202,
+  "trace_id": "83ac64a28c5ea65289eeb75a7a140d0f",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "mumbai-sea-level-no-gauge",
+  "answer": "Sorry, I can't answer this one. Our sea level records come only from tide gauges on US coasts, and Mumbai is on the Indian coast, so we have no sea level data there.\n\nWhat we do have for any location, including Mumbai, is air temperature (2 metres above the ground), the hottest day of each month, and precipitation (rainfall in millimetres per day, measured monthly). I can check whether any of those are changing in Mumbai if you tell me which one you want to look at.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 3,
+  "cost_usd": 0.0004304,
+  "latency_s": 2.499,
+  "trace_id": "0b229877dcd0aa227d895ae6f35cd76e",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "rain-tomorrow-forecast",
+  "answer": "I can't tell you whether it will rain tomorrow. Forecasts are predictions about the future, and I only look at past observations.\n\nI can check whether rainfall has changed over time at a place you name. I use monthly rainfall in millimetres per day, from NASA's POWER data (power.larc.nasa.gov). Just tell me the town or city, and say which state or country it is in if the name is shared by other places.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 5,
+  "cost_usd": 0.0004836,
+  "latency_s": 4.45,
+  "trace_id": "adf420bf0e52f771197e53e562ae8544",
+  "error": null
+ },
+ {
+  "model": "anthropic:claude-haiku-5-5",
+  "case": "springfield-ambiguous",
+  "answer": "Springfield exists in many places, so I need to know which one you mean. Which state (or country) is it in? Once you tell me, I can check whether its air temperature has really been rising.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": 5,
+  "cost_usd": 0.0003254,
+  "latency_s": 1.115,
+  "trace_id": "da702b86dfee3f8e5c976164bc064af8",
+  "error": null
+ }
+]
