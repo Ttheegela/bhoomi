@@ -18,7 +18,7 @@ ARGS = {"variable": "sea_level", "lat": 39.36, "lon": -74.42}
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    for k in ("OPENROUTER_API_KEY", "AGENT_MODEL", *tracing.KEYS):
+    for k in ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "AGENT_MODEL", *tracing.KEYS):
         monkeypatch.delenv(k, raising=False)
     ratelimit.reset()
     monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: TREND)
@@ -156,11 +156,11 @@ def test_budget_normal_path_with_two_tools(fake, monkeypatch):
     assert [x["id"] for x in fake.results[0]] == ["a", "b"]
 
 
-def test_unbuilt_provider_in_env_is_not_configured(monkeypatch):
+def test_anthropic_without_key_is_not_configured(monkeypatch):
     monkeypatch.setenv("AGENT_MODEL", "anthropic:claude-haiku-5-5")
     with pytest.raises(providers.NotConfigured):
         loop.ask("q")
-    with pytest.raises(ValueError):
+    with pytest.raises(providers.NotConfigured):
         loop.ask("q", model="anthropic:claude-haiku-5-5")
     r = client.post("/api/ask", json={"question": "hi"})
     assert r.status_code == 503 and r.json() == {"detail": "The assistant is not set up on this server."}
@@ -362,9 +362,9 @@ def test_parse_spec(spec, want):
     assert providers.parse_spec(spec) == want
 
 
-def test_unsupported_provider():
-    with pytest.raises(ValueError, match="not supported"):
-        providers.parse_spec("anthropic:claude-haiku-5-5")
+def test_anthropic_provider_is_registered():
+    assert providers.parse_spec("anthropic:claude-haiku-5-5") == ("anthropic", "claude-haiku-5-5")
+    assert providers.PROVIDERS["anthropic"] is providers.AnthropicProvider
 
 
 # ---- OpenRouter provider (fake HTTP) ----

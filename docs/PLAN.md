@@ -40,6 +40,16 @@ Venue: Princeton Public Library, Tech Center and Spark Lab, 65 Witherspoon St. L
 - Every PR goes draft, then `reviewer`, then `qa` (local and Vercel preview), then ready and auto-merge. After 2 fix rounds without a pass, the human decides.
 - The humans freeze contracts, approve new dependencies and contract changes, and judge the demo.
 
+## Judging (from the venue's slides, Sat Nov 14)
+
+- Five criteria: Impact, Creativity, Validity, Relevance, Presentation.
+- The panel includes software engineers and a UX designer, so UI polish and accessibility count as much as correctness.
+- Presentation, Sun 14:00: 7 to 10 minutes including Q&A. Everyone on the team talks. A live demo, or a video of 30 s or less.
+- Validity is what our checks are for: the eval runner and its results in `evals/results/`, the NOAA truth check (our Atlantic City sea-level trend 4.25 mm per year against NOAA's 4.24 ± 0.08) and the model comparison table. Keep them readable by a person.
+- The submission needs the code to be open source in a public repo. When to make the repo public is Tarun's call.
+- The production site must be stable before the Sun 12:00 freeze.
+- Delhi "sources disagree" demo: it uses the hottest day of the month (`air_temp_max`) from NASA POWER, ERA5 and the Safdarjung station. Quote the numbers the tool returns on the day; the "days at or above 40 °C" figures in older notes do not reproduce.
+
 ## Rules that cost points if missed
 
 - SI disclosure: every PR ends with `SI used: ...`; collect them for the submission.

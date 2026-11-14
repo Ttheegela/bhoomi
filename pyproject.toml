@@ -27,6 +27,9 @@ packages = ["earthtrends"]
 dev = [
     "pytest>=9.2.0",
 ]
+evals = [
+    "anthropic>=2.8.0",
+]
 
 [tool.vercel]
 entrypoint = "earthtrends.app:app"

@@ -23,7 +23,7 @@ You may write `earthtrends/stats/`, `earthtrends/agent/`, `earthtrends/app.py`, 
 ## Agent loop
 - Call OpenRouter through httpx (already a dependency), using the OpenAI-compatible chat completions API with tool calls. Read the key from `OPENROUTER_API_KEY` and the model from an env var with a default.
 - Trace with Langfuse when the `LANGFUSE_*` keys are set, and do nothing when they're missing. Adding the langfuse package is a new dependency, so ask first.
-- The agent answers only from tool results. Every number it states comes from a `TrendResult`, names its source, and keeps the caveats. When two sources disagree (for example, Delhi days at or above 40 °C fall in POWER and ERA5 but rise at the Safdarjung station), it says so instead of picking one.
+- The agent answers only from tool results. Every number it states comes from a `TrendResult`, names its source, and keeps the caveats. When two sources disagree (for example, Delhi's hottest day of the month from 1981 to 2015 shows no clear change in POWER and ERA5 but rises at the Safdarjung station), it says so instead of picking one.
 - Tests never call the LLM or the network: mock the OpenRouter response.
 
 ## Report
