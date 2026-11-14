@@ -7,7 +7,7 @@ import langfuse
 import pytest
 from fastapi.testclient import TestClient
 
-from earthtrends.agent import loop, providers, tools, tracing
+from earthtrends.agent import loop, providers, ratelimit, tools, tracing
 from earthtrends.app import app
 
 client = TestClient(app)
@@ -20,6 +20,7 @@ ARGS = {"variable": "sea_level", "lat": 39.36, "lon": -74.42}
 def clean_env(monkeypatch):
     for k in ("OPENROUTER_API_KEY", "AGENT_MODEL", *tracing.KEYS):
         monkeypatch.delenv(k, raising=False)
+    ratelimit.reset()
     monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: TREND)
 
 
@@ -104,11 +105,32 @@ def test_malformed_tool_calls_do_not_crash(fake, monkeypatch, c):
     assert "error" in fake.results[0][0]["content"]
 
 
-def test_call_limit_ends_honestly(fake):
+def test_call_limit_ends_honestly(fake, monkeypatch):
+    ran = []
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
     fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(10)]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(r["tool_calls"]) == loop.MAX_CALLS
-    assert len(fake.script) == 10 - loop.MAX_CALLS
+    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 10 - loop.MAX_CALLS
+    # The last call's tool requests are not run: nobody would read the results.
+    assert len(r["tool_calls"]) == len(ran) == loop.MAX_CALLS - 1
+
+
+def test_time_budget_ends_honestly(fake, monkeypatch):
+    clock = iter(range(0, 10_000, 50))  # every reading is 50 s later
+    monkeypatch.setattr(loop, "time", type("T", (), {"monotonic": staticmethod(lambda: next(clock))}))
+    fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(10)]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 8  # 2 model calls fit in 120 s
+
+
+def test_unbuilt_provider_in_env_is_not_configured(monkeypatch):
+    monkeypatch.setenv("AGENT_MODEL", "anthropic:claude-haiku-5-5")
+    with pytest.raises(providers.NotConfigured):
+        loop.ask("q")
+    with pytest.raises(ValueError):
+        loop.ask("q", model="anthropic:claude-haiku-5-5")
+    r = client.post("/api/ask", json={"question": "hi"})
+    assert r.status_code == 503 and r.json() == {"detail": "The assistant is not set up on this server."}
 
 
 def test_clarifying_question_has_no_tool_calls(fake):
@@ -199,6 +221,40 @@ def test_openrouter_bad_json_arguments(openrouter):
     assert json.loads(sent[1]["json"]["messages"][3]["content"]) == {"error": "Tool arguments were not valid JSON."}
 
 
+def raw(body):
+    return httpx.Response(200, json=body, request=httpx.Request("POST", providers.OPENROUTER_URL))
+
+
+@pytest.mark.parametrize("body", [
+    {"choices": [{"message": "hello"}]},
+    {"choices": [{"message": None}]},
+    {"choices": []},
+    {"error": {"message": "rate limited"}},
+    {"choices": [{"message": {"content": 42}}]},
+    {"choices": [{"message": {"content": "x", "tool_calls": {"id": "c1"}}}]},
+    {"choices": [{"message": {"content": None, "tool_calls": ["c1"]}}]},
+    {"choices": [{"message": {"content": "x"}}], "usage": {"prompt_tokens": "lots"}},
+    {"choices": [{"message": {"content": "x"}}], "usage": {"prompt_tokens": 1.5}},
+    [1, 2],
+])
+def test_openrouter_malformed_is_upstream_error(openrouter, body):
+    openrouter[1].append(raw(body))
+    with pytest.raises(providers.UpstreamError):
+        loop.ask("q")
+
+
+def test_openrouter_tolerant_shapes(openrouter):
+    sent, replies = openrouter
+    obj_args = {"role": "assistant", "content": None, "tool_calls": [
+        {"id": "c1", "type": "function", "function": {"name": "detect_trend", "arguments": ARGS}}]}
+    replies += [raw({"choices": [{"message": obj_args}]}),  # no usage, arguments already an object
+                raw({"choices": [{"message": {"content": "Done.", "tool_calls": None}}], "usage": {"cost": "?"}})]
+    r = loop.ask("q")
+    assert r["answer"] == "Done." and r["tool_calls"][0]["arguments"] == ARGS and r["tool_calls"][0]["error"] is None
+    assert r["usage"] == {"prompt_tokens": 0, "completion_tokens": 0, "cost_usd": None}
+    assert sent[1]["json"]["messages"][2]["tool_calls"][0]["function"]["arguments"] == json.dumps(ARGS)
+
+
 def test_openrouter_no_key():
     with pytest.raises(providers.NotConfigured):
         loop.ask("q")
@@ -286,7 +342,15 @@ def test_tracing_failure_does_not_break_ask(fake, lf, fail):
 def test_score(lf):
     f = lf(FakeLF())
     tracing.score("trace-123", "honest", 1, "ok")
-    assert f.log == [("score", {"trace_id": "trace-123", "name": "honest", "value": 1, "comment": "ok"}), ("flush",)]
+    assert f.log == [("score", {"trace_id": "trace-123", "name": "honest", "value": 1, "comment": "ok"})]  # no flush
+    tracing.flush()
+    assert f.log[-1] == ("flush",)
+
+
+def test_flush_survives_failure_and_off(lf):
+    tracing.flush()  # off: no client, nothing happens
+    lf(FakeLF(fail="flush"))
+    tracing.flush()
 
 
 # ---- /api/ask ----
@@ -303,6 +367,10 @@ def test_route_ok(openrouter):
 def test_route_bad_question(openrouter, q):
     r = client.post("/api/ask", json={"question": q})
     assert r.status_code == 400 and r.json()["detail"]
+
+
+def test_route_extra_field_is_422():
+    assert client.post("/api/ask", json={"question": "hi", "model": "x/y"}).status_code == 422
 
 
 def test_route_no_key():

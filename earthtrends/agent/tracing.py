@@ -92,6 +92,7 @@ class Trace:
 
 
 def score(trace_id: str | None, name: str, value: float | int | str, comment: str | None = None) -> None:
+    """Queue a score on a trace. Does not flush: call flush() once after posting many."""
     if trace_id is None:
         return
     lf = _client()
@@ -99,6 +100,16 @@ def score(trace_id: str | None, name: str, value: float | int | str, comment: st
         return
     try:
         lf.create_score(trace_id=trace_id, name=name, value=value, comment=comment)
-        lf.flush()
     except Exception:
         log.warning("Langfuse score failed.", exc_info=True)
+
+
+def flush() -> None:
+    """Send everything queued (scores, spans). Does nothing when tracing is off; never raises."""
+    lf = _client()
+    if lf is None:
+        return
+    try:
+        lf.flush()
+    except Exception:
+        log.warning("Langfuse flush failed.", exc_info=True)

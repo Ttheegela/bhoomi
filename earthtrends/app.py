@@ -8,10 +8,9 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import BaseModel, ConfigDict
 
-from pydantic import BaseModel
-
-from earthtrends.agent import loop, tools
+from earthtrends.agent import loop, ratelimit, tools
 from earthtrends.agent.providers import NotConfigured, UpstreamError
 from earthtrends.mcp_server import SOURCE_DOWN, mcp
 
@@ -102,16 +101,28 @@ def trend(response: Response, variable: str, lat: float, lon: float,
 
 
 class AskBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     question: str
 
 
+def client_id(request: Request) -> str:
+    """Who to count for the rate limit only. Vercel sets x-forwarded-for; never trust it for anything else."""
+    h = request.headers
+    if xff := h.get("x-forwarded-for"):
+        return xff.split(",")[0].strip()
+    return h.get("x-real-ip") or (request.client.host if request.client else "unknown")
+
+
 @app.post("/api/ask")
-def ask(body: AskBody) -> dict:
+def ask(body: AskBody, request: Request) -> dict:
     q = body.question.strip()
     if not q:
         raise HTTPException(400, "Please type a question.")
     if len(q) > 500:
         raise HTTPException(400, "Please keep your question under 500 characters.")
+    if wait := ratelimit.check(client_id(request)):  # after validation, so a 400 uses no quota
+        raise HTTPException(429, f"Too many questions right now. Please wait {wait} seconds and try again.",
+                            headers={"Retry-After": str(wait)})
     try:
         return loop.ask(q)
     except NotConfigured:

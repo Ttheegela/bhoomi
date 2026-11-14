@@ -6,11 +6,12 @@ import time
 import httpx
 
 from earthtrends.agent import prompts, tools
-from earthtrends.agent.providers import PROVIDERS, parse_spec
+from earthtrends.agent.providers import PROVIDERS, NotConfigured, parse_spec
 from earthtrends.agent.tracing import Trace
 
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
 MAX_CALLS = 6
+BUDGET_S = 120  # total per question, checked before each model call; keeps us inside the serverless limit
 SOURCE_DOWN = "The data source did not answer."
 GAVE_UP = ("Sorry, I could not finish working this out, so I have no answer to give you. "
            "Please try asking again, maybe in a simpler way.")
@@ -53,14 +54,21 @@ def run_tool(name: str, args: dict) -> tuple[dict | list | None, str | None]:
 
 def ask(question: str, model: str | None = None) -> dict:
     t0 = time.monotonic()
-    provider_name, model_id = parse_spec(model or os.environ.get("AGENT_MODEL") or DEFAULT_MODEL)
+    try:
+        provider_name, model_id = parse_spec(model or os.environ.get("AGENT_MODEL") or DEFAULT_MODEL)
+    except ValueError:
+        if model:  # a caller's own bad spec stays a ValueError
+            raise
+        raise NotConfigured("AGENT_MODEL names a provider that is not built yet.") from None
     provider = PROVIDERS[provider_name](model_id)
     provider.start(prompts.system_prompt(tools.list_variables()), question, TOOLS)
 
     trace = Trace(question, model_id)
     calls, usage, costs, answer = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None
     try:
-        for _ in range(MAX_CALLS):
+        for i in range(MAX_CALLS):
+            if time.monotonic() - t0 >= BUDGET_S:
+                break
             with trace.child("generation", "model", model=model_id) as gen:
                 step = provider.step()
                 gen.update(output={"text": step["text"], "tool_calls": step["tool_calls"]},
@@ -72,6 +80,8 @@ def ask(question: str, model: str | None = None) -> dict:
             if not step["tool_calls"]:
                 answer = step["text"] or GAVE_UP  # empty text: e.g. a reasoning model spent its token cap
                 break
+            if i == MAX_CALLS - 1:  # no model call left to read the results, so don't fetch data for nothing
+                break
             results = []
             for c in step["tool_calls"]:
                 args = c["arguments"] if c["arguments"] is not None else {}
@@ -81,8 +91,7 @@ def ask(question: str, model: str | None = None) -> dict:
                 calls.append({"name": c["name"], "arguments": args, "result": result, "error": error})
                 results.append({"id": c["id"], "content": result if error is None else {"error": error}})
             provider.add_tool_results(results)
-        else:
-            answer = GAVE_UP
+        answer = answer or GAVE_UP
     finally:
         trace_id = trace.end(answer)
 
