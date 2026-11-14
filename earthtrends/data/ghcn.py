@@ -13,6 +13,7 @@ DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
 SOURCE = {"id": "ghcn", "name": "NOAA NCEI GHCN-Daily", "url": "https://www.ncei.noaa.gov/"}
 MAX_KM = 50
 MIN_YEARS = 30  # of the needed data type, since 1981
+FIRST_DAY = "1981-01-01"  # the data requests start here
 # The agent gives one question 120 s. One lookup stops starting requests after DEADLINE_S. httpx timeouts are per
 # phase (connect 5 s, write 10 s, read 30 s; a server that trickles bytes can restart the read clock), so one
 # request is not hard-capped: a normal worst case is the deadline plus one request, about 40 + 5 + 10 + 30 = 85 s, which leaves the agent time to answer.
@@ -79,7 +80,7 @@ def search(lat: float, lon: float, types: tuple[str, ...]) -> list[dict]:
     dlon = min(180.0, dlat / max(cos(radians(lat)), 0.01))
     box = (min(90, lat + dlat), max(-180, lon - dlon), max(-90, lat - dlat), min(180, lon + dlon))  # N,W,S,E
     r = _get(SEARCH, {"dataset": "daily-summaries", "bbox": ",".join(f"{x:.3f}" for x in box), "dataTypes": ",".join(types),
-                      "startDate": "1981-01-01", "endDate": _last_day(), "limit": 1000})
+                      "startDate": FIRST_DAY, "endDate": _last_day(), "limit": 1000})
     return parse_search(r.json())
 
 
@@ -88,7 +89,7 @@ def _years(span: tuple[str, str, float]) -> float:
     ponytail: the search service gives one coverage number for the whole record, so a station with
     plenty of old data and a thin recent record can still pass; check the returned rows if that bites."""
     start, end, coverage = span
-    lo, hi = max(start, "1981-01-01"), min(end, _last_day())
+    lo, hi = max(start, FIRST_DAY), min(end, _last_day())
     since = (date.fromisoformat(hi) - date.fromisoformat(lo)).days / 365.25 if hi > lo else 0.0
     whole = (date.fromisoformat(end) - date.fromisoformat(start)).days / 365.25
     return min(since, whole * coverage / 100)
@@ -168,15 +169,18 @@ def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[flo
             return None
         return v if isfinite(v) else None  # "NaN" and "inf" are not readings
     by_day: dict[str, dict[str, float]] = {}
+    last = _last_day()
     for row in resp:
         if not isinstance(row, dict) or not isinstance(row.get("DATE"), str):
             continue
         d = row["DATE"][:10]  # "2000-01-01T00:00" is the day 2000-01-01
         try:
-            if len(d) != 10:
+            if len(d) != 10 or (len(row["DATE"]) > 10 and row["DATE"][10] != "T"):
                 raise ValueError
             datetime.strptime(d, "%Y-%m-%d")  # exactly YYYY-MM-DD: fromisoformat also takes week dates and 20000101
         except ValueError:
+            continue
+        if not FIRST_DAY <= d <= last:  # outside what we asked for: it would stretch the monthly axis
             continue
         got = by_day.setdefault(d, {})
         for t in types:
@@ -188,5 +192,5 @@ def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[flo
 
 def fetch(station_id: str, types: tuple[str, ...]) -> list[dict]:
     r = _get(DATA, {"dataset": "daily-summaries", "stations": station_id, "dataTypes": ",".join(types), "units": "metric",
-                    "format": "json", "includeAttributes": "true", "startDate": "1981-01-01", "endDate": _last_day()})
+                    "format": "json", "includeAttributes": "true", "startDate": FIRST_DAY, "endDate": _last_day()})
     return r.json()

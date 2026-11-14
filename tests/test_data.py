@@ -304,7 +304,9 @@ def test_ghcn_parse_junk_and_duplicate_dates():
     rows = [{"DATE": "garbage", "TMAX": "1"}, {"DATE": "2000-13-45", "TMAX": "1"},
             {"DATE": "2000-W01-1", "TMAX": "1"}, {"DATE": "20000101", "TMAX": "1"}, {"DATE": "2000-1-01", "TMAX": "1"},
             {"DATE": "2000-01-01T00:00", "TMAX": "55"},  # the same day as 2000-01-01, counted once (first value wins)
-            {"DATE": "2000-01-01junk", "TMAX": "56"},
+            {"DATE": "2000-01-01junk", "TMAX": "56"}, {"DATE": "2000-01-02junk", "TMAX": "77"},  # junk suffix: skipped
+            {"DATE": "1975-06-01", "TMAX": "1"}, {"DATE": "0001-01-01", "TMAX": "1"},  # valid dates outside the
+            {"DATE": "9999-12-31", "TMAX": "1"}, {"DATE": "1980-12-31", "TMAX": "1"},  # requested range: skipped
             {"DATE": "2000-01-01", "TMAX": "10", "TMIN": "2"},
             {"DATE": "2000-01-01", "TMAX": "99", "TMIN": "4"},  # duplicate: first real value per type wins
             {"DATE": "2000-01-02", "TMAX": "NaN", "TMIN": "3"},
@@ -312,7 +314,7 @@ def test_ghcn_parse_junk_and_duplicate_dates():
     # TMAX 55 comes first for 2000-01-01 in the list above, so it wins; TMIN 2 comes from the next row
     assert ghcn.parse(rows, ("TMAX",)) == (["2000-01-01", "2000-01-02"], [55.0, 8.0])
     assert ghcn.parse(rows, ("TMAX", "TMIN")) == (["2000-01-01", "2000-01-02"], [28.5, 5.5])
-    monthly.daily_to_monthly(*ghcn.parse(rows, ("TMAX",)), "max")  # the monthly step copes with what is left
+    assert monthly.daily_to_monthly(*ghcn.parse(rows, ("TMAX",)), "max")[0] == ["2000-01"]  # the axis is not stretched
 
 
 def test_ghcn_station_coordinates_and_ids():
