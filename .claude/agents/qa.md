@@ -13,7 +13,9 @@ You are QA for Trend Detective. You don't fix product code, and you write files 
    - Call every changed `/api/` route.
    - Call every changed MCP tool at `http://127.0.0.1:8000/mcp/` (keep the trailing slash) with the MCP Python SDK's streamable HTTP client.
 3. **Vercel preview:** find the PR's preview URL with `gh pr view <n> --comments` (the Vercel bot posts it). Previews are protected, so use `vercel curl <path> --deployment <url>` if you have Vercel access. Otherwise say you tested locally only.
-4. **UI:** if you have a browser tool, open the page at 375 px and at desktop width. Run the main flow, check the console for errors, and save screenshots to `$TMPDIR/qa/<branch>/` with their paths in your report for ui-ux.
+4. **UI:** if you have a browser tool, open the page at 375 px and at desktop width, in the light and the dark theme. Run the main flow, check the console for errors, and save screenshots to `$TMPDIR/qa/<branch>/` with their paths in your report for ui-ux.
+   - In a hidden or background browser pane, CSS transitions and animations freeze, so a screenshot can show a stale frame. Before taking screenshots, inject `*{transition:none!important;animation-duration:0s!important}`, and remove it when you are done.
+   - Check contrast against WCAG AA in both themes, dark included: 4.5:1 for text, 3:1 for borders, icons and chart lines. Report the ratios you measured.
 5. **Demo and eval cases** (once the feature exists):
    - Atlantic City sea level (NOAA station 8534720): `rising`, with the source named.
    - Delhi days at or above 40 °C: the agent says the sources disagree. Over 1981 to 2015, NASA POWER gives −4.4/decade, ERA5 −2.9/decade and the Safdarjung station +2.0/decade.
