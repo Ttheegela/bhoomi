@@ -6,7 +6,7 @@ import time
 import httpx
 
 from earthtrends.agent import prompts, tools
-from earthtrends.agent.providers import PROVIDERS, NotConfigured, parse_spec
+from earthtrends.agent.providers import MAX_TOKENS, PROVIDERS, NotConfigured, parse_spec
 from earthtrends.agent.tracing import Trace
 
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
@@ -15,6 +15,8 @@ BUDGET_S = 120  # total per question, checked before each model call and each to
 SOURCE_DOWN = "The data source did not answer."
 GAVE_UP = ("Sorry, I could not finish working this out, so I have no answer to give you. "
            "Please try asking again, maybe in a simpler way.")
+RETRY = ("\n\nYour first answer to this question was cut off because it was too long. Give the same answer again "
+         "in fewer words, following every rule. Do not call a tool: these are the tool results you already got:\n")
 
 TOOLS = [
     {"name": "list_variables",
@@ -61,10 +63,11 @@ def ask(question: str, model: str | None = None) -> dict:
             raise
         raise NotConfigured("AGENT_MODEL names a provider that is not built yet.") from None
     provider = PROVIDERS[provider_name](model_id)
-    provider.start(prompts.system_prompt(tools.list_variables()), question, TOOLS)
+    system = prompts.system_prompt(tools.list_variables())
+    provider.start(system, question, TOOLS)
 
     trace = Trace(question, model_id)
-    calls, usage, costs, answer = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None
+    calls, usage, costs, answer, retried = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None, False
     try:
         for i in range(MAX_CALLS):
             if time.monotonic() - t0 >= BUDGET_S:
@@ -78,8 +81,17 @@ def ask(question: str, model: str | None = None) -> dict:
             usage["completion_tokens"] += step["usage"]["completion_tokens"]
             costs.append(step["usage"]["cost_usd"])
             if not step["tool_calls"]:
-                answer = step["text"] or GAVE_UP  # empty text: e.g. a reasoning model spent its token cap
-                break
+                # Cut off at the output cap: never show partial text. The token check covers providers without "stop".
+                if step.get("stop") != "length" and step["usage"]["completion_tokens"] < MAX_TOKENS:
+                    answer = step["text"] or GAVE_UP  # empty text: e.g. a reasoning model spent its token cap
+                    break
+                if retried:
+                    break
+                # One fresh, shorter try. The seam has no "add a user message", so restart with the results inline;
+                # the call limit and the budget still apply through the loop.
+                retried = True
+                provider.start(system, question + RETRY + json.dumps(calls), TOOLS)
+                continue
             if i == MAX_CALLS - 1:  # no model call left to read the results, so don't fetch data for nothing
                 break
             results = []

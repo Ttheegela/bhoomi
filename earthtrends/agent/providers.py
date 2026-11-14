@@ -5,7 +5,7 @@ import os
 import httpx
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-MAX_TOKENS = 800  # so a reasoning model cannot run up the bill
+MAX_TOKENS = 2000  # so a reasoning model cannot run up the bill
 TIMEOUT_S = 60
 
 

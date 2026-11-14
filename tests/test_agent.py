@@ -30,8 +30,8 @@ def call(name="detect_trend", arguments=ARGS, id="c1", error=None):
     return {"id": id, "name": name, "arguments": arguments, "arguments_error": error}
 
 
-def step(text=None, tool_calls=(), cost=0.001):
-    return {"text": text, "tool_calls": list(tool_calls), "usage": {"prompt_tokens": 100, "completion_tokens": 20, "cost_usd": cost}}
+def step(text=None, tool_calls=(), cost=0.001, tokens=20, **extra):
+    return {"text": text, "tool_calls": list(tool_calls), "usage": {"prompt_tokens": 100, "completion_tokens": tokens, "cost_usd": cost}, **extra}
 
 
 @pytest.fixture
@@ -177,6 +177,49 @@ def test_empty_text_is_not_an_empty_answer(fake):
     assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP
 
 
+# ---- cut-off answers ----
+
+CUT = step("Sea level is rising at 42.54 mm per decade. Source: NO", stop="length")
+
+
+def test_cut_off_answer_is_retried_once(fake):
+    fake.script = [step(tool_calls=[call()]), CUT, step("Sea level is rising. Source: NOAA, https://x")]
+    r = loop.ask("Is sea level rising?", model="fake:m")
+    assert r["answer"] == "Sea level is rising. Source: NOAA, https://x" and not fake.script
+    system, question, _ = fake.started  # the retry restarts with the results inline
+    assert question.startswith("Is sea level rising?" + loop.RETRY) and json.dumps(TREND) in question
+    assert r["usage"]["prompt_tokens"] == 300  # the retry is counted
+
+
+def test_second_cut_off_gives_up(fake):
+    fake.script = [step(tool_calls=[call()]), CUT, CUT, step("never read")]
+    assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP and len(fake.script) == 1
+
+
+def test_cut_off_by_token_count_without_stop_key(fake):
+    fake.script = [step(tool_calls=[call()]), step("Sea level is ris", tokens=providers.MAX_TOKENS), step("Rising.")]
+    assert loop.ask("q", model="fake:m")["answer"] == "Rising."
+
+
+def test_normal_final_step_is_unchanged(fake):
+    fake.script = [step(tool_calls=[call()]), step("Rising.", stop="stop", tokens=providers.MAX_TOKENS - 1), step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == "Rising." and fake.script == [step("never")]
+
+
+def test_cut_off_on_last_call_gives_up(fake):
+    fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(loop.MAX_CALLS - 1)] + [CUT, step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 1  # no call left for a retry
+
+
+def test_cut_off_retry_respects_budget(fake, monkeypatch):
+    fake_clock(monkeypatch, [0, 0, 1, 2, 120, 125])  # t0, model, tool, model (cut off), retry check: spent
+    fake.script = [step(tool_calls=[call()]), CUT, step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 1
+
+
 # ---- prompt ----
 
 @pytest.mark.parametrize("phrase", [
@@ -285,7 +328,7 @@ def test_openrouter_request_body(openrouter, monkeypatch, arg, env, want):
         b = s["json"]
         assert s["url"] == "https://openrouter.ai/api/v1/chat/completions" and s["timeout"] == 60
         assert b["model"] == want and b["provider"]["data_collection"] == "deny" and b["usage"]["include"] is True
-        assert b["max_tokens"] == 800
+        assert b["max_tokens"] == 2000
         assert [t["function"]["name"] for t in b["tools"]] == ["list_variables", "detect_trend"]
     msgs = sent[1]["json"]["messages"]
     assert msgs[2]["tool_calls"][0]["id"] == "c1"
