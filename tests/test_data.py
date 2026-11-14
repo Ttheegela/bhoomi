@@ -2,6 +2,7 @@ import gzip
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 
 from earthtrends import data
@@ -69,7 +70,7 @@ def test_errors(offline):
         data.get_series("air_temp", 95, 0)
     with pytest.raises(ValueError, match="Longitude"):
         data.get_series("air_temp", 0, 200)
-    with pytest.raises(ValueError, match="No air_temp data"):
+    with pytest.raises(ValueError, match="No air temperature data"):
         data.get_series("air_temp", 39.36, -74.42, start="2090")
 
 
@@ -176,25 +177,25 @@ def test_ghcn_station_rule():
     st, km, types = ghcn.ranked(28.567, 77.117, found, "air_temp_max")[0]  # Palam is on top of the point but its TMAX starts in 2009
     assert st["id"] == "IN022021900" and 5 < km < 15 and types == ("TMAX",)
     assert ghcn.ranked(28.58, 77.21, found, "air_temp")[0][2] == ("TAVG",)
-    with pytest.raises(ValueError, match="not used: it is .* km away"):
+    with pytest.raises(ValueError, match=r"has 30 years of daily high temperature data since 1981\. The nearest is NEW DELHI SAFDARJUN, IN, \d+ km away"):
         ghcn.ranked(29.2, 77.2, found, "air_temp_max")[0]
-    with pytest.raises(ValueError, match="within 50 km"):
+    with pytest.raises(ValueError, match=r"^No weather station within 50 km has 30 years of rainfall data since 1981\.$"):
         ghcn.ranked(0, -30, [], "precip")[0]
     palam_only = [s for s in found if s["id"] == "IN022023000"]
-    with pytest.raises(ValueError, match=r"PALAM.*under 30 years"):
+    with pytest.raises(ValueError, match=r"The nearest is NEW DELHI PALAM, IN, 0 km away"):
         ghcn.ranked(28.567, 77.117, palam_only, "air_temp_max")[0]
 
 
 def test_ghcn_station_rule_thin_record():
     thin = {"id": "X", "name": "THIN", "lat": 40.7, "lon": -74.0, "types": {"TMAX": ("1871-07-01", "2024-06-17", 1.5)}}
-    with pytest.raises(ValueError, match="THIN.*under 30 years"):
+    with pytest.raises(ValueError, match=r"The nearest is THIN, 1 km away"):
         ghcn.ranked(40.71, -74.0, [thin], "air_temp_max")[0]
 
 
 def test_ghcn_checks_the_rows(offline2, monkeypatch):
     # the search says 1944-2025, but the rows only cover 2022 on: not enough, and the error names the station
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: [{"DATE": f"2022-{m:02d}-{d:02d}", "TMAX": "30"} for m in range(1, 13) for d in range(1, 29)])
-    with pytest.raises(ValueError, match="IN022021900.*under 30 years"):
+    with pytest.raises(ValueError, match=r"The nearest is NEW DELHI SAFDARJUN, IN, 1 km away"):
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
 
 
@@ -241,12 +242,94 @@ def test_ghcn_deadline(offline2, monkeypatch):
     found = ghcn.parse_search(load("ghcn_search_delhi.json"))
 
     def slow_search(la, lo, types):
-        clock[0] += 61  # the search itself took longer than the 60 s deadline
+        clock[0] += 41  # the search itself took longer than the 40 s deadline
         return found
     monkeypatch.setattr(ghcn, "search", slow_search)
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: pytest.fail("no request may start after the deadline"))
-    with pytest.raises(ValueError, match="slow right now"):
+    with pytest.raises(httpx.TimeoutException, match="slow right now"):  # a provider problem: the API answers 502
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+
+
+def test_ghcn_search_without_results_key():
+    assert ghcn.parse_search({"results": []}) == []  # what NOAA sends for a real empty box: "no station"
+    with pytest.raises(ValueError, match="unexpected reply"):
+        ghcn.parse_search({"errorMessage": "maintenance"})  # an error object is not "zero stations" (and is not cached)
+
+
+def test_ghcn_other_http_error_is_not_retried(offline2, monkeypatch):
+    near = {"id": "N", "name": "NEAR", "lat": 28.58, "lon": 77.21, "types": {"TMAX": ("1950-01-01", "2024-12-31", 100.0)}}
+    monkeypatch.setattr(ghcn, "search", lambda la, lo, types: [near, dict(near, id="F", name="FAR")])
+    calls = []
+
+    def fetch(sid, types):
+        calls.append(sid)
+        raise httpx.HTTPStatusError("503", request=httpx.Request("GET", "https://x"), response=httpx.Response(503))
+    monkeypatch.setattr(ghcn, "fetch", fetch)
+    with pytest.raises(httpx.HTTPStatusError):
+        data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    assert calls == ["N"]
+
+
+def test_ghcn_provider_timeout_is_an_httpx_error(monkeypatch):
+    ghcn.search.cache_clear()
+
+    def boom(*a, **k):
+        raise httpx.ReadTimeout("read timed out")
+    monkeypatch.setattr(ghcn.httpx, "get", boom)
+    with pytest.raises(httpx.HTTPError):  # not ValueError, so app.py answers 502 instead of 400
+        data.get_series("air_temp", 28.58, 77.21, source="ghcn")
+    ghcn.search.cache_clear()
+
+
+def test_ghcn_next_station_after_timeout(offline2, monkeypatch):
+    near = {"id": "N", "name": "NEAR", "lat": 28.58, "lon": 77.21, "types": {"TMAX": ("1950-01-01", "2024-12-31", 100.0)}}
+    far = dict(near, id="F", name="FAR", lat=28.7)
+    monkeypatch.setattr(ghcn, "search", lambda la, lo, types: [near, far])
+    calls = []
+
+    def fetch(sid, types):
+        calls.append(sid)
+        if sid == "N":
+            raise httpx.ReadTimeout("slow")
+        return load_gz("ghcn_daily_tmax_safdarjung.json.gz")
+    monkeypatch.setattr(ghcn, "fetch", fetch)
+    s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    assert calls == ["N", "F"] and s["place"]["name"] == "FAR"
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: (_ for _ in ()).throw(httpx.ReadTimeout("slow")))
+    data._cache.clear()
+    with pytest.raises(httpx.ReadTimeout):  # every station timed out: a provider problem
+        data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+
+
+def test_ghcn_parse_junk_and_duplicate_dates():
+    rows = [{"DATE": "garbage", "TMAX": "1"}, {"DATE": "2000-13-45", "TMAX": "1"},
+            {"DATE": "2000-W01-1", "TMAX": "1"}, {"DATE": "20000101", "TMAX": "1"}, {"DATE": "2000-1-01", "TMAX": "1"},
+            {"DATE": "2000-01-01T00:00", "TMAX": "55"},  # the same day as 2000-01-01, counted once (first value wins)
+            {"DATE": "2000-01-01junk", "TMAX": "56"}, {"DATE": "2000-01-02junk", "TMAX": "77"},  # junk suffix: skipped
+            {"DATE": "1975-06-01", "TMAX": "1"}, {"DATE": "0001-01-01", "TMAX": "1"},  # valid dates outside the
+            {"DATE": "9999-12-31", "TMAX": "1"}, {"DATE": "1980-12-31", "TMAX": "1"},  # requested range: skipped
+            {"DATE": "2000-01-01", "TMAX": "10", "TMIN": "2"},
+            {"DATE": "2000-01-01", "TMAX": "99", "TMIN": "4"},  # duplicate: first real value per type wins
+            {"DATE": "2000-01-02", "TMAX": "NaN", "TMIN": "3"},
+            {"DATE": "2000-01-02", "TMAX": "8"}]  # duplicate fills the missing TMAX, TMIN stays from the first row
+    # TMAX 55 comes first for 2000-01-01 in the list above, so it wins; TMIN 2 comes from the next row
+    assert ghcn.parse(rows, ("TMAX",)) == (["2000-01-01", "2000-01-02"], [55.0, 8.0])
+    assert ghcn.parse(rows, ("TMAX", "TMIN")) == (["2000-01-01", "2000-01-02"], [28.5, 5.5])
+    assert monthly.daily_to_monthly(*ghcn.parse(rows, ("TMAX",)), "max")[0] == ["2000-01"]  # the axis is not stretched
+
+
+def test_ghcn_station_coordinates_and_ids():
+    def station(**over):
+        st = {"id": "A", "name": "A", "dataTypes": []}
+        st.update(over)
+        return {"stations": [st], "boundingPoints": [{"coordinates": over.pop("xy", [1.0, 2.0])}]}
+    assert len(ghcn.parse_search({"results": [station()]})) == 1
+    for bad in ({"id": 7}, {"id": ["A"]}, {"name": None}, {"name": 3}):
+        assert ghcn.parse_search({"results": [station(**bad)]}) == [], bad
+    for xy in ([float("inf"), 2.0], [1.0, float("-inf")], [181.0, 2.0], [1.0, 91.0], [1.0, -91.0], [-180.5, 0.0]):
+        res = station()
+        res["boundingPoints"][0]["coordinates"] = xy
+        assert ghcn.parse_search({"results": [res]}) == [], xy
 
 
 def test_era5_length_mismatch():
@@ -296,3 +379,191 @@ def test_hot_days_trend_directions():
     assert slopes["era5"] < 0 < slopes["ghcn"]
     assert slopes["era5"] == pytest.approx(-1.9, abs=0.3) and slopes["ghcn"] == pytest.approx(2.0, abs=0.5), slopes
     # Pinned loosely to what this code gives. Issue #16 quoted ERA5 -2.9 and GHCN +2.0 per decade; ERA5 differs by about 1.
+
+
+# ---- series cache, 429, station period notes, error wording ----
+
+@pytest.fixture
+def counted(monkeypatch):
+    """power.fetch served from a fixture, counting upstream calls."""
+    calls = []
+
+    def fetch(param, lat, lon):
+        calls.append((param, lat, lon))
+        return load("power_monthly.json")
+    monkeypatch.setattr(power, "fetch", fetch)
+    return calls
+
+
+def test_cache_second_call_and_periods_share_one_fetch(counted):
+    a = data.get_series("air_temp", 39.36, -74.42)
+    b = data.get_series("air_temp", 39.36, -74.42)
+    c = data.get_series("air_temp", 39.36, -74.42, start="1990", end="1991")
+    d = data.get_series("air_temp", 39.36, -74.42, start="2000")
+    assert len(counted) == 1 and a == b and c["times"][0] == "1990-01" and c["times"][-1] == "1991-12" and d["times"][0] == "2000-01"
+    data.get_series("air_temp_max", 39.36, -74.42)  # another variable is another entry
+    assert len(counted) == 2
+
+
+def test_cache_is_cleared_between_tests_part_1(counted):
+    data.get_series("air_temp", 39.36, -74.42)
+    assert len(data._cache) == 1
+
+
+def test_cache_is_cleared_between_tests_part_2(counted):
+    # runs right after part 1: fails if the suite-wide fixture in conftest.py stops clearing the cache
+    assert data._cache == {}
+    data.get_series("air_temp", 39.36, -74.42)
+    assert len(counted) == 1  # a leaked entry would have served this call without any upstream request
+
+
+def test_no_data_message_uses_a_new_measurements_own_name(offline, monkeypatch):
+    new = {"id": "groundwater", "name": "Groundwater level", "units": "m", "sources": ["power"], "start_year": 1981,
+           "resolution": "test", "good_for": "test"}
+    monkeypatch.setattr(data, "CATALOG", [*data.CATALOG, new])
+    monkeypatch.setitem(power.PARAMS, "groundwater", "T2M")
+    with pytest.raises(ValueError, match=r"^No groundwater level data for that place and period\.$"):
+        data.get_series("groundwater", 39.36, -74.42, start="1950", end="1951")
+    with pytest.raises(ValueError, match=r"^No sea level data for that place and period\.$"):
+        data.get_series("sea_level", 39.36, -74.42, start="1850", end="1851")
+    # a station measurement with no plain name must not crash the error
+    assert str(ghcn._no_station("ground_water", None)).startswith("No weather station within 50 km has 30 years of ground water data")
+
+
+def test_no_data_message_uses_plain_names(offline):
+    with pytest.raises(ValueError, match=r"^No air temperature data for that place and period\.$"):
+        data.get_series("air_temp", 39.36, -74.42, start="1950", end="1951")
+
+
+def test_cache_place_key_is_rounded_to_two_decimals(counted):
+    data.get_series("air_temp", 39.360, -74.420)
+    s = data.get_series("air_temp", 39.364, -74.416)  # 0.004 degrees away: same entry
+    assert len(counted) == 1 and counted[0][1:] == (39.36, -74.42)
+    assert s["place"] == {"name": "39.36, -74.42", "lat": 39.36, "lon": -74.42}  # the point that was fetched
+    data.get_series("air_temp", 39.38, -74.42)  # 0.02 degrees away: a new fetch
+    assert len(counted) == 2 and counted[1][1] == 39.38
+    assert data.get_series("air_temp", -0.004, 0.004)["place"]["name"] == "0.0, 0.0"  # no "-0.0"
+
+
+def test_cache_expires_after_12_hours(counted, monkeypatch):
+    clock = [5000.0]
+    monkeypatch.setattr(data.time, "monotonic", lambda: clock[0])
+    data.get_series("air_temp", 39.36, -74.42)
+    clock[0] += data.TTL_S - 1
+    data.get_series("air_temp", 39.36, -74.42)
+    assert len(counted) == 1
+    clock[0] += 2
+    data.get_series("air_temp", 39.36, -74.42)
+    assert len(counted) == 2
+
+
+def test_cache_size_cap_drops_oldest(counted, monkeypatch):
+    monkeypatch.setattr(data, "MAX_ENTRIES", 3)
+    for i in range(5):
+        data.get_series("air_temp", 10 + i, 20)
+    assert len(data._cache) == 3 and len(counted) == 5
+    data.get_series("air_temp", 14, 20)  # newest is still there
+    assert len(counted) == 5
+    data.get_series("air_temp", 10, 20)  # oldest was dropped
+    assert len(counted) == 6
+
+
+def test_cache_does_not_keep_failures(monkeypatch):
+    calls = []
+
+    def fetch(param, lat, lon):
+        calls.append(1)
+        if len(calls) == 1:
+            raise httpx.ConnectError("down")
+        return load("power_monthly.json")
+    monkeypatch.setattr(power, "fetch", fetch)
+    with pytest.raises(httpx.ConnectError):
+        data.get_series("air_temp", 39.36, -74.42)
+    assert data.get_series("air_temp", 39.36, -74.42)["times"]  # the next call tries again
+    assert len(calls) == 2
+
+
+def test_cache_returns_copies(counted):
+    a = data.get_series("air_temp", 39.36, -74.42)
+    a["values"][0] = 12345.0
+    a["times"].clear()
+    a["notes"].append("junk")
+    a["place"]["lat"] = 0.0
+    a["source"]["id"] = "nope"
+    b = data.get_series("air_temp", 39.36, -74.42)
+    assert b["values"][0] != 12345.0 and b["times"] and "junk" not in b["notes"]
+    assert b["place"]["lat"] == 39.36 and b["source"]["id"] == "power"
+
+
+def test_cache_threads(counted):
+    from concurrent.futures import ThreadPoolExecutor
+    places = [(39.36, -74.42), (10.0, 20.0), (-33.9, 151.2)]
+    with ThreadPoolExecutor(8) as ex:
+        out = list(ex.map(lambda i: (places[i % 3], data.get_series("air_temp", *places[i % 3], start="1990", end="1991")), range(60)))
+    for (lat, lon), s in out:
+        assert s["place"]["lat"] == lat and s["times"][0] == "1990-01" and len(s["values"]) == 24
+    assert 3 <= len(counted) <= 24  # a race may fetch twice, never more than the number of threads per place
+
+
+def test_era5_429_is_a_provider_failure(monkeypatch):
+    body = {"error": True, "reason": "Hourly API request limit exceeded. Please try again in the next hour."}
+    monkeypatch.setattr(era5.httpx, "get", lambda *a, **k: httpx.Response(429, json=body, request=httpx.Request("GET", era5.URL)))
+    with pytest.raises(httpx.HTTPError) as e:  # not a ValueError: the API answers 502, not 400
+        data.get_series("air_temp_max", 28.58, 77.21, source="era5")
+    assert not isinstance(e.value, ValueError)
+
+
+def _daily_rows(first: str, last: str):
+    from datetime import date, timedelta
+    d, end = date.fromisoformat(first), date.fromisoformat(last)
+    while d <= end:
+        yield {"DATE": d.isoformat(), "TMAX": "30.0"}
+        d += timedelta(days=1)
+
+
+def test_station_period_notes(offline2, monkeypatch):
+    last = ghcn.last_day()
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: list(_daily_rows("1986-10-01", last)))
+    s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    assert "This station's record starts in October 1986." in s["notes"]
+    assert not any("record ends" in n for n in s["notes"])
+    for start in ("1950", "1981"):  # asking from before the station began, or from our own cutoff: still says so
+        s = data.get_series("air_temp_max", 28.58, 77.21, start=start, source="ghcn")
+        assert "This station's record starts in October 1986." in s["notes"], start
+    data._cache.clear()
+    s = data.get_series("air_temp_max", 28.58, 77.21, start="1990", source="ghcn")  # asked from 1990: no start note
+    assert not any("record starts" in n for n in s["notes"])
+    data._cache.clear()
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: load_gz("ghcn_daily_tmax_safdarjung.json.gz"))  # ends December 2015
+    s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    assert "This station's record ends in December 2015." in s["notes"]
+    assert not any("record starts" in n for n in s["notes"])
+    s = data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="2016", source="ghcn")  # gap is 12 months: no note
+    assert not any("record ends" in n for n in s["notes"])
+
+
+def test_station_period_notes_only_count_the_fetched_years(offline2, monkeypatch):
+    last = ghcn.last_day()
+    # the station really goes back to 1940, but we only fetch from 1981: asking from 1950 must not say "starts in 1981"
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: list(_daily_rows("1981-01-01", last)))
+    s = data.get_series("air_temp_max", 28.58, 77.21, start="1950", source="ghcn")
+    assert not any("record starts" in n for n in s["notes"]), s["notes"]
+    # asking to 2030 must not say "ends in <last year>" for a station that is up to date
+    s = data.get_series("air_temp_max", 28.58, 77.21, end="2030", source="ghcn")
+    assert not any("record ends" in n for n in s["notes"]), s["notes"]
+
+
+def test_station_period_notes_skip_short_gaps(offline2, monkeypatch):
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: list(_daily_rows("1982-03-01", f"{int(ghcn.last_day()[:4]) - 1}-12-31")))
+    s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")  # starts 14 months late, ends 12 months early
+    assert not any("record starts" in n or "record ends" in n for n in s["notes"])
+
+
+def test_station_error_wording_is_the_same_for_every_measurement():
+    far = {"id": "X", "name": "FARAWAY", "lat": 30.0, "lon": 77.2, "types": {}}
+    for variable, plain in (("precip", "rainfall"), ("air_temp", "air temperature"),
+                            ("air_temp_max", "daily high temperature")):
+        with pytest.raises(ValueError) as e:
+            ghcn.ranked(28.58, 77.21, [far], variable)
+        assert str(e.value).startswith(f"No weather station within 50 km has 30 years of {plain} data since 1981. The nearest is FARAWAY, ")
+        assert "air_temp" not in str(e.value) and "PRCP" not in str(e.value)  # no raw ids
