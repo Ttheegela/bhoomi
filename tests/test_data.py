@@ -386,10 +386,13 @@ def raw(name):
     return (FX / name).read_text()
 
 
+# Fixtures come from PSMSL: psmsl_filelist.txt is rows copied from
+# https://psmsl.org/data/obtaining/rlr.monthly.data/filelist.txt and psmsl_<id>.rlrdata are whole files from
+# https://psmsl.org/data/obtaining/rlr.monthly.data/<id>.rlrdata (ids 43 and 212), fetched 2026-11-14.
 @pytest.fixture
 def psmsl_offline(monkeypatch):
     monkeypatch.setattr(psmsl, "stations", lambda: psmsl.parse_stations(raw("psmsl_filelist.txt")))
-    monkeypatch.setattr(psmsl, "fetch", lambda sid: raw(f"psmsl_{sid}.rlrdata"))
+    monkeypatch.setattr(psmsl, "fetch", lambda sid, **kw: raw(f"psmsl_{sid}.rlrdata"))
 
 
 def test_psmsl_parse_gauge():
@@ -405,17 +408,51 @@ def test_psmsl_parse_gaps_flags_and_junk():
     # Jan ok, Feb missing, Mar flag 001 dropped, Apr interpolated dropped, May gap, Jun flag 010 kept
     assert times == ["1900-01", "1900-02", "1900-03", "1900-04", "1900-05", "1900-06"]
     assert values == [7000, None, None, None, None, 7300] and dropped == 2
-    with pytest.raises(ValueError):
-        psmsl.parse("1900.0417; -99999; 0;000")
-    with pytest.raises(ValueError):
-        psmsl.parse("<html>nope</html>")
+    assert psmsl.parse("1900.0417; -99999; 0;000")[1] == [None]  # data rows, none valid: the gauge is skipped, not an error
+    assert psmsl.why_not(*psmsl.parse("1900.0417; -99999; 0;000")[:2]) == "its file has no valid values"
+    for page in ("<html>nope</html>", ""):  # no data row at all: a provider failure
+        with pytest.raises(httpx.HTTPError):
+            psmsl.parse(page)
+
+
+def test_psmsl_gauge_without_valid_values_is_skipped_for_the_next(monkeypatch):
+    monkeypatch.setattr(psmsl, "stations", lambda: [{"id": i, "name": f"G{i}", "lat": 10 + i * 0.01, "lon": 20.0} for i in (1, 2)])
+    good = _record(date.today().year - 41, date.today().year - 1, 12)
+    monkeypatch.setattr(psmsl, "fetch", lambda sid, **kw: "1900.0417; -99999; 0;000" if sid == 1 else good)
+    assert psmsl.series(10.0, 20.0)[2]["name"] == "G2"
+
+
+def test_psmsl_years_are_rounded_down():
+    times = [f"{1900 + i // 12}-{i % 12 + 1:02d}" for i in range(355)]  # 29.6 years
+    assert "only 29 years" in psmsl.why_not(times, [1.0] * 355)
+
+
+def test_coops_outage_does_not_switch_to_psmsl(monkeypatch):
+    psmsl_calls = []
+    monkeypatch.setattr(psmsl, "fetch", lambda sid, **kw: psmsl_calls.append(sid))
+    monkeypatch.setattr(psmsl, "stations", lambda: psmsl_calls.append("list") or [])
+    monkeypatch.setattr(coops.httpx, "get", lambda *a, **k: httpx.Response(200, text="<html>maintenance</html>", request=httpx.Request("GET", "http://x")))
+    coops.stations.cache_clear()
+    try:
+        with pytest.raises(json.JSONDecodeError):
+            data.get_series("sea_level", 40.70, -74.01)
+    finally:
+        coops.stations.cache_clear()
+    assert psmsl_calls == []
+
+
+def test_psmsl_fallback_note(offline, psmsl_offline):
+    assert any("no tide gauge within 100 km" in n for n in data.get_series("sea_level", 19.08, 72.88)["notes"])
+    assert not any("CO-OPS" in n for n in data.get_series("sea_level", 19.08, 72.88, source="psmsl")["notes"])
+    assert not any("PSMSL" in n for n in data.get_series("sea_level", 39.36, -74.42)["notes"])
 
 
 def test_psmsl_parse_stations():
     st = psmsl.parse_stations(raw("psmsl_filelist.txt") + "\nbroken line\n")
     assert len(st) == 8 and st[3] == {"id": 43, "name": "MUMBAI / BOMBAY (APOLLO BANDAR)", "lat": 18.916667, "lon": 72.833333}
-    with pytest.raises(ValueError):
+    with pytest.raises(httpx.HTTPError):
         psmsl.parse_stations("<html></html>")
+    assert [s["id"] for s in psmsl.parse_stations("1" * 400 + "; 10.0; 20.0; Long id; 1; 1; N\n7; 10.0; 20.0; Ok; 1; 1; N")] == [7]  # id capped by skipping
 
 
 def test_psmsl_skips_short_gauge_for_next_one(psmsl_offline):
@@ -429,7 +466,7 @@ def test_psmsl_skips_short_gauge_for_next_one(psmsl_offline):
 
 
 def test_psmsl_stale_record_skipped(psmsl_offline, monkeypatch):
-    monkeypatch.setattr(psmsl, "fetch", lambda sid: _record(1950, 1989, 12) if sid == 43 else raw(f"psmsl_{sid}.rlrdata"))
+    monkeypatch.setattr(psmsl, "fetch", lambda sid, **kw: _record(1950, 1989, 12) if sid == 43 else raw(f"psmsl_{sid}.rlrdata"))
     with pytest.raises(ValueError, match=r"no usable tide gauge within 100 km.*its record ends in 1989-12") as e:
         psmsl.series(18.92, 72.83)
     assert "can't be measured" in str(e.value)
@@ -443,9 +480,9 @@ def _record(y0, y1, m1):
 def test_psmsl_recency_boundary(psmsl_offline, monkeypatch):
     edge = date.today().year - 1 - psmsl.MAX_STALE_YEARS  # end of last year minus 5 years: December of this year
     assert psmsl.MAX_STALE_YEARS == 5
-    monkeypatch.setattr(psmsl, "fetch", lambda sid: _record(edge - 40, edge, 12))
+    monkeypatch.setattr(psmsl, "fetch", lambda sid, **kw: _record(edge - 40, edge, 12))
     assert psmsl.series(18.92, 72.83)[1][-1] == 7000  # last valid month exactly on the edge: kept
-    monkeypatch.setattr(psmsl, "fetch", lambda sid: _record(edge - 40, edge, 11))
+    monkeypatch.setattr(psmsl, "fetch", lambda sid, **kw: _record(edge - 40, edge, 11))
     with pytest.raises(ValueError, match=f"its record ends in {edge}-11"):  # one month earlier: skipped
         psmsl.series(18.92, 72.83)
 
@@ -471,7 +508,7 @@ def _row_of_gauges(monkeypatch, usable_id, n=13):
     monkeypatch.setattr(psmsl, "stations", lambda: [{"id": i, "name": f"G{i}", "lat": 10 + i * 0.01, "lon": 20.0} for i in range(1, n + 1)])
     fetched = []
 
-    def fetch(sid):
+    def fetch(sid, **kw):
         fetched.append(sid)
         return _record(date.today().year - 41, date.today().year - 1, 12) if sid == usable_id else _record(1950, 1989, 12)
     monkeypatch.setattr(psmsl, "fetch", fetch)
@@ -492,7 +529,7 @@ def test_psmsl_gives_up_after_12_tries(monkeypatch):
 
 def test_psmsl_deadline_is_a_provider_failure(monkeypatch):
     fetched = _row_of_gauges(monkeypatch, 13)
-    clock = iter([0.0, 1.0, 2.0, 41.0, 42.0, 43.0])  # start, check 1, check 2, then past the 40 s deadline
+    clock = iter([0.0, 1.0, 2.0, 3.0, 41.0, 42.0, 43.0])  # start, check at the top, check 1, check 2, then past the 40 s deadline
     monkeypatch.setattr(psmsl.time, "monotonic", lambda: next(clock))
     with pytest.raises(httpx.HTTPError) as e:
         psmsl.series(10.0, 20.0)
@@ -500,7 +537,7 @@ def test_psmsl_deadline_is_a_provider_failure(monkeypatch):
 
 
 def test_psmsl_provider_failures_are_httpx_errors(psmsl_offline, monkeypatch):
-    def boom(sid):
+    def boom(sid, **kw):
         raise httpx.ReadTimeout("slow")
     monkeypatch.setattr(psmsl, "fetch", boom)
     with pytest.raises(httpx.HTTPError):
@@ -558,6 +595,7 @@ def test_upstream_text_survives_any_value():
     for v in (None, 5, 1.5, ["a", "b"], {"k": "v"}, b"bytes", ""):
         assert isinstance(upstream.text(v, 20), str)
     assert upstream.text("a\n\t b\x00c  d ", 50) == "a b c d"
+    assert upstream.text("a‮b​c⁦d﻿", 50) == "abcd"  # bidi controls and zero-width characters dropped
     assert upstream.text("x" * 100, 10) == "x" * 9 + "…"
 
 

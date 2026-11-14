@@ -21,7 +21,7 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
 def stations() -> list[dict]:
     r = httpx.get(f"{BASE}/mdapi/prod/webapi/stations.json", params={"type": "waterlevels"}, timeout=30)
     r.raise_for_status()
-    return [{**s, "name": text(s.get("name", ""), NAME)} for s in r.json()["stations"]]
+    return [{**s, "id": text(s.get("id", ""), 40), "name": text(s.get("name", ""), NAME)} for s in r.json()["stations"]]
 
 
 def nearest(lat: float, lon: float, station_list: list[dict]) -> tuple[dict, float]:

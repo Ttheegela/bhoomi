@@ -26,25 +26,27 @@ RULE = (f"The gauge used is the nearest one within {MAX_KM} km with at least {MI
         f"and a last valid month no more than {MAX_STALE_YEARS} years before the end of last year.")
 
 
-def _get(url: str) -> str:
-    r = httpx.get(url, timeout=TIMEOUT)
+def _get(url: str, left: float | None = None) -> str:
+    """`left`: seconds of the lookup deadline still left; every phase of the request is capped to it."""
+    timeout = TIMEOUT if left is None else httpx.Timeout(min(30, left), connect=min(5, left), write=min(10, left))
+    r = httpx.get(url, timeout=timeout)
     r.raise_for_status()  # httpx errors are left to the API, which answers 502
     return r.text
 
 
 def parse_stations(listing: str) -> list[dict]:
-    """Station list -> [{id, name, lat, lon}]. A malformed row is skipped; no rows at all is a ValueError."""
+    """Station list -> [{id, name, lat, lon}]. A malformed row is skipped; no rows at all is a provider failure."""
     out = []
     for line in listing.splitlines():
         p = [x.strip() for x in line.split(";")]
         try:
             lat, lon = float(p[1]), float(p[2])
-            if len(p) >= 4 and isfinite(lat) and isfinite(lon) and abs(lat) <= 90 and abs(lon) <= 180 and p[3]:
+            if len(p) >= 4 and p[0].isascii() and p[0].isdigit() and len(p[0]) <= 10 and isfinite(lat) and isfinite(lon) and abs(lat) <= 90 and abs(lon) <= 180 and p[3]:
                 out.append({"id": int(p[0]), "name": text(p[3], NAME), "lat": lat, "lon": lon})
         except (ValueError, IndexError):
             continue
     if not out:
-        raise ValueError("PSMSL's station list was not in the documented format.")
+        raise httpx.DecodingError("PSMSL's station list was not in the documented format.")
     return out
 
 
@@ -57,7 +59,8 @@ def parse(text: str) -> tuple[list[str], list[float | None], int]:
     """Gauge file -> (times "YYYY-MM" with no gaps, mm or None, number of values dropped as doubtful).
     Dropped: flag bit 001 ("treat with caution") and interpolated months (missing-days column 99).
     Kept: flag 010 (a mean tidal level value PSMSL adjusted to an MSL estimate inside the RLR series).
-    A malformed row is skipped; no valid row at all is a ValueError."""
+    A malformed row is skipped; no data row at all (an HTML page, an empty body) is a provider failure (httpx error);
+    rows that are all missing or dropped give all-None values, and why_not() says so."""
     by_month: dict[tuple[int, int], float | None] = {}
     dropped = 0
     for line in text.splitlines():
@@ -77,8 +80,8 @@ def parse(text: str) -> tuple[list[str], list[float | None], int]:
             dropped += 1
         else:
             by_month[(y, m)] = v
-    if not any(v is not None for v in by_month.values()):
-        raise ValueError("PSMSL's gauge file had no valid monthly values or was not in the documented format.")
+    if not by_month:
+        raise httpx.DecodingError("PSMSL's gauge file was not in the documented format.")
     (y0, m0), (y1, m1) = min(by_month), max(by_month)
     times, values = [], []
     for k in range(y0 * 12 + m0 - 1, y1 * 12 + m1):
@@ -91,19 +94,31 @@ def parse(text: str) -> tuple[list[str], list[float | None], int]:
 def why_not(times: list[str], values: list[float | None]) -> str | None:
     """None if the record can support a trend test, else a plain reason."""
     valid = [t for t, v in zip(times, values) if v is not None]
+    if not valid:
+        return "its file has no valid values"
     if len(valid) < MIN_YEARS * 12:
-        return f"it has only {len(valid) / 12:.0f} years of valid monthly values ({valid[0]} to {valid[-1]})"
+        return f"it has only {len(valid) // 12} years of valid monthly values ({valid[0]} to {valid[-1]})"
     if valid[-1] < f"{date.today().year - 1 - MAX_STALE_YEARS}-12":
         return f"its record ends in {valid[-1]}"
     return None
 
 
-def fetch(station_id: int) -> str:
-    return _get(f"{BASE}/{station_id}.rlrdata")
+def fetch(station_id: int, left: float | None = None) -> str:
+    return _get(f"{BASE}/{station_id}.rlrdata", left)
+
+
+def _check(deadline: float) -> float:
+    """Seconds left; past the deadline this raises a provider failure, not the caller's problem."""
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise httpx.TimeoutException("PSMSL is slow right now. Try again in a minute.")
+    return left
 
 
 def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str]]:
     """Nearest usable gauge within MAX_KM -> (times, values, place, notes)."""
+    deadline = time.monotonic() + DEADLINE_S
+    _check(deadline)
     near = sorted(((haversine_km(lat, lon, s["lat"], s["lon"]), s["id"], s) for s in stations()), key=lambda t: t[:2])
     close = [(km, s) for km, _, s in near if km <= MAX_KM]
     if not close:
@@ -111,12 +126,8 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
         raise ValueError(text(f"There is no tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
                               f"The nearest gauge is {s['name']}, {km:.0f} km away.", LIMIT))
     skipped = []
-    deadline = time.monotonic() + DEADLINE_S
     for km, s in close[:MAX_TRIES]:
-        if time.monotonic() > deadline:
-            # a provider problem, not the caller's: an httpx error, so the API answers 502 like for every other source
-            raise httpx.TimeoutException("PSMSL is slow right now. Try again in a minute.")
-        times, values, dropped = parse(fetch(s["id"]))
+        times, values, dropped = parse(fetch(s["id"], left=_check(deadline)))
         if (why := why_not(times, values)) is None:
             notes = [f"Tide gauge {s['name']} (PSMSL id {s['id']}), {km:.0f} km from the point you asked about.",
                      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, "

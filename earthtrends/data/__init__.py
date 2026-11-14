@@ -43,11 +43,13 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
     if lo and hi and lo > hi:
         raise ValueError("start must not be after end.")
 
+    fell_back = False
     if variable == "sea_level" and auto and source == "coops":
+        gauges = coops.stations()  # outside the try: a CO-OPS failure must reach the caller, not switch the source
         try:
-            coops.nearest(lat, lon, coops.stations())
+            coops.nearest(lat, lon, gauges)
         except ValueError:  # no CO-OPS gauge within 100 km: the next source in the list
-            source = "psmsl"
+            source, fell_back = "psmsl", True
 
     if source == "power":
         param = power.PARAMS[variable]
@@ -75,6 +77,8 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
     elif source == "psmsl":
         times, values, place, notes = psmsl.series(lat, lon)
         src = psmsl.SOURCE
+        if fell_back:
+            notes.append("NOAA CO-OPS has no tide gauge within 100 km of this point, so the nearest PSMSL gauge was used.")
     else:
         st, km = coops.nearest(lat, lon, coops.stations())
         times, values = coops.parse(coops.fetch(st["id"]), st["name"])
