@@ -763,13 +763,13 @@ function renderChart(s, t) {
   noText.setAttribute('x', nc.end === 'left' ? ml + 4 : vw - mr - 2);
   noText.setAttribute('text-anchor', nc.end === 'left' ? 'start' : 'end');
   noText.setAttribute('y', nc.below ? B.yS(0) + fs + 3 : B.yS(0) - 5);
-  root.append(noText); // moved last so the lines and the band never paint over it (its halo then hides what is under it)
 
   // Yearly averages (dots) sit over the faint monthly line; the solid trend line goes on top. Drawing only: never printed.
   const dots = yearlyAverages(ms, des);
   const r = dotRadius(dots.map((d) => xS(d.x)), Math.max(2.5, fs * 0.22));
   dots.forEach((d) => root.append(svg('circle', { cx: xS(d.x).toFixed(1), cy: B.yS(d.mean).toFixed(1), r: r.toFixed(2), class: 's-year', 'aria-hidden': 'true' })));
   if (trendLine) root.append(svg('line', Object.assign({ class: 's-trend', 'clip-path': 'url(#c-clip)' }, trendLine)));
+  root.append(noText); // drawn after the lines, band, dots and trend so nothing paints over it (its halo hides what is under it); only the hover rule follows
 
   const rule = svg('line', { y1: A.top, y2: B.bot, class: 'c-rule', visibility: 'hidden' });
   root.append(rule);

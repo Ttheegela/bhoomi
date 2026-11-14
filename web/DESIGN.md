@@ -193,3 +193,5 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - The "No change" label is drawn last, over the lines and the band, with a 4 px halo in the page background colour (`.c-halo`, used only by that label), so data never shows through it.
 - The footer's ERA5 entry is one list item that flows as one line of text: Open-Meteo link, ", ERA5 reanalysis, ", CC BY 4.0 link.
 - Below 360 px a lone last item in the app picker takes the full row.
+- The sideways-scroll hint on the code blocks says "Scroll sideways to see the whole line." on non-touch screens ("Swipe sideways..." on touch screens, from his option 4B).
+- The server address field on "Use in your AI" stays on one line.
