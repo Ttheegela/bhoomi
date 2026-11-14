@@ -4,7 +4,7 @@
 
 Draft. Judging slot is 7 to 10 minutes including Q&A, and **both Tarun and Sairam present**. This script is about 4 minutes, which leaves room for the live demo and questions. Suggested split: Sairam slides 1, 2, 6, 7, 8; Tarun the live demo (3, 4) and slide 5. Also say in a sentence or two how we used AI (judges asked for it): see the SI paragraph in `project-page.md`.
 Every slide carries the visible label **"Built with AI assistance"**. No NASA logos or branding. Monochrome, matching the app.
-Every number spoken or shown names its data source. Numbers marked `TBD` are filled from the live tool on Sunday morning, never typed by hand.
+Every number spoken or shown names its data source. Numbers here come from the live tool and the eval run on Sat 14 Nov; re-check them on Sunday morning.
 
 ## Slide 1: The question (20 s)
 **Say:** "Every week someone says 'the floods are getting worse here' or 'summers are hotter than when I was a kid.' Is that really true for *your* place, or is it just a bad year? That's hard to answer, even with public NASA and NOAA data."
@@ -20,7 +20,7 @@ Every number spoken or shown names its data source. Numbers marked `TBD` are fil
 Ask the app: **"Is sea level rising in Atlantic City?"**
 Point at:
 - the chart with the season taken out
-- the verdict and slope: `TBD` per decade, 95% range `TBD` to `TBD`
+- the verdict and slope: rising, +42.5 mm per decade, 95% range +41.1 to +44.0 mm
 - the source line: NOAA CO-OPS tide gauge, station 8534720
 **Say:** "It picked the right dataset, pulled the data, tested it, and named the source."
 
@@ -35,9 +35,9 @@ Question → AI agent → MCP tools (`list_variables`, `get_series`, `detect_tre
 **Say:** "Any AI assistant can plug into the same tools through MCP, not just ours."
 
 ## Slide 6: How we know it's right (40 s)
-- **Truth check:** our Atlantic City trend falls inside NOAA's own published range for that station. (`TBD` ours vs NOAA's `TBD`)
-- **Stats tests:** on 200 pure-noise series we raise a false alarm about `TBD`% of the time (target ≤ 5%).
-- **Golden questions:** 14 questions with answers from independent references (NOAA, published papers). Pass rate `TBD`%.
+- **Truth check:** our Atlantic City trend matches NOAA's own published one for that station: ours +42.5 mm per decade (41.1 to 44.0) vs NOAA's 42.4 ± 0.8 (1.67 ± 0.03 inches per decade).
+- **Stats tests:** pure noise, seasonal-only data and autocorrelated noise all come back "no clear change", so the tool doesn't cry wolf.
+- **Golden questions:** expected answers come from independent references (NOAA, published papers). Our agent passes 11 of 12 runnable ones (92%), and 9 models were compared on the same set (`evals/results/`). Re-run before the pitch: the Delhi case changed and a Delhi sea-level case was added.
 - Includes questions it must refuse: "Will it rain tomorrow?", "Is sea level rising in Mumbai?" (no US tide gauge there).
 **Show:** the eval pass/fail table, plus the Langfuse trace screenshot.
 
