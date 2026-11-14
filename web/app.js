@@ -115,9 +115,9 @@ function captionText(t, name, place) {
 }
 
 function layoutFor(w) {
-  if (w <= 599) return { vw: 340, vh: 340, hA: 110, hB: 190 };
-  if (w < 900) return { vw: 640, vh: 420, hA: 150, hB: 230 };
-  return { vw: 720, vh: 460, hA: 140, hB: 260 };
+  if (w <= 599) return { vw: 340, vh: 372, hA: 126, hB: 206 };
+  if (w < 900) return { vw: 640, vh: 452, hA: 166, hB: 246 };
+  return { vw: 720, vh: 492, hA: 156, hB: 276 };
 }
 
 function nearestIndex(ms, m) {
@@ -449,7 +449,7 @@ function renderChart(s, t) {
   const ml = Math.round(fs * 3.4) + 4, mr = 8, vw = LY.vw;
   const axis = Math.max(40, 2 * fs + 8);
   const vh = Math.max(LY.vh, LY.hA + LY.hB + axis);
-  const hh = 2 * (fs + 2);
+  const hh = 2 * (fs + 2) + Math.round(fs * 0.9); // title + y label, plus room so the top tick label clears them
   const pw = vw - ml - mr;
   const xS = (m) => ml + (m1 === m0 ? 0 : (m - m0) / (m1 - m0) * pw);
 
@@ -466,7 +466,7 @@ function renderChart(s, t) {
   root.append(svg('desc', { id: 'c-desc' }, t ? captionText(t, name, place) : `${name} at ${place}, ${times[0]} to ${times[times.length - 1]}.`));
 
   // x ticks
-  const y0y = Math.floor(m0 / 12), y1y = Math.floor(m1 / 12), step = yearStep((m1 - m0) / 12);
+  const y0y = Math.floor(m0 / 12), y1y = Math.floor(m1 / 12), step = yearStep((m1 - m0) / 12) * (vw < 400 ? 2 : 1); // half as many year labels on a phone so they don't run together
   const xt = [];
   for (let y = Math.ceil(y0y / step) * step; y <= y1y; y += step) if (y * 12 >= m0 && y * 12 <= m1) xt.push(y);
 
@@ -497,6 +497,21 @@ function renderChart(s, t) {
   };
   root.append(svg('path', { d: path(A, vals), class: 's-raw' }));
   root.append(svg('path', { d: path(B, des), class: 's-des' }));
+
+  // Yearly averages of the seasons-removed values: easier to see the trend through the monthly noise.
+  // Drawing only; no number from this is printed. Years with fewer than 6 months of data are skipped.
+  const years = new Map();
+  des.forEach((v, i) => {
+    if (v == null) return;
+    const y = Math.floor(ms[i] / 12);
+    const e = years.get(y) || { sum: 0, n: 0, m: 0 };
+    e.sum += v; e.n += 1; e.m += ms[i];
+    years.set(y, e);
+  });
+  years.forEach((e) => {
+    if (e.n < 6) return;
+    root.append(svg('circle', { cx: xS(e.m / e.n).toFixed(1), cy: B.yS(e.sum / e.n).toFixed(1), r: Math.max(2.5, fs * 0.22), class: 's-year' }));
+  });
 
   if (t) {
     const ts = ms.map((m) => (m - m0) / 120); // decades since the first month
