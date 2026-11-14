@@ -7,6 +7,7 @@ from math import cos, isfinite, radians
 import httpx
 
 from .coops import haversine_km
+from .upstream import NAME, fit, text
 
 SEARCH = "https://www.ncei.noaa.gov/access/services/search/v1/data"
 DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
@@ -54,7 +55,7 @@ def parse_search(resp: dict) -> list[dict]:
             lat, lon = float(lat), float(lon)
             if not (isfinite(lat) and isfinite(lon) and abs(lat) <= 90 and abs(lon) <= 180 and isinstance(st["id"], str) and isinstance(st["name"], str)):
                 continue
-            out.append({"id": st["id"], "name": st["name"], "lat": lat, "lon": lon, "types": types})
+            out.append({"id": st["id"], "name": text(st["name"], NAME), "lat": lat, "lon": lon, "types": types})
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             continue
     return out
@@ -157,7 +158,7 @@ def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[flo
     "measurement flag,quality flag,source flag[,time]", and a non-blank quality flag means it failed."""
     if not isinstance(resp, list):
         msg = resp.get("errorMessage") if isinstance(resp, dict) else None
-        raise ValueError(f"NOAA's data service returned an unexpected reply{': ' + str(msg) if msg else ''}.")
+        raise ValueError(fit("NOAA's data service returned an unexpected reply: ", msg, ".") if msg else "NOAA's data service returned an unexpected reply.")
 
     def num(row, k):
         parts = str(row.get(f"{k}_ATTRIBUTES") or "").split(",")

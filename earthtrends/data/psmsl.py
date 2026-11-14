@@ -10,6 +10,7 @@ from math import isfinite
 import httpx
 
 from .coops import haversine_km
+from .upstream import LIMIT, NAME, text
 
 BASE = "https://psmsl.org/data/obtaining/rlr.monthly.data"
 SOURCE = {"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/"}
@@ -29,15 +30,15 @@ def _get(url: str) -> str:
     return r.text
 
 
-def parse_stations(text: str) -> list[dict]:
+def parse_stations(listing: str) -> list[dict]:
     """Station list -> [{id, name, lat, lon}]. A malformed row is skipped; no rows at all is a ValueError."""
     out = []
-    for line in text.splitlines():
+    for line in listing.splitlines():
         p = [x.strip() for x in line.split(";")]
         try:
             lat, lon = float(p[1]), float(p[2])
             if len(p) >= 4 and isfinite(lat) and isfinite(lon) and abs(lat) <= 90 and abs(lon) <= 180 and p[3]:
-                out.append({"id": int(p[0]), "name": p[3], "lat": lat, "lon": lon})
+                out.append({"id": int(p[0]), "name": text(p[3], NAME), "lat": lat, "lon": lon})
         except (ValueError, IndexError):
             continue
     if not out:
@@ -105,8 +106,8 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
     close = [(km, s) for km, _, s in near if km <= MAX_KM]
     if not close:
         km, _, s = near[0]
-        raise ValueError(f"There is no tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
-                         f"The nearest gauge is {s['name']}, {km:.0f} km away.")
+        raise ValueError(text(f"There is no tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
+                              f"The nearest gauge is {s['name']}, {km:.0f} km away.", LIMIT))
     skipped = []
     for km, s in close[:MAX_TRIES]:
         times, values, dropped = parse(fetch(s["id"]))
@@ -120,5 +121,6 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
                 notes.append(f"{dropped} monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out.")
             return times, values, {"name": s["name"], "lat": s["lat"], "lon": s["lon"]}, notes
         skipped.append(f"{s['name']}, {km:.0f} km away: {why}")
-    raise ValueError(f"There is no usable tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
-                     f"Gauges found but not used: {'; '.join(skipped)}. {RULE}")
+    # the sentence lists the nearest gauges and why; the full rule is in the notes of a successful result
+    raise ValueError(text(f"There is no usable tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
+                          f"Gauges found but not used: {'; '.join(skipped)}.", LIMIT))

@@ -5,6 +5,8 @@ from math import asin, cos, radians, sin, sqrt
 
 import httpx
 
+from .upstream import NAME, fit, text
+
 BASE = "https://api.tidesandcurrents.noaa.gov"
 SOURCE = {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"}
 MAX_KM = 100
@@ -19,7 +21,7 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
 def stations() -> list[dict]:
     r = httpx.get(f"{BASE}/mdapi/prod/webapi/stations.json", params={"type": "waterlevels"}, timeout=30)
     r.raise_for_status()
-    return r.json()["stations"]
+    return [{**s, "name": text(s.get("name", ""), NAME)} for s in r.json()["stations"]]
 
 
 def nearest(lat: float, lon: float, station_list: list[dict]) -> tuple[dict, float]:
@@ -27,7 +29,7 @@ def nearest(lat: float, lon: float, station_list: list[dict]) -> tuple[dict, flo
     km = haversine_km(lat, lon, float(st["lat"]), float(st["lng"]))
     if km > MAX_KM:
         raise ValueError(
-            f"No tide gauge within {MAX_KM} km of ({lat}, {lon}); the nearest is {st['name']}, {km:.0f} km away."
+            f"No tide gauge within {MAX_KM} km of ({lat}, {lon}); the nearest is {text(st['name'], NAME)}, {km:.0f} km away."
         )
     return st, km
 
@@ -35,13 +37,13 @@ def nearest(lat: float, lon: float, station_list: list[dict]) -> tuple[dict, flo
 def parse(resp: dict, name: str = "this station") -> tuple[list[str], list[float | None]]:
     if "error" in resp or "data" not in resp:
         msg = resp.get("error", {}).get("message", "no data returned")
-        raise ValueError(f"No monthly sea level at {name}: {msg}")
+        raise ValueError(fit(f"No monthly sea level at {text(name, NAME)}: ", msg))
     by_month = {}
     for row in resp["data"]:
         v = row["MSL"]
         by_month[(int(row["year"]), int(row["month"]))] = round(float(v) * 1000, 1) if v != "" else None  # m -> mm
     if not by_month:
-        raise ValueError(f"No monthly sea level at {name}: no rows returned")
+        raise ValueError(f"No monthly sea level at {text(name, NAME)}: no rows returned")
     (y0, m0), (y1, m1) = min(by_month), max(by_month)
     times, values = [], []
     for k in range(y0 * 12 + m0 - 1, y1 * 12 + m1):  # regular monthly axis, None for gaps

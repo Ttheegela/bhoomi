@@ -3,6 +3,8 @@ from datetime import date
 
 import httpx
 
+from .upstream import fit
+
 URL = "https://power.larc.nasa.gov/api/temporal/monthly/point"
 SOURCE = {"id": "power", "name": "NASA POWER (MERRA-2)", "url": "https://power.larc.nasa.gov/"}
 PARAMS = {"air_temp": "T2M", "air_temp_max": "T2M_MAX", "precip": "PRECTOTCORR"}
@@ -13,7 +15,8 @@ def parse(resp: dict, param: str) -> tuple[list[str], list[float | None]]:
     fill = resp.get("header", {}).get("fill_value", -999.0)
     series = resp.get("properties", {}).get("parameter", {}).get(param)
     if series is None:
-        raise ValueError(f"NASA POWER returned no {param} data: {' '.join(map(str, resp.get('messages') or [])) or 'unknown reason'}")
+        msgs = resp.get("messages")
+        raise ValueError(fit(f"NASA POWER returned no {param} data: ", (" ".join(map(str, msgs)) if isinstance(msgs, list) else msgs) or "unknown reason"))
     times, values = [], []
     for key, v in series.items():
         if key[4:] == "13":  # annual value, not a month
