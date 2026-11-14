@@ -4,12 +4,15 @@ import os
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 
-from earthtrends.agent import tools
+from pydantic import BaseModel
+
+from earthtrends.agent import loop, tools
+from earthtrends.agent.providers import NotConfigured, UpstreamError
 from earthtrends.mcp_server import SOURCE_DOWN, mcp
 
 # Remote MCP endpoint (streamable HTTP) for agents that connect over the network.
@@ -96,6 +99,25 @@ def trend(response: Response, variable: str, lat: float, lon: float,
     out = tools.detect_trend(variable, lat, lon, start, end, source)
     response.headers["Cache-Control"] = CACHE
     return out
+
+
+class AskBody(BaseModel):
+    question: str
+
+
+@app.post("/api/ask")
+def ask(body: AskBody) -> dict:
+    q = body.question.strip()
+    if not q:
+        raise HTTPException(400, "Please type a question.")
+    if len(q) > 500:
+        raise HTTPException(400, "Please keep your question under 500 characters.")
+    try:
+        return loop.ask(q)
+    except NotConfigured:
+        raise HTTPException(503, "The assistant is not set up on this server.") from None
+    except UpstreamError:
+        raise HTTPException(502, "The assistant could not be reached. Please try again.") from None
 
 
 def mount_web(app: FastAPI, web: Path) -> None:
