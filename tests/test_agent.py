@@ -339,8 +339,57 @@ def test_one_source_errors_two_answer(fake, monkeypatch):
     fake.script = [step(tool_calls=three_calls()), step(words(150))]
     r = loop.ask("q", model="fake:m")
     assert r["tool_calls"][2]["error"] == "No weather station within 50 km of this point."
-    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": "No weather station within 50 km of this point."}}
+    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.STATION_REASON}}  # the model sees no digit
     assert r["answer"] == words(150)  # two sources returned results, so 180 applies
+
+
+# ---- error reasons the model reads: never a digit ----
+
+def one_ok_one_failing(monkeypatch, fake, message):
+    def detect(variable, lat, lon, source=None, **kw):
+        if source == "ghcn":
+            raise ValueError(message)
+        return {**TREND, "source": {"id": source}}
+    monkeypatch.setattr(tools, "detect_trend", detect)
+    fake.script = [step(tool_calls=[call(arguments={**DELHI, "source": s}, id=s) for s in ("power", "ghcn")]),
+                   step(words(150)), step(words(100))]  # a length retry too, so the inline results are checked
+    r = loop.ask("q", model="fake:m")
+    seen = fake.results[0][1]["content"]["error"]
+    return r, seen
+
+
+@pytest.mark.parametrize("message,want", [
+    ("No weather station within 50 km has 30 years of rainfall data since 1981. The nearest is X, 13 km away.",
+     loop.STATION_REASON),
+    ("No tide gauge within 100 km of (28.58, 77.21); the nearest is Apra Harbor, Guam, 7113 km away.",
+     loop.GAUGE_REASON),
+])
+def test_failed_call_reason_has_no_digit(fake, monkeypatch, message, want):
+    r, seen = one_ok_one_failing(monkeypatch, fake, message)
+    assert seen == want and not any(ch.isdigit() for ch in seen)
+    assert r["tool_calls"][1]["error"] == message  # the API response keeps the full text
+    retry = fake.started[1]  # 150 words with one source answering: the retry inlines the results
+    assert loop.RETRY_LONG.format(limit=120, target=100) in retry and message not in retry and want in retry
+
+
+def test_digit_free_reason_reaches_model_unchanged(fake, monkeypatch):
+    r, seen = one_ok_one_failing(monkeypatch, fake, "The data source did not answer in time.")
+    assert seen == "The data source did not answer in time." == r["tool_calls"][1]["error"]
+    assert loop.model_reason(loop.LATE) == loop.LATE and loop.model_reason(loop.SOURCE_DOWN) == loop.SOURCE_DOWN
+    assert loop.model_reason("No rainfall data for that place and period.") == "No rainfall data for that place and period."
+
+
+def test_unknown_reason_with_digit_gets_fallback(fake, monkeypatch):
+    r, seen = one_ok_one_failing(monkeypatch, fake, "Open-Meteo returned no data: 429 limit reached.")
+    assert seen == loop.FALLBACK_REASON and r["tool_calls"][1]["error"] == "Open-Meteo returned no data: 429 limit reached."
+
+
+@pytest.mark.parametrize("message", ["Latitude must be between -90 and 90, got 95.0.",
+                                     "start must look like 2015 or 2015-06, got 'x'.",
+                                     "Too many tool calls at once; at most 6 per step."])
+def test_own_input_errors_stay_fixable_without_digits(message):
+    reason = loop.model_reason(message)
+    assert reason != loop.FALLBACK_REASON and not any(ch.isdigit() for ch in reason)
 
 
 def test_one_source_answering_keeps_120(fake, monkeypatch):
