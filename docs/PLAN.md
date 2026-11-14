@@ -33,6 +33,13 @@ Venue: Princeton Public Library, Tech Center and Spark Lab, 65 Witherspoon St. L
 - Tarun: agent (#5) + stats (#4), merges and deploys
 - Sairam: data (#3) + UI and story (#6)
 
+## How we work: agent team
+
+- Each of us runs one orchestrator session on Fable: `/orchestrate #<issue>` (playbook in `.claude/commands/orchestrate.md`).
+- It splits the issue into task cards and runs builders in parallel, each in its own git worktree: `data-integrator`, `backend`, `ui-ux` (designs first), then `frontend`.
+- Every PR goes draft, then `reviewer`, then `qa` (local and Vercel preview), then ready and auto-merge. After 2 fix rounds without a pass, the human decides.
+- The humans freeze contracts, approve new dependencies and contract changes, and judge the demo.
+
 ## Rules that cost points if missed
 
 - SI disclosure: every PR ends with `SI used: ...`; collect them for the submission.
