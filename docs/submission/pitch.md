@@ -1,5 +1,7 @@
 # Local judging pitch (Sun 14:00, Princeton Public Library)
 
+**Slides:** the 7-slide deck is built in Claude (Slides artifact "Trend Detective pitch"); ask Sairam for the share link. It downloads as PDF or PowerPoint. Real numbers are already in: Atlantic City +42.5 mm/decade vs NOAA's published 42.4 ± 0.8 mm/decade (1.67 in/decade). The only blank is the golden-question score on slide 6. **Video:** see `video.md`.
+
 Draft. **Ask the local lead (Venu) how long each team gets** and cut to fit. This script is about 4 minutes.
 Every slide carries the visible label **"Built with AI assistance"**. No NASA logos or branding. Monochrome, matching the app.
 Every number spoken or shown names its data source. Numbers marked `TBD` are filled from the live tool on Sunday morning, never typed by hand.
