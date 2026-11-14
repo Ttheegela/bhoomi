@@ -220,6 +220,55 @@ def test_cut_off_retry_respects_budget(fake, monkeypatch):
     assert r["answer"] == loop.GAVE_UP and len(fake.script) == 1
 
 
+# ---- word limit ----
+
+def words(n, tag="w"):
+    return " ".join([tag] * n)
+
+
+def test_long_answer_retried_and_short_retry_returned(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step(words(95))]
+    r = loop.ask("Is sea level rising?", model="fake:m")
+    assert r["answer"] == words(95) and fake.started[1].startswith("Is sea level rising?" + loop.RETRY_LONG)
+    assert r["usage"]["prompt_tokens"] == 300 and r["usage"]["completion_tokens"] == 60  # both attempts counted
+
+
+def test_long_retry_returns_shorter_of_two(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step(words(125, "x"))]
+    assert loop.ask("q", model="fake:m")["answer"] == words(125, "x")
+
+
+def test_longer_retry_returns_original(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step(words(140, "x"))]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130)
+
+
+def test_limit_is_inclusive(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(loop.MAX_WORDS)), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == words(loop.MAX_WORDS) and fake.script == [step("never")]
+
+
+def test_cut_off_then_long_retry_returns_long(fake):
+    fake.script = [step(tool_calls=[call()]), CUT, step(words(130))]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130)
+
+
+def test_long_then_cut_off_retry_returns_long(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), CUT]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130)
+
+
+def test_long_answer_on_last_call_returned_as_is(fake):
+    fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(loop.MAX_CALLS - 1)] + [step(words(130)), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130) and len(fake.script) == 1
+
+
+def test_long_retry_respects_budget(fake, monkeypatch):
+    fake_clock(monkeypatch, [0, 0, 1, 2, 120, 125])  # t0, model, tool, model (long), retry check: spent
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130) and len(fake.script) == 1
+
+
 # ---- prompt ----
 
 @pytest.mark.parametrize("phrase", [
@@ -230,8 +279,8 @@ def test_cut_off_retry_respects_budget(fake, monkeypatch):
     "would be very unlikely if nothing were really changing",
     "give no number, only a plain phrase",
     'write "less than 0.01"',
-    "never round across 0.05",
-    'never "0.05"',
+    "From 0.045 up to 0.055, use three decimals",
+    '0.0551 is "0.055"), so it never prints as "0.05"',
     "Say the verdict once",
     "Never quote the tool's verdict label or any field name",
     "month and year in words",
@@ -246,24 +295,30 @@ def test_cut_off_retry_respects_budget(fake, monkeypatch):
     "looks at all months of the year together",
     "ONLY when the question asks about part of the year",
     "Never say this for any other question",
-    "never change its sign or turn it into zero",
+    "Never change a number's sign or turn it into zero",
     "would print 0.00 or -0.00",
-    "at least one non-zero digit",
+    "as many decimals as it takes to show one non-zero digit",
     "minus sign in front of the digits",
     "Don't convert units and don't do arithmetic on the tool's numbers",
-    "in the tool's own units, rounded to at most two decimals",
+    "in the tool's own units, rounded to two decimals",
     "shorten the caveats first",
     "and the p-value phrase second",
     "Aim for 80 to 100 words",
     "Leave out: closing advice, offers of a follow-up, suggestions about other datasets or who else to ask",
     "explaining what a decade is more than once",
     "0.0472 is 0.05, 0.0948 is 0.09, 42.536 is 42.54, 0.2031 is 0.20",
-    "Never print four decimals",
+    "-0.0004 is -0.0004",
+    "the only case where more than two decimals are allowed",
     "-0.0008 is -0.001",
     "gets no sentence about months at all",
-    "The data are monthly values. Never call them yearly or daily data",
-    "That 0.05 is allowed even though it is not in the tool result",
-    "no other outside number is allowed",
+    "The data are monthly values; never call them yearly or daily data",
+    "rainfall in millimetres per day, measured monthly",
+    'never call it "daily rainfall"',
+    '"the usual 0.05 line", "less than 0.01" and "95% range"',
+    "No other number from outside the tool results",
+    "decline in one short sentence that counts inside the word budget",
+    "the range including zero is why",
+    '"falls by 0.40", not "falls by -0.40"',
     # rules that must survive
     "Never state a number that is not in a tool result",
     "Never call a \"no_clear_change\" result rising or falling",
