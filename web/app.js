@@ -30,7 +30,7 @@ const SOURCE_HELP = {
   coops: 'Readings from the nearest NOAA tide gauge (US coasts).',
   psmsl: 'Readings from the nearest tide gauge in a worldwide collection.',
 };
-// Shorter names for the closed select on phones; the open list keeps SOURCE_LABELS.
+// Names in the source select (every width); SOURCE_LABELS are the full names used in text elsewhere.
 const SOURCE_SHORT = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'GHCN-Daily', coops: 'CO-OPS', psmsl: 'PSMSL' };
 const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'GRACE/GRACE-FO', psmsl: 'PSMSL tide gauges' };
 
@@ -359,29 +359,12 @@ function applyPreset(i) {
   syncVariableUI();
   submit(true);
 }
-// At phone width the closed select shows the short name; the open list keeps full names.
-const narrowQ = window.matchMedia('(max-width: 599px)');
-const VAR_SHORT = { air_temp_max: 'Hottest day' }; // the closed select on phones; the open list keeps the catalog name
-let fullNames = false;
-function nameMode(full) {
-  if (full !== undefined) fullNames = full;
-  const short = narrowQ.matches && !fullNames;
-  [...$('variable').options].forEach((o) => { const v = varById(o.value); o.textContent = short ? (VAR_SHORT[v.id] || stripParens(v.name)) : v.name; });
-  [...$('source').options].forEach((o) => { o.textContent = (short ? SOURCE_SHORT[o.value] : SOURCE_LABELS[o.value]) || o.value; });
-}
+// Both selects use short names at every width, open or closed (full names clip in the closed select).
+const VAR_SHORT = { air_temp_max: 'Hottest day' };
 function fillVariables() {
   const sel = $('variable');
   clear(sel);
-  state.variables.forEach((v) => sel.append(el('option', { value: v.id }, v.name)));
-  nameMode(false);
-  sel.addEventListener('focus', () => nameMode(true));
-  sel.addEventListener('pointerdown', () => nameMode(true));
-  sel.addEventListener('blur', () => nameMode(false));
-  const src = $('source');
-  src.addEventListener('focus', () => nameMode(true));
-  src.addEventListener('pointerdown', () => nameMode(true));
-  src.addEventListener('blur', () => nameMode(false));
-  narrowQ.addEventListener('change', () => nameMode());
+  state.variables.forEach((v) => sel.append(el('option', { value: v.id }, VAR_SHORT[v.id] || stripParens(v.name))));
 }
 function syncVariableUI() {
   const v = varById($('variable').value);
@@ -389,12 +372,11 @@ function syncVariableUI() {
   const src = $('source');
   clear(src);
   const many = !!v && Array.isArray(v.sources) && v.sources.length > 1;
-  if (many) v.sources.forEach((s) => src.append(el('option', { value: s }, SOURCE_LABELS[s] || s)));
+  if (many) v.sources.forEach((s) => src.append(el('option', { value: s }, SOURCE_SHORT[s] || s)));
   // keep the source the user chose when this measurement has it; otherwise the default
   if (many) src.value = v.sources.includes(state.userSource) ? state.userSource : v.sources[0];
   $('source-field').hidden = !many;
   $('pick').classList.toggle('one', !many);
-  nameMode();
   sourceHelp();
 }
 // After a result the control shows the source the result came from (a fallback is not the user's choice).
