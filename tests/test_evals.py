@@ -532,3 +532,135 @@ def test_errored_source_need_not_be_named():
 ])
 def test_rising_with_no_change_phrase(answer, ok):
     assert run.wording_agrees(answer, "rising") is ok
+
+
+@pytest.mark.parametrize("guess", ["likely because", "Probably due to", "differ somewhat", "the same station as"])
+def test_guessed_reason_for_a_difference_fails_wording(guess):
+    answer = DISAGREE.replace("The grids are", f"They {guess} the grids are")
+    assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([POWER, ERA5, GHCN])))["wording"] is False
+
+
+NY_CASE = {"id": "nyc-sea-level", "question": "Is sea level rising in New York?", "expect_tool": "detect_trend",
+           "expect_variable": "sea_level"}
+CO_OPS = {"variable": "sea_level", "units": "mm", "verdict": "rising", "slope_per_decade": 31.787, "ci_low": 30.616,
+          "ci_high": 32.9559, "p_value": 1e-12, "period": {"start": "1900-01", "end": "2026-10"},
+          "source": {"id": "coops", "name": "NOAA CO-OPS", "url": "https://tidesandcurrents.noaa.gov/"},
+          "caveats": ["Tide gauge The Battery (8518750)."]}
+PSMSL = {**CO_OPS, "slope_per_decade": 29.6154, "ci_low": 28.76, "ci_high": 30.47,
+         "period": {"start": "1856-01", "end": "2025-12"},
+         "source": {"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"},
+         "caveats": ["Tide gauge NEW YORK (THE BATTERY) (PSMSL id 12)."]}
+NY_OK = ("Yes, sea level at The Battery in New York is clearly rising, by 31.79 mm per decade (95% range 30.62 to "
+         "32.96), January 1900 to October 2026. PSMSL agrees, over its own record, January 1856 to December 2025. "
+         "Sources: NOAA CO-OPS, https://tidesandcurrents.noaa.gov/, PSMSL, https://psmsl.org/")
+NY_PROD = ("Yes. Sea level at The Battery in New York City rises by 31.79 millimetres per decade (a decade is ten "
+           "years), with a 95% range of 30.62 to 32.96. The second source gives the same verdict: clearly rising, "
+           "29.62 millimetres per decade (95% range 28.76 to 30.47), for January 1856 to December 2025. The two "
+           "slopes differ somewhat, likely because they use different gauge records and periods.")
+
+
+def test_agreeing_source_named_with_its_own_period_passes():
+    assert run.check(NY_CASE, fake_run(NY_OK, multi([CO_OPS, PSMSL])))["wording"]
+
+
+def test_production_agree_answer_fails_wording():
+    assert run.check(NY_CASE, fake_run(NY_PROD, multi([CO_OPS, PSMSL])))["wording"] is False
+    leak_only = NY_PROD.split(" The two slopes")[0]  # the agreeing source's own slope and range alone also fail
+    assert run.check(NY_CASE, fake_run(leak_only, multi([CO_OPS, PSMSL])))["wording"] is False
+
+
+def test_same_gauge_claim_fails_wording():
+    answer = NY_OK.replace("PSMSL agrees, over its own record, January 1856 to December 2025.",
+                           "NOAA CO-OPS tide gauges agree, over its own longer record, January 1856 to December 2025 "
+                           "(PSMSL, https://psmsl.org/). Both use the same gauge, about 1 km from the point you asked "
+                           "about.")
+    assert answer != NY_OK
+    assert run.check(NY_CASE, fake_run(answer, multi([CO_OPS, PSMSL])))["wording"] is False
+
+
+def test_agree_answer_may_repeat_caveat_numbers():
+    era5 = {**ERA5, "verdict": "falling"}
+    ghcn = {**GHCN, "verdict": "falling", "caveats": ["Weather station X (id), 6 km from the point you asked about."]}
+    answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 "
+              "to December 2025. ERA5 reanalysis via Open-Meteo archive and NOAA NCEI GHCN-Daily agree; the "
+              "station is 6 km from the point you asked about. Sources: NASA POWER (MERRA-2), "
+              "https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
+    assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([POWER, era5, ghcn])))["wording"]
+    psmsl = {**PSMSL, "caveats": ["30 monthly values that PSMSL flags as doubtful were left out."]}
+    ny = NY_OK.replace(" Sources:", " 30 monthly values that PSMSL flags as doubtful were left out. Sources:")
+    assert run.check(NY_CASE, fake_run(ny, multi([CO_OPS, psmsl])))["wording"]
+
+
+def test_atlantic_city_agree_answer_passes():
+    co_ops = {**CO_OPS, "caveats": ["Tide gauge Atlantic City (8534720), 0 km from the point you asked about."]}
+    psmsl = {**PSMSL, "period": {"start": "1911-09", "end": "2025-12"},
+             "source": {**PSMSL["source"], "name": "Permanent Service for Mean Sea Level (PSMSL)"},
+             "caveats": ["Tide gauge ATLANTIC CITY (PSMSL id 180), 1 km from the point you asked about."]}
+    answer = ("Sea level at Atlantic City is clearly rising, by 31.79 mm per decade (95% range 30.62 to 32.96), "
+              "January 1900 to October 2026. Permanent Service for Mean Sea Level (PSMSL) agrees, over its own "
+              "record, September 1911 to December 2025. The PSMSL gauge is 1 km away. Sources: NOAA CO-OPS, "
+              "https://tidesandcurrents.noaa.gov/, https://psmsl.org/")
+    assert run.check(NY_CASE, fake_run(answer, multi([co_ops, psmsl])))["wording"]
+
+
+def test_own_record_sentence_must_name_an_agreeing_source():
+    wrong = NY_OK.replace("PSMSL agrees, over its own record", "NOAA CO-OPS tide gauges agrees, over its own record")
+    assert wrong != NY_OK
+    assert run.check(NY_CASE, fake_run(wrong, multi([CO_OPS, PSMSL])))["wording"] is False
+    full = NY_OK.replace("PSMSL agrees", "Permanent Service for Mean Sea Level (PSMSL) agrees")
+    assert run.check(NY_CASE, fake_run(full, multi([CO_OPS, PSMSL])))["wording"]
+
+
+# ---- the real source names (earthtrends/data) ----
+
+from earthtrends.data import coops as coops_src, psmsl as psmsl_src  # noqa: E402
+
+REAL_COOPS = {**CO_OPS, "source": coops_src.SOURCE}
+REAL_PSMSL = {**PSMSL, "source": psmsl_src.SOURCE,
+              "caveats": ["Tide gauge NEW YORK (THE BATTERY) (PSMSL id 12), 1 km from the point you asked about."]}
+NY_HEAD = ("Sea level at The Battery in New York is clearly rising, by 31.79 mm per decade (95% range 30.62 to 32.96), "
+           "January 1900 to October 2026. ")
+NY_TAIL = " Sources: NOAA CO-OPS, https://tidesandcurrents.noaa.gov/, PSMSL, https://psmsl.org/"
+
+
+def real_ny(sentence):
+    return run.check(NY_CASE, fake_run(NY_HEAD + sentence + NY_TAIL, multi([REAL_COOPS, REAL_PSMSL])))["wording"]
+
+
+@pytest.mark.parametrize("sentence", [
+    "PSMSL agrees, over its own record, January 1856 to December 2025.",
+    "Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, January 1856 to December 2025.",
+    "Permanent Service for Mean Sea Level (PSMSL) (https://psmsl.org/) agrees, over its own record, January 1856 to "
+    "December 2025.",
+    "The Permanent Service for Mean Sea Level agrees, over its own record, January 1856 to December 2025.",
+    "PSMSL agrees with NOAA CO-OPS, over its own record, January 1856 to December 2025.",
+    "PSMSL agrees, over its own record, January 1856 to December 2025. Its gauge is 1 km from the point you asked about.",
+])
+def test_own_record_with_real_source_names_passes(sentence):
+    assert real_ny(sentence)
+
+
+@pytest.mark.parametrize("sentence", [
+    "NOAA CO-OPS tide gauges agrees, over its own record, January 1856 to December 2025.",
+    "NOAA CO-OPS tide gauges agrees with this, using the Permanent Service for Mean Sea Level (PSMSL) data, over its "
+    "own record, January 1856 to December 2025.",  # ny8: PSMSL named, but not as the one that agrees
+    "PSMSL agrees, over its own record, January 1856 to December 2025. Both used the gauge about 1 km from the point.",
+])
+def test_own_record_misattributed_or_shared_gauge_fails(sentence):
+    assert not real_ny(sentence)
+
+
+@pytest.mark.parametrize("start,period", [("1899-01", "January 1899 to December 2025"),
+                                          ("1911-09", "September 1911 to December 2025")])
+def test_own_record_live_periods_pass(start, period):
+    psmsl = {**REAL_PSMSL, "period": {"start": start, "end": "2025-12"}}
+    for subject in ("PSMSL", "The PSMSL tide gauge", "The Permanent Service for Mean Sea Level"):
+        answer = NY_HEAD + f"{subject} agrees, over its own record, {period}." + NY_TAIL
+        assert run.check(NY_CASE, fake_run(answer, multi([REAL_COOPS, psmsl])))["wording"]
+
+
+def test_ny1_answer_fails_wording():
+    answer = (NY_HEAD + "The PSMSL record agrees, over its own record, January 1856 to December 2025. Its slope is "
+              "29.62 mm per decade (95% range 28.76 to 30.47). Both used the gauge about 1 km from the point." + NY_TAIL)
+    assert run.check(NY_CASE, fake_run(answer, multi([REAL_COOPS, REAL_PSMSL])))["wording"] is False
+
