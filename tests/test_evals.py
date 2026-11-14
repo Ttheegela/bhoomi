@@ -737,10 +737,12 @@ def test_composed_answer_with_missing_link_names_every_source():
     assert out["source_named"] and out["wording"]
 
 
-@pytest.mark.parametrize("caveat,ok", [("PSMSL's gauge is also The Battery, 1 km away.", False),
-                                       ("Its gauge is also The Battery.", False),
-                                       ("The PSMSL gauge is 1 km away.", True)])
-def test_shared_gauge_wording_fails(caveat, ok):
+@pytest.mark.parametrize("caveat,ok", [("PSMSL's gauge is also The Battery, 1 km away.", True),  # its own caveat
+                                       ("The PSMSL gauge is also 1 km away.", True),
+                                       ("The PSMSL gauge is 1 km away.", True),
+                                       ("Both use the same gauge.", False),
+                                       ("They share a gauge at The Battery.", False)])
+def test_caveat_wording_passes_shared_gauge_claim_fails(caveat, ok):
     assert real_ny(CODE_SENT + " " + caveat) is ok
 
 

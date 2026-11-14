@@ -193,8 +193,8 @@ def compose(text: str, calls: list[dict]) -> str:
             mask[m.start():m.end()] = [True] * (m.end() - m.start())
         else:
             _cut(text, m.start(), m.end(), mask)
-    for s in sents:  # the model's exact copy goes, so each sentence is there once
-        for c in re.finditer(re.escape(s), text):
+    for s in sents:  # the model's exact copy goes when it stands on its own; one inside a sentence stays
+        for c in re.finditer(rf"(?:^|(?<=[.!?]\s)){re.escape(s)}(?=\s|$)", text, re.M):
             _cut(text, c.start(), c.end(), mask)
     kept = "".join(ch for ch, gone in zip(text, mask) if not gone)
     line = False  # put the sentences on a line of their own (in front of a list)
@@ -204,8 +204,9 @@ def compose(text: str, calls: list[dict]) -> str:
             if mask[m.start()] or not ("://" in m.group() or any(h in m.group().lower() for h in hosts)):
                 continue
             at = m.start()
-            if (at == 0 or text[at - 1] == "\n") and re.match(r"(?:[-*•]|\d+[.)])\s", m.group()):
-                line = True
+            ls = text.rfind("\n", 0, at) + 1  # the start of the link's line: a list item is judged by its line
+            if re.match(r"(?:[-*•]|\d+[.)])\s", text[ls:]):
+                at, line = ls, True
                 prev = text.rfind("\n", 0, at - 1) + 1  # a list header line ("Sources:") stays with its list
                 if at and text[prev:at - 1].rstrip().endswith(":"):
                     at = prev

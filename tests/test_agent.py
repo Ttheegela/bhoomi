@@ -687,6 +687,33 @@ def test_nul_in_model_text_does_not_double_the_sentence():
     assert out.count(NY_SENT) == 1 and out == f"{NY_HEAD} \0 {NY_SENT} {NY_SOURCES}"
 
 
+DELHI_CALLS = done_calls(*(({**DELHI, "source": s}, {**TREND, "variable": "air_temp_max",
+                            "source": {"id": s, "name": SRC[s][0], "url": SRC[s][1]}}) for s in SRC))
+DELHI_LINKS = "Sources: " + ", ".join(url for _, url in SRC.values()) + "."
+ERA5_SENT, GHCN_SENT = "ERA5 reanalysis via Open-Meteo archive agrees.", "NOAA NCEI GHCN-Daily agrees."
+
+
+@pytest.mark.parametrize("model,calls,want", [
+    ("Rising. The NOAA NCEI GHCN-Daily agrees.", DELHI_CALLS, "{m} {E} {G} {L}"),
+    # ".)" ends no sentence, so the sources sentence (where the code's go in front) starts at "Station"
+    ("Station data (NOAA NCEI GHCN-Daily agrees.)", DELHI_CALLS, "{E} {G} {m} {L}"),
+    (f"As a check, {NY_SENT} It is 1 km away.", NY_CALLS, "{m} {N} {L}"),
+])
+def test_copy_inside_a_model_sentence_stays(model, calls, want):
+    links = DELHI_LINKS if calls is DELHI_CALLS else NY_SOURCES
+    # the model's words are intact; the code's sentences are added next to them
+    assert loop.compose(f"{model} {links}", calls) == want.format(m=model, E=ERA5_SENT, G=GHCN_SENT, N=NY_SENT, L=links)
+
+
+@pytest.mark.parametrize("items", [
+    "1. https://tidesandcurrents.noaa.gov/\n2. https://psmsl.org/\n",
+    "- NOAA CO-OPS tide gauges, U.S. https://tidesandcurrents.noaa.gov/\n- PSMSL, https://psmsl.org/\n",
+])
+def test_list_item_with_a_full_stop_before_its_link_stays_whole(items):
+    assert loop.compose(f"{NY_HEAD}\n\nSources:\n{items}", NY_CALLS) == f"{NY_HEAD}\n\n{NY_SENT}\nSources:\n{items}"
+    assert loop.compose(f"{NY_HEAD}\n{items}", NY_CALLS) == f"{NY_HEAD}\n{NY_SENT}\n{items}"
+
+
 # ---- error reasons the model reads: never a digit ----
 
 def one_ok_one_failing(monkeypatch, fake, message):
