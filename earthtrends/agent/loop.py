@@ -1,4 +1,5 @@
 """The agent loop: identical for every model; it talks to the model only through a provider."""
+import calendar
 import contextvars
 import json
 import logging
@@ -103,8 +104,153 @@ def model_reason(error: str) -> str:
     return FALLBACK_REASON
 
 
+# ---- sources that agree: the code writes their sentence, the model never sees their numbers ----
+
+MARKER = "[AGREEING SOURCES]"  # the model writes it where the agreeing sources' sentences go
+_MARK = r"\[\s*agreeing\s+sources\s*\]"
+# A sentence (up to . ! or ? before a space, or the end of its line), or the marker on its own.
+_UNIT = re.compile(rf"{_MARK}|\S.*?(?:[.!?](?=\s|$)|(?={_MARK})|$)", re.M | re.I)
+AGREE_NOTE = ("Same verdict as the default source, so its own numbers are left out. Do not write a sentence about "
+              "this source. Do list its name and URL in your sources line and pass on its caveats. "
+              f"Write {MARKER} where the agreeing sources belong.")
+RESTORED_NOTE = ("These sources no longer all agree, so here are the full results of those sent earlier without "
+                 "their numbers.")
+_YM = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])")
+
+
+def _place(args: dict) -> tuple[float, float]:
+    """The point as the data layer uses it: two decimals, so 40.7 and 40.70 are one place."""
+    return round(float(args["lat"]), 2) + 0.0, round(float(args["lon"]), 2) + 0.0
+
+
+def agree_plan(calls: list[dict]) -> tuple[dict, list[dict]] | None:
+    """(default result, the other results) when two or more sources returned a result for one variable at one
+    place and all gave the same verdict, all of them sources the catalog lists for it; else None. Failed calls
+    don't count. The default is the first source in the catalog among those that returned (so if the catalog
+    default failed, the next one leads). A source called twice counts once, with its last result."""
+    ok = [c for c in calls
+          if c["name"] == "detect_trend" and c.get("error") is None and isinstance(c.get("result"), dict)]
+    if len({_place(c["arguments"]) for c in ok}) > 1:  # two places are a comparison, not agreeing sources
+        return None
+    by_src = {(c["result"].get("source") or {}).get("id"): c["result"] for c in ok}
+    rs = list(by_src.values())
+    verdicts = {r.get("verdict") for r in rs}
+    if len(rs) < 2 or len({r.get("variable") for r in rs}) != 1 or len(verdicts) != 1 or None in verdicts:
+        return None
+    order = next((v["sources"] for v in tools.list_variables() if v["id"] == rs[0].get("variable")), [])
+    if not set(by_src) <= set(order):  # no catalog order, no default source
+        return None
+    rs.sort(key=lambda r: order.index(r["source"]["id"]))
+    return rs[0], rs[1:]
+
+
+def _month(ym: str) -> str:
+    y, m = ym.split("-")
+    return f"{calendar.month_name[int(m)]} {y}"
+
+
+def agree_sentence(result: dict, default: dict) -> str:
+    """The one sentence about an agreeing non-default source. The eval scorer imports it."""
+    name = result["source"]["name"].split(",")[0].strip()
+    p = result.get("period")
+    if (not isinstance(p, dict) or p == default.get("period")
+            or not all(isinstance(p.get(k), str) and _YM.fullmatch(p[k]) for k in ("start", "end"))):
+        return f"{name} agrees."
+    return f"{name} agrees, over its own record, {_month(p['start'])} to {_month(p['end'])}."
+
+
+def _host(url: str) -> str:
+    return re.sub(r"^https?://(www\.)?|/.*$", "", url or "").lower()
+
+
+def _cut(text: str, s: int, e: int, mask: list[bool]) -> None:
+    """Mark text[s:e] removed, with the whitespace on one side, keeping a paragraph break."""
+    head = len(text[:s]) - len(text[:s].rstrip())
+    tail = len(text[e:]) - len(text[e:].lstrip())
+    if (e + tail == len(text) or tail == 0
+            or ("\n" in text[e:e + tail] and "\n" not in text[s - head:s] and s - head > 0)):
+        s -= head  # last in the text, glued to what follows ("mm [X]."), or a paragraph break follows
+    else:
+        e += tail
+    mask[s:e] = [True] * (e - s)
+
+
+def compose(text: str, calls: list[dict]) -> str:
+    """The final text. The agreeing sources' sentences go where the marker is (or, if it is missing or inside a
+    sentence, in front of the first sentence or list line with a link, else at the end), each followed by
+    "Its data: <url>." if the text lacks its link. Only markers are removed; everything the model wrote stays
+    (a copy of the code's sentence written by the model shows twice: accepted). Any other source with a result whose link is missing gets
+    "Source: <name>, <url>." at the end. Only the space around a change is touched."""
+    plan = agree_plan(calls)
+    lead, others = plan or ({}, [])
+    sents = [agree_sentence(r, lead) for r in others]
+    mask, at = [False] * len(text), None
+    for m in re.finditer(_MARK, text, re.I):
+        before = text[:m.start()].rstrip()
+        own = not before or before[-1] in ".!?" or "\n" in text[len(before):m.start()]  # not inside a sentence
+        if at is None and sents and own:
+            at = m.start()
+            mask[m.start():m.end()] = [True] * (m.end() - m.start())
+        else:
+            _cut(text, m.start(), m.end(), mask)
+    kept = "".join(ch for ch, gone in zip(text, mask) if not gone)
+    line = False  # put the sentences on a line of their own (in front of a list)
+    if sents and at is None:
+        hosts = {_host(r["source"].get("url")) for r in [lead, *others]} - {""}
+        for m in _UNIT.finditer(text):
+            if mask[m.start()] or not ("://" in m.group() or any(h in m.group().lower() for h in hosts)):
+                continue
+            at = m.start()
+            ls = text.rfind("\n", 0, at) + 1  # the start of the link's line: a list item is judged by its line
+            if re.match(r"[ \t]*(?:[-*•]|\d+[.)])\s", text[ls:]):
+                at, line = ls, True
+                prev = text.rfind("\n", 0, at - 1) + 1  # a list header line ("Sources:") stays with its list
+                if at and text[prev:at - 1].rstrip().endswith(":"):
+                    at = prev
+            break
+        else:
+            at = len(text.rstrip())
+    left = "".join(ch for ch, gone in zip(text[:at], mask) if not gone) if sents else kept
+    right = "".join(ch for ch, gone in zip(text[at:], mask[at:]) if not gone) if sents else ""
+    if sents:
+        ins = " ".join(s if _host(r["source"].get("url")) in kept.lower() else f"{s} Its data: {r['source']['url']}."
+                       for r, s in zip(others, sents))
+        if line:
+            ins += "\n"
+        else:
+            ins = (" " if left and not left[-1].isspace() else "") + ins
+            ins += " " if right and not right[0].isspace() else ""
+        left += ins
+    out = left + right
+    # Every source with a result names its link: any still missing goes at the end.
+    srcs = {}
+    for c in calls:
+        if c["name"] == "detect_trend" and c.get("error") is None and isinstance(c.get("result"), dict):
+            src = c["result"].get("source") or {}
+            srcs.setdefault(src.get("id"), src)
+    missing = [f"Source: {s['name'].split(',')[0].strip()}, {s['url']}." for s in srcs.values()
+               if _host(s.get("url")) not in out.lower() and s.get("name")]  # no URL: "" is always "in"
+    if missing:
+        body = out.rstrip()
+        out = body + (" " if body else "") + " ".join(missing) + out[len(body):]
+    return out
+
+
+def _hidden(calls: list[dict]) -> set[int]:
+    """Indexes of the calls whose result the model gets without its numbers: the agreeing non-default sources."""
+    others = (agree_plan(calls) or (None, []))[1]
+    return {i for i, c in enumerate(calls) if c["error"] is None and any(c["result"] is r for r in others)}
+
+
 def for_model(calls: list[dict]) -> list[dict]:
-    return [{**c, "error": model_reason(c["error"])} if c["error"] else c for c in calls]
+    """What the model reads: digit-free error reasons, and each agreeing non-default source without its numbers."""
+    hidden = _hidden(calls)
+
+    def brief(r):
+        return {"variable": r.get("variable"), "verdict": r.get("verdict"), "source": r.get("source"),
+                "caveats": r.get("caveats", []), "note": AGREE_NOTE}
+    return [{**c, "error": model_reason(c["error"])} if c["error"]
+            else {**c, "result": brief(c["result"])} if i in hidden else c for i, c in enumerate(calls)]
 
 
 def word_limit(calls: list[dict]) -> int:
@@ -129,6 +275,7 @@ def ask(question: str, model: str | None = None) -> dict:
     trace = Trace(question, model_id)
     calls, usage, costs, answer, retried, too_long = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None, False, None
     no_tools = False  # the current attempt was started without tools
+    sent_hidden: set[int] = set()  # calls whose result the model got without its numbers
     try:
         for i in range(MAX_CALLS):
             if time.monotonic() - t0 >= BUDGET_S:
@@ -150,6 +297,7 @@ def ask(question: str, model: str | None = None) -> dict:
                 if not cut:
                     if not (text or "").strip():
                         break  # empty text (e.g. reasoning spent the cap): falls through to too_long or GAVE_UP
+                    text = compose(text, calls)  # before the length check: the limit holds for what the user sees
                     if len(text.split()) <= limit:
                         answer = text
                         break
@@ -207,8 +355,18 @@ def ask(question: str, model: str | None = None) -> dict:
             done = [f.result() if f.done() and not f.cancelled() else failed(c, LATE) for f, c in zip(futs, run)]
             done += [failed(c, f"Too many tool calls at once; at most {MAX_TOOLS} per step.") for c in todo[MAX_TOOLS:]]
             calls += done
-            provider.add_tool_results([{"id": c["id"], "content": d["result"] if d["error"] is None
-                                        else {"error": model_reason(d["error"])}} for c, d in zip(todo, done)])
+            seen = for_model(calls)[len(calls) - len(done):]  # agreement judged over every result so far
+            content = [d["result"] if d["error"] is None else {"error": d["error"]} for d in seen]
+            # Sent without numbers in an earlier step but no longer agreeing (e.g. a later source disagrees):
+            # the model gets those full results now, with this step's first result.
+            now = _hidden(calls)
+            back = [calls[j]["result"] for j in sorted(sent_hidden - now)]
+            sent_hidden = now
+            if back:
+                k = next((j for j, x in enumerate(content) if isinstance(x, dict)), 0)  # a dict result keeps its shape
+                first = content[k] if isinstance(content[k], dict) else {"result": content[k]}
+                content[k] = {**first, "earlier_results_in_full": {"note": RESTORED_NOTE, "results": back}}
+            provider.add_tool_results([{"id": c["id"], "content": x} for c, x in zip(todo, content)])
         answer = answer or too_long or GAVE_UP
     finally:
         trace_id = trace.end(answer)
