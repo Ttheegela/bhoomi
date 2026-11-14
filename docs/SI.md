@@ -31,9 +31,10 @@ Chose the problem and audience, chose the method (deseasonalize, then Mann-Kenda
 
 ## Images, video, audio
 - Slides and the demo video carry a visible "Built with AI assistance" label. So does the app UI.
-- AI voiceover: `TBD`, either none, or named here and in the video's description and file metadata.
+- AI voiceover: none planned; the video uses captions only. If an AI voice is added, name it here and in the video's description and file metadata.
+- Screenshots in `docs/submission/screenshots/` are real captures of the live site, taken by Claude Code's built-in browser; nothing in them is edited.
 
-## Merged PRs (as of Sat 18:30 EST)
+## Merged PRs (as of Sat 19:15 EST)
 - #1 ci: run gitleaks on pull requests only: Claude wrote this change.
 - #7 feat: /api/health/keys key check: Claude wrote this endpoint and its test.
 - #8 docs: README live URL, agent connect, team: Claude drafted this README update.
@@ -77,5 +78,9 @@ Chose the problem and audience, chose the method (deseasonalize, then Mann-Kenda
 - #59 app: health-keys route off in production, rate limit on data routes and /mcp/, security headers: Claude (backend builder agent) read the app, limiter, MCP and web code and the Vercel docs, then wrote the production 404, the rate limit, the headers and the tests; the orchestrator session wrote this description.
 - #60 data: land water storage from NASA GSFC GRACE mascons (contract change: grace source row): Claude (data builder agent) read the provider's page and files, wrote the offline build script, the run-time source, the tests and the contract edit, and ran the validity checks; Tarun approved the source and the wording of the notes; the orchestrator session wrote this description.
 - #61 docs: Apache-2.0 licence, NOTICE, security policy and a public README: Claude (builder agent) read the code and docs, fetched the Apache licence text and each provider's credit page, wrote NOTICE, SECURITY.md and the README, made the pyproject, .gitignore and PLAN.md edits, and ran the lock, test, ignore and link checks; the orchestrator session wrote this description.
+- #62 agent: when sources agree, the code writes the "agrees" sentence: Claude (backend agent) wrote the agree-case code in the agent loop, rewrote the prompt rule, updated the eval scorer and wrote the offline tests over four fix rounds; reviewer and QA agents checked each round; the orchestrator session wrote this description.
 - #63 docs: README and NOTICE cover land water storage: Claude (orchestrator session) wrote the added lines from the reviewed GRACE pull request.
 - #64 evals: GRACE cases runnable, Mumbai answered from PSMSL (part of #16): Claude Code (Opus 5.5) edited the cases, checked the Mumbai reference's title and journal on Crossref, and ran the three changed cases (3/3 passed); Sairam asked for it and reviewed it.
+- #65 story: GRACE and worldwide tide gauges in the pitch, project page and SI (part of #18): Claude Code (Opus 5.5) checked the numbers on production, looked up the references in Crossref and PubMed, re-ran the evals and edited the docs and slides; Sairam asked for it and reviews it.
+- #66 ui: no minus or plus sign after a direction word in the answer sentence: Claude (frontend builder agent) edited the sentence builder in `web/app.js` and the design notes and ran the checks; the orchestrator session wrote this description.
+- This PR, story: final pitch, video script, project page and SI for the new demo flow (part of #18): Claude Code (Opus 5.5) ran the demo questions on production, rewrote the pitch and video script around Tarun's demo flow, took the new screenshots in its built-in browser, finished the project page and this list, and updated the slides; Sairam asked for it and reviews it.
