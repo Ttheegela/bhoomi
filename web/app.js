@@ -763,6 +763,7 @@ function renderChart(s, t) {
   noText.setAttribute('x', nc.end === 'left' ? ml + 4 : vw - mr - 2);
   noText.setAttribute('text-anchor', nc.end === 'left' ? 'start' : 'end');
   noText.setAttribute('y', nc.below ? B.yS(0) + fs + 3 : B.yS(0) - 5);
+  root.append(noText); // moved last so the lines and the band never paint over it (its halo then hides what is under it)
 
   // Yearly averages (dots) sit over the faint monthly line; the solid trend line goes on top. Drawing only: never printed.
   const dots = yearlyAverages(ms, des);
@@ -828,8 +829,8 @@ function fillFooter(vars) {
     if (!used && id === 'grace') return; // known only through the catalog
     const li = el('li', {});
     if (src.credit) {
-      li.className = 'multi';
-      li.append(el('a', { href: src.url, class: 'srclink' }, src.credit), `${src.dataset},`, el('a', { href: src.licence.url, class: 'srclink' }, src.licence.name));
+      // one list item, one flowing line of text: link, ", dataset, ", link
+      li.append(el('a', { href: src.url, class: 'srclink' }, src.credit), `, ${src.dataset}, `, el('a', { href: src.licence.url, class: 'srclink' }, src.licence.name));
     } else srcLink(li, src);
     ul.append(li);
   });

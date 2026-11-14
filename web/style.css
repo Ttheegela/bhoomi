@@ -128,7 +128,7 @@ figcaption span { display: block; max-width: 70ch; }
 .s-edge { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 2 3; fill: none; }
 .c-grid { stroke: var(--hairline); stroke-width: 1; }
 .c-zero { stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 6 4; }
-.c-halo { paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; }
+.c-halo { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; stroke-linecap: round; }
 .c-rule { stroke: var(--ink); stroke-width: 1; }
 .c-text { fill: var(--ink-2); }
 .c-title { fill: var(--ink); font-weight: 700; }
@@ -161,7 +161,7 @@ dd { margin: 0; }
 footer { border-top: 1px solid var(--line); padding: var(--s5) 0; }
 footer p:nth-child(2) { margin: var(--s3) 0 0; color: var(--ink-2); }
 footer ul { list-style: none; padding: 0; margin: var(--s2) 0 0; font-size: 14px; }
-footer li.multi { display: flex; flex-wrap: wrap; align-items: center; column-gap: .4em; }
+footer li + li { margin-top: var(--s2); }
 footer li a { display: inline-flex; align-items: center; min-height: 48px; color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
@@ -267,7 +267,7 @@ textarea { width: 100%; min-height: 48px; padding: var(--s3); font: inherit; col
 /* explore: verdict card and chart headline */
 .big { margin: 0 0 var(--s1); line-height: 1.1; }
 #verdict-calc { margin-bottom: 0; } /* sits directly under the number */
-.src-label { color: var(--ink-2); }
+.src-label { color: var(--ink-2); display: inline-block; text-decoration: none; } /* inline-block: the link's underline does not run under the label */
 .big-n { font-size: 36px; font-weight: 700; }
 .big-u { font-size: 16px; color: var(--ink-2); }
 .facts { display: block; margin: var(--s4) 0 0; }
@@ -331,6 +331,7 @@ pre::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; bord
 /* below 360 px the two selects stack, each full width (the longest short name, "Air temperature", clips in half a row) */
 @media (max-width: 359px) {
   .pick { grid-template-columns: minmax(0, 1fr); }
+  .apptabs:not(.cfgtabs) .tab:last-child:nth-child(odd) { grid-column: 1 / -1; } /* a lone last picker item takes the full row */
 }
 @media (min-width: 900px) {
   .field-var { flex: 0 1 400px; width: 400px; }
