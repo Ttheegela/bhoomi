@@ -11,6 +11,8 @@ MIN_DAYS_PER_MONTH = 20
 def compute_trend(series: dict) -> dict:
     """TimeSeries dict -> TrendResult dict."""
     freq, times, values = series["freq"], list(series["times"]), list(series["values"])
+    if len(times) != len(values):
+        raise ValueError(f"times and values must have the same length, got {len(times)} and {len(values)}.")
     caveats = list(series.get("notes") or [])
     if freq == "daily":
         times, values = _daily_to_monthly(times, values)
@@ -19,7 +21,7 @@ def compute_trend(series: dict) -> dict:
     if freq not in ("monthly", "annual"):
         raise ValueError(f"Unknown freq {freq!r}: expected daily, monthly or annual.")
 
-    x = np.array([np.nan if v is None else v for v in values], dtype=float)
+    x = np.array([_num(v) for v in values])
     year = np.array([int(t[:4]) for t in times])
     if freq == "monthly":
         month = np.array([int(t[5:7]) for t in times])
@@ -73,6 +75,7 @@ def compute_trend(series: dict) -> dict:
     c, big_n = 1.96 * math.sqrt(var_s), len(slopes)
     lo_i, hi_i = (min(max(round(r) - 1, 0), big_n - 1) for r in ((big_n - c) / 2, (big_n + c) / 2 + 1))
 
+    # ponytail: fixed 4 decimals suits mm, degC, mm/day; values ~1e-6 get a degenerate CI. Round to significant figures if a small-unit variable is added.
     slope_d, lo_d, hi_d = (round(float(v) * 10, 4) + 0.0 for v in (slope, slopes[lo_i], slopes[hi_i]))  # + 0.0 turns -0.0 into 0.0
     p = float(f"{p:.3g}")
     # Verdict from the rounded numbers, so the output always agrees with the contract rule on its face.
@@ -110,6 +113,14 @@ def _daily_to_monthly(times: list, values: list) -> tuple[list, list]:
     days: dict[str, list] = {}
     for tm, v in zip(times, values):
         days.setdefault(tm[:7], [])
-        if v is not None and not math.isnan(v):
+        if not math.isnan(v := _num(v)):
             days[tm[:7]].append(v)
     return list(days), [sum(d) / len(d) if len(d) >= MIN_DAYS_PER_MONTH else None for d in days.values()]
+
+
+def _num(v) -> float:
+    """None -> NaN, numbers and numeric strings -> float, anything else -> ValueError."""
+    try:
+        return math.nan if v is None else float(v)
+    except TypeError:
+        raise ValueError(f"Value {v!r} is not a number.") from None

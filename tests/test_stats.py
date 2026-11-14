@@ -152,6 +152,25 @@ def test_daily_partial_months_and_nan_days():
     assert all(isinstance(r[k], float) and not math.isnan(r[k]) for k in ("slope_per_decade", "ci_low", "ci_high", "p_value"))
 
 
+def test_length_mismatch_raises():
+    days = [(dt.date(2015, 1, 1) + dt.timedelta(d)).isoformat() for d in range(3650)]
+    for s in (series("daily", days, range(3650)), monthly(synthetic(0.3))):
+        s["values"] = s["values"][:-1]
+        with pytest.raises(ValueError, match="length"):
+            compute_trend(s)
+
+
+def test_daily_numeric_strings_coerced_like_monthly():
+    days = [(dt.date(2015, 1, 1) + dt.timedelta(d)).isoformat() for d in range(3650)]
+    s = series("daily", days, np.random.default_rng(8).normal(12, 1, 3650))
+    s["values"][40] = 12.3
+    assert compute_trend({**s, "values": [*s["values"][:40], "12.3", *s["values"][41:]]}) == compute_trend(s)
+    for bad in ("abc", [1]):  # unparseable values are a ValueError, never a TypeError
+        for broken in ({**s, "values": [bad, *s["values"][1:]]}, {**monthly(synthetic(0.3)), "values": [bad] * 480}):
+            with pytest.raises(ValueError):
+                compute_trend(broken)
+
+
 def test_annual_not_deseasonalized():
     x = np.arange(30) * 0.02 + np.random.default_rng(5).normal(0, 0.1, 30)
     r = compute_trend(series("annual", [str(1990 + i) for i in range(30)], x))
