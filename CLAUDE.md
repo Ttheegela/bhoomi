@@ -50,3 +50,4 @@ Never put a key in code, tests, fixtures, logs, commits, PR text, or chat. Keys 
 - No NASA logos or branding in anything we generate.
 - SI (AI) use must be disclosed: every PR description ends with a line `SI used: <what the AI did>` so we can write the disclosure.
 - Only public data. No private lab code or unpublished data.
+- Every UI screen, slide and video carries a visible "Built with AI assistance" label.
