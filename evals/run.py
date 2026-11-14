@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 import httpx
 
 from earthtrends.agent import providers, tracing
-from earthtrends.agent.loop import GAVE_UP, MAX_CALLS, agree_plan, agree_sentence, ask
+from earthtrends.agent.loop import GAVE_UP, MAX_CALLS, agree_plan, agree_sentence, ask, wrong_periods
 from earthtrends.data import list_variables
 from earthtrends.data.coops import haversine_km
 
@@ -56,6 +56,9 @@ GUESSED = ("likely because", "probably because", "likely due to", "probably due 
            "same gauge", "same station", "both used the gauge", "both use the gauge", "share a gauge", "shares a gauge")
 # The prompt's fixed phrases with an outside number; they are removed before numbers are checked.
 ALLOWED = re.compile(r"\b0\.05 line|less than 0\.01|\b95\s*(?:%|percent)", re.I)
+# Fixed p-value phrases allowed only when a result's p-value is really under that line.
+UNDER_001 = re.compile(r"\b(?:below|less than) 0\.001(?!\d)", re.I)
+UNDER_01 = re.compile(r"\bbelow 0\.01(?!\d)", re.I)
 NUM = re.compile(r"(?<![\w.])([-\u2212]?)(\d+(?:\.\d+)?)")  # a minus only when it isn't a hyphen after a word
 UNIT = re.compile(r"\s*(?:%|°|degrees?\b|deg\b|mm\b|cm\b|m\b|km\b|inch|feet\b|ft\b|days?\b|weeks?\b|months?\b"
                   r"|years?\b|decades?\b|times\b|percent\b)", re.I)
@@ -122,6 +125,10 @@ def invented_numbers(answer: str, results: list) -> list[str]:
     """Answer numbers that no tool-result number rounds to at the answer's precision, sign included. Only the
     slope may appear without its sign (see _pool); a range end must keep its minus."""
     pool = _pool(results, [])
+    ps = [r["p_value"] for r in results if isinstance(r, dict) and isinstance(r.get("p_value"), (int, float))]
+    for phrase, line in ((UNDER_001, 0.001), (UNDER_01, 0.01)):
+        if any(p < line for p in ps):
+            answer = phrase.sub(" ", answer)
     bad = []
     for sign, s in _numbers(answer):
         v = -float(s) if sign else float(s)
@@ -200,6 +207,8 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                 subj = [s[:s.index("agree")] if "agree" in s[:s.index("over its own record")] else s for s in own]
                 out["wording"] = out["wording"] and all(
                     any(_short_named(r.get("source") or {}, s) for r in agreeing) for s in subj)
+        if wrong_periods(answer, run.get("tool_calls", [])):  # a period range that is no result's period
+            out["wording"] = False
         out["numbers"] = not invented_numbers(answer, results)
         if by_src:
             out["source_named"] = all(_named(r.get("source") or {}, a) for r in by_src.values())

@@ -29,9 +29,13 @@ RETRY = ("\n\nYour answer did not fit. Answer now, in at most {target} words, fo
 MAX_WORDS = 120  # longest answer we return without asking for a shorter one
 MAX_WORDS_MULTI = 180  # the same, when results from two or more sources are reported
 SHORTER = {MAX_WORDS: 100, MAX_WORDS_MULTI: 150}  # what the length retry asks for
-RETRY_LONG = ("\n\nYour first answer to this question was over {limit} words. Give the same answer again in at "
-              "most {target} words, following every rule: one short sentence per caveat, no unit explained twice, and "
-              "any declined request in a few words. Do not call a tool: these are the tool results you already got:\n")
+LONG_ASK = ("Your first answer to this question was over {limit} words. Give the same answer again in at most "
+            "{target} words, following every rule: one short sentence per caveat, no unit explained twice, and any "
+            "declined request in a few words.")
+PERIOD_ASK = ("Your first answer to this question gave a period that is in no tool result. The period of each source "
+              "is: {periods}. Give the same answer again, following every rule, with each period exactly as given here.")
+NO_TOOL = " Do not call a tool: these are the tool results you already got:\n"
+RETRY_LONG = "\n\n" + LONG_ASK + NO_TOOL
 
 TOOLS = [
     {"name": "list_variables",
@@ -260,6 +264,116 @@ def word_limit(calls: list[dict]) -> int:
     return MAX_WORDS_MULTI if len(srcs) >= 2 else MAX_WORDS
 
 
+# ---- periods: every range the answer gives must be the period of a returned result ----
+
+_MON = ("jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?"
+        "|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?")
+_DATE = rf"(?:\b({_MON})\.?\s+)?((?:1[5-9]|20)\d\d)"
+# A start and an end, each a month and year or a bare year, joined by to/through/until or a dash. A year glued to a
+# word or hyphen ("mid-2017"), a decimal or an ISO month ("1981-01") is not a range end.
+PERIOD_RANGE = re.compile(rf"(?<![\w.\-–—/]){_DATE}\s*(?:\b(?:to|through|until)\b|[-–—])\s*{_DATE}"
+                          r"(?![\w\-–—]|[.,]\d)", re.I)
+_MONTHS = {m[:3].lower(): i for i, m in enumerate(calendar.month_name) if m}
+
+
+def _ok_results(calls: list[dict]) -> list[dict]:
+    return [c["result"] for c in calls
+            if c["name"] == "detect_trend" and c.get("error") is None and isinstance(c.get("result"), dict)]
+
+
+def _period(r: dict) -> dict | None:
+    p = r.get("period")
+    ok = isinstance(p, dict) and all(isinstance(p.get(k), str) and _YM.fullmatch(p[k]) for k in ("start", "end"))
+    return p if ok else None
+
+
+def _fits(month: str | None, year: str, ym: str) -> bool:
+    """An answer's end at its own precision: a bare year matches any month of that year."""
+    y, m = ym.split("-")
+    return year == y and (month is None or _MONTHS[month[:3].lower()] == int(m))
+
+
+def wrong_periods(text: str, calls: list[dict]) -> list[re.Match]:
+    """The period ranges in `text` that equal no returned result's period. A range written in a result's own caveat
+    ("its 2004 to 2009 average") is the tool's words, not a period, so it passes. No result with a period: nothing to
+    check. The eval scorer imports this."""
+    rs = _ok_results(calls)
+    periods = [p for p in map(_period, rs) if p]
+    if not periods:
+        return []
+    caveats = [c.lower() for r in rs for c in r.get("caveats") or [] if isinstance(c, str)]
+    bad = []
+    for m in PERIOD_RANGE.finditer(text):
+        (m1, y1), (m2, y2) = m.group(1, 2), m.group(3, 4)
+        if any(_fits(m1, y1, p["start"]) and _fits(m2, y2, p["end"]) for p in periods):
+            continue
+        ends = [" ".join(text[m.start(i if m.group(i) else i + 1):m.end(i + 1)].lower().split()) for i in (1, 3)]
+        if any(all(re.search(rf"\b{re.escape(e)}\b", c) for e in ends) for c in caveats):
+            continue
+        bad.append(m)
+    return bad
+
+
+def _in_words(p: dict) -> str:
+    return f"{_month(p['start'])} to {_month(p['end'])}"
+
+
+def _names(src: dict, chunk: str) -> bool:
+    """The chunk names the source: its id, its name up to a "," or "(", a short form in brackets, or its host."""
+    name = (src.get("name") or "").lower()
+    forms = {src.get("id") or "", re.split(r"[,(]", name)[0].strip(), *re.findall(r"\(([^)]+)\)", name),
+             _host(src.get("url"))} - {""}
+    low = chunk.lower()
+    return any(re.search(rf"\b{re.escape(f)}\b", t) for f in forms for t in (low, low.replace("-", "")))
+
+
+def _right_period(text: str, m: re.Match, calls: list[dict]) -> dict:
+    """The period that replaces a wrong range: the only one if all results share it; else the one period of the
+    sources named in the range's sentence, then its line; else the default source's (first in the catalog)."""
+    rs = [r for r in _ok_results(calls) if _period(r)]
+    if len({(r["period"]["start"], r["period"]["end"]) for r in rs}) > 1:
+        sent = next((u.group() for u in _UNIT.finditer(text) if u.start() <= m.start() < u.end()), "")
+        e = text.find("\n", m.end())
+        line = text[text.rfind("\n", 0, m.start()) + 1:e if e >= 0 else len(text)]
+        for chunk in (sent, line):
+            found = {(r["period"]["start"], r["period"]["end"]) for r in rs if _names(r.get("source") or {}, chunk)}
+            if len(found) == 1:
+                start, end = found.pop()
+                return {"start": start, "end": end}
+    order = next((v["sources"] for v in tools.list_variables() if v["id"] == rs[0].get("variable")), [])
+    rank = [order.index(i) if i in order else len(order) for i in ((r.get("source") or {}).get("id") for r in rs)]
+    return rs[rank.index(min(rank))]["period"]
+
+
+def fix_periods(text: str, calls: list[dict]) -> str:
+    """Each wrong range replaced by the tool's period in words; text with no wrong range is returned unchanged."""
+    for m in reversed(wrong_periods(text, calls)):
+        text = text[:m.start()] + _in_words(_right_period(text, m, calls)) + text[m.end():]
+    return text
+
+
+def periods_note(calls: list[dict]) -> str:
+    """Each source's period, for the retry; agreeing sources whose numbers the model never saw are left out."""
+    hidden, seen = _hidden(calls), []
+    for i, c in enumerate(calls):
+        r = c["result"] if c["name"] == "detect_trend" and c["error"] is None else None
+        if i not in hidden and isinstance(r, dict) and _period(r):
+            s = f"{((r.get('source') or {}).get('name') or '?').split(',')[0].strip()}: {_in_words(r['period'])}"
+            if s not in seen:
+                seen.append(s)
+    return "; ".join(seen)
+
+
+def best(kept: list[str], calls: list[dict]) -> str | None:
+    """What to return when every complete attempt failed a check: each with its wrong periods replaced by code, then
+    the last one within the word limit, else the shortest (the first of equals). Cut-off text is never in `kept`."""
+    if not kept:
+        return None
+    fixed, limit = [fix_periods(t, calls) for t in kept], word_limit(calls)
+    fits = [t for t in fixed if len(t.split()) <= limit]
+    return fits[-1] if fits else min(fixed, key=lambda t: len(t.split()))
+
+
 def ask(question: str, model: str | None = None) -> dict:
     t0 = time.monotonic()
     try:
@@ -273,7 +387,8 @@ def ask(question: str, model: str | None = None) -> dict:
     provider.start(system, question, TOOLS)
 
     trace = Trace(question, model_id)
-    calls, usage, costs, answer, retried, too_long = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None, False, None
+    calls, usage, costs, answer, checked = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None, False
+    kept: list[str] = []  # complete answers that failed a check (too long, or a wrong period), in order
     no_tools = False  # the current attempt was started without tools
     sent_hidden: set[int] = set()  # calls whose result the model got without its numbers
     try:
@@ -293,28 +408,34 @@ def ask(question: str, model: str | None = None) -> dict:
             if not step["tool_calls"]:
                 # Cut off at the output cap: never show partial text. The token check covers providers without "stop".
                 cut = step.get("stop") == "length" or step["usage"]["completion_tokens"] >= MAX_TOKENS
-                text, limit = step["text"], word_limit(calls)
+                text, limit, long, wrong = step["text"], word_limit(calls), False, False
                 if not cut:
                     if not (text or "").strip():
-                        break  # empty text (e.g. reasoning spent the cap): falls through to too_long or GAVE_UP
-                    text = compose(text, calls)  # before the length check: the limit holds for what the user sees
-                    if len(text.split()) <= limit:
+                        break  # empty text (e.g. reasoning spent the cap): falls through to kept or GAVE_UP
+                    text = compose(text, calls)  # before the checks: they hold for what the user sees
+                    long, wrong = len(text.split()) > limit, bool(wrong_periods(text, calls))
+                    if not (long or wrong):
                         answer = text
                         break
-                    if too_long is None or len(text.split()) < len(too_long.split()):
-                        too_long = text  # complete but long: kept, so length alone never ends in GAVE_UP
-                # No call left; or a long answer already had its one retry; or a cut-off one when a complete (long)
-                # answer is in hand. A cut-off step is retried until the call limit or the budget ends it.
-                if i == MAX_CALLS - 1 or (retried and (not cut or too_long)):
+                    kept.append(text)  # complete but failing a check: kept, so a check never ends in GAVE_UP
+                # No call left; or a complete answer already had its one check retry; or a cut-off one when a
+                # complete answer is in hand. A cut-off step is retried until the call limit or the budget ends it.
+                if i == MAX_CALLS - 1 or (kept if cut else checked):
                     break
-                # The seam has no "add a user message", so restart with the results inline.
-                retried = True
                 if cut:  # reasoning may have spent the cap: answer without it from now on
                     provider.low_reasoning = True
+                else:
+                    checked = True  # one retry for both checks together
+                # The seam has no "add a user message", so restart with the results inline.
                 if not calls:  # nothing fetched yet: start again from the plain question, tools offered
                     provider.start(system, question, TOOLS)
                     continue
-                again = (RETRY if cut else RETRY_LONG).format(limit=limit, target=SHORTER[limit])
+                if cut:
+                    again = RETRY.format(target=SHORTER[limit])
+                else:
+                    asks = ([LONG_ASK.format(limit=limit, target=SHORTER[limit])] if long else []) + (
+                        [PERIOD_ASK.format(periods=periods_note(calls))] if wrong else [])
+                    again = "\n\n" + " ".join(asks) + NO_TOOL
                 provider.start(system, question + again + json.dumps(for_model(calls)), [])  # no tools: no refetch
                 no_tools = True
                 continue
@@ -367,7 +488,7 @@ def ask(question: str, model: str | None = None) -> dict:
                 first = content[k] if isinstance(content[k], dict) else {"result": content[k]}
                 content[k] = {**first, "earlier_results_in_full": {"note": RESTORED_NOTE, "results": back}}
             provider.add_tool_results([{"id": c["id"], "content": x} for c, x in zip(todo, content)])
-        answer = answer or too_long or GAVE_UP
+        answer = answer or best(kept, calls) or GAVE_UP
     finally:
         trace_id = trace.end(answer)
 

@@ -21,7 +21,8 @@ sources, with the same place and period and the source set, all in the same step
 If the variable has only one source, call it once and leave source out.
 3. Never state a number that is not in a tool result. Do not use your own knowledge for any number. \
 The only exceptions are the fixed phrases these instructions give: "the usual 0.05 line", "less than 0.01", \
-"95% range", and "a decade is ten years" or "every ten years". No other number from outside the tool results.
+"below 0.001" or "less than 0.001" (only for a p-value under 0.001), "95% range", and "a decade is ten years" or \
+"every ten years". No other number from outside the tool results.
 
 How to answer, when detect_trend returns a result:
 - The data are monthly values; never call them yearly or daily data. Precipitation is rainfall in millimetres \
@@ -49,9 +50,9 @@ Write each number in the tool's own units, rounded to two decimals: 0.0372 is 0.
 That is the only case where more than two decimals are allowed (p-values follow their own rule below). \
 Write negative numbers with a minus sign in front of the digits, never the word "minus". Explaining a unit in words ("mm per decade means \
 millimetres every ten years") is fine, since it adds no number.
-- The p-value gets one short phrase at most, never in scientific notation (never like 1e-5). Below 0.001, give no \
-number at all (not "below 0.001"), only a plain phrase such as "a change this steady would be very unlikely if \
-nothing were really changing". \
+- The p-value gets one short phrase at most, never in scientific notation (never like 1e-5) and never its raw \
+tiny number. Below 0.001, write "below 0.001" or "less than 0.001", or only a plain phrase such as "a change this \
+steady would be very unlikely if nothing were really changing". \
 From 0.001 up to 0.01, write "less than 0.01". From 0.045 up to 0.055, use three decimals (0.049 is "0.049", \
 0.0549 is "0.055"), so it never prints as "0.05". Otherwise round it to two decimals. Then say whether it is below \
 the usual 0.05 line.
