@@ -48,7 +48,7 @@ helper + counter
 
 ## 2.2 Words on screen (idle)
 - Lead (16 px): "Ask about a place in your own words. We look up public data and tell you whether it changed over time. We can't forecast the future."
-- Privacy (14 px grey): "Your question is sent to an AI model provider so it can be answered. Don't include personal details."
+- Privacy (16 px, normal text colour): "Your question is sent to an AI model provider so it can be answered. Don't include personal details."
 - Textarea label (14 px grey): "Your question". Placeholder: "Is sea level rising in New York?". Button "Ask". Native `maxlength="500"`; counter "{n} of 500" from 400 characters (announced once at 450 and at 500 through the status line: "50 characters left." / "Limit reached: 500 characters."). Enter sends, Shift+Enter new line. Helper: "Press Enter to ask. Shift+Enter starts a new line."
 - Empty state (no messages): the thread area shows "Try one of these:" and four example buttons (real `<button>`s, 48 px, full width at 375, wrap on desktop; click sends at once): "Is sea level rising in New York?" / "Are the hottest days getting hotter in Delhi?" / "Is it getting warmer in Princeton, New Jersey?" / "Has anything changed in Visakhapatnam (17.69, 83.22) since 1981?". After the first message the buttons are replaced by the follow-up hint under the last answer: "Ask a follow-up, for example: \"What about Delhi?\"". Hint is plain text, not a button.
 - Until the history PR: after the first answer, grey 14 px line above the composer: "For now each question is answered on its own. Name the place again in a follow-up."
@@ -78,7 +78,7 @@ Every number in the AI text must also be checkable: the "Show on chart" card car
 | Cancel | Aborts (`AbortController`). Block says "Cancelled." Text returns to the box, focus to the textarea. |
 | Stop at 150 s | "That took too long, so we stopped waiting. Try a shorter or simpler question." Button "Ask" ready. |
 | Answer | 2.4. Box clears and focus goes to the answer label line. Status: "Answer ready." |
-| Clarifying question (no tool call, text contains a "?" anywhere) | Normal answer block without the "No data was looked up" line, plus "Answer in the box below to continue." Focus goes to the textarea (empty). If history is off, this line reads "Answer in the box below. Name the place and what to measure again." |
+| Clarifying question (no tool call, text contains a "?" anywhere) | Normal answer block with the grey "No data was looked up for this answer" line, plus "Answer in the box below to continue." Focus goes to the textarea (empty). If history is off, this line reads "Answer in the box below. Name the place and what to measure again." |
 | Declined (no tool call, text does not end with "?") | Answer block with the no-data line, then "We can tell you whether something changed over time at a place. Try one of these:" and the four example buttons again. |
 | "Could not finish" (answer starts with "Sorry, I could not finish") | Normal block plus "Try a shorter question, or pick a place on the Explore tab." and the button "Go to Explore". Not added to history. |
 | All `detect_trend` calls have `error` | Text block plus "We couldn't get the data for that: {error}" (verbatim) and "Try another place or measurement." If the error mentions a tide gauge add "Tide gauges sit along US coasts." (only while sea level has a single source) |
@@ -109,7 +109,7 @@ Textarea has a visible label and `aria-describedby` (helper, privacy, counter, i
 h2 Use Trend Detective in your own AI agent
 lead
 Server address: read-only field + Copy
-Pick your AI app: tabs (375: 3 columns x 2 rows; >=600: one row)
+Pick your AI app: tabs (below 600: 2 columns; >=600: one row. The settings-file picker below has 3 columns, the first wider so "Claude Code" stays on one line)
    panel: h3, numbered steps, address field + Copy, "{App} setup docs ↗", "Checked {date}" (grey 14 px)
 Prefer a settings file?: JSON block + Copy config
 What you can ask once connected: 3 tool rows + example questions
@@ -198,7 +198,7 @@ Then "Try asking" (plain list): "Is sea level rising in New York?" / "Are the ho
 1. "No clear change", range fully above or below zero but p at least 0.05. Second paragraph replaces "too small or too noisy": "The 95% range ({lo} to {hi}) stays {above|below} zero, but the p-value is {p}, which is not below 0.05. We go by the stricter test, so we don't call this a clear change. Treat it as a hint, not a finding." (Keep the old wording only when the range includes zero.) The headline stays "≈ No clear change".
 2. When the place or measurement changed and a new request runs: hide the old verdict and chart and show the grey placeholder block with "Looking up the data…". Keep the dimmed old card (`aria-busy`) only for "Try again" on the same request.
 3. The ▸ / ▾ disclosure markers (`.mark`) are 16 px, in `--ink-2`, in a 24 px box.
-4. Closed measurement select at 375 px shows a short name (catalog `name` without the parentheses, e.g. "Air temperature"); the open list keeps full names. Select max-width 480 px on desktop.
+4. The measurement select shows a short name at every width, open or closed (catalog `name` without the parentheses, e.g. "Air temperature"; "Hottest day" for the monthly maximum). Select max-width 480 px on desktop.
 5. Chart legend: one item per row at 375 px, two-column grid from 600 px; item text 14 px, the same as other labels.
 6. Vertical rhythm 24 px between the source link, legend, readout and caption at 375 px. The readout uses the caption style (14 px, `--ink-2`). The line "Raw values: {source} ↗. Trend and range: our calculation, the Mann-Kendall test with Sen's slope on monthly values with seasons removed." is 14 px grey and sits under the caption.
 7. Sentence 1 leads with the period and holds the uncertainty: rising "From {y0} to {y1}, {name} at {place} rose about {slope} per decade, and the data support a range of {lo} to {hi}." falling "From {y0} to {y1}, {name} at {place} fell about {slope} per decade, and the data support a range of {lo} to {hi}." no clear change "From {y0} to {y1}, we can't tell {name} at {place} apart from no change: the data lean {up|down} about {slope} per decade, but the range runs from {lo} to {hi}." (Number rules as in DESIGN.md section 3.) The second paragraph and p-value line stay.
@@ -219,7 +219,7 @@ Chosen by the agent here: hash `tab=` key and Explore keeping a key-less hash; p
 - Ask, "health off": the lead line is hidden together with the composer, examples and privacy line, because it invites a question that cannot be asked.
 - Explore, no clear change grey line: when the range excludes zero it reads "The data lean up, but the p-value is not below 0.05." (the design text says "range includes zero", which would be false there). On phones the line sits under sentence 1 instead of under the big value, so the heading, source link and sentence 1 stay on the first screen.
 - Explore, the "Raw values: {source}" line is plain text without an arrow: the source link sits directly under the chart, and a link inside a sentence breaks the "source links are their own 48 px lines" rule.
-- Explore, the closed measurement select shows the short name by swapping option text on focus, pointerdown and blur (a native select cannot style the closed state alone). Untested on a real phone picker.
+- Explore, both selects (measurement and source) use short option text at every width, open or closed. No text swapping on focus; the full names appear in the answer and in the help line under the source control.
 - Explore, the phone gap between sections is 8 px (was 12) and the tab bar margins are 8 px, to keep the first screen.
 - "Use in your AI": the Cursor note says we could not confirm menu names; VS Code lists both docs links. Each config block has a one-line file note above it so it reads without the tabs (no JavaScript).
 - Ask errors are announced once, through the conversation log; the error block itself has no `role="alert"` (inside a log it was announced twice).
