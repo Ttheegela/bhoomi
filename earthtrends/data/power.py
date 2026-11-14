@@ -10,8 +10,11 @@ PARAMS = {"air_temp": "T2M", "air_temp_max": "T2M_MAX", "precip": "PRECTOTCORR"}
 
 def parse(resp: dict, param: str) -> tuple[list[str], list[float | None]]:
     fill = resp.get("header", {}).get("fill_value", -999.0)
+    series = resp.get("properties", {}).get("parameter", {}).get(param)
+    if series is None:
+        raise ValueError(f"NASA POWER returned no {param} data: {' '.join(map(str, resp.get('messages') or [])) or 'unknown reason'}")
     times, values = [], []
-    for key, v in resp["properties"]["parameter"][param].items():
+    for key, v in series.items():
         if key[4:] == "13":  # annual value, not a month
             continue
         times.append(f"{key[:4]}-{key[4:]}")

@@ -72,6 +72,42 @@ def test_errors(offline):
         data.get_series("air_temp", 39.36, -74.42, start="2090")
 
 
+def test_coops_error_body(offline, monkeypatch):
+    with pytest.raises(ValueError, match="No monthly sea level at Foo: No data was found"):
+        coops.parse(load("coops_error.json"), "Foo")
+    monkeypatch.setattr(coops, "fetch", lambda sid: load("coops_error.json"))
+    with pytest.raises(ValueError, match="Atlantic City"):
+        data.get_series("sea_level", 39.36, -74.42)
+
+
+def test_coops_sorted_and_gap_filled():
+    rows = [{"year": "2000", "month": m, "MSL": v} for m, v in (("3", "0.3"), ("1", "0.1"), ("4", ""), ("6", "0.6"))]
+    times, values = coops.parse({"data": rows})
+    assert times == [f"2000-0{m}" for m in range(1, 7)]
+    assert values == [100.0, None, 300.0, None, None, 600.0]
+
+
+def test_power_missing_param():
+    with pytest.raises(ValueError, match="out of range"):
+        power.parse({"messages": ["latitude out of range"], "properties": {"parameter": {}}}, "T2M")
+
+
+def test_string_latlon_and_strict_dates(offline):
+    assert data.get_series("air_temp", "39.36", "-74.42")["place"]["lat"] == 39.36
+    with pytest.raises(ValueError, match="numbers"):
+        data.get_series("air_temp", "abc", 0)
+    with pytest.raises(ValueError, match="Latitude"):
+        data.get_series("air_temp", float("nan"), 0)
+    for bad in ("2015-", "2015-6"):
+        with pytest.raises(ValueError, match="start must look like"):
+            data.get_series("air_temp", 39.36, -74.42, start=bad)
+
+
+def test_sea_level_mid_ocean_via_get_series(offline):
+    with pytest.raises(ValueError, match="tide gauge"):
+        data.get_series("sea_level", 0, -30)
+
+
 def test_catalog():
     assert {v["id"]: v["sources"][0] for v in data.list_variables()} == {
         "air_temp": "power", "air_temp_max": "power", "precip": "power", "sea_level": "coops"}
