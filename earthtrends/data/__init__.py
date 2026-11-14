@@ -12,6 +12,10 @@ def list_variables() -> list[dict]:
 def _bound(s: str | None, name: str, last: bool = False) -> str | None:
     if s is None:
         return None
+    if type(s) is int:  # JSON callers pass years as ints (bool is rejected below)
+        s = str(s)
+    if not isinstance(s, str):
+        raise ValueError(f"{name} must look like 2015 or 2015-06, got {s!r}.")
     y, _, m = s.partition("-")
     if len(y) != 4 or not y.isdigit() or ("-" in s and not (len(m) == 2 and m.isdigit() and 1 <= int(m) <= 12)):
         raise ValueError(f"{name} must look like 2015 or 2015-06, got {s!r}.")
@@ -35,6 +39,8 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
     if not -180 <= lon <= 180:
         raise ValueError(f"Longitude must be between -180 and 180, got {lon}.")
     lo, hi = _bound(start, "start"), _bound(end, "end", last=True)
+    if lo and hi and lo > hi:
+        raise ValueError("start must not be after end.")
 
     if source == "power":
         param = power.PARAMS[variable]

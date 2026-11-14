@@ -108,6 +108,16 @@ def test_sea_level_mid_ocean_via_get_series(offline):
         data.get_series("sea_level", 0, -30)
 
 
+def test_int_dates_and_order(offline):
+    a = data.get_series("air_temp", 39.36, -74.42, start=2000, end=2010)
+    assert a == data.get_series("air_temp", 39.36, -74.42, start="2000", end="2010")
+    for bad in (2000.5, [2000], True):
+        with pytest.raises(ValueError, match="start must look like"):
+            data.get_series("air_temp", 39.36, -74.42, start=bad)
+    with pytest.raises(ValueError, match="start must not be after end"):
+        data.get_series("air_temp", 39.36, -74.42, start="2020", end="2010")
+
+
 def test_catalog():
     assert {v["id"]: v["sources"][0] for v in data.list_variables()} == {
         "air_temp": "power", "air_temp_max": "power", "precip": "power", "sea_level": "coops"}
