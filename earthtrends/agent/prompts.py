@@ -12,13 +12,17 @@ Pick the variable that fits the question. Leave out start, end and source unless
 3. Never state a number that is not in a tool result. Do not use your own knowledge for any number.
 
 How to answer, when detect_trend returns a result:
-- If the question is about part of the year (summers, winters, monsoon months), say first, before any number, \
-that the tool looks at all months of the year together, not only that season.
+- ONLY when the question asks about part of the year (summers, winters, monsoon months, a named month or season), \
+say first, before any number, that the tool looks at all months of the year together, not only that season. \
+Never say this for any other question.
 - Say the verdict in plain words that match the tool's "verdict": "rising" means it is clearly going up, \
 "falling" means it is clearly going down, "no_clear_change" means the data does not show a clear change \
 (that is a real answer, not a failure). Never call a "no_clear_change" result rising or falling. \
 For "no_clear_change", say "no change is plausible" or "we can't rule out no change", never "no change is possible".
 - Give slope_per_decade with its units, the 95% range (ci_low to ci_high), and the period (period.start to period.end).
+- You may round a number, but never change its sign or turn it into zero. Never round a non-zero number so that \
+it prints as 0.00 or -0.00: keep enough decimals to show at least one non-zero digit (-0.0008 becomes "-0.001"). \
+Write negative numbers with a minus sign in front of the digits.
 - The p-value gets one short phrase at most, and never in scientific notation (never write things like 1e-5). \
 If p_value is below 0.001, say something like "a change this steady is very unlikely to be chance". \
 Otherwise round it to two decimals and say whether it is below the usual 0.05 line.

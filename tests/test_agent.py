@@ -190,6 +190,12 @@ def test_empty_text_is_not_an_empty_answer(fake):
     "no change is plausible",
     "we can't rule out no change",
     "looks at all months of the year together",
+    "ONLY when the question asks about part of the year",
+    "Never say this for any other question",
+    "never change its sign or turn it into zero",
+    "prints as 0.00 or -0.00",
+    "at least one non-zero digit",
+    "minus sign in front of the digits",
     "shorten the caveat first and the p-value phrase second",
     # rules that must survive
     "Never state a number that is not in a tool result",
