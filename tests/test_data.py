@@ -205,6 +205,17 @@ def test_ghcn_search_malformed():
                 "boundingPoints": [{"coordinates": [1.0, 2.0]}]}
     assert ghcn.parse_search({"results": [bad_type]})[0]["types"] == {}  # no startDate: that type is skipped
     assert good["id"] == "IN022021900"
+
+    def station(**over):
+        dt = {"id": "TMAX", "startDate": "1950-01-01", "endDate": "2020-01-01"}
+        dt.update(over)
+        return {"stations": [{"id": "A", "name": "A", "dataTypes": [dt]}], "boundingPoints": [{"coordinates": [1.0, 2.0]}]}
+    for bad in ({"startDate": ["1950"]}, {"endDate": "garbage"}, {"startDate": None}, {"coverage": "nan"}):
+        assert ghcn.parse_search({"results": [station(**bad)]})[0]["types"] == {}, bad  # skipped, no crash
+    assert "TMAX" in ghcn.parse_search({"results": [station()]})[0]["types"]
+    nan_station = station()
+    nan_station["boundingPoints"][0]["coordinates"] = [float("nan"), 2.0]
+    assert ghcn.parse_search({"results": [nan_station]}) == []  # a station with no usable position is skipped
     for reply in ([], "oops", {"results": {"a": 1}}):  # not the shape we expect at all
         with pytest.raises(ValueError, match="station search returned an unexpected reply"):
             ghcn.parse_search(reply)
@@ -219,6 +230,9 @@ def test_ghcn_parse_malformed_and_quality_flags():
     rows = [{"TMAX": "20"}, "x", {"DATE": "2000-01-01", "TMAX": "20", "TMAX_ATTRIBUTES": ",,S"},
             {"DATE": "2000-01-02", "TMAX": "99", "TMAX_ATTRIBUTES": ",O,S"}]  # no DATE, not a dict, flagged
     assert ghcn.parse(rows, ("TMAX",)) == (["2000-01-01", "2000-01-02"], [20.0, None])
+    odd = [{"DATE": ["2000-01-01"], "TMAX": "1"}, {"DATE": {"a": 1}, "TMAX": "1"}, {"DATE": 20000101, "TMAX": "1"},
+           {"DATE": "2000-01-03", "TMAX": "NaN"}, {"DATE": "2000-01-04", "TMAX": "inf"}, {"DATE": "2000-01-05", "TMAX": "7"}]
+    assert ghcn.parse(odd, ("TMAX",)) == (["2000-01-03", "2000-01-04", "2000-01-05"], [None, None, 7.0])
 
 
 def test_ghcn_deadline(offline2, monkeypatch):

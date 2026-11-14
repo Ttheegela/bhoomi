@@ -2,7 +2,7 @@
 import time
 from datetime import date
 from functools import lru_cache
-from math import cos, radians
+from math import cos, isfinite, radians
 
 import httpx
 
@@ -13,10 +13,11 @@ DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
 SOURCE = {"id": "ghcn", "name": "NOAA NCEI GHCN-Daily", "url": "https://www.ncei.noaa.gov/"}
 MAX_KM = 50
 MIN_YEARS = 30  # of the needed data type, since 1981
-# The agent gives one question 120 s. One call stops starting requests after DEADLINE_S, and a request waits at
-# most TIMEOUT_S, so the worst case is about 80 s.
+# The agent gives one question 120 s. One call stops starting requests after DEADLINE_S. httpx timeouts are per
+# phase (connect 5 s, then 20 s each for write and read, and a server that trickles bytes can restart the read
+# clock), so one request is not hard-capped: a normal worst case is about 60 + 5 + 20 + 20 = 105 s.
 DEADLINE_S = 60
-TIMEOUT_S = 20
+TIMEOUT = httpx.Timeout(20, connect=5)
 # Data types that give each variable; the first group a station has enough record for is used.
 NEED = {"air_temp": [("TAVG",), ("TMAX", "TMIN")], "air_temp_max": [("TMAX",)], "precip": [("PRCP",)]}
 HOW = {"air_temp": "mean", "air_temp_max": "max", "precip": "mean"}  # daily -> monthly rule
@@ -40,10 +41,18 @@ def parse_search(resp: dict) -> list[dict]:
             types = {}
             for d in st["dataTypes"]:
                 try:
-                    types[d["id"]] = (d["startDate"][:10], d["endDate"][:10], float(d.get("coverage", 100.0)))
+                    start, end = d["startDate"][:10], d["endDate"][:10]
+                    date.fromisoformat(start), date.fromisoformat(end)  # a bad date skips this data type
+                    coverage = float(d.get("coverage", 100.0))
+                    if not isfinite(coverage):
+                        continue
+                    types[d["id"]] = (start, end, coverage)
                 except (KeyError, TypeError, ValueError, AttributeError):
                     continue
-            out.append({"id": st["id"], "name": st["name"], "lat": float(lat), "lon": float(lon), "types": types})
+            lat, lon = float(lat), float(lon)
+            if not (isfinite(lat) and isfinite(lon) and isinstance(st["id"], str) and isinstance(st["name"], str)):
+                continue
+            out.append({"id": st["id"], "name": st["name"], "lat": lat, "lon": lon, "types": types})
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             continue
     return out
@@ -56,7 +65,7 @@ def _check(deadline: float) -> None:
 
 def _get(url: str, params: dict) -> httpx.Response:
     try:
-        r = httpx.get(url, params=params, timeout=TIMEOUT_S)
+        r = httpx.get(url, params=params, timeout=TIMEOUT)
         r.raise_for_status()
     except httpx.HTTPError as e:
         raise ValueError(f"NOAA's station service did not answer ({type(e).__name__}). Try again in a minute.") from None
@@ -147,12 +156,13 @@ def parse(resp: list[dict], types: tuple[str, ...]) -> tuple[list[str], list[flo
         if len(parts) > 1 and parts[1].strip():
             return None
         try:
-            return float(row[k])
+            v = float(row[k])
         except (KeyError, ValueError, TypeError):
             return None
+        return v if isfinite(v) else None  # "NaN" and "inf" are not readings
     by_day = {}
     for row in resp:
-        if not isinstance(row, dict) or not row.get("DATE"):
+        if not isinstance(row, dict) or not isinstance(row.get("DATE"), str) or not row["DATE"]:
             continue
         vals = [num(row, t) for t in types]
         by_day[row["DATE"]] = None if None in vals else sum(vals) / len(vals)
