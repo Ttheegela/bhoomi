@@ -68,9 +68,9 @@ Container `figure`, width 100%, SVG `viewBox` scales with it. Two stacked panels
 - Panel A "Raw monthly values" (units on y axis): thin line.
 - Panel B "Seasons removed, with trend" (y label "Change from the usual for that month ({units})"): deseasonalized line, trend line, uncertainty fan. Deseasonalized = value − its calendar month's mean over all non-null values.
 - Sizes: viewBox 340 x 340 at <= 599 px (A 110 tall, B 190, axis 40); 640 x 420 at 600-899 px; 720 x 460 at >= 900 px (A 140, B 260). Min text in SVG 12 px on screen (scale font with the viewBox).
-- Marks (distinct without colour): raw = 1 px solid line, grey `--chart-faint`. Deseasonalized = 1.5 px solid line, `--ink`. Trend = 3 px dashed `--ink` (8 4), drawn over the line. Fan = flat fill `--ink` at 14% opacity, no outline, plus 1 px dotted edges (2 3) so it reads in high contrast mode.
+- Marks (distinct without colour): raw = 1 px solid line, grey `--chart-faint`. Seasons-removed monthly line = faint, 1 px, `--chart-faint`; yearly averages of it (years with at least 6 valid months) = dots in `--ink`. Trend = solid line, about 3.5 px, `--ink`, drawn over the dots. Fan = flat fill `--ink` at 22% opacity, no outline, plus 1.5 px dotted edges (2 3) so it reads in high contrast mode.
 - Trend line: t in decades since first month; intercept = median(deseasonalized − slope_per_decade × t); y = intercept + slope × t. Fan: two lines through the pivot (median t, trend value there) with slopes `ci_low` and `ci_high`, filled between them across the whole x range. The browser draws only; printed numbers come from the API.
-- Axes: x ticks every 10 years if the span > 40 years, else every 5, else yearly; labels "1980", "1990". y: 4 to 5 "nice" ticks, labels with up to 2 decimals, light 1 px grid `--hairline`. Panel B draws a heavier zero line. X axis title: "Year". Y axis in panel A: "{name} ({units})".
+- Axes: x ticks by screen spacing: the smallest step from 1, 2, 5, 10, 20, 25, 50 years whose ticks are at least 56 screen px apart (a span of 2 years or more always shows at least two labels); labels "1980", "1990". y: 4 to 5 "nice" ticks, labels with up to 2 decimals, light 1 px grid `--hairline`. Panel B draws a heavier zero line. X axis title: "Year". Y axis in panel A: "{name} ({units})".
 - Nulls: break the line (no interpolation, no dots). Say in the legend note: "Gaps in the line are months with no data."
 - Legend (HTML, below chart, each item an SVG swatch drawn in the same stroke style plus words): "Raw monthly value" / "Seasons removed" / "Trend line" / "95% range of the trend".
 - Readout instead of a floating tooltip (works on touch): a line under the chart, `aria-live="polite"`, empty text "Tap or hover the chart to read a month." On pointer move/tap, snap to the nearest month, draw a 1 px vertical rule, and show "Mar 2004: 24.1 degC raw, 0.3 degC above the usual March." Values come from the series; the difference is the plotted deseasonalized value. Chart `tabindex="0"`; Left/Right move the rule by 1 month, Shift+Left/Right by 12, Home/End jump, Esc clears.
@@ -100,7 +100,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - [ ] Visakhapatnam air temperature shows "No clear change" in a card the same size as the others, with the 95% range and p-value in words.
 - [ ] Delhi + Sea level shows the 400 `detail` text verbatim plus the two recovery buttons.
 - [ ] Forced 502, network failure, empty series and bad latitude each show their exact copy above.
-- [ ] Both chart panels, trend line (dashed), fan and legend visible; a null gap is a break, not a line.
+- [ ] Both chart panels, trend line (solid, about 3.5 px), yearly-average dots, fan and legend visible; a null gap is a break, not a line.
 - [ ] Readout works by hover, tap and arrow keys. Table opens and scrolls.
 - [ ] No hex colour outside the tokens, no external requests, no NASA logo; the AI label shows without scrolling at 375 px.
 - [ ] Tab order follows reading order; ask slot is hidden and empty.
@@ -109,3 +109,51 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Geocoding is out of scope; presets plus lat/lon cover it. For custom coordinates `place.name` may be empty; the UI falls back to "lat, lon".
 - `/api/variables` should include `sources` and `good_for` per entry as in CONTRACTS (used for the optional source select and help text).
 - Nice to have: `/api/trend` including a one-line `summary` so the chart caption and the agent say the same words. Not required; the UI builds the text from fields.
+
+## 9. Review checklist (apply after every UI change)
+1. No sample data is shown as real. A demo value is labelled "sample" or not shown. Every number names its source with a link, including numbers inside error cards.
+2. What we computed is marked. The verdict, trend line, shaded band, yearly averages and "seasons removed" line carry a grey label: "Trend, range and verdict: our calculation (Mann-Kendall test, Sen's slope)" beside a "Data: {source} ↗" link. The legend groups "From the dataset" and "Our calculation".
+3. The verdict sentence holds the number and the uncertainty in plain words, for example "about +42.5 mm per decade; the shaded band shows where the true trend likely sits". Never "X% chance it's real" or "95% sure". Never claim more than the data show.
+4. Contrast meets WCAG AA in light and dark. Text is at least 4.5:1. Borders, icons and chart lines are at least 3:1. Recompute from the tokens after any token change, and measure muted text on the surface and the inverted verdict header in both themes.
+5. Labels are sentence case, grey, 14 px (12 px minimum), regular weight. No ALL CAPS, no small caps, no letter-spacing.
+6. Colour appears only inside the data and always with a legend. Today there is none; everything is monochrome.
+7. At 375 px nothing sticky covers content. Tap targets (chips, buttons, inputs, select, summary, skip link, source links) are at least 48 px. The verdict number, range and source are on screen without scrolling on a first load.
+8. The chart has an accessible name that states place, variable, period, verdict, slope and range. Decorative marks are `aria-hidden`. Icon-only controls have a screen-reader name.
+9. Chart: x tick labels at least 56 screen px apart; axis titles never touch a tick label; the trend line stays visible on a series of 1,400 points.
+10. QA trap: in a hidden or background browser pane, CSS transitions freeze, so screenshots can look stale. While verifying, inject `*{transition:none!important;animation-duration:0s!important}` and remove it afterwards.
+
+## 10. Decisions
+### Decided by Tarun
+- A visible "Built with AI assistance" label.
+- Every number names its data source with a link.
+- No NASA logos or branding.
+- Only public data.
+- Monochrome tokens (black, white, greys; no gradients).
+
+### Chosen by the agent (swappable)
+- Single-page flow: place chips, then measurement, then verdict and chart.
+- Hand-written SVG chart and no JS libraries or web fonts.
+- Two stacked chart panels (raw, then seasons removed with trend and band).
+- Trend line drawn solid, about 3.5 px, over a faint 1 px monthly line, with yearly averages as dots (from Sairam's PR #28).
+- Shaded band as a 22% ink fill with dotted edges.
+- Verdict shown as a word plus a shape (▲ ▼ ≈), in an inverted headline bar.
+- "No clear change" styled at the same size and weight as the other verdicts.
+- Readout line under the chart instead of a tooltip.
+- Keyboard chart control: arrows, shift-arrows, Home, End and Esc.
+- Chart x ticks chosen by screen spacing (at least 56 px).
+- Four preset places: Atlantic City, Delhi, Visakhapatnam, Princeton.
+- First load shows Atlantic City sea level.
+- Coordinates in a closed "Type coordinates or use my location" section.
+- Hash state `#variable=..&lat=..&lon=..` (two decimals).
+- Breakpoints 600 and 900 px; 960 px container; 16/24 px side padding.
+- Type scale: 14 small, 16 body, 18 lead, 22/24 h2, 28/32 verdict.
+- Greys: light #111 / #4A4A4A / #767676 / #F4F4F4; dark #F2F2F2 / #BDBDBD / #8C8C8C / #1A1A1A.
+- Tap targets at least 48 px.
+- Focus ring 3 px, offset 2 px.
+- p-value wording: "Below 0.05 counts as a clear change."
+- Confidence interval described as the range of trends the data support.
+- Seasons removed by subtracting each calendar month's mean.
+- Temperature shown as °C.
+- Error and empty-state copy.
+- Loading placeholder is a flat grey block with no motion.
+- Labels at 14 px instead of 12 px.

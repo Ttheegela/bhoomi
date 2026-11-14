@@ -11,6 +11,10 @@ const PRESETS = [
   { label: 'Visakhapatnam', lat: 17.69, lon: 83.22, variable: 'air_temp' },
   { label: 'Princeton, NJ', lat: 40.35, lon: -74.66, variable: 'air_temp' },
 ];
+const SOURCES = {
+  power: { name: 'NASA POWER (MERRA-2)', url: 'https://power.larc.nasa.gov/' },
+  coops: { name: 'NOAA CO-OPS tide gauges', url: 'https://tidesandcurrents.noaa.gov/' },
+};
 const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'GRACE/GRACE-FO' };
 
 /* ---------- pure helpers (no DOM; exported for a node check) ---------- */
@@ -60,8 +64,43 @@ function niceTicks(lo, hi, n) {
   return { ticks, step, lo: ticks[0], hi: ticks[ticks.length - 1] };
 }
 
-function yearStep(spanYears) { return spanYears > 40 ? 10 : spanYears > 5 ? 5 : 1; }
-// ponytail: "every 5 if span <= 40, else yearly" is read as yearly only for spans of 5 years or less.
+// Year ticks by screen spacing: smallest step in STEPS whose ticks are >= 56 screen px apart
+// (pw = plot width in viewBox units, cw = container px, vw = viewBox width). Needs >= 2 labels when span >= 2 years.
+const TICK_STEPS = [1, 2, 5, 10, 20, 25, 50];
+function yearTicks(m0, m1, pw, cw, vw) {
+  const span = (m1 - m0) / 12, y0 = Math.floor(m0 / 12), y1 = Math.floor(m1 / 12);
+  const at = (step) => { const r = []; for (let y = Math.ceil(m0 / 12 / step) * step; y * 12 <= m1; y += step) r.push(y); return r; };
+  const px = (step) => span > 0 ? step * pw / span * (cw / vw) : Infinity;
+  const need = span >= 2 ? 2 : 1;
+  let step = TICK_STEPS.find((st) => px(st) >= 56 && at(st).length >= need);
+  if (step === undefined) step = TICK_STEPS.slice().reverse().find((st) => at(st).length >= need) || 1;
+  return at(step).filter((y) => y >= y0 && y <= y1);
+}
+
+// Yearly averages of seasons-removed values, drawing only. A year needs >= 6 valid months;
+// x is the mean month index of its valid months.
+function yearlyAverages(ms, des) {
+  const years = new Map();
+  des.forEach((v, i) => {
+    if (v == null) return;
+    const y = Math.floor(ms[i] / 12), e = years.get(y) || { sum: 0, n: 0, m: 0 };
+    e.sum += v; e.n += 1; e.m += ms[i];
+    years.set(y, e);
+  });
+  const out = [];
+  years.forEach((e, y) => { if (e.n >= 6) out.push({ year: y, x: e.m / e.n, mean: e.sum / e.n }); });
+  return out.sort((p, q) => p.x - q.x);
+}
+
+// Dot radius: at most rmax and at most 0.35 of the typical gap between neighbouring dots.
+function dotRadius(xs, rmax) {
+  const g = [];
+  for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] > 0) g.push(xs[i] - xs[i - 1]);
+  return g.length ? Math.min(rmax, 0.35 * median(g)) : rmax;
+}
+
+function unitLabel(u) { return u === 'degC' ? '°C' : u; }
+function lcName(n) { return /^[A-Z]{2,}/.test(n) ? n : n.charAt(0).toLowerCase() + n.slice(1); }
 
 function fixed(x, d) {
   let s = x.toFixed(d);
@@ -79,45 +118,53 @@ function fmtNum(x, signed) {
   const s = fixed(x, d);
   return signed && x > 0 ? '+' + s : s;
 }
-function fmtVal(x, units) { return fmtNum(x, true) + (units ? ' ' + units : ''); }
+function fmtVal(x, units) { return fmtNum(x, true) + (units ? ' ' + unitLabel(units) : ''); }
 function fmtP(p) { return p < 0.001 ? '< 0.001' : String(p); }
 
 function stripParens(name) { return String(name).replace(/\s*\([^)]*\)\s*$/, ''); }
-function placeName(place) {
-  return place && place.name ? place.name : place ? place.lat.toFixed(2) + ', ' + place.lon.toFixed(2) : '';
+// Station sources (coops, ghcn) give a real station name: use it as given. Otherwise a preset
+// within 0.005 degrees gives its chip label; any other point is "the spot at lat, lon".
+function placeFor(lat, lon, apiName, sourceId) {
+  if (apiName && (sourceId === 'coops' || sourceId === 'ghcn')) return apiName;
+  const p = PRESETS.find((q) => Math.abs(q.lat - lat) <= 0.005 && Math.abs(q.lon - lon) <= 0.005);
+  return p ? p.label : `the spot at ${Number(lat).toFixed(2)}, ${Number(lon).toFixed(2)}`;
 }
 function monthLabel(t) { const m = monthIndex(t); return MONTHS[m % 12] + ' ' + Math.floor(m / 12); }
 
 function verdictCopy(t, name, place) {
   const y0 = t.period.start.slice(0, 4), y1 = t.period.end.slice(0, 4);
   const s = fmtVal(t.slope_per_decade, t.units), lo = fmtVal(t.ci_low, t.units), hi = fmtVal(t.ci_high, t.units);
+  const band = `The shaded band on the chart, ${lo} to ${hi} per decade, shows where the true trend likely sits.`;
   if (t.verdict === 'rising') {
     return { head: 'Rising', shape: 'up',
-      p1: `${name} at ${place} is going up: ${s} per decade, from ${y0} to ${y1}.`,
-      p2: `The 95% range is ${lo} to ${hi} per decade. Even the low end is above zero, so this is a clear rise.` };
+      p1: `${name} at ${place} is going up, about ${s} per decade from ${y0} to ${y1}. ${band}`,
+      p2: 'Even the low end of the band is above zero, so this is a clear rise.' };
   }
   if (t.verdict === 'falling') {
     return { head: 'Falling', shape: 'down',
-      p1: `${name} at ${place} is going down: ${s} per decade, from ${y0} to ${y1}.`,
-      p2: `The 95% range is ${lo} to ${hi} per decade. Even the high end is below zero, so this is a clear fall.` };
+      p1: `${name} at ${place} is going down, about ${s} per decade from ${y0} to ${y1}. ${band}`,
+      p2: 'Even the high end of the band is below zero, so this is a clear fall.' };
   }
   const sl = t.slope_per_decade;
   const incl = t.ci_low <= 0 && t.ci_high >= 0 ? 'includes zero' : 'is too wide to rule out no change';
+  const lean = sl === 0 ? `The data show no lean either way (${s} per decade)` : `The data lean ${sl > 0 ? 'up' : 'down'} by ${s} per decade`;
   return { head: 'No clear change', shape: 'flat',
-    p1: `We can't tell ${name} at ${place} apart from no change, ${y0} to ${y1}.`,
-    p2: `${sl === 0 ? `The data show no lean either way: ${s} per decade.` : `The data lean ${sl > 0 ? 'up' : 'down'}: ${s} per decade.`} But the 95% range (${lo} to ${hi}) ${incl}. That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs.` };
+    p1: `We can't tell ${lcName(name)} at ${place} apart from no change, ${y0} to ${y1}. ${lean}, but the shaded band (${lo} to ${hi}) ${incl}.`,
+    p2: 'That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs.' };
 }
 
 function captionText(t, name, place) {
-  const y = t.verdict === 'rising' ? 'rises' : t.verdict === 'falling' ? 'falls' : 'stays flat at';
+  const s = fmtVal(t.slope_per_decade, t.units);
+  const amt = fmtNum(Math.abs(t.slope_per_decade), false) + ' ' + unitLabel(t.units);
+  const y = t.verdict === 'rising' ? `rises by ${amt} per decade` : t.verdict === 'falling' ? `falls by ${amt} per decade` : `moves by ${s} per decade, which we can't tell from zero`;
   const v = t.verdict === 'no_clear_change' ? 'no clear change' : t.verdict;
-  return `${name} at ${place}, ${t.period.start} to ${t.period.end}. The trend line ${y}, ${fmtVal(t.slope_per_decade, t.units)} per decade (95% range ${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)}). Verdict: ${v}.`;
+  return `${name} at ${place}, ${t.period.start} to ${t.period.end}. The trend line ${y}. Verdict: ${v}.`;
 }
 
 function layoutFor(w) {
-  if (w <= 599) return { vw: 340, vh: 340, hA: 110, hB: 190 };
-  if (w < 900) return { vw: 640, vh: 420, hA: 150, hB: 230 };
-  return { vw: 720, vh: 460, hA: 140, hB: 260 };
+  if (w <= 599) return { vw: 340, hA: 126, hB: 206 };
+  if (w < 900) return { vw: 640, hA: 166, hB: 246 };
+  return { vw: 720, hA: 156, hB: 276 };
 }
 
 function nearestIndex(ms, m) {
@@ -149,17 +196,40 @@ function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
 function fillSource(node, source) {
   clear(node);
   node.append('Source: ');
+  srcLink(node, source);
+}
+
+function srcLink(node, source) {
   if (source && typeof source.url === 'string' && source.url.startsWith('https://')) {
     node.append(el('a', { href: source.url }, source.name));
   } else {
     node.append(source ? source.name : 'unknown');
   }
 }
+// "Data: <name> ↗. Trend, range and verdict: our calculation (...)."
+function fillDataLine(node, source) {
+  clear(node);
+  node.append('Data: ');
+  srcLink(node, source);
+  node.append(" ↗. Trend, range and verdict: our calculation (Mann-Kendall test, Sen's slope).");
+}
+// "Raw values: <name>. Trend and range: our calculation."
+function fillRawLine(node, source) {
+  clear(node);
+  node.append('Raw values: ');
+  srcLink(node, source);
+  node.append('. Trend and range: our calculation.');
+}
 
 /* ---------- state ---------- */
 
 const state = { variables: [], req: 0, series: null, trend: null, selIdx: null, fromGeo: false, params: null, slowTimer: 0, chart: null };
 
+function placeOf(t) {
+  const q = state.params || {};
+  const lat = q.lat !== undefined ? q.lat : t.place.lat, lon = q.lon !== undefined ? q.lon : t.place.lon;
+  return placeFor(lat, lon, t.place && t.place.name, t.source && t.source.id);
+}
 function varById(id) { return state.variables.find((v) => v.id === id); }
 function nameOf(id) { const v = varById(id); return stripParens(v ? v.name : String(id).replace(/_/g, ' ')); }
 
@@ -195,6 +265,7 @@ function markChips() {
     b.setAttribute('aria-pressed', String(p.lat === lat && p.lon === lon));
   });
 }
+function openCoords() { $('coords').open = true; }
 function applyPreset(i) {
   const p = PRESETS[i];
   state.fromGeo = false;
@@ -210,7 +281,7 @@ function fillVariables() {
 }
 function syncVariableUI() {
   const v = varById($('variable').value);
-  $('variable-help').textContent = v ? `Good for: ${v.good_for}. Resolution: ${v.resolution}.` : '';
+  $('variable-help').textContent = v ? `Good for: ${v.good_for}.` : '';
   const src = $('source');
   clear(src);
   const many = v && Array.isArray(v.sources) && v.sources.length > 1;
@@ -231,7 +302,12 @@ function readParams() {
     return x;
   };
   const lat = one('lat', 90, 'Latitude'), lon = one('lon', 180, 'Longitude');
-  if (!ok) { const first = document.querySelector('[aria-invalid="true"]'); if (first) first.focus(); return null; }
+  if (!ok) {
+    openCoords();
+    const first = document.querySelector('[aria-invalid="true"]');
+    if (first) first.focus();
+    return null;
+  }
   const v = varById($('variable').value);
   const p = { variable: $('variable').value, lat, lon };
   if (v && !$('source-field').hidden && $('source').value !== v.sources[0]) p.source = $('source').value;
@@ -240,7 +316,13 @@ function readParams() {
 
 function submit(user) {
   const p = readParams();
-  if (!p) return;
+  if (!p) {
+    state.req++; // drop any answer still on its way
+    setBusy(false);
+    ['chart-wrap', 'more', 'verdict-card', 'problem'].forEach((id) => { $(id).hidden = true; });
+    state.series = null; state.trend = null;
+    return;
+  }
   if (!state.fromGeo) history.replaceState(null, '', `#variable=${p.variable}&lat=${p.lat.toFixed(2)}&lon=${p.lon.toFixed(2)}`);
   markChips();
   run(p, user);
@@ -279,6 +361,7 @@ async function run(params, user) {
   const id = ++state.req;
   state.params = params;
   const first = !state.series && $('problem').hidden && $('verdict-card').hidden;
+  $('problem').hidden = true;
   setBusy(true, first);
   const [sr, tr] = await Promise.all([api('/api/series', params), api('/api/trend', params)]);
   if (id !== state.req) return; // stale
@@ -334,6 +417,7 @@ function problemFor(r, params) {
   const out = { heading: "We can't answer that for this place.", paras: [detail] };
   if (params.variable === 'sea_level') {
     out.paras.push('Tide gauges sit along US coasts.');
+    out.source = SOURCES.coops;
     out.buttons = [{ label: 'Try Atlantic City, NJ', fn: () => applyPreset(0) }];
     if (varById('air_temp')) {
       out.buttons.push({ label: 'Show air temperature here', fn: () => { $('variable').value = 'air_temp'; syncVariableUI(); submit(true); } });
@@ -348,6 +432,7 @@ function showProblem(p) {
   const body = $('problem-body');
   clear(body);
   p.paras.forEach((t) => body.append(el('p', {}, t)));
+  if (p.source) { const sp = el('p', { class: 'source' }); fillSource(sp, p.source); body.append(sp); }
   const act = $('problem-actions');
   clear(act);
   (p.buttons || []).forEach((b) => {
@@ -374,14 +459,14 @@ function shapeSvg(kind) {
 }
 
 function renderVerdict(t) {
-  const c = verdictCopy(t, nameOf(t.variable), placeName(t.place));
+  const c = verdictCopy(t, nameOf(t.variable), placeOf(t));
   const h = $('verdict-heading');
   clear(h);
   h.append(shapeSvg(c.shape), c.head);
   $('verdict-p1').textContent = c.p1;
   $('verdict-p2').textContent = c.p2;
   $('verdict-evidence').textContent = `p-value: ${fmtP(t.p_value)}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change.`;
-  fillSource($('verdict-source'), t.source);
+  fillDataLine($('verdict-source'), t.source);
   $('verdict-card').hidden = false;
   return h;
 }
@@ -391,7 +476,7 @@ function renderMore(t, s) {
   clear(dl);
   const rows = [
     ["How fast it's changing", "Sen's slope", fmtVal(t.slope_per_decade, t.units) + ' per decade'],
-    ["Range we're 95% sure it falls in", 'confidence interval', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
+    ['Range of trends the data support', 'confidence interval', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
     ['How easily luck explains it', 'p-value', fmtP(t.p_value)],
     ['Period', null, `${t.period.start} to ${t.period.end}`],
     ['Months used', 'n', String(t.n)],
@@ -421,14 +506,14 @@ function renderMore(t, s) {
 
 function renderTable(s) {
   const name = nameOf(s.variable);
-  $('table-col').textContent = `${name} (${s.units})`;
-  fillSource($('table-source'), s.source);
+  $('table-col').textContent = `${name} (${unitLabel(s.units)})`;
+  fillRawLine($('table-source'), s.source);
   const body = $('table-body');
   clear(body);
   const frag = document.createDocumentFragment();
   s.times.forEach((t, i) => {
     const v = s.values[i];
-    frag.append(el('tr', {}, el('td', {}, t), el('td', {}, v == null ? 'no data' : String(v))));
+    frag.append(el('tr', {}, el('td', {}, t), el('td', {}, v == null ? 'no data' : String(v).replace('-', MINUS))));
   });
   body.append(frag);
 }
@@ -442,14 +527,16 @@ function renderChart(s, t) {
   const ms = times.map(monthIndex);
   const des = deseasonalize(times, vals);
   const m0 = ms[0], m1 = ms[ms.length - 1];
-  const name = nameOf(s.variable), place = placeName(t ? t.place : s.place);
+  const name = nameOf(s.variable), place = t ? placeOf(t) : placeFor(state.params.lat, state.params.lon, s.place && s.place.name, s.source && s.source.id);
+  const units = unitLabel(s.units);
   const LY = layoutFor(window.innerWidth);
   const cw = box.clientWidth || LY.vw;
   const fs = Math.max(12, Math.round(12 * LY.vw / cw));
   const ml = Math.round(fs * 3.4) + 4, mr = 8, vw = LY.vw;
-  const axis = Math.max(40, 2 * fs + 8);
-  const vh = Math.max(LY.vh, LY.hA + LY.hB + axis);
-  const hh = 2 * (fs + 2);
+  const axis = Math.max(40, 2 * fs + 12);
+  const gap = fs + 8; // between the upper panel's bottom and the lower panel's title
+  const vh = LY.hA + gap + LY.hB + axis;
+  const hh = Math.round(fs * 3.25); // panel header: title, y label, then room above the top tick label
   const pw = vw - ml - mr;
   const xS = (m) => ml + (m1 === m0 ? 0 : (m - m0) / (m1 - m0) * pw);
 
@@ -457,7 +544,7 @@ function renderChart(s, t) {
   const rawT = niceTicks(Math.min(...nn(vals)), Math.max(...nn(vals)));
   const desT = niceTicks(Math.min(0, ...nn(des)), Math.max(0, ...nn(des)));
   const A = { top: hh, bot: LY.hA - 4, t: rawT, y0: 0 };
-  const yB = vh - axis - LY.hB;
+  const yB = LY.hA + gap;
   const B = { top: yB + hh, bot: yB + LY.hB, t: desT, y0: yB };
   [A, B].forEach((p) => { p.yS = (v) => p.top + (p.t.hi - v) / (p.t.hi - p.t.lo) * (p.bot - p.top); });
 
@@ -465,14 +552,11 @@ function renderChart(s, t) {
   root.append(svg('title', { id: 'c-title' }, `${name} at ${place}`));
   root.append(svg('desc', { id: 'c-desc' }, t ? captionText(t, name, place) : `${name} at ${place}, ${times[0]} to ${times[times.length - 1]}.`));
 
-  // x ticks
-  const y0y = Math.floor(m0 / 12), y1y = Math.floor(m1 / 12), step = yearStep((m1 - m0) / 12);
-  const xt = [];
-  for (let y = Math.ceil(y0y / step) * step; y <= y1y; y += step) if (y * 12 >= m0 && y * 12 <= m1) xt.push(y);
+  const xt = yearTicks(m0, m1, pw, cw, vw);
 
   const panel = (P, title, ylabel) => {
     root.append(svg('text', { x: 0, y: P.y0 + fs, class: 'c-text c-title' }, title));
-    root.append(svg('text', { x: 0, y: P.y0 + 2 * fs + 2, class: 'c-text' }, ylabel));
+    root.append(svg('text', { x: 0, y: P.y0 + Math.round(fs * 2.15), class: 'c-text' }, ylabel));
     xt.forEach((y) => root.append(svg('line', { x1: xS(y * 12), x2: xS(y * 12), y1: P.top, y2: P.bot, class: 'c-grid' })));
     P.t.ticks.forEach((v) => {
       const y = P.yS(v);
@@ -480,8 +564,8 @@ function renderChart(s, t) {
       root.append(svg('text', { x: ml - 6, y: y + fs * 0.35, 'text-anchor': 'end', class: 'c-text' }, tickLabel(v, P.t.step)));
     });
   };
-  panel(A, 'Raw monthly values', `${name} (${s.units})`);
-  panel(B, 'Seasons removed, with trend', `Change from the usual for that month (${s.units})`);
+  panel(A, 'Raw monthly values', `${name} (${units})`);
+  panel(B, 'Seasons removed, with trend', `Change from the usual for that month (${units})`);
   xt.forEach((y) => root.append(svg('text', { x: xS(y * 12), y: B.bot + fs + 3, 'text-anchor': 'middle', class: 'c-text' }, String(y))));
   root.append(svg('text', { x: ml + pw / 2, y: B.bot + 2 * fs + 6, 'text-anchor': 'middle', class: 'c-text' }, 'Year'));
   root.append(svg('line', { x1: ml, x2: vw - mr, y1: B.yS(0), y2: B.yS(0), class: 'c-zero' }));
@@ -498,6 +582,7 @@ function renderChart(s, t) {
   root.append(svg('path', { d: path(A, vals), class: 's-raw' }));
   root.append(svg('path', { d: path(B, des), class: 's-des' }));
 
+  let trendLine = null;
   if (t) {
     const ts = ms.map((m) => (m - m0) / 120); // decades since the first month
     const b0 = trendIntercept(ts, des, t.slope_per_decade);
@@ -513,33 +598,41 @@ function renderChart(s, t) {
     g.append(svg('polygon', { points: `${x0},${l0} ${x1},${l1} ${x1},${h1} ${x0},${h0}`, class: 's-fan' }));
     g.append(svg('line', { x1: x0, y1: l0, x2: x1, y2: l1, class: 's-edge' }));
     g.append(svg('line', { x1: x0, y1: h0, x2: x1, y2: h1, class: 's-edge' }));
-    g.append(svg('line', { x1: x0, y1: m0y, x2: x1, y2: m1y, class: 's-trend' }));
+    trendLine = { x1: x0, y1: m0y, x2: x1, y2: m1y };
     root.append(clip, g);
   }
+
+  // Yearly averages (dots) sit over the faint monthly line; the solid trend line goes on top. Drawing only: never printed.
+  const dots = yearlyAverages(ms, des);
+  const r = dotRadius(dots.map((d) => xS(d.x)), Math.max(2.5, fs * 0.22));
+  dots.forEach((d) => root.append(svg('circle', { cx: xS(d.x).toFixed(1), cy: B.yS(d.mean).toFixed(1), r: r.toFixed(2), class: 's-year', 'aria-hidden': 'true' })));
+  if (trendLine) root.append(svg('line', Object.assign({ class: 's-trend', 'clip-path': 'url(#c-clip)' }, trendLine)));
 
   const rule = svg('line', { y1: A.top, y2: B.bot, class: 'c-rule', visibility: 'hidden' });
   root.append(rule);
   box.append(root);
 
   $('chart-caption').textContent = t ? captionText(t, name, place) : `${name} at ${place}.`;
-  fillSource($('chart-source'), t ? t.source : s.source);
+  fillRawLine($('chart-source'), t ? t.source : s.source);
 
   // readout
   const readout = $('readout');
   const EMPTY = 'Tap or hover the chart to read a month.';
+  const dRange = Math.max(...nn(des)) - Math.min(...nn(des));
   const select = (i) => {
     state.selIdx = i;
+    readout.classList.toggle('sel', i != null);
     if (i == null) { rule.setAttribute('visibility', 'hidden'); readout.textContent = EMPTY; return; }
     const x = xS(ms[i]);
     rule.setAttribute('x1', x); rule.setAttribute('x2', x); rule.setAttribute('visibility', 'visible');
     const mi = ms[i] % 12, v = vals[i];
     if (v == null) { readout.textContent = `${monthLabel(times[i])}: no data.`; return; }
-    const d = des[i], rel = d === 0 ? 'at' : d > 0 ? 'above' : 'below';
-    readout.textContent = `${monthLabel(times[i])}: ${v} ${s.units} raw, ${rel} the usual ${MONTHS_LONG[mi]}.`;
+    const d = des[i], rel = Math.abs(d) < 1e-9 * dRange ? 'at' : d > 0 ? 'above' : 'below';
+    readout.textContent = `${monthLabel(times[i])}: ${String(v).replace('-', MINUS)} ${units} raw, ${rel} the usual ${MONTHS_LONG[mi]}.`;
   };
   const at = (e) => {
-    const r = root.getBoundingClientRect();
-    const xv = (e.clientX - r.left) / r.width * vw;
+    const rc = root.getBoundingClientRect();
+    const xv = (e.clientX - rc.left) / rc.width * vw;
     select(nearestIndex(ms, m0 + (xv - ml) / pw * (m1 - m0)));
   };
   root.addEventListener('pointermove', at);
@@ -561,13 +654,22 @@ function renderChart(s, t) {
 
 /* ---------- start ---------- */
 
+// Only a complete, in-range hash is used; anything else is ignored and the default preset loads.
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
-  if (!h.get('variable') || !h.has('lat') || !h.has('lon')) return null;
-  return { variable: h.get('variable'), lat: h.get('lat'), lon: h.get('lon') }; // raw text; submit() validates
+  const num = (k) => { const r = (h.get(k) || '').trim(); return r === '' ? NaN : Number(r); };
+  const lat = num('lat'), lon = num('lon');
+  if (!h.get('variable') || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { variable: h.get('variable'), lat, lon };
+}
+
+function fillFooter() {
+  const ul = $('footer-sources');
+  Object.values(SOURCES).forEach((src) => { const li = el('li', {}); srcLink(li, src); ul.append(li); });
 }
 
 async function init() {
+  fillFooter();
   const r = await api('/api/variables');
   if (!r.ok || !Array.isArray(r.body) || !r.body.length) {
     const p = problemFor(r.ok ? { status: 500 } : r, {});
@@ -580,6 +682,7 @@ async function init() {
   const h = readHash();
   const start = h && varById(h.variable) ? h : PRESETS[0];
   $('lat').value = start.lat; $('lon').value = start.lon; $('variable').value = start.variable;
+  if (!PRESETS.some((p) => Math.abs(p.lat - start.lat) <= 0.005 && Math.abs(p.lon - start.lon) <= 0.005)) openCoords();
   syncVariableUI();
   markChips();
   submit(false);
@@ -590,6 +693,7 @@ $('controls').addEventListener('submit', (e) => { e.preventDefault(); if ($('go'
 $('variable').addEventListener('change', () => { syncVariableUI(); submit(true); });
 $('source').addEventListener('change', () => submit(true));
 $('locate').addEventListener('click', locate);
+['lat', 'lon'].forEach((id) => $(id).addEventListener('focus', openCoords));
 ['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => { state.fromGeo = false; markChips(); }));
 let lastBand = layoutFor(window.innerWidth).vw;
 window.addEventListener('resize', () => {
