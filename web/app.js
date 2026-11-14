@@ -802,6 +802,7 @@ window.addEventListener('resize', () => {
   const b = layoutFor(window.innerWidth).vw;
   if (b !== lastBand && state.series && !$('chart-wrap').hidden) { lastBand = b; renderChart(state.series, state.trend); }
 });
+$('skip').addEventListener('click', (e) => { e.preventDefault(); $('h-' + tabState.tab).focus(); });
 buildTabbar();
 showTab(parseHash(location.hash).tab, false);
 window.addEventListener('popstate', onLocation);

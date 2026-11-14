@@ -222,3 +222,39 @@ pre { margin: 0; padding: var(--s3); background: var(--surface); border: 1px sol
   .tools > div { display: grid; grid-template-columns: 200px 1fr; gap: var(--s3); }
   .tools dd { margin: 0; }
 }
+
+/* ask */
+#panel-ask > * + *, #ask-ui > * + * { margin-top: var(--s3); }
+#ask-ui p { margin-bottom: 0; }
+#ask-thread > * + * { margin-top: var(--s3); }
+#ask-thread:empty, #ask-status:empty { display: none; }
+textarea { width: 100%; min-height: 48px; padding: var(--s3); font: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+.ask-row { display: flex; flex-direction: column; gap: var(--s3); }
+.ask-btns { display: flex; flex-direction: column; gap: var(--s2); }
+.msg { padding: var(--s3); border-radius: 8px; }
+.msg > * + * { margin-top: var(--s3); }
+.msg p { margin-bottom: 0; }
+.msg-label { font-size: 14px; color: var(--ink-2); }
+.msg-text { white-space: pre-wrap; }
+.msg.you { background: var(--bg); border: 1px solid var(--line); }
+.msg.ai { background: var(--surface); border-left: 1px dashed var(--line); padding: var(--s3) var(--s4); }
+.msg.err { background: var(--bg); border: 1px solid var(--line); }
+.msg.err .msg-text { font-size: 14px; font-weight: 700; }
+.msg-label:focus { outline: none; }
+.msg-label:focus-visible, .msg-text:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.badge { display: inline-block; padding: 0 var(--s1); margin-right: var(--s1); border: 1px solid var(--line); border-radius: 4px; font-size: 12px; line-height: 1.4; }
+.examples { display: flex; flex-direction: column; gap: var(--s2); }
+.btn.example { text-align: left; }
+.msg .btn { width: auto; }
+.jump { display: flex; align-items: center; min-height: 48px; }
+.examples .btn, .msg .examples .btn { width: 100%; }
+@media (min-width: 600px) {
+  .examples { flex-direction: row; flex-wrap: wrap; }
+  .examples .btn, .msg .examples .btn { width: auto; }
+  .jump { display: none !important; }
+}
+@media (min-width: 900px) {
+  .ask-row { flex-direction: row; align-items: flex-start; }
+  .ask-btns { flex: none; width: 140px; }
+}

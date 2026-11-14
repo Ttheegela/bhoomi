@@ -134,6 +134,8 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Structure: tabs Explore, Ask, Use in your AI (his words, 2026-11-14, picked from visual options).
 - Theme: follow the device setting (light or dark); no theme switch.
 - Ask box: a chat thread with follow-up questions.
+- Tab bar on desktop: left-aligned.
+- Grey labels stay at 14 px. This overrides the 'about 12 px' label rule from the Konam checklist.
 - MCP page: both, tabs per AI app with steps, then a config block for developers.
 
 ### Chosen by the agent (swappable)
@@ -162,7 +164,6 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Temperature shown as °C.
 - Error and empty-state copy.
 - Loading placeholder is a flat grey block with no motion.
-- Labels at 14 px instead of 12 px.
 - Show trend button inside the coordinates section.
 - Source links as their own 48 px lines.
 - Tabs live in one page; URL hash `tab=ask|connect` (Explore keeps the key-less hash), push for tab changes, replace for app sub-tabs; details in `web/DESIGN-ask-mcp.md`.

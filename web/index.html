@@ -165,10 +165,47 @@
 
 </div>
 
-<div id="panel-ask" class="panel">
+<div id="panel-ask" class="panel narrow">
   <h2 id="h-ask" tabindex="-1">Ask a question</h2>
-</div>
+  <noscript><p>Asking a question needs JavaScript. Turn it on to use this tab.</p></noscript>
+  <div id="ask-ui" hidden>
+    <p id="ask-lead" class="lead-p">Ask about a place in your own words. We look up public data and tell you whether it changed over time. We can't forecast the future.</p>
+    <p id="ask-privacy" class="small">Your question is sent to an AI model provider so it can be answered. Don't include personal details.</p>
+    <p id="ask-keep" class="small">Your conversation stays in this browser tab. Reloading clears it. Nothing is saved on our server.</p>
 
+    <div id="ask-off" hidden>
+      <p><strong>Asking questions isn't available right now.</strong></p>
+      <p>You can still pick a place and a measurement.</p>
+      <button type="button" id="ask-off-go" class="btn">Go to Explore</button>
+    </div>
+
+    <a id="ask-jump" class="jump" href="#ask-q" hidden>Go to the question box</a>
+
+    <div id="ask-empty">
+      <p id="ask-try">Try one of these:</p>
+      <div id="ask-examples" class="examples"></div>
+    </div>
+
+    <div id="ask-thread" role="log" aria-label="Conversation"></div>
+    <p id="ask-hint" class="small" hidden>Ask a follow-up, for example: "What about Delhi?"</p>
+    <p id="ask-status" role="status" class="small"></p>
+
+    <form id="ask-form" novalidate>
+      <p id="ask-nohist" class="small" hidden>For now each question is answered on its own. Name the place again in a follow-up.</p>
+      <label for="ask-q">Your question</label>
+      <div class="ask-row">
+        <textarea id="ask-q" rows="2" maxlength="500" placeholder="Is sea level rising in Atlantic City?" aria-describedby="ask-help ask-privacy ask-count ask-err"></textarea>
+        <div class="ask-btns">
+          <button type="submit" id="ask-go" class="btn primary">Ask</button>
+          <button type="button" id="ask-cancel" class="btn" hidden>Cancel</button>
+        </div>
+      </div>
+      <p id="ask-err" class="field-err" hidden></p>
+      <p id="ask-help" class="help">Press Enter to ask. Shift+Enter starts a new line.</p>
+      <p id="ask-count" class="help" hidden></p>
+    </form>
+  </div>
+</div>
 <div id="panel-connect" class="panel narrow">
   <h2 id="h-connect" tabindex="-1">Use Trend Detective in your AI</h2>
   <p class="lead-p">Connect an AI app to Trend Detective and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named.</p>
@@ -347,5 +384,6 @@
 
 <script src="app.js"></script>
 <script src="connect.js"></script>
+<script src="ask.js"></script>
 </body>
 </html>

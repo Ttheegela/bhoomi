@@ -217,6 +217,4 @@ Then "Try asking" (plain list): "Is sea level rising in Atlantic City?" / "Is it
 Chosen by the agent here: hash `tab=` key and Explore keeping a key-less hash; push for tab changes, replace for app sub-tabs; tab bar not sticky and one grid at 375; panels kept in the DOM; chat in normal page flow with no inner scroll and a jump link; examples as buttons only when empty; "Show on chart" opens Explore instead of changing it silently; send no `history` until the PR; 150 s stop; Cancel from the start; per-app steps and docs links in 3.3; two or three config blocks in tabs; "Checked" date beside each docs link.
 
 # For Tarun's call (the frontend builds the default)
-1. Where the tab bar sits at 1280 px. Default: left-aligned under the header. Alternative: centred under the title.
-2. Label size. The built grey labels are 14 px; your rule says about 12 px. Default: keep 14 px (12 px is below what many students can read comfortably and fails 48 px-friendly spacing on phones); change it only if you want the denser look.
-3. ChatGPT tab. Default: show the steps from the official page with a "may differ on your plan" note. Alternative: drop the ChatGPT tab for now and let ChatGPT users use "Other" until someone checks it on a live account.
+1. ChatGPT tab. Default: show the steps from the official page with a "may differ on your plan" note. Alternative: drop the ChatGPT tab for now and let ChatGPT users use "Other" until someone checks it on a live account.
