@@ -395,14 +395,25 @@ def test_wrong_catalog_id_gets_catalog_reason(message):
 
 def test_wrong_pairing_of_real_ids_gets_true_reason():
     reason = loop.model_reason("sea_level is not available from 'era5'. Available: coops.")
-    assert reason == ("That variable, or that source for this variable, is not in the catalog; "
-                      "use the ids listed in your instructions.")
+    assert reason == loop.CATALOG_REASON
     assert "or source id is not in the catalog" not in reason  # both ids exist; only the pairing is wrong
 
 
-def test_data_text_saying_not_available_from_is_not_a_catalog_error():
-    reason = loop.model_reason("No monthly sea level at Station 8518750: data not available from 2020")
-    assert reason != loop.CATALOG_REASON and reason == loop.GAUGE_REASON
+@pytest.mark.parametrize("message", [
+    "air_temp is not available from \"x'y\". Available: power, era5, ghcn.",  # repr picks double quotes
+    "sea_level is not available from 5. Available: coops.",  # a non-string source has no quotes
+])
+def test_catalog_error_however_source_is_quoted(message):
+    assert loop.model_reason(message) == loop.CATALOG_REASON
+
+
+@pytest.mark.parametrize("message,want", [
+    ("No monthly sea level at Station 8518750: data not available from 2020", loop.GAUGE_REASON),
+    ("NASA POWER returned no T2M data: The value for 'start' is not available from '1970'. Available: 1981 onward",
+     loop.FALLBACK_REASON),
+])
+def test_data_text_saying_not_available_from_is_not_a_catalog_error(message, want):
+    assert loop.model_reason(message) == want
 
 
 def test_unknown_tool_and_superscript_digit():

@@ -3,6 +3,7 @@ import contextvars
 import json
 import logging
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 
@@ -83,8 +84,9 @@ def model_reason(error: str) -> str:
     low = error.lower()
     # The model's own bad call first: it must learn to fix it, not hear "no data". A wrong-source error lists
     # "era5" and "ghcn", so it would otherwise match the station words below.
-    # The catalog's own wording only ("x is not available from 'y'. Available: ..."), so quoted provider text can't hit it.
-    if (" is not available from '" in low and "available:" in low) or low.startswith("unknown variable"):
+    # The catalog's own wording only: "<variable> is not available from <source repr>. Available: ...". Anchored on
+    # the start (the variable is one catalog token), since the model controls how the source is quoted, if at all.
+    if re.match(r"\S+ is not available from ", low) or low.startswith("unknown variable"):
         return CATALOG_REASON
     if low.startswith("unknown tool"):
         return "That tool does not exist; use only the tools you were given."
