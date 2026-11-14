@@ -16,7 +16,8 @@ uv run --env-file ~/.config/trend-detective/dev.env uvicorn earthtrends.app:app 
 | data | `earthtrends/data/` | fetchers that return the `TimeSeries` shape | `data-integrator` |
 | stats | `earthtrends/stats/` | deseasonalize, Mann-Kendall, Sen's slope, CIs, returns `TrendResult` | `backend` |
 | agent | `earthtrends/agent/`, `earthtrends/mcp_server.py` | LLM loop, MCP tools, prompts, evals, tracing | `backend` |
-| ui + story | `web/`, `docs/submission/` | screens, charts, demo video/slides, submission text | `ui-ux` designs, `frontend` builds |
+| ui | `web/` | screens, charts | `ui-ux` designs, `frontend` builds |
+| story | `docs/submission/`, `evals/cases.toml` | demo script, slides, video, submission text, SI disclosure, golden eval questions | Sairam (no agent team) |
 
 Stay in your lane's folder. If you must touch another lane's files, say so in the PR description.
 

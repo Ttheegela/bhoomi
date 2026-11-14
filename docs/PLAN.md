@@ -30,12 +30,12 @@ Venue: Princeton Public Library, Tech Center and Spark Lab, 65 Witherspoon St. L
 
 ## Lanes (decided at hour 0)
 
-- Tarun: all four lanes for now (data #3, stats #4, agent #5, UI and story #6), merges and deploys
-- Sairam: set up and ready; picks up a lane when we split the work
+- Tarun: all code lanes through his orchestrator (data #3, stats #4, agent #5, UI #6, eval runner and checks in #16), plus the automated reviewer and QA agents, merges and deploys
+- Sairam (Claude Pro: Sonnet, one session, no `/orchestrate`, no edits in `earthtrends/` or `web/`): golden eval questions in `evals/cases.toml` (#16), human QA on each production deploy (#17), story and submission in `docs/submission/` (#18)
 
 ## How we work: agent team
 
-- Each of us runs one orchestrator session on Fable: `/orchestrate #<issue>` (playbook in `.claude/commands/orchestrate.md`).
+- Tarun runs one orchestrator session on Fable: `/orchestrate #<issue>` (playbook in `.claude/commands/orchestrate.md`). Sairam works in a single session without the agent team.
 - It splits the issue into task cards and runs builders in parallel, each in its own git worktree: `data-integrator`, `backend`, `ui-ux` (designs first), then `frontend`.
 - Every PR goes draft, then `reviewer`, then `qa` (local and Vercel preview), then ready and auto-merge. After 2 fix rounds without a pass, the human decides.
 - The humans freeze contracts, approve new dependencies and contract changes, and judge the demo.
