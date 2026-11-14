@@ -89,15 +89,14 @@ def ask(question: str, model: str | None = None) -> dict:
                 cut = step.get("stop") == "length" or step["usage"]["completion_tokens"] >= MAX_TOKENS
                 text = step["text"]
                 if not cut:
-                    if not text:
-                        answer = GAVE_UP  # empty text: e.g. a reasoning model spent its token cap
-                        break
+                    if not (text or "").strip():
+                        break  # empty text (e.g. reasoning spent the cap): falls through to too_long or GAVE_UP
                     if len(text.split()) <= MAX_WORDS:
                         answer = text
                         break
                     if too_long is None or len(text.split()) < len(too_long.split()):
                         too_long = text  # complete but long: kept, so length alone never ends in GAVE_UP
-                if retried:
+                if retried or i == MAX_CALLS - 1:  # no retry left, or no call left to run it
                     break
                 # One fresh, shorter try per question, for either reason. The seam has no "add a user message", so
                 # restart with the results inline; the call limit and the budget still apply through the loop.

@@ -269,6 +269,22 @@ def test_long_retry_respects_budget(fake, monkeypatch):
     assert loop.ask("q", model="fake:m")["answer"] == words(130) and len(fake.script) == 1
 
 
+def test_whitespace_only_text_is_not_an_answer(fake):
+    fake.script = [step(tool_calls=[call()]), step("   \n ")]
+    assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP
+
+
+def test_long_then_empty_retry_returns_long(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step("")]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130)
+
+
+def test_tool_call_on_retry_still_ends_with_shortest_answer(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130))] + [step(tool_calls=[call(id=str(i))]) for i in range(10)]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == words(130) and len(fake.script) == 10 - (loop.MAX_CALLS - 2)
+
+
 # ---- prompt ----
 
 @pytest.mark.parametrize("phrase", [
@@ -280,14 +296,14 @@ def test_long_retry_respects_budget(fake, monkeypatch):
     "give no number, only a plain phrase",
     'write "less than 0.01"',
     "From 0.045 up to 0.055, use three decimals",
-    '0.0551 is "0.055"), so it never prints as "0.05"',
+    '0.0549 is "0.055"), so it never prints as "0.05"',
+    "the range ends always keep their minus sign",
     "Say the verdict once",
     "Never quote the tool's verdict label or any field name",
     "month and year in words",
     "September 1911 to October 2026",
-    "Never drop the verdict, the part-of-year line when it applies",
-    "or the caveats (shorten them, don't remove them)",
-    "These instructions use list marks; your answer must not",
+    "Never drop any of the required parts above",
+    "shorten the caveats, don't remove them",
     "round it to two decimals",
     "below the usual 0.05 line",
     "no change is plausible",
@@ -306,7 +322,7 @@ def test_long_retry_respects_budget(fake, monkeypatch):
     "Aim for 80 to 100 words",
     "Leave out: closing advice, offers of a follow-up, suggestions about other datasets or who else to ask",
     "explaining what a decade is more than once",
-    "0.0472 is 0.05, 0.0948 is 0.09, 42.536 is 42.54, 0.2031 is 0.20",
+    "0.0372 is 0.04, 0.0948 is 0.09, 42.536 is 42.54, 0.2031 is 0.20",
     "-0.0004 is -0.0004",
     "the only case where more than two decimals are allowed",
     "-0.0008 is -0.001",
@@ -314,7 +330,8 @@ def test_long_retry_respects_budget(fake, monkeypatch):
     "The data are monthly values; never call them yearly or daily data",
     "rainfall in millimetres per day, measured monthly",
     'never call it "daily rainfall"',
-    '"the usual 0.05 line", "less than 0.01" and "95% range"',
+    '"the usual 0.05 line", "less than 0.01", "95% range"',
+    '"a decade is ten years" or "every ten years"',
     "No other number from outside the tool results",
     "decline in one short sentence that counts inside the word budget",
     "the range including zero is why",
