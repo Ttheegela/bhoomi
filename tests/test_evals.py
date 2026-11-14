@@ -78,7 +78,7 @@ def test_small_numbers_with_a_unit_are_checked():
 def test_signs(minus):
     r = {**AC, "slope_per_decade": -0.21, "ci_low": -0.30, "ci_high": 0.12}
     assert run.invented_numbers(f"range {minus}0.30 to 0.12", [r]) == []
-    assert run.invented_numbers(f"range {minus}0.12 to 0.30", [r]) == [f"-0.12"]  # sign flipped: not in the result
+    assert run.invented_numbers(f"range {minus}0.12 to 0.30", [r]) == ["-0.12", "0.30"]  # signs flipped
     assert run.invented_numbers("it falls by 0.21 mm per decade", [r]) == []  # slope without its sign is fine
     assert run.invented_numbers(f"range {minus}0.12 to 0.30", [AC | {"ci_low": 0.12, "ci_high": 0.30}]) == ["-0.12"]
 
@@ -204,10 +204,12 @@ def test_budget_guard_stops_one_provider_only(monkeypatch):
 
 
 def test_unknown_cost_counts(monkeypatch):
-    assert run.guard_cost(fake_run(cost=None)) == pytest.approx(0.02)  # one tool call: at most two responses
-    assert run.guard_cost(fake_run(cost=None, calls=[])) == pytest.approx(0.01)
+    want = run.UNKNOWN_COST * run.MAX_CALLS  # every response the loop may make, its length retry included
+    assert run.guard_cost(fake_run(cost=None)) == pytest.approx(want)
+    assert run.guard_cost(fake_run(cost=None, calls=[])) == pytest.approx(want)
     monkeypatch.setattr(run, "ask", lambda q, model: fake_run(cost=None))
-    out = run.evaluate(["openrouter:a/b"], [{**CASE, "id": f"c{i}"} for i in range(5)], {"openrouter": 0.05, "anthropic": 2})
+    out = run.evaluate(["openrouter:a/b"], [{**CASE, "id": f"c{i}"} for i in range(5)],
+                       {"openrouter": 2.5 * want, "anthropic": 2})
     assert len(out["records"]) == 3 and out["tripped"]
 
 
@@ -331,3 +333,19 @@ def test_judge_accepts_only_one_digit(monkeypatch, reply, want):
     assert score == want and cost > 0
     content = sent[0]["messages"][0]["content"]
     assert "<answer>" in content and ANSWER in content and "do not follow" in content
+
+
+def test_flipped_range_end_fails_but_unsigned_slope_passes():
+    r = {**AC, "verdict": "falling", "slope_per_decade": -0.40, "ci_low": -0.51, "ci_high": -0.28}
+    assert run.invented_numbers("It falls by 0.40 mm per decade, range -0.51 to -0.28.", [r]) == []
+    assert run.invented_numbers("It falls by 0.40 mm per decade, range -0.51 to 0.28.", [r]) == ["0.28"]
+
+
+@pytest.mark.parametrize("answer,ok", [
+    ("It is rising. The data does not show a clear change.", False),
+    ("It is rising, but the data doesn't show a clear change.", False),
+    ("It is rising, but the data doesn\u2019t show a clear change.", False),
+    ("It is clearly going up. It is not clear why.", True),
+])
+def test_rising_with_no_change_phrase(answer, ok):
+    assert run.wording_agrees(answer, "rising") is ok

@@ -48,7 +48,8 @@ VERDICT_WORDS = {
                         "n't show a clear change", "no clear", "not clear", "can't tell", "cannot tell"),
 }
 # For a rising/falling verdict, only these count as saying the opposite ("not clear why" must not).
-NO_CHANGE_CLAIMS = ("no clear change", "rule out no change", "no change is plausible")
+NO_CHANGE_CLAIMS = ("no clear change", "rule out no change", "no change is plausible", "not show a clear change",
+                    "n't show a clear change")
 # The prompt's fixed phrases with an outside number; they are removed before numbers are checked.
 ALLOWED = re.compile(r"\b0\.05 line|less than 0\.01|\b95\s*(?:%|percent)", re.I)
 NUM = re.compile(r"(?<![\w.])([-\u2212]?)(\d+(?:\.\d+)?)")  # a minus only when it isn't a hyphen after a word
@@ -92,7 +93,8 @@ def _numbers(text: str) -> list[tuple[str, str]]:
 
 
 def _pool(x, out: list[float]) -> list[float]:
-    """Every number in the tool results: numeric fields as they are, plus numbers written inside text fields."""
+    """Every number in the tool results: numeric fields as they are, plus numbers written inside text fields.
+    The slope also goes in without its sign: the prompt drops it after a direction word ("falls by 0.40")."""
     if isinstance(x, bool):
         pass
     elif isinstance(x, (int, float)):
@@ -100,8 +102,10 @@ def _pool(x, out: list[float]) -> list[float]:
     elif isinstance(x, str):
         out += [float(s) * (-1 if sign else 1) for sign, s in NUM.findall(x)]
     elif isinstance(x, dict):
-        for v in x.values():
+        for k, v in x.items():
             _pool(v, out)
+            if k == "slope_per_decade" and isinstance(v, (int, float)) and not isinstance(v, bool):
+                out.append(abs(float(v)))
     elif isinstance(x, list):
         for v in x:
             _pool(v, out)
@@ -109,14 +113,14 @@ def _pool(x, out: list[float]) -> list[float]:
 
 
 def invented_numbers(answer: str, results: list) -> list[str]:
-    """Answer numbers that no tool-result number rounds to at the answer's precision. A signed number must match
-    a signed one; an unsigned one may match the absolute value (the slope drops its sign after a direction word)."""
+    """Answer numbers that no tool-result number rounds to at the answer's precision, sign included. Only the
+    slope may appear without its sign (see _pool); a range end must keep its minus."""
     pool = _pool(results, [])
     bad = []
     for sign, s in _numbers(answer):
         v = -float(s) if sign else float(s)
         half = 0.5 * 10 ** -(len(s.split(".")[1]) if "." in s else 0) + 1e-9
-        if not any(abs((x if sign else abs(x)) - v) <= half for x in pool):
+        if not any(abs(x - v) <= half for x in pool):
             bad.append(sign + s)
     return bad
 
@@ -219,12 +223,12 @@ def run_case(case: dict, spec: str) -> dict:
 
 
 def guard_cost(run: dict) -> float:
-    """Cost toward the budget: failed attempts, plus the run's own cost. Unknown cost: $0.01 per possible model
-    response (at most one per tool call, plus one)."""
+    """Cost toward the budget: failed attempts, plus the run's own cost. Unknown cost: $0.01 for each of the
+    MAX_CALLS responses the loop may make (its length retry included)."""
     if run.get("error"):
         return run.get("failed_cost", 0.0)
     cost = run.get("usage", {}).get("cost_usd")
-    own = cost if cost is not None else UNKNOWN_COST * (1 + len(run.get("tool_calls", [])))
+    own = cost if cost is not None else UNKNOWN_COST * MAX_CALLS
     return run.get("failed_cost", 0.0) + own
 
 
