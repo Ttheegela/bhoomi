@@ -136,6 +136,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Ask box: a chat thread with follow-up questions.
 - Tab bar on desktop: left-aligned.
 - Grey labels stay at 14 px. This overrides the 'about 12 px' label rule from the Konam checklist.
+- Use in your AI: framed as 'use Trend Detective in your own AI agent'; example agents named in one line only when their docs confirm remote MCP support; detailed tabs only for apps with verified steps; one 'Any other AI agent' tab; no ChatGPT tab.
 - MCP page: both, tabs per AI app with steps, then a config block for developers.
 
 ### Chosen by the agent (swappable)

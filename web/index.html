@@ -64,7 +64,8 @@
       </div>
       <div class="field span2" id="source-field" hidden>
         <label for="source">Data source</label>
-        <select id="source"></select>
+        <select id="source" aria-describedby="source-help"></select>
+        <p id="source-help" class="help"></p>
       </div>
     </div>
   </form>
@@ -106,7 +107,7 @@
       <div class="col-chart" id="chart-wrap" hidden>
         <figure id="chart-fig">
           <p id="chart-head" class="chart-head"></p>
-          <p class="source">Trend and range: our calculation.</p>
+          <p class="source t-only">Trend and range: our calculation.</p>
           <div id="chart-box"></div>
           <div id="chart-source" class="srcline"></div>
           <div id="legend" class="legend">
@@ -204,8 +205,9 @@
   </div>
 </div>
 <div id="panel-connect" class="panel narrow">
-  <h2 id="h-connect" tabindex="-1">Use Trend Detective in your AI</h2>
+  <h2 id="h-connect" tabindex="-1">Use Trend Detective in your own AI agent</h2>
   <p class="lead-p">Connect an AI app to Trend Detective and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named.</p>
+  <p class="small">Works with AI agents such as Claude, ChatGPT and Copilot.</p>
 
   <div class="addr-block">
     <label for="addr-top">Trend Detective server address</label>
@@ -253,22 +255,6 @@
       <p class="small">Checked 14 November 2026</p>
     </div>
 
-    <div id="app-chatgpt" class="app-panel">
-      <h3>ChatGPT</h3>
-      <ol>
-        <li>Open ChatGPT on the web and go to chatgpt.com/plugins.</li>
-        <li>Click the plus button, then "Add custom MCP server".</li>
-        <li>Enter the name "Trend Detective" and the server address.</li>
-        <li>Set authentication to "No authentication", accept the risk notice, and click "Create as a plugin".</li>
-        <li>Install it, then type <code>@</code> in a chat and pick Trend Detective.</li>
-      </ol>
-      <label for="addr-chatgpt">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-chatgpt" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
-      <p class="small">ChatGPT's setup changes often and may depend on your plan. If these steps don't match your screen, use the docs link.</p>
-      <a class="srclink" href="https://developers.openai.com/api/docs/guides/developer-mode" rel="noopener">ChatGPT setup docs ↗</a>
-      <p class="small">Checked 14 November 2026</p>
-    </div>
-
     <div id="app-cursor" class="app-panel">
       <h3>Cursor</h3>
       <ol>
@@ -301,10 +287,15 @@
     </div>
 
     <div id="app-other" class="app-panel">
-      <h3>Other</h3>
-      <p>Any app that supports remote MCP servers over streamable HTTP can use the address above. Look for a setting called MCP servers, connectors or tools, choose "HTTP" or "streamable HTTP", paste the address, and choose no authentication.</p>
+      <h3>Any other AI agent</h3>
+      <ol>
+        <li>Open your AI agent's settings for MCP servers or connectors.</li>
+        <li>Add a new server.</li>
+        <li>Paste this address. No key and no sign-in are needed.</li>
+      </ol>
       <label for="addr-other">Trend Detective server address</label>
       <div class="copyrow"><input id="addr-other" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <p class="small">If it asks for a type, choose "HTTP" or "streamable HTTP".</p>
       <a class="srclink" href="https://modelcontextprotocol.io" rel="noopener">About MCP ↗</a>
     </div>
   </section>

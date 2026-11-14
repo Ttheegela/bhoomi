@@ -42,7 +42,9 @@ function waitSeconds(retryAfter, detail) {
 }
 function waitShort(n) { return n <= 90 ? `${n}s` : `${Math.ceil(n / 60)} min`; }
 
-function firstNum(...xs) { for (const x of xs) { if (x !== '' && x != null && Number.isFinite(Number(x))) return Number(x); } return NaN; }
+// Only a real number or a non-blank numeric string; never true, [5] or " ".
+function asNum(x) { return typeof x === 'number' ? (Number.isFinite(x) ? x : NaN) : typeof x === 'string' && x.trim() !== '' ? Number(x) : NaN; }
+function firstNum(...xs) { for (const x of xs) { const n = asNum(x); if (Number.isFinite(n)) return n; } return NaN; }
 
 // What "Show on chart" opens: the detect_trend call's own variable, latitude, longitude and source.
 function chartTarget(call) {
@@ -64,9 +66,12 @@ function describeAnswer(body) {
   if (text.startsWith(GAVE_UP_PREFIX)) return Object.assign(out, { variant: 'gaveup' });
   if (good.length) {
     const r = good[0].result, p = r.place || {}, per = r.period || {};
+    const seen = new Set(), sources = [];
+    good.forEach((c) => { const s = c.result.source; if (s && !seen.has(s.id)) { seen.add(s.id); sources.push(s); } });
+    const spots = new Set(good.map((c) => { const t = chartTarget(c), q = c.result.place || {}; return t ? `${t.lat.toFixed(2)},${t.lon.toFixed(2)}` : String(q.name); }));
     const place = p.name ? p.name : `the spot at ${Number(p.lat).toFixed(2)}, ${Number(p.lon).toFixed(2)}`;
     return Object.assign(out, {
-      variant: 'data', count: good.length, source: r.source || null, chart: chartTarget(good[0]),
+      variant: 'data', count: spots.size, sources, chart: chartTarget(good[0]),
       variable: r.variable, place, y0: String(per.start || '').slice(0, 4), y1: String(per.end || '').slice(0, 4),
     });
   }
@@ -101,7 +106,7 @@ function classifyAsk(r) {
 
 /* ---------- the thread ---------- */
 
-const askS = { off: false, busy: false, turns: [], ctrl: null, reason: '', timers: [], count: 0, said: 0, cd: 0 };
+const askS = { off: false, busy: false, turns: [], ctrl: null, reason: '', timers: [], said: 0, cd: 0 };
 
 function paras(text) { return text.split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean).map((t) => el('p', { class: 'msg-text' }, t)); }
 function reducedMotion() { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
@@ -139,13 +144,13 @@ function answerBlock(d) {
     let line = `Looked up: ${nameOf(d.variable)} at ${d.place}, ${d.y0} to ${d.y1}.`;
     if (d.count > 1) line += ` The assistant checked ${d.count} places. The first is shown here.`;
     block.append(el('p', { class: 'small' }, line));
-    const src = el('div', { class: 'srcline' });
-    srcBlock(src, 'Data', d.source);
-    block.append(src);
+    d.sources.forEach((s) => { const src = el('div', { class: 'srcline' }); srcBlock(src, 'Data', s); block.append(src); });
+    if (!d.sources.length) { const src = el('div', { class: 'srcline' }); srcBlock(src, 'Data', null); block.append(src); }
     block.append(el('p', { class: 'small' }, 'The AI wrote the text above. The trend, range and verdict are our calculation from public data. To see them, open the chart.'));
-    if (d.chart && varById(d.chart.variable)) {
-      const a = el('a', { class: 'srclink', href: '#' + writeHash({ tab: 'explore', explore: d.chart }) }, 'Show on chart');
-      a.addEventListener('click', (e) => { e.preventDefault(); showOnChart(d.chart); });
+    const target = d.chart && fixExplore(d.chart, state.variables);
+    if (target) {
+      const a = el('a', { class: 'srclink', href: '#' + writeHash({ tab: 'explore', explore: target }) }, 'Show on chart');
+      a.addEventListener('click', (e) => { e.preventDefault(); showOnChart(target); });
       block.append(a);
     }
   } else if (d.variant === 'dataerror') {
@@ -165,7 +170,7 @@ function answerBlock(d) {
 }
 
 function errorBlock(text, retryQ) {
-  const b = el('div', { class: 'msg err', role: 'alert' }, el('p', { class: 'msg-text', tabindex: '-1' }, text));
+  const b = el('div', { class: 'msg err' }, el('p', { class: 'msg-text', tabindex: '-1' }, text));
   if (retryQ) {
     const btn = el('button', { type: 'button', class: 'btn' }, 'Try again');
     btn.addEventListener('click', () => send(retryQ));
@@ -193,7 +198,7 @@ async function postAsk(q, signal) {
       body: JSON.stringify(askBody(q, askS.turns)),
     });
     let body = null;
-    try { body = await res.json(); } catch (e) { /* not json */ }
+    try { body = await res.json(); } catch (e) { if (signal.aborted) return { cancelled: askS.reason === 'cancel', timedOut: askS.reason === 'timeout' }; }
     return { status: res.status, body, retryAfter: res.headers.get('Retry-After') };
   } catch (e) {
     if (e && e.name === 'AbortError') return { cancelled: askS.reason === 'cancel', timedOut: askS.reason === 'timeout' };
@@ -245,6 +250,8 @@ async function send(raw) {
   } else if (o.kind === 'off') {
     askS.turns.push({ q, a: '', kind: 'error' });
     setOff();
+    focus = $('ask-off-go');
+    say("Asking questions isn't available right now.");
   } else {
     askS.turns.push({ q, a: '', kind: 'error' });
     const b = errorBlock(o.text, o.retry ? q : null);

@@ -13,7 +13,15 @@ const PRESETS = [
 ];
 const SOURCES = {
   power: { name: 'NASA POWER (MERRA-2)', url: 'https://power.larc.nasa.gov/' },
+  era5: { name: 'ERA5 reanalysis via Open-Meteo archive', url: 'https://open-meteo.com/' },
+  ghcn: { name: 'NOAA NCEI GHCN-Daily', url: 'https://www.ncei.noaa.gov/' },
   coops: { name: 'NOAA CO-OPS tide gauges', url: 'https://tidesandcurrents.noaa.gov/' },
+};
+// One plain-words line under the source control (grid sizes as in the catalog's resolution text).
+const SOURCE_HELP = {
+  power: 'A NASA record of past weather on a grid about 50 km wide.',
+  era5: 'A European record of past weather on a grid about 25 km wide.',
+  ghcn: 'Readings from the nearest weather station.',
 };
 const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'GRACE/GRACE-FO' };
 
@@ -164,7 +172,7 @@ function captionText(t, name, place) {
   return `${name} at ${place}, ${t.period.start} to ${t.period.end}. The trend line ${y} ${range}. Verdict: ${v}.`;
 }
 
-function rawLine(source) { return `Raw values: ${source ? source.name : 'unknown'}. Trend and range: our calculation, the Mann-Kendall test with Sen's slope on monthly values with seasons removed.`; }
+function rawLine(source, withTrend) { return `Raw values: ${source ? source.name : 'unknown'}.` + (withTrend ? " Trend and range: our calculation, the Mann-Kendall test with Sen's slope on monthly values with seasons removed." : ''); }
 function chartHead(t, name, place) { return `${name} at ${place}: ${fmtVal(t.slope_per_decade, t.units)} per decade, ${t.period.start.slice(0, 4)} to ${t.period.end.slice(0, 4)}`; }
 
 function layoutFor(w) {
@@ -186,7 +194,7 @@ const TABS = [
   { id: 'ask', label: 'Ask', title: 'Trend Detective: Ask' },
   { id: 'connect', label: 'Use in your AI', title: 'Trend Detective: Use in your AI' },
 ];
-const APPS = ['claude', 'claude-code', 'chatgpt', 'cursor', 'vscode', 'other'];
+const APPS = ['claude', 'claude-code', 'cursor', 'vscode', 'other'];
 
 // Hash -> { tab, app, explore }. Missing or unknown tab = explore; unknown app = claude.
 // explore is set only for a complete, in-range variable/lat/lon (old share links); else null.
@@ -209,6 +217,15 @@ function writeHash(st) {
   const e = st.explore;
   if (!e) return '';
   return `variable=${e.variable}&lat=${Number(e.lat).toFixed(2)}&lon=${Number(e.lon).toFixed(2)}` + (e.source ? '&source=' + encodeURIComponent(e.source) : '');
+}
+
+// A place from a link or an answer, made safe for the catalog: null for an unknown measurement; the source
+// is kept only when the measurement offers it and it is not the default one (the default is never written).
+function fixExplore(e, vars) {
+  const v = vars.find((x) => x.id === e.variable);
+  if (!v) return null;
+  const ok = !!e.source && Array.isArray(v.sources) && v.sources.includes(e.source) && e.source !== v.sources[0];
+  return { variable: e.variable, lat: e.lat, lon: e.lon, source: ok ? e.source : null };
 }
 
 /* ---------- DOM helpers ---------- */
@@ -258,9 +275,9 @@ function srcBlock(node, label, source) {
   else node.append(el('span', { class: 'srclink' }, `${label}: ${name}`));
 }
 // Link with the name only (footer list).
-function srcLink(node, source) {
-  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, source.name));
-  else node.append(source.name);
+function srcLink(node, source, arrow) {
+  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, source.name + (arrow ? ' ↗' : '')));
+  else node.append(source ? source.name : 'unknown');
 }
 
 /* ---------- state ---------- */
@@ -336,10 +353,16 @@ function syncVariableUI() {
   const v = varById($('variable').value);
   $('variable-help').textContent = v ? `Good for: ${v.good_for}.` : '';
   const src = $('source');
+  const prev = src.value;
   clear(src);
   const many = v && Array.isArray(v.sources) && v.sources.length > 1;
   if (many) v.sources.forEach((s) => src.append(el('option', { value: s }, SOURCE_LABELS[s] || s)));
+  if (many && v.sources.includes(prev)) src.value = prev; // keep the chosen source when this measurement has it
   $('source-field').hidden = !many;
+  sourceHelp();
+}
+function sourceHelp() {
+  $('source-help').textContent = $('source-field').hidden ? '' : (SOURCE_HELP[$('source').value] || '');
 }
 
 function readParams() {
@@ -444,8 +467,8 @@ function show(sr, tr, params, user) {
       state.trend = tr.ok ? tr.body : null;
       $('chart-wrap').hidden = false;
       renderChart(s, state.trend);
-      document.querySelectorAll('#legend .t-only').forEach((li) => { li.hidden = !state.trend; });
-      renderTable(s);
+      document.querySelectorAll('#chart-fig .t-only').forEach((li) => { li.hidden = !state.trend; });
+      renderTable(s, !!state.trend);
       if (state.trend) {
         heading = renderVerdict(state.trend, s);
         renderMore(state.trend);
@@ -477,6 +500,10 @@ function problemFor(r, params) {
     if (varById('air_temp')) {
       out.buttons.push({ label: 'Show air temperature here', fn: () => { $('variable').value = 'air_temp'; syncVariableUI(); submit(true); } });
     }
+  }
+  const v = varById(params.variable), def = v && v.sources && v.sources[0];
+  if (params.source && def && params.source !== def) {
+    out.buttons = (out.buttons || []).concat([{ label: `Use ${SOURCE_LABELS[def] || def} for this place`, fn: () => { $('source').value = def; sourceHelp(); submit(true); } }]);
   }
   out.paras.push('Try another place or measurement.');
   return out;
@@ -533,7 +560,6 @@ function renderVerdict(t, series) {
 
   const facts = $('facts');
   clear(facts);
-  const srcNode = isHttps(t.source) ? el('a', { href: t.source.url, class: 'srclink' }, `${t.source.name} ↗`) : (t.source ? t.source.name : 'unknown');
   [
     ['Period', `${t.period.start} to ${t.period.end}`],
     ['Months of data', String(t.n)],
@@ -541,9 +567,14 @@ function renderVerdict(t, series) {
     ['p-value', fmtP(t.p_value)],
     ['Seasons removed', t.deseasonalized ? 'Yes' : 'No'],
     ['Adjusted for neighbouring months', t.autocorrelation_adjusted ? 'Yes' : 'No'],
-    ['Source', srcNode],
+    ['Source', 'src'],
     ['Method', t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
-  ].forEach(([l, v]) => facts.append(fact(l, v)));
+  ].forEach(([l, v]) => {
+    if (v !== 'src') { facts.append(fact(l, v)); return; }
+    const dd = el('dd', {});
+    srcLink(dd, t.source, true);
+    facts.append(el('div', {}, el('dt', {}, l), dd));
+  });
 
   const list = $('notes-list');
   clear(list);
@@ -563,11 +594,11 @@ function renderMore(t) {
   $('more').hidden = false;
 }
 
-function renderTable(s) {
+function renderTable(s, withTrend) {
   const name = nameOf(s.variable);
   $('table-col').textContent = `${name} (${unitLabel(s.units)})`;
   srcBlock($('table-source'), 'Source', s.source);
-  $('table-caption').textContent = rawLine(s.source);
+  $('table-caption').textContent = rawLine(s.source, withTrend);
   const body = $('table-body');
   clear(body);
   const frag = document.createDocumentFragment();
@@ -680,7 +711,7 @@ function renderChart(s, t) {
   $('chart-head').textContent = t ? chartHead(t, name, place) : `${name} at ${place}`;
   $('chart-caption').textContent = t ? captionText(t, name, place) : `${name} at ${place}.`;
   srcBlock($('chart-source'), 'Source', t ? t.source : s.source);
-  $('chart-raw').textContent = rawLine(t ? t.source : s.source);
+  $('chart-raw').textContent = rawLine(t ? t.source : s.source, !!t);
 
   // readout
   const readout = $('readout');
@@ -768,7 +799,12 @@ function onLocation() {
   const h = parseHash(location.hash);
   if (typeof setApp === 'function' && h.app !== tabState.app) setApp(h.app);
   showTab(h.tab, false);
-  if (h.explore && state.variables.length && !sameExplore(h.explore, state.params)) applyExplore(h.explore, false);
+  if (h.explore && state.variables.length) {
+    // An unknown measurement falls back like a bad link on first load. A repeat call (popstate, then hashchange)
+    // finds state.params already set, so it does not start a second request.
+    const e = fixExplore(h.explore, state.variables) || fixExplore(PRESETS[0], state.variables);
+    if (!sameExplore(e, state.params)) applyExplore(e, false);
+  }
 }
 
 // Put a place, measurement and source into the controls and run it.
@@ -777,13 +813,18 @@ function applyExplore(e, user) {
   $('lat').value = e.lat; $('lon').value = e.lon;
   $('variable').value = e.variable;
   syncVariableUI();
-  if (e.source && [...$('source').options].some((o) => o.value === e.source)) $('source').value = e.source;
+  if (!$('source-field').hidden) { // the link's source, else the default
+    $('source').value = e.source && [...$('source').options].some((o) => o.value === e.source) ? e.source : $('source').options[0].value;
+    sourceHelp();
+  }
   if (!PRESETS.some((p) => Math.abs(p.lat - e.lat) <= 0.005 && Math.abs(p.lon - e.lon) <= 0.005)) openCoords();
   markChips();
   submit(user);
 }
 // "Show on chart" from an Ask answer: a normal Explore hash entry, then the normal Explore flow.
-function showOnChart(e) {
+function showOnChart(e0) {
+  const e = fixExplore(e0, state.variables);
+  if (!e) return;
   history.pushState(null, '', '#' + writeHash({ tab: 'explore', explore: e }));
   showTab('explore', false);
   applyExplore(e, true);
@@ -801,13 +842,13 @@ async function init() {
   state.variables = r.body;
   fillVariables();
   const h = parseHash(location.hash).explore;
-  applyExplore(h && varById(h.variable) ? h : PRESETS[0], false);
+  applyExplore((h && fixExplore(h, state.variables)) || fixExplore(PRESETS[0], state.variables), false);
 }
 
 buildChips();
 $('controls').addEventListener('submit', (e) => { e.preventDefault(); if ($('go').getAttribute('aria-disabled') !== 'true') submit(true); });
 $('variable').addEventListener('change', () => { syncVariableUI(); submit(true); });
-$('source').addEventListener('change', () => submit(true));
+$('source').addEventListener('change', () => { sourceHelp(); submit(true); });
 $('locate').addEventListener('click', locate);
 ['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => { state.fromGeo = false; markChips(); }));
 let lastBand = layoutFor(window.innerWidth).vw;

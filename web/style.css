@@ -137,7 +137,6 @@ summary { cursor: pointer; min-height: 48px; display: flex; align-items: center;
 .mark { display: inline-block; width: 24px; font-size: 16px; flex: none; color: var(--ink-2); }
 .mark::before { content: '\25B8'; }
 details[open] > summary .mark::before { content: '\25BE'; }
-#notes summary h2 { display: inline; }
 .table-scroll { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
 table { border-collapse: collapse; width: 100%; }
 caption { text-align: left; padding: var(--s2) var(--s3); font-size: 14px; color: var(--ink-2); }
@@ -158,8 +157,6 @@ dt { font-weight: 700; }
 dt .term { font-weight: 400; color: var(--ink-2); }
 dd { margin: 0; }
 @media (min-width: 600px) { dl { grid-template-columns: 1fr 1fr; } }
-#notes ul { margin: 0; padding-left: var(--s5); max-width: 70ch; }
-#notes li { margin-bottom: var(--s2); }
 
 footer { border-top: 1px solid var(--line); padding: var(--s5) 0; }
 footer p:nth-child(2) { margin: var(--s3) 0 0; color: var(--ink-2); }

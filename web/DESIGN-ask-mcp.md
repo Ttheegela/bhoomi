@@ -12,7 +12,7 @@ Directly under the header (title row, AI label), above everything else. Not stic
 ```
 - Tab: 16 px, regular; selected tab inverted (`--ink` fill, `--bg` text) and weight 700 (not colour alone); unselected `--bg` fill, 1 px `--line` border, `--ink` text. Radius 6. 12 px gap.
 - Header lead line "Is it really changing here? Pick a place and a measurement." moves into the Explore panel (top). Header keeps h1 and AI label only.
-- Panels: three `<div role="tabpanel" id="panel-explore|panel-ask|panel-connect">` in the same order as tabs. Hidden panels use `hidden`, never removed (the Ask thread and Explore result survive tab switches). Each panel starts with an h2: Explore "Is it really changing here?" (existing lead), Ask "Ask a question", Use in your AI "Use Trend Detective in your AI".
+- Panels: three `<div role="tabpanel" id="panel-explore|panel-ask|panel-connect">` in the same order as tabs. Hidden panels use `hidden`, never removed (the Ask thread and Explore result survive tab switches). Each panel starts with an h2: Explore "Is it really changing here?" (existing lead), Ask "Ask a question", Use in your AI "Use Trend Detective in your own AI agent".
 - Skip link text "Skip to the content"; its href points at the active panel's h2 (JS updates it).
 - Document title: "Trend Detective" / "Trend Detective: Ask" / "Trend Detective: Use in your AI".
 
@@ -22,7 +22,7 @@ Without JS: the three panels stack in order, each under its h2; the tablist is b
 
 ## 1.3 URL scheme (hash only; old links keep working)
 - Explore: the existing `#variable=air_temp&lat=17.69&lon=83.22` (optional `&source=`). No `tab` key written for Explore, so every old link is unchanged. Missing or unknown `tab` means Explore.
-- Ask: `#tab=ask`. Connect: `#tab=connect`, with app sub-tab `#tab=connect&app=claude|claude-code|chatgpt|cursor|vscode|other` (default `claude`; unknown value: `claude`).
+- Ask: `#tab=ask`. Connect: `#tab=connect`, with app sub-tab `#tab=connect&app=claude|claude-code|cursor|vscode|other` (default `claude`; unknown value: `claude`).
 - A hash with `tab=` and also `variable/lat/lon`: tab wins for what is shown; Explore state is still loaded.
 - Switching tabs by click or key uses `history.pushState` (new entry). Choosing an app sub-tab uses `replaceState`. Explore's own hash writes stay as built (replace). `hashchange`/`popstate` re-select the tab, so Back returns to the previous tab with its state; the Ask thread is in memory so it survives Back/Forward within the page.
 - Switching tab does not scroll; it moves nothing but focus rules in 1.2. A programmatic switch (the "Show on chart" link) pushes the Explore hash and runs the normal Explore flow, then focuses the verdict heading.
@@ -106,7 +106,7 @@ Textarea has a visible label and `aria-describedby` (helper, privacy, counter, i
 
 ## 3.1 Layout (column max 720 px)
 ```
-h2 Use Trend Detective in your AI
+h2 Use Trend Detective in your own AI agent
 lead
 Server address: read-only field + Copy
 Pick your AI app: tabs (375: 3 columns x 2 rows; >=600: one row)
@@ -115,7 +115,7 @@ For developers: JSON block + Copy config
 What you can ask once connected: 3 tool rows + example questions
 What it can and can't do
 ```
-These app tabs are a second tablist inside the panel (`aria-label="AI apps"`), same pattern as 1.2, 48 px, selected inverted. Order: Claude, Claude Code, ChatGPT, Cursor, VS Code, Other. Without JS all six panels show stacked.
+These app tabs are a second tablist inside the panel (`aria-label="AI apps"`), same pattern as 1.2, 48 px, selected inverted. Order: Claude, Claude Code, Cursor, VS Code, Any other AI agent. Without JS all five panels show stacked.
 
 ## 3.2 Words on screen
 - Lead: "Connect an AI app to Trend Detective and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named."
@@ -154,16 +154,14 @@ Menu names for adding a server in the app were not confirmed; do not invent them
 4. Accept the trust prompt after reading it, then ask Copilot a question and look for Trend Detective's tools.
 Or put the VS Code block from "For developers" in `.vscode/mcp.json`. VS Code uses `servers`, not `mcpServers`.
 
-**ChatGPT**. Docs: https://developers.openai.com/api/docs/guides/developer-mode (the page the older developer-mode address now redirects to)
-Only partly confirmed. The page describes adding a custom MCP server as a plugin on the web version; it does not state which plans can do it, and the page text we could read did not mention "developer mode". Show:
-1. Open ChatGPT on the web and go to chatgpt.com/plugins.
-2. Click the plus button, then "Add custom MCP server".
-3. Enter the name "Trend Detective" and the server address.
-4. Set authentication to "No authentication", accept the risk notice, and click "Create as a plugin".
-5. Install it, then type `@` in a chat and pick Trend Detective.
-Grey note: "ChatGPT's setup changes often and may depend on your plan. If these steps don't match your screen, use the docs link." QA or the frontend should recheck this tab against the live page before launch.
+**Any other AI agent** (replaces "Other"). Steps: "Open your AI agent's settings for MCP servers or connectors." / "Add a new server." / "Paste this address. No key and no sign-in are needed." With the server address and its Copy button, the hint "If it asks for a type, choose \"HTTP\" or \"streamable HTTP\"." and the link "About MCP ↗" to https://modelcontextprotocol.io.
 
-**Other.** "Any app that supports remote MCP servers over streamable HTTP can use the address above. Look for a setting called MCP servers, connectors or tools, choose \"HTTP\" or \"streamable HTTP\", paste the address, and choose no authentication." Link "About MCP ↗" to https://modelcontextprotocol.io (official site; the designer did not fetch it).
+**Framing (Tarun, 2026-11-14).** The panel heading is "Use Trend Detective in your own AI agent" (the tab keeps its label "Use in your AI"). One grey line under the intro: "Works with AI agents such as Claude, ChatGPT and Copilot." A product is named only when its own official documentation confirms it can connect to a remote MCP server by URL. Checked 14 November 2026:
+- Claude: https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp (custom connector by URL).
+- ChatGPT: https://developers.openai.com/api/docs/guides/developer-mode ("Connect your Model Context Protocol (MCP) server to ChatGPT as a plugin"; steps ask for a Server URL; on the web; workspace permissions apply). No plan is named, so the line does not name one.
+- Copilot: https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/extend-copilot-chat-with-mcp (remote servers defined with a URL in Visual Studio, JetBrains IDEs, Xcode and Eclipse) and https://code.visualstudio.com/docs/copilot/customization/mcp-servers (VS Code).
+- Grok: dropped. https://docs.x.ai/docs/guides/tools/remote-mcp-tools confirms remote MCP only for the xAI developer API, not the Grok app, so it is not named.
+Detailed tabs with numbered steps stay only for apps whose steps were verified: Claude, Claude Code, Cursor, VS Code. ChatGPT has no tab of its own; its users follow "Any other AI agent".
 
 ## 3.4 Config blocks (developers)
 Intro: "Many apps read a config file. Field names differ between apps, so match yours." Three `<pre><code>` blocks in a small tab set "Claude Code" / "Cursor" / "VS Code" (same tab pattern, 48 px), each with "Copy config"; block `--surface`, 1 px `--line`, 14 px mono, scrolls sideways inside itself only.
@@ -193,7 +191,7 @@ Then "Try asking" (plain list): "Is sea level rising in Atlantic City?" / "Is it
 - [ ] `#tab=connect&app=cursor` opens Cursor's panel; reload keeps it; arrow keys, Home, End switch app tabs.
 - [ ] JS off: three panels and six app panels show in order; no Copy buttons, no empty boxes.
 - [ ] Copy puts exactly the address (or command, or JSON) on the clipboard and shows "Copied" plus the status text.
-- [ ] Each app panel has its docs link and "Checked" date; Cursor and ChatGPT carry their caveat notes; no menu name appears that is not in section 3.3.
+- [ ] Each app panel has its docs link and "Checked" date; Cursor carries its caveat note; no menu name appears that is not in section 3.3.
 - [ ] "What it can and can't do" is present; AI label and data sources visible.
 
 # 4. Explore changes (frontend builds these with the tabs)
@@ -204,20 +202,17 @@ Then "Try asking" (plain list): "Is sea level rising in Atlantic City?" / "Is it
 5. Chart legend: one item per row at 375 px, two-column grid from 600 px; item text 14 px, the same as other labels.
 6. Vertical rhythm 24 px between the source link, legend, readout and caption at 375 px. The readout uses the caption style (14 px, `--ink-2`). The line "Raw values: {source} ↗. Trend and range: our calculation, the Mann-Kendall test with Sen's slope on monthly values with seasons removed." is 14 px grey and sits under the caption.
 7. Sentence 1 leads with the period and holds the uncertainty: rising "From {y0} to {y1}, {name} at {place} rose about {slope} per decade, and the data support a range of {lo} to {hi}." falling "From {y0} to {y1}, {name} at {place} fell about {slope} per decade, and the data support a range of {lo} to {hi}." no clear change "From {y0} to {y1}, we can't tell {name} at {place} apart from no change: the data lean {up|down} about {slope} per decade, but the range runs from {lo} to {hi}." (Number rules as in DESIGN.md section 3.) The second paragraph and p-value line stay.
-8. Label size: see "For Tarun's call" 2.
+8. Label size: 14 px, decided by Tarun (see `web/DESIGN.md` section 10).
 9. Verdict restyle that is still wanted, from the earlier plan (the build did none of it): big value under the inverted bar (36 px phone / 44 px desktop, weight 700; the slope with sign and unit; for no clear change the same size plus grey line "The data lean up, but the range includes zero."); fact rows as one `<dl>` inside the card (Period, Months of data, Range of trends the data support, p-value, Seasons removed, Adjusted for neighbouring months, Source ↗, Method), 48 px rows, hairline between; caveats in a bordered box inside the card (`--bg`, 1 px `--line`, radius 8, padding 12, label "Caveats"); the separate "The numbers" and "Caveats and notes" sections go. Chart: headline above it (18 px bold) "{Name} at {place}: {slope} per decade, {y0} to {y1}" with grey "Trend and range: our calculation."; the panel B zero line becomes a dashed "No change" line (1.5 px, `--ink-2`, dash 6 4, 12 px label with a `--bg` halo, legend entry "No-change line"). Contrast: all from existing tokens (see DESIGN.md section 6; `--ink-2` on `--surface` 8.1:1 light, 9.3:1 dark; `--line` on `--surface` 4.1:1 light, 5.2:1 dark, both above 3:1).
 
 # 5. Needs from other lanes
 - Backend: `history` field on `/api/ask` (at most 6 messages, character cap number to share with the page), and `extra="forbid"` means the page must not send it before then.
 - Backend: a boolean `needs_clarification` in the `/api/ask` response would replace the trailing-"?" guess.
 - Backend: confirm the Vercel function time limit is above the 150 s client stop, or a 504 shows as "We can't reach the server."
-- Frontend: re-read each app's docs before launch (dates in 3.3 will age); ChatGPT steps need a live check.
+- Frontend: re-read each app's docs before launch (dates in 3.3 will age).
 
 # 6. Decisions (full lists in `web/DESIGN.md` section 10)
 Chosen by the agent here: hash `tab=` key and Explore keeping a key-less hash; push for tab changes, replace for app sub-tabs; tab bar not sticky and one grid at 375; panels kept in the DOM; chat in normal page flow with no inner scroll and a jump link; examples as buttons only when empty; "Show on chart" opens Explore instead of changing it silently; send no `history` until the PR; 150 s stop; Cancel from the start; per-app steps and docs links in 3.3; two or three config blocks in tabs; "Checked" date beside each docs link.
-
-# For Tarun's call (the frontend builds the default)
-1. ChatGPT tab. Default: show the steps from the official page with a "may differ on your plan" note. Alternative: drop the ChatGPT tab for now and let ChatGPT users use "Other" until someone checks it on a live account.
 
 # Deviations from the design (frontend build)
 - Ask, follow-up hint: shown only when `ASK_HISTORY` is on. With it off, only the "For now each question is answered on its own" line shows, because the hint ("What about Delhi?") would not work without history.
@@ -227,4 +222,7 @@ Chosen by the agent here: hash `tab=` key and Explore keeping a key-less hash; p
 - Explore, the closed measurement select shows the short name by swapping option text on focus, pointerdown and blur (a native select cannot style the closed state alone). Untested on a real phone picker.
 - Explore, the phone gap between sections is 8 px (was 12) and the tab bar margins are 8 px, to keep the first screen.
 - "Use in your AI": the Cursor note says we could not confirm menu names; VS Code lists both docs links. Each config block has a one-line file note above it so it reads without the tabs (no JavaScript).
-- Not built: "Show on chart" for answers that only used `get_series` (no `detect_trend`); those show the "No data was looked up" line.
+- Ask errors are announced once, through the conversation log; the error block itself has no `role="alert"` (inside a log it was announced twice).
+
+# Source help line (Explore, measurements with more than one source)
+Grey 14 px line under the "Data source" select, describing the selected source (catalog resolution text): NASA POWER "A NASA record of past weather on a grid about 50 km wide." / ERA5 "A European record of past weather on a grid about 25 km wide." / NOAA GHCN-Daily "Readings from the nearest weather station." Choosing a non-default source writes `&source=` into the share link; a link with a source the measurement does not offer opens the default. Changing the measurement keeps the chosen source when the new measurement has it. When a non-default source has no data for a place, the API sentence is shown unchanged with the button "Use NASA POWER for this place". The footer names every source with its link. An Ask answer shows one "Data: {source} ↗" line for each distinct source among its successful `detect_trend` calls; "Show on chart" uses the first.

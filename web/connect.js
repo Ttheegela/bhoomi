@@ -2,7 +2,7 @@
 /* "Use in your AI" tab: per-app tabs, config tabs and Copy buttons. Loaded after app.js (uses el, $, wireTablist,
    selectTab, tabState, APPS, writeHash). The steps themselves are static HTML in index.html. */
 
-const APP_LABELS = { claude: 'Claude', 'claude-code': 'Claude Code', chatgpt: 'ChatGPT', cursor: 'Cursor', vscode: 'VS Code', other: 'Other' };
+const APP_LABELS = { claude: 'Claude', 'claude-code': 'Claude Code', cursor: 'Cursor', vscode: 'VS Code', other: 'Any other AI agent' };
 const CFG_IDS = ['claude-code', 'cursor', 'vscode'];
 const COPIED_SAYS = { 'server address': 'Copied the server address.', command: 'Copied the command.', config: 'Copied the config.' };
 
