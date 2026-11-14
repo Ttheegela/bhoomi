@@ -1,11 +1,12 @@
 """Model providers for the agent loop. Each one owns the conversation in its own wire format."""
 import json
+import math
 import os
 
 import httpx
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-MAX_TOKENS = 800  # so a reasoning model cannot run up the bill
+MAX_TOKENS = 800  # so a reasoning model cannot run up the bill; shared by every provider
 TIMEOUT_S = 60
 
 
@@ -40,13 +41,14 @@ class OpenRouterProvider:
                            headers={"Authorization": f"Bearer {self.key}"})
             r.raise_for_status()
             out = self._parse(r.json())
-        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
+        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, AttributeError, RecursionError) as e:
             # Any unexpected shape is an upstream failure (502). The body stays out: it never reaches the user.
             raise UpstreamError(f"OpenRouter failed: {type(e).__name__}") from None
         return out
 
     def _parse(self, data: dict) -> dict:
-        msg = data["choices"][0]["message"]
+        choice = data["choices"][0]
+        msg = choice["message"]
         text = msg.get("content")
         if text is not None and not isinstance(text, str):
             raise TypeError("content is not text")
@@ -68,7 +70,8 @@ class OpenRouterProvider:
             "text": text,
             "tool_calls": parsed,
             "usage": {"prompt_tokens": tokens[0], "completion_tokens": tokens[1],
-                      "cost_usd": float(cost) if type(cost) in (int, float) else None},
+                      "cost_usd": float(cost) if type(cost) in (int, float) and math.isfinite(cost) and cost >= 0 else None},
+            "stop": choice.get("finish_reason") if isinstance(choice.get("finish_reason"), str) else None,
         }
 
     @staticmethod
@@ -90,8 +93,69 @@ class OpenRouterProvider:
         self.messages += [{"role": "tool", "tool_call_id": r["id"], "content": json.dumps(r["content"])} for r in results]
 
 
-PROVIDERS = {"openrouter": OpenRouterProvider}
-PLANNED = {"anthropic"}  # prefixes reserved for providers that are not built yet
+ANTHROPIC_EFFORT = "medium"
+# Dollars per million (input, output) tokens, from https://platform.claude.com/docs/en/about-claude/pricing (2026-11-14).
+ANTHROPIC_PRICES = {"claude-sonnet-5-5": (2.0, 10.0), "claude-haiku-5-5": (0.10, 0.50)}
+
+
+def anthropic_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    p = ANTHROPIC_PRICES.get(model)
+    return None if p is None else round((input_tokens * p[0] + output_tokens * p[1]) / 1e6, 8)
+
+
+class AnthropicProvider:
+    """Claude through the Anthropic API. Needs `uv sync --group evals`; the deployed app does not ship the SDK."""
+    name = "anthropic"
+
+    def __init__(self, model: str):
+        self.model = model
+        key = os.environ.get("ANTHROPIC_API_KEY")
+        if not key:
+            raise NotConfigured("ANTHROPIC_API_KEY is not set.")
+        try:
+            import anthropic  # lazy: the app and the tests import fine without it
+        except ImportError:
+            raise NotConfigured("The anthropic package is not installed (uv sync --group evals).") from None
+        self._errors = (anthropic.APIError,)
+        self.client = anthropic.Anthropic(api_key=key, timeout=TIMEOUT_S, max_retries=0)
+
+    def start(self, system: str, question: str, tools: list[dict]) -> None:
+        self.system = system
+        self.messages = [{"role": "user", "content": question}]
+        self.tools = [{"name": t["name"], "description": t["description"], "input_schema": t["parameters"]} for t in tools]
+
+    def step(self) -> dict:
+        try:
+            # No temperature/top_p and no forced tool choice: current Claude models reject them.
+            r = self.client.messages.create(
+                model=self.model, max_tokens=MAX_TOKENS, system=self.system, messages=self.messages,
+                tools=self.tools, tool_choice={"type": "auto"}, output_config={"effort": ANTHROPIC_EFFORT})
+            return self._parse(r)
+        except (*self._errors, ValueError, KeyError, TypeError, AttributeError) as e:
+            raise UpstreamError(f"Anthropic failed: {type(e).__name__}") from None
+
+    def _parse(self, r) -> dict:
+        tokens = [r.usage.input_tokens, r.usage.output_tokens]
+        if not all(type(t) is int for t in tokens):
+            raise TypeError("token counts are not integers")
+        usage = {"prompt_tokens": tokens[0], "completion_tokens": tokens[1],
+                 "cost_usd": anthropic_cost(self.model, *tokens)}
+        if r.stop_reason == "refusal":  # not an answer; nothing goes back into the conversation
+            return {"text": "", "tool_calls": [], "usage": usage, "stop": "refusal"}
+        self.messages.append({"role": "assistant", "content": r.content})  # unchanged, thinking blocks included
+        text = "".join(b.text for b in r.content if b.type == "text") or None
+        calls = [{"id": b.id, "name": b.name, "arguments": b.input if isinstance(b.input, dict) else None,
+                  "arguments_error": None if isinstance(b.input, dict) else "Tool arguments must be a JSON object."}
+                 for b in r.content if b.type == "tool_use"]
+        return {"text": text, "tool_calls": calls, "usage": usage, "stop": r.stop_reason}
+
+    def add_tool_results(self, results: list[dict]) -> None:
+        self.messages.append({"role": "user", "content": [  # all results of one step in one user message
+            {"type": "tool_result", "tool_use_id": r["id"], "content": json.dumps(r["content"])} for r in results]})
+
+
+PROVIDERS = {"openrouter": OpenRouterProvider, "anthropic": AnthropicProvider}
+PLANNED: set[str] = set()  # prefixes reserved for providers that are not built yet
 
 
 def parse_spec(spec: str) -> tuple[str, str]:
