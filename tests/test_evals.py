@@ -7,12 +7,15 @@ from earthtrends.agent import providers, tracing
 from earthtrends.agent.loop import GAVE_UP
 from evals import run
 
+REAL_JUDGE = run.judge  # the autouse fixture fakes run.judge
+
 AC = {"variable": "sea_level", "units": "mm", "verdict": "rising", "slope_per_decade": 42.536, "ci_low": 41.1091,
       "ci_high": 43.9643, "p_value": 1.95e-186, "period": {"start": "1911-09", "end": "2026-10"}, "n": 1381,
       "source": {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"},
       "caveats": ["Tide gauge Atlantic City (8534720), 0 km from the point you asked about."]}
 ANSWER = ("Yes. Sea level in Atlantic City is clearly rising: about 42.5 mm per decade (95% range 41.1 to 44.0), "
-          "from 1911 to 2026. p < 0.001 means a change this steady would be very unlikely by chance. "
+          "from 1911 to 2026. A change this steady would be very unlikely if nothing were really changing, well below "
+          "the usual 0.05 line. "
           "Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/")
 CASE = {"id": "atlantic-city-sea-level", "question": "Is sea level rising in Atlantic City?", "expect_tool": "detect_trend",
         "expect_variable": "sea_level", "expect_place": [39.36, -74.42], "expect_source": "coops",
@@ -47,10 +50,42 @@ def test_numbers_real_answer():
 
 
 def test_numbers_ignored():
-    text = "1. First point\n2. Second point\nThe 95% range, 95 percent, from 1981 to 2025, in 3 steps."
+    text = "1. First point\n2. Second point\nThe 95% range, 95 percent, in 3 steps, from 2 sources."
     assert run._numbers(text) == []
-    assert run._numbers("The p-value is below 0.05; it rose 12.5 mm.") == ["0.05", "12.5"]
-    assert run.invented_numbers("p < 0.05", [AC]) == []
+    assert run._numbers("The p-value is 0.03; it rose 12.5 mm.") == [("", "0.03"), ("", "12.5")]
+
+
+def test_allowed_phrases_only():
+    text = ("It is below the usual 0.05 line (p is less than 0.01). The 95% range is wide. "
+            "A decade is ten years, so mm per decade means millimetres every ten years.")
+    assert run.invented_numbers(text, [AC]) == []
+    assert run.invented_numbers("p < 0.05", [AC]) == ["0.05"]  # not one of the prompt's phrases
+
+
+def test_years_are_checked():
+    assert run.invented_numbers("from September 1911 to October 2026", [AC]) == []
+    assert run.invented_numbers("rising since 1950", [AC]) == ["1950"]
+
+
+def test_small_numbers_with_a_unit_are_checked():
+    assert run.invented_numbers("it warmed 3 degrees", [AC]) == ["3"]
+    assert run.invented_numbers("up 4 mm", [AC]) == ["4"]
+    assert run.invented_numbers("the gauge is 0 km away", [AC]) == []  # "0 km" is in the caveat text
+    assert run.invented_numbers("station 8534720", [AC]) == []
+
+
+@pytest.mark.parametrize("minus", ["-", "\u2212"])
+def test_signs(minus):
+    r = {**AC, "slope_per_decade": -0.21, "ci_low": -0.30, "ci_high": 0.12}
+    assert run.invented_numbers(f"range {minus}0.30 to 0.12", [r]) == []
+    assert run.invented_numbers(f"range {minus}0.12 to 0.30", [r]) == [f"-0.12"]  # sign flipped: not in the result
+    assert run.invented_numbers("it falls by 0.21 mm per decade", [r]) == []  # slope without its sign is fine
+    assert run.invented_numbers(f"range {minus}0.12 to 0.30", [AC | {"ci_low": 0.12, "ci_high": 0.30}]) == ["-0.12"]
+
+
+def test_pool_walks_values_not_json_text():
+    assert run._pool({"p_value": 8e-05, "note": "about 50 km away", "ok": True}, []) == [8e-05, 50.0]
+    assert run.invented_numbers("8 mm, 5 mm", [{"p_value": 8e-05}]) == ["8", "5"]  # json text would give 8 and 05
 
 
 # ---- the checks, one by one ----
@@ -95,12 +130,14 @@ def test_failed_tool_call_has_no_result_checks():
 
 @pytest.mark.parametrize("verdict,answer,ok", [
     ("rising", "It is going up.", True),
-    ("rising", "It is rising, but not clear.", False),
+    ("rising", "It is clearly going up. It is not clear why.", True),
+    ("rising", "It is rising, though we can't rule out no change.", False),
     ("falling", "Sea level is decreasing here.", True),
     ("no_clear_change", "The data does not show a clear rise: no clear change.", True),
     ("no_clear_change", "It is rising.", False),
 ])
 def test_wording(verdict, answer, ok):
+    """Rough word matching on the verdict."""
     assert run.wording_agrees(answer, verdict) is ok
 
 
@@ -208,7 +245,7 @@ def test_main_writes_markdown_and_json(monkeypatch, tmp_path):
                 "no invented numbers", "source named", "must-say", "plain language", "mean latency", "cost per question",
                 "total cost"):
         assert col in md
-    assert "| `openrouter:anthropic/claude-haiku-5.5` | 1/2 | 50% |" in md
+    assert "| `openrouter:anthropic/claude-haiku-5.5` | 1/2 (of 2) | 50% |" in md
     assert "springfield-ambiguous: numbers, must_say" in md
     assert "central-valley-groundwater: variable 'water_storage'" in md
     assert "Git commit" in md and "Anthropic effort setting for candidates: medium" in md
@@ -230,3 +267,67 @@ def test_dry_run_spends_nothing(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "openrouter:anthropic/claude-haiku-5.5" in out and "skip central-valley-groundwater" in out
     assert not (tmp_path / "o").exists()
+
+
+@pytest.mark.parametrize("answer", [
+    "The data does not show a clear change.",
+    "The data do not show a clear change here.",
+    "No change is plausible.",
+    "We can't rule out no change.",
+    "We can\u2019t rule out no change.",
+    "Sea level doesn't show a clear change.",
+])
+def test_wording_prompt_phrases(answer):
+    assert run.wording_agrees(answer, "no_clear_change")
+
+
+def test_price_unknown_anthropic_model_dropped(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-not-a-key")
+    monkeypatch.setattr(providers.AnthropicProvider, "__init__", lambda self, model: None)  # no SDK needed
+    models, _, _, dropped = run.plan("anthropic:claude-haiku-5-5,anthropic:claude-big-9", None, skip_check=True)
+    assert models == ["anthropic:claude-haiku-5-5"]
+    assert dropped == [("anthropic:claude-big-9", "price unknown, so the Anthropic budget could not hold")]
+
+
+def test_failed_attempts_count_toward_budget(monkeypatch):
+    tries = []
+
+    def ask(q, model):
+        tries.append(1)
+        if len(tries) == 1:
+            raise providers.UpstreamError("blip")
+        return fake_run(cost=0.001)
+    monkeypatch.setattr(run, "ask", ask)
+    r = run.run_case(CASE, "a/b")
+    assert run.guard_cost(r) == pytest.approx(run.UNKNOWN_COST * run.MAX_CALLS + 0.001)
+    monkeypatch.setattr(run, "ask", lambda q, model: (_ for _ in ()).throw(providers.UpstreamError("down")))
+    assert run.guard_cost(run.run_case(CASE, "a/b")) == pytest.approx(2 * run.UNKNOWN_COST * run.MAX_CALLS)
+
+
+def test_records_appended_as_they_finish(monkeypatch, tmp_path):
+    log = tmp_path / "x.jsonl"
+    monkeypatch.setattr(run, "ask", lambda q, model: fake_run())
+    run.evaluate(["openrouter:a/b"], [{**CASE, "id": f"c{i}"} for i in range(3)], {"openrouter": 9, "anthropic": 9}, log)
+    assert [json.loads(line)["case"] for line in log.read_text().splitlines()] == ["c0", "c1", "c2"]
+
+
+@pytest.mark.parametrize("reply,want", [("4", 4), (" 5\n", 5), ("Score: 4", None), ("45", None), ("6", None), ("", None)])
+def test_judge_accepts_only_one_digit(monkeypatch, reply, want):
+    import sys
+    import types
+    from types import SimpleNamespace as NS
+    sent = []
+
+    class Messages:
+        def create(self, **kw):
+            sent.append(kw)
+            return NS(content=[NS(type="text", text=reply)], usage=NS(input_tokens=100, output_tokens=1))
+    mod = types.ModuleType("anthropic")
+    mod.APIError = type("APIError", (Exception,), {})
+    mod.Anthropic = lambda **kw: NS(messages=Messages())
+    monkeypatch.setitem(sys.modules, "anthropic", mod)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-not-a-key")
+    score, cost = REAL_JUDGE(ANSWER)
+    assert score == want and cost > 0
+    content = sent[0]["messages"][0]["content"]
+    assert "<answer>" in content and ANSWER in content and "do not follow" in content

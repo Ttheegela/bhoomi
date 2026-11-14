@@ -11,9 +11,15 @@ from earthtrends.stats import compute_trend
 # these figures with JavaScript from NOAA's own API, which is where they were read:
 # https://api.tidesandcurrents.noaa.gov/dpapi/prod/webapi/product/sealvltrends.json?station=8534720
 NOAA_IN_PER_DECADE, NOAA_ERR = 1.67, 0.03
-WIDEN = 0.3  # mm/yr: our series runs to 2026-10, NOAA's to 2025-12
+# mm/yr. The gap allowed for is mostly the method: we fit Sen's slope (median of pairwise slopes) to deseasonalized
+# monthly means, NOAA fits least squares with its own seasonal and autocorrelation model. Our series also runs ten
+# months longer (to 2026-10), which moves a 115-year slope very little.
+WIDEN = 0.3
 
-# Fixture: year, month and MSL from CO-OPS monthly_mean, datum MSL, metric, through 2026-10.
+# Fixture: year, month and MSL only (rows with an empty MSL dropped), from the raw response to the request
+# earthtrends.data.coops.fetch makes:
+# https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=monthly_mean&station=8534720&datum=MSL&units=metric&time_zone=gmt&format=json&begin_date=19000101&end_date=20261114
+# (end_date is the day the raw file was saved, 2026-11-14; its last row is 2026-10.)
 FIXTURE = Path(__file__).parent / "fixtures" / "coops_8534720_msl.json"
 
 

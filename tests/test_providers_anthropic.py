@@ -172,6 +172,16 @@ def test_openrouter_stop_normalised(monkeypatch, reason, want):
     assert p._parse({"choices": [{"message": {"content": "hi"}, "finish_reason": reason}]})["stop"] == want
 
 
+def test_openrouter_refusal_drops_text_and_calls(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-not-a-key")
+    p = providers.OpenRouterProvider("a/b")
+    p.start("sys", "q", loop.TOOLS)
+    out = p._parse({"choices": [{"finish_reason": "content_filter", "message": {"content": "partial filtered te",
+                    "tool_calls": [{"id": "c1", "function": {"name": "detect_trend", "arguments": "{}"}}]}}]})
+    assert out["text"] == "" and out["tool_calls"] == [] and out["stop"] == "refusal"
+    assert len(p.messages) == 2  # nothing appended
+
+
 def test_openrouter_deep_json_is_upstream_error(monkeypatch):
     import httpx
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-not-a-key")

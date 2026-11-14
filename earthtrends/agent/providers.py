@@ -71,17 +71,21 @@ class OpenRouterProvider:
         if not all(type(t) is int for t in tokens):
             raise TypeError("token counts are not integers")
         cost = u.get("cost")
+        stop = norm_stop(choice.get("finish_reason"))
+        if stop == "refusal":  # filtered text is not an answer; nothing goes back into the conversation
+            text, parsed, calls = "", [], []
         # History goes back in the standard wire shape: arguments as a JSON string.
         history = [{"id": p["id"], "type": "function", "function": {
             "name": p["name"], "arguments": json.dumps(p["arguments"]) if p["arguments"] is not None
             else str(c.get("function", {}).get("arguments") or "")}} for c, p in zip(calls, parsed)]
-        self.messages.append({"role": "assistant", "content": text, **({"tool_calls": history} if history else {})})
+        if stop != "refusal":
+            self.messages.append({"role": "assistant", "content": text, **({"tool_calls": history} if history else {})})
         return {
             "text": text,
             "tool_calls": parsed,
             "usage": {"prompt_tokens": tokens[0], "completion_tokens": tokens[1],
                       "cost_usd": float(cost) if type(cost) in (int, float) and math.isfinite(cost) and cost >= 0 else None},
-            "stop": norm_stop(choice.get("finish_reason")),
+            "stop": stop,
         }
 
     @staticmethod
@@ -104,8 +108,9 @@ class OpenRouterProvider:
 
 
 ANTHROPIC_EFFORT = "medium"
-# Dollars per million (input, output) tokens, from https://platform.claude.com/docs/en/about-claude/pricing (2026-11-14).
-ANTHROPIC_PRICES = {"claude-sonnet-5-5": (2.0, 10.0), "claude-haiku-5-5": (0.10, 0.50)}
+# Dollars per million (input, output) tokens, first-party API, checked 2026-11-14 against
+# https://platform.claude.com/docs/en/about-claude/pricing. Haiku 5.5 is the rate for prompts up to 100K tokens.
+ANTHROPIC_PRICES = {"claude-sonnet-5-5": (2.00, 10.00), "claude-haiku-5-5": (0.10, 0.50)}
 
 
 def anthropic_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
