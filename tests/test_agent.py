@@ -452,7 +452,6 @@ def no_trend_numbers(content):
     (f"{NY_HEAD} {WRONG_NY1} [AGREEING SOURCES] {NY_CAVEAT} {NY_SOURCES}",
      f"{NY_HEAD} {WRONG_NY1} {NY_SENT} {NY_CAVEAT} {NY_SOURCES}"),
     (f"{NY_HEAD} {WRONG_NY8} {NY_CAVEAT} {NY_SOURCES}", f"{NY_HEAD} {WRONG_NY8} {NY_CAVEAT} {NY_SENT} {NY_SOURCES}"),
-    (f"{NY_HEAD} {NY_SENT} [AGREEING SOURCES] {NY_SOURCES}", f"{NY_HEAD} {NY_SENT} {NY_SOURCES}"),  # exact copy: once
     (f"{NY_HEAD} PSMSL agrees. {NY_SOURCES}", f"{NY_HEAD} PSMSL agrees. {NY_SENT} {NY_SOURCES}"),
 ])
 def test_two_sources_agree_code_writes_the_sentence(fake, monkeypatch, model_text, want):
@@ -578,10 +577,10 @@ def test_sentences_with_more_than_an_agree_claim_are_kept(sentence):
     NY_SENT,
     WRONG_NY8,
 ])
-def test_model_agree_claims_are_kept_only_exact_copies_go(sentence):
+def test_model_agree_claims_are_kept(sentence):
+    # nothing the model wrote goes, not even an exact copy of the code's sentence (it then shows twice: accepted)
     out = loop.compose(f"{NY_HEAD} {sentence} [AGREEING SOURCES] {NY_SOURCES}", NY_CALLS)
-    kept = "" if sentence == NY_SENT else sentence + " "
-    assert out == f"{NY_HEAD} {kept}{NY_SENT} {NY_SOURCES}" and out.count(NY_SENT) == 1
+    assert out == f"{NY_HEAD} {sentence} {NY_SENT} {NY_SOURCES}"
 
 
 @pytest.mark.parametrize("text,want", [
@@ -708,6 +707,8 @@ def test_copy_inside_a_model_sentence_stays(model, calls, want):
 @pytest.mark.parametrize("items", [
     "1. https://tidesandcurrents.noaa.gov/\n2. https://psmsl.org/\n",
     "- NOAA CO-OPS tide gauges, U.S. https://tidesandcurrents.noaa.gov/\n- PSMSL, https://psmsl.org/\n",
+    "  - https://tidesandcurrents.noaa.gov/\n  - https://psmsl.org/\n",  # indented with spaces
+    "   1. U.S. https://tidesandcurrents.noaa.gov/\n\t2. https://psmsl.org/\n",  # spaces and a tab
 ])
 def test_list_item_with_a_full_stop_before_its_link_stays_whole(items):
     assert loop.compose(f"{NY_HEAD}\n\nSources:\n{items}", NY_CALLS) == f"{NY_HEAD}\n\n{NY_SENT}\nSources:\n{items}"

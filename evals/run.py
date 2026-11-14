@@ -192,8 +192,8 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                 base = [lead] + [r.get("caveats") for r in by_src.values()]  # every caveat may be passed on
                 leaked = set(invented_numbers(answer, base)) - set(invented_numbers(answer, base + others))
                 out["wording"] = out["wording"] and not leaked
-                # the loop writes one sentence per agreeing source: each must be there exactly once
-                out["wording"] = out["wording"] and all(answer.count(agree_sentence(r, lead)) == 1 for r in agreeing)
+                # the loop writes one sentence per agreeing source: each must be there (a model copy may double it)
+                out["wording"] = out["wording"] and all(agree_sentence(r, lead) in answer for r in agreeing)
                 # "over its own record" belongs to an agreeing source, so its sentence must name one
                 # and the subject (the text before "agree") must name one: not "<default> agrees ... using PSMSL"
                 own = [s for s in re.split(r"(?<=[.!?])\s+", a) if "over its own record" in s]

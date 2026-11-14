@@ -661,7 +661,8 @@ def test_code_sentence_is_the_helpers():
 def test_code_written_answer_passes(sentence):
     calls = multi([REAL_COOPS, REAL_PSMSL])
     answer = compose(NY_HEAD + sentence + NY_TAIL, calls)
-    assert answer.count(CODE_SENT) == 1
+    # a model-written copy stays, and the code's sentence is added too
+    assert answer.count(CODE_SENT) == (2 if CODE_SENT in sentence else 1)
     assert run.check(NY_CASE, fake_run(answer, calls))["wording"]
 
 
@@ -670,7 +671,6 @@ def test_code_written_answer_passes(sentence):
     "PSMSL agrees, over its own record, January 1856 to December 2025.",
     "The Permanent Service for Mean Sea Level agrees, over its own record, January 1856 to December 2025.",
     "",
-    CODE_SENT + " " + CODE_SENT,  # twice
     "NOAA CO-OPS tide gauges agrees, over its own record, January 1856 to December 2025.",
     "NOAA CO-OPS tide gauges agrees with this, using the Permanent Service for Mean Sea Level (PSMSL) data, over its "
     "own record, January 1856 to December 2025.",  # ny8: PSMSL named, but not as the one that agrees

@@ -178,8 +178,8 @@ def _cut(text: str, s: int, e: int, mask: list[bool]) -> None:
 def compose(text: str, calls: list[dict]) -> str:
     """The final text. The agreeing sources' sentences go where the marker is (or, if it is missing or inside a
     sentence, in front of the first sentence or list line with a link, else at the end), each followed by
-    "Its data: <url>." if the text lacks its link. Only markers and exact copies of those sentences are removed;
-    every other model sentence stays. Any other source with a result whose link is missing gets
+    "Its data: <url>." if the text lacks its link. Only markers are removed; everything the model wrote stays
+    (a copy of the code's sentence written by the model shows twice: accepted). Any other source with a result whose link is missing gets
     "Source: <name>, <url>." at the end. Only the space around a change is touched."""
     plan = agree_plan(calls)
     lead, others = plan or ({}, [])
@@ -193,9 +193,6 @@ def compose(text: str, calls: list[dict]) -> str:
             mask[m.start():m.end()] = [True] * (m.end() - m.start())
         else:
             _cut(text, m.start(), m.end(), mask)
-    for s in sents:  # the model's exact copy goes when it stands on its own; one inside a sentence stays
-        for c in re.finditer(rf"(?:^|(?<=[.!?]\s)){re.escape(s)}(?=\s|$)", text, re.M):
-            _cut(text, c.start(), c.end(), mask)
     kept = "".join(ch for ch, gone in zip(text, mask) if not gone)
     line = False  # put the sentences on a line of their own (in front of a list)
     if sents and at is None:
@@ -205,7 +202,7 @@ def compose(text: str, calls: list[dict]) -> str:
                 continue
             at = m.start()
             ls = text.rfind("\n", 0, at) + 1  # the start of the link's line: a list item is judged by its line
-            if re.match(r"(?:[-*•]|\d+[.)])\s", text[ls:]):
+            if re.match(r"[ \t]*(?:[-*•]|\d+[.)])\s", text[ls:]):
                 at, line = ls, True
                 prev = text.rfind("\n", 0, at - 1) + 1  # a list header line ("Sources:") stays with its list
                 if at and text[prev:at - 1].rstrip().endswith(":"):
