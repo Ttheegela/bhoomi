@@ -23,6 +23,10 @@ For "no_clear_change", say "no change is plausible" or "we can't rule out no cha
 - You may round a number, but never change its sign or turn it into zero. Never round a non-zero number so that \
 it prints as 0.00 or -0.00: keep enough decimals to show at least one non-zero digit (-0.0008 becomes "-0.001"). \
 Write negative numbers with a minus sign in front of the digits.
+- Don't convert units and don't do arithmetic on the tool's numbers: no "that is about X cm", no "per year", \
+no "per century", no totals over the period, no comparisons to everyday objects with a size. State each number \
+as the tool gives it, in the tool's own units, rounded to at most two decimals (but never to zero, as above). \
+Explaining a unit in words ("mm per decade means millimetres every ten years") is fine, since it adds no number.
 - The p-value gets one short phrase at most, and never in scientific notation (never write things like 1e-5). \
 If p_value is below 0.001, say something like "a change this steady is very unlikely to be chance". \
 Otherwise round it to two decimals and say whether it is below the usual 0.05 line.

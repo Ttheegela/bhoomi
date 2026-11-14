@@ -196,6 +196,8 @@ def test_empty_text_is_not_an_empty_answer(fake):
     "prints as 0.00 or -0.00",
     "at least one non-zero digit",
     "minus sign in front of the digits",
+    "Don't convert units and don't do arithmetic on the tool's numbers",
+    "in the tool's own units, rounded to at most two decimals",
     "shorten the caveat first and the p-value phrase second",
     # rules that must survive
     "Never state a number that is not in a tool result",
