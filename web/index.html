@@ -16,7 +16,7 @@
       <h1>Trend Detective</h1>
       <p class="ai-label">Built with AI assistance</p>
     </div>
-    <p class="lead">Is it really changing here? Pick a place and a measurement.</p>
+    <p class="lead">Is it really changing here?<span class="lead-2"> Pick a place and a measurement.</span></p>
   </div>
 </header>
 
@@ -30,7 +30,7 @@
     </fieldset>
 
     <details id="coords">
-      <summary>Type coordinates or use my location</summary>
+      <summary><span class="mark" aria-hidden="true"></span>Type coordinates or use my location</summary>
       <div class="fields">
         <div class="field">
           <label for="lat">Latitude</label>
@@ -46,6 +46,9 @@
           <button type="button" id="locate" class="btn">Use my location</button>
           <p id="geo-msg" class="field-err" hidden></p>
         </div>
+        <div class="field btn-field span2">
+          <button type="submit" id="go" class="btn primary">Show trend</button>
+        </div>
       </div>
     </details>
 
@@ -58,9 +61,6 @@
       <div class="field span2" id="source-field" hidden>
         <label for="source">Data source</label>
         <select id="source"></select>
-      </div>
-      <div class="field btn-field span2">
-        <button type="submit" id="go" class="btn primary">Show trend</button>
       </div>
     </div>
   </form>
@@ -78,8 +78,9 @@
           <p class="card-label">Our answer</p>
           <h2 id="verdict-heading" tabindex="-1" class="verdict-head"></h2>
           <div class="card-body">
+            <div id="verdict-source" class="srcline"></div>
             <p id="verdict-p1"></p>
-            <p id="verdict-source" class="source"></p>
+            <p id="verdict-calc" class="source"></p>
             <p id="verdict-p2"></p>
             <p id="verdict-evidence"></p>
           </div>
@@ -94,15 +95,16 @@
       <div class="col-chart" id="chart-wrap" hidden>
         <figure id="chart-fig">
           <div id="chart-box"></div>
+          <div id="chart-source" class="srcline"></div>
           <div id="legend" class="legend">
-            <div class="legend-group">
-              <p class="legend-label">From the dataset</p>
+            <div class="legend-group" role="group" aria-labelledby="lg-data">
+              <p id="lg-data" class="legend-label">From the dataset</p>
               <ul>
                 <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-raw"/></svg>Raw monthly value</li>
               </ul>
             </div>
-            <div class="legend-group">
-              <p class="legend-label">Our calculation</p>
+            <div class="legend-group" role="group" aria-labelledby="lg-calc">
+              <p id="lg-calc" class="legend-label">Our calculation</p>
               <ul>
                 <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-des"/></svg>Seasons removed</li>
                 <li><svg width="32" height="12" aria-hidden="true"><circle cx="16" cy="6" r="3.5" class="s-year"/></svg>Yearly average, seasons removed</li>
@@ -115,14 +117,15 @@
           <p id="readout" class="readout" aria-live="polite">Tap or hover the chart to read a month.</p>
           <figcaption>
             <span id="chart-caption"></span>
-            <span id="chart-source" class="source"></span>
+            <span id="chart-raw"></span>
           </figcaption>
         </figure>
         <details id="table-details">
-          <summary>Show the data as a table</summary>
+          <summary><span class="mark" aria-hidden="true"></span>Show the data as a table</summary>
+          <div id="table-source" class="srcline"></div>
           <div id="table-scroll" class="table-scroll" tabindex="0" role="region" aria-label="Monthly data table">
             <table>
-              <caption id="table-source"></caption>
+              <caption id="table-caption"></caption>
               <thead><tr><th scope="col">Month</th><th scope="col" id="table-col"></th></tr></thead>
               <tbody id="table-body"></tbody>
             </table>
@@ -137,11 +140,11 @@
       <section id="numbers" aria-labelledby="numbers-h">
         <h2 id="numbers-h">The numbers</h2>
         <dl id="numbers-list"></dl>
-        <p id="numbers-source" class="source"></p>
+        <div id="numbers-source" class="srcline"></div>
       </section>
       <section id="notes" aria-label="Caveats and notes">
         <details open>
-          <summary><h2>Caveats and notes</h2></summary>
+          <summary><span class="mark" aria-hidden="true"></span><h2>Caveats and notes</h2></summary>
           <ul id="notes-list"></ul>
         </details>
       </section>

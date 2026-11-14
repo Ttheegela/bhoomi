@@ -95,13 +95,15 @@ input[aria-invalid="true"] { border-width: 2px; border-color: var(--ink); }
 .verdict-head { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); background: var(--ink); color: var(--bg);
   font-size: var(--fs-verdict); font-weight: 700; }
 .verdict-head svg { flex: none; width: .8em; height: .8em; fill: currentColor; }
-.card-body { padding: var(--s4); }
+.card-body { padding: var(--s3) var(--s4) var(--s4); }
 .card-body p:last-child { margin-bottom: 0; }
 .problem h2 { padding: var(--s4) var(--s4) 0; }
 .actions { display: flex; flex-wrap: wrap; gap: var(--s3); padding: 0 var(--s4) var(--s4); }
 .actions .btn { width: auto; }
 .source { font-size: 14px; color: var(--ink-2); }
-.source a { color: var(--ink); display: inline-block; padding: 12px 0; }
+.srcline { margin: 0; }
+.srclink { display: inline-flex; align-items: center; min-height: 48px; font-size: 14px; color: var(--ink); }
+span.srclink { color: var(--ink-2); }
 
 /* chart */
 figure { margin: 0; }
@@ -129,11 +131,13 @@ figcaption span { display: block; max-width: 70ch; }
 .c-title { fill: var(--ink); font-weight: 700; }
 details { margin-top: var(--s4); }
 summary { cursor: pointer; min-height: 48px; display: flex; align-items: center; }
+.mark { display: inline-block; width: 1.4em; flex: none; color: var(--ink-2); }
+.mark::before { content: '\25B8'; }
+details[open] > summary .mark::before { content: '\25BE'; }
 #notes summary h2 { display: inline; }
 .table-scroll { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
 table { border-collapse: collapse; width: 100%; }
 caption { text-align: left; padding: var(--s2) var(--s3); font-size: 14px; color: var(--ink-2); }
-caption a { color: var(--ink); }
 th, td { text-align: left; padding: var(--s1) var(--s3); border-bottom: 1px solid var(--hairline); }
 thead th { position: sticky; top: 0; background: var(--surface); }
 
@@ -157,10 +161,18 @@ dd { margin: 0; }
 footer { border-top: 1px solid var(--line); padding: var(--s5) 0; }
 footer p:nth-child(2) { margin: var(--s3) 0 0; color: var(--ink-2); }
 footer ul { list-style: none; padding: 0; margin: var(--s2) 0 0; font-size: 14px; }
-footer li a { display: inline-block; padding: 12px 0; }
+footer li a { display: inline-flex; align-items: center; min-height: 48px; color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 
 #loading p:empty { display: none; }
 #coords { margin-top: var(--s4); }
+.lead-2 { display: inline; }
+@media (max-width: 599px) {
+  .lead-2 { display: none; }
+  .lead { margin: var(--s2) 0 var(--s3); }
+  main > .wrap > * + * { margin-top: var(--s3); }
+  #coords, .fields { margin-top: var(--s3); }
+  .card-label { padding: var(--s2) var(--s4) var(--s1); }
+}
 #coords summary { color: var(--ink); }

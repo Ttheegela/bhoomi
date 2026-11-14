@@ -32,6 +32,8 @@ Is it really changing here?      [Question line]
 ```
 - Desktop verdict column is sticky (top 16 px) beside the chart. Below 900 px all stacked.
 - Header AI label: bordered text "Built with AI assistance", always visible in the header (not hidden at 375). Footer repeats it with the line "Data come from the sources named next to each number. Only public data."
+- Controls: the "Show trend" button lives inside the coordinates section (a closed `<details>`); chips and the measurement select run at once.
+- Verdict card order: heading, the source link line ("Data: {source.name} ↗"), sentence 1, the "our calculation" line, then the explanatory paragraphs and the p-value. Source links are block-level lines, 48 px tall, never inside a sentence.
 - Ask slot: `<section id="ask" hidden aria-label="Ask a question"></section>` after "How to read this". Empty now.
 
 ## 3. Words on screen
@@ -67,14 +69,14 @@ Is it really changing here?      [Question line]
 Container `figure`, width 100%, SVG `viewBox` scales with it. Two stacked panels sharing one x axis (so raw seasonal swings never flatten the trend):
 - Panel A "Raw monthly values" (units on y axis): thin line.
 - Panel B "Seasons removed, with trend" (y label "Change from the usual for that month ({units})"): deseasonalized line, trend line, uncertainty fan. Deseasonalized = value − its calendar month's mean over all non-null values.
-- Sizes: viewBox 340 x 340 at <= 599 px (A 110 tall, B 190, axis 40); 640 x 420 at 600-899 px; 720 x 460 at >= 900 px (A 140, B 260). Min text in SVG 12 px on screen (scale font with the viewBox).
+- Sizes: viewBox width 340 at <= 599 px (panel A 126 tall, B 206), 640 at 600-899 px (A 166, B 246), 720 at >= 900 px (A 156, B 276); height = A + B + a gap of font size + 8 + the axis area (at least 40); each panel header is 3.25 x the font size. Min text in SVG 12 px on screen (scale font with the viewBox).
 - Marks (distinct without colour): raw = 1 px solid line, grey `--chart-faint`. Seasons-removed monthly line = faint, 1 px, `--chart-faint`; yearly averages of it (years with at least 6 valid months) = dots in `--ink`. Trend = solid line, about 3.5 px, `--ink`, drawn over the dots. Fan = flat fill `--ink` at 22% opacity, no outline, plus 1.5 px dotted edges (2 3) so it reads in high contrast mode.
 - Trend line: t in decades since first month; intercept = median(deseasonalized − slope_per_decade × t); y = intercept + slope × t. Fan: two lines through the pivot (median t, trend value there) with slopes `ci_low` and `ci_high`, filled between them across the whole x range. The browser draws only; printed numbers come from the API.
 - Axes: x ticks by screen spacing: the smallest step from 1, 2, 5, 10, 20, 25, 50 years whose ticks are at least 56 screen px apart (a span of 2 years or more always shows at least two labels); labels "1980", "1990". y: 4 to 5 "nice" ticks, labels with up to 2 decimals, light 1 px grid `--hairline`. Panel B draws a heavier zero line. X axis title: "Year". Y axis in panel A: "{name} ({units})".
 - Nulls: break the line (no interpolation, no dots). Say in the legend note: "Gaps in the line are months with no data."
-- Legend (HTML, below chart, each item an SVG swatch drawn in the same stroke style plus words): "Raw monthly value" / "Seasons removed" / "Trend line" / "95% range of the trend".
+- Legend (HTML, below chart, each item an SVG swatch drawn in the same stroke style plus words): "Raw monthly value" / "Seasons removed" / "Trend line" / "Range of the trend", grouped under "From the dataset" and "Our calculation".
 - Readout instead of a floating tooltip (works on touch): a line under the chart, `aria-live="polite"`, empty text "Tap or hover the chart to read a month." On pointer move/tap, snap to the nearest month, draw a 1 px vertical rule, and show "Mar 2004: 24.1 degC raw, 0.3 degC above the usual March." Values come from the series; the difference is the plotted deseasonalized value. Chart `tabindex="0"`; Left/Right move the rule by 1 month, Shift+Left/Right by 12, Home/End jump, Esc clears.
-- Text alternative: `role="img"` with `<title>` and `<desc>`; visible caption under the chart: "{name} at {place}, {period.start} to {period.end}. The trend line {rises|falls|stays flat at}, {slope} per decade (95% range {lo} to {hi}). Verdict: {rising|falling|no clear change}." (flat when verdict is no_clear_change.) Then "Source: {source.name}" (link).
+- Text alternative: `role="img"` with `<title>` and `<desc>`; visible caption under the chart: "{name} at {place}, {period.start} to {period.end}. The trend line {rises|falls|stays flat at}, {slope} per decade (range of trends the data support: {lo} to {hi} per decade). Verdict: {rising|falling|no clear change}." ("rises by" / "falls by" / "moves by {slope} per decade, which we can't tell from zero".) The source is a block-level link line directly below the chart.
 - `<details>` "Show the data as a table": columns Month, {name} ({units}); one row per `times` entry, empty cell shown as "no data"; `max-height` 320 px scroll, sticky header, `tabindex="0"` on the scroller, caption "Source: {source.name}" (link).
 
 ## 6. Tokens
@@ -97,7 +99,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 
 ## 8. Done-check for QA (screenshots at 375 px and 1280 px, light and dark)
 - [ ] First load shows Atlantic City sea level with a verdict and chart, no empty form. Verdict names its dataset (from the API) as a link.
-- [ ] Visakhapatnam air temperature shows "No clear change" in a card the same size as the others, with the 95% range and p-value in words.
+- [ ] Visakhapatnam air temperature shows "No clear change" in a card the same size as the others, with the range and p-value in words.
 - [ ] Delhi + Sea level shows the 400 `detail` text verbatim plus the two recovery buttons.
 - [ ] Forced 502, network failure, empty series and bad latitude each show their exact copy above.
 - [ ] Both chart panels, trend line (solid, about 3.5 px), yearly-average dots, fan and legend visible; a null gap is a break, not a line.
@@ -157,3 +159,5 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Error and empty-state copy.
 - Loading placeholder is a flat grey block with no motion.
 - Labels at 14 px instead of 12 px.
+- Show trend button inside the coordinates section.
+- Source links as their own 48 px lines.

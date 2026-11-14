@@ -118,16 +118,17 @@ function fmtNum(x, signed) {
   const s = fixed(x, d);
   return signed && x > 0 ? '+' + s : s;
 }
-function fmtVal(x, units) { return fmtNum(x, true) + (units ? ' ' + unitLabel(units) : ''); }
+function fmtVal(x, units) { return fmtNum(x, true) + (units ? '\u00a0' + unitLabel(units) : ''); }
+function fmtAbs(x, units) { return fmtNum(Math.abs(x), false) + (units ? '\u00a0' + unitLabel(units) : ''); }
 function fmtP(p) { return p < 0.001 ? '< 0.001' : String(p); }
 
 function stripParens(name) { return String(name).replace(/\s*\([^)]*\)\s*$/, ''); }
 // Station sources (coops, ghcn) give a real station name: use it as given. Otherwise a preset
-// within 0.005 degrees gives its chip label; any other point is "the spot at lat, lon".
+// within 0.005 degrees gives its chip label; any other point is written as "lat, lon".
 function placeFor(lat, lon, apiName, sourceId) {
   if (apiName && (sourceId === 'coops' || sourceId === 'ghcn')) return apiName;
   const p = PRESETS.find((q) => Math.abs(q.lat - lat) <= 0.005 && Math.abs(q.lon - lon) <= 0.005);
-  return p ? p.label : `the spot at ${Number(lat).toFixed(2)}, ${Number(lon).toFixed(2)}`;
+  return p ? p.label : `${fixed(Number(lat), 2)}, ${fixed(Number(lon), 2)}`;
 }
 function monthLabel(t) { const m = monthIndex(t); return MONTHS[m % 12] + ' ' + Math.floor(m / 12); }
 
@@ -145,21 +146,30 @@ function verdictCopy(t, name, place) {
       p1: `${name} at ${place} is going down, about ${s} per decade from ${y0} to ${y1}. ${band}`,
       p2: 'Even the high end of the band is below zero, so this is a clear fall.' };
   }
-  const sl = t.slope_per_decade;
-  const incl = t.ci_low <= 0 && t.ci_high >= 0 ? 'includes zero' : 'is too wide to rule out no change';
-  const lean = sl === 0 ? `The data show no lean either way (${s} per decade)` : `The data lean ${sl > 0 ? 'up' : 'down'} by ${s} per decade`;
-  return { head: 'No clear change', shape: 'flat',
-    p1: `We can't tell ${lcName(name)} at ${place} apart from no change, ${y0} to ${y1}. ${lean}, but the shaded band (${lo} to ${hi}) ${incl}.`,
+  const sl = t.slope_per_decade, abs = fmtAbs(sl, t.units);
+  const lean = sl === 0 ? `The data show no lean either way (${s} per decade)` : `The data lean ${sl > 0 ? 'up' : 'down'} by ${abs} per decade`;
+  const head = `We can't tell ${lcName(name)} at ${place} apart from no change, ${y0} to ${y1}.`;
+  let p1;
+  if (t.ci_low > 0 || t.ci_high < 0) {
+    const side = t.ci_low > 0 ? 'above' : 'below';
+    p1 = `${head} ${lean} and the shaded band (${lo} to ${hi}) stays ${side} zero, but the test is not sure enough to call it a clear change (p-value ${fmtP(t.p_value)}).`;
+  } else {
+    p1 = `${head} ${lean}, but the shaded band (${lo} to ${hi}) includes zero.`;
+  }
+  return { head: 'No clear change', shape: 'flat', p1,
     p2: 'That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs.' };
 }
 
 function captionText(t, name, place) {
   const s = fmtVal(t.slope_per_decade, t.units);
-  const amt = fmtNum(Math.abs(t.slope_per_decade), false) + ' ' + unitLabel(t.units);
+  const amt = fmtAbs(t.slope_per_decade, t.units);
+  const range = `(range of trends the data support: ${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade)`;
   const y = t.verdict === 'rising' ? `rises by ${amt} per decade` : t.verdict === 'falling' ? `falls by ${amt} per decade` : `moves by ${s} per decade, which we can't tell from zero`;
   const v = t.verdict === 'no_clear_change' ? 'no clear change' : t.verdict;
-  return `${name} at ${place}, ${t.period.start} to ${t.period.end}. The trend line ${y}. Verdict: ${v}.`;
+  return `${name} at ${place}, ${t.period.start} to ${t.period.end}. The trend line ${y} ${range}. Verdict: ${v}.`;
 }
+
+function rawLine(source) { return `Raw values: ${source ? source.name : 'unknown'}. Trend and range: our calculation.`; }
 
 function layoutFor(w) {
   if (w <= 599) return { vw: 340, hA: 126, hB: 206 };
@@ -192,33 +202,18 @@ function svg(tag, attrs, text) {
 }
 function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
 
-// "Source: <name>" with a link only when the API gave an https:// URL.
-function fillSource(node, source) {
+const isHttps = (src) => !!src && typeof src.url === 'string' && src.url.startsWith('https://');
+// One block-level 48 px line: "<label>: <name> ↗" as a link (https URLs only), plain text without the arrow otherwise.
+function srcBlock(node, label, source) {
   clear(node);
-  node.append('Source: ');
-  srcLink(node, source);
+  const name = source ? source.name : 'unknown';
+  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, `${label}: ${name} ↗`));
+  else node.append(el('span', { class: 'srclink' }, `${label}: ${name}`));
 }
-
+// Link with the name only (footer list).
 function srcLink(node, source) {
-  if (source && typeof source.url === 'string' && source.url.startsWith('https://')) {
-    node.append(el('a', { href: source.url }, source.name));
-  } else {
-    node.append(source ? source.name : 'unknown');
-  }
-}
-// "Data: <name> ↗. Trend, range and verdict: our calculation (...)."
-function fillDataLine(node, source) {
-  clear(node);
-  node.append('Data: ');
-  srcLink(node, source);
-  node.append(" ↗. Trend, range and verdict: our calculation (Mann-Kendall test, Sen's slope).");
-}
-// "Raw values: <name>. Trend and range: our calculation."
-function fillRawLine(node, source) {
-  clear(node);
-  node.append('Raw values: ');
-  srcLink(node, source);
-  node.append('. Trend and range: our calculation.');
+  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, source.name));
+  else node.append(source.name);
 }
 
 /* ---------- state ---------- */
@@ -432,7 +427,7 @@ function showProblem(p) {
   const body = $('problem-body');
   clear(body);
   p.paras.forEach((t) => body.append(el('p', {}, t)));
-  if (p.source) { const sp = el('p', { class: 'source' }); fillSource(sp, p.source); body.append(sp); }
+  if (p.source) { const sp = el('div', { class: 'srcline' }); srcBlock(sp, 'Source', p.source); body.append(sp); }
   const act = $('problem-actions');
   clear(act);
   (p.buttons || []).forEach((b) => {
@@ -466,7 +461,8 @@ function renderVerdict(t) {
   $('verdict-p1').textContent = c.p1;
   $('verdict-p2').textContent = c.p2;
   $('verdict-evidence').textContent = `p-value: ${fmtP(t.p_value)}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change.`;
-  fillDataLine($('verdict-source'), t.source);
+  srcBlock($('verdict-source'), 'Data', t.source);
+  $('verdict-calc').textContent = "Trend, range and verdict: our calculation (Mann-Kendall test, Sen's slope).";
   $('verdict-card').hidden = false;
   return h;
 }
@@ -489,7 +485,7 @@ function renderMore(t, s) {
     if (term) dt.append(' ', el('span', { class: 'term' }, `(${term})`));
     dl.append(el('div', {}, dt, el('dd', {}, val)));
   });
-  fillSource($('numbers-source'), t.source);
+  srcBlock($('numbers-source'), 'Source', t.source);
 
   const list = $('notes-list');
   clear(list);
@@ -507,7 +503,8 @@ function renderMore(t, s) {
 function renderTable(s) {
   const name = nameOf(s.variable);
   $('table-col').textContent = `${name} (${unitLabel(s.units)})`;
-  fillRawLine($('table-source'), s.source);
+  srcBlock($('table-source'), 'Source', s.source);
+  $('table-caption').textContent = rawLine(s.source);
   const body = $('table-body');
   clear(body);
   const frag = document.createDocumentFragment();
@@ -566,7 +563,11 @@ function renderChart(s, t) {
   };
   panel(A, 'Raw monthly values', `${name} (${units})`);
   panel(B, 'Seasons removed, with trend', `Change from the usual for that month (${units})`);
-  xt.forEach((y) => root.append(svg('text', { x: xS(y * 12), y: B.bot + fs + 3, 'text-anchor': 'middle', class: 'c-text' }, String(y))));
+  xt.forEach((y) => {
+    const x = xS(y * 12), hw = 0.3 * fs * String(y).length; // half the label width, roughly
+    const edge = x + hw > vw ? ['end', vw] : x - hw < 0 ? ['start', 0] : ['middle', x];
+    root.append(svg('text', { x: edge[1], y: B.bot + fs + 3, 'text-anchor': edge[0], class: 'c-text' }, String(y)));
+  });
   root.append(svg('text', { x: ml + pw / 2, y: B.bot + 2 * fs + 6, 'text-anchor': 'middle', class: 'c-text' }, 'Year'));
   root.append(svg('line', { x1: ml, x2: vw - mr, y1: B.yS(0), y2: B.yS(0), class: 'c-zero' }));
 
@@ -613,7 +614,8 @@ function renderChart(s, t) {
   box.append(root);
 
   $('chart-caption').textContent = t ? captionText(t, name, place) : `${name} at ${place}.`;
-  fillRawLine($('chart-source'), t ? t.source : s.source);
+  srcBlock($('chart-source'), 'Source', t ? t.source : s.source);
+  $('chart-raw').textContent = rawLine(t ? t.source : s.source);
 
   // readout
   const readout = $('readout');
@@ -627,8 +629,8 @@ function renderChart(s, t) {
     rule.setAttribute('x1', x); rule.setAttribute('x2', x); rule.setAttribute('visibility', 'visible');
     const mi = ms[i] % 12, v = vals[i];
     if (v == null) { readout.textContent = `${monthLabel(times[i])}: no data.`; return; }
-    const d = des[i], rel = Math.abs(d) < 1e-9 * dRange ? 'at' : d > 0 ? 'above' : 'below';
-    readout.textContent = `${monthLabel(times[i])}: ${String(v).replace('-', MINUS)} ${units} raw, ${rel} the usual ${MONTHS_LONG[mi]}.`;
+    const d = des[i], rel = d === 0 || Math.abs(d) < 1e-9 * dRange ? 'at' : d > 0 ? 'above' : 'below';
+    readout.textContent = `${monthLabel(times[i])}: ${String(v).replace('-', MINUS)}\u00a0${units} raw, ${rel} the usual ${MONTHS_LONG[mi]}.`;
   };
   const at = (e) => {
     const rc = root.getBoundingClientRect();
@@ -693,7 +695,6 @@ $('controls').addEventListener('submit', (e) => { e.preventDefault(); if ($('go'
 $('variable').addEventListener('change', () => { syncVariableUI(); submit(true); });
 $('source').addEventListener('change', () => submit(true));
 $('locate').addEventListener('click', locate);
-['lat', 'lon'].forEach((id) => $(id).addEventListener('focus', openCoords));
 ['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => { state.fromGeo = false; markChips(); }));
 let lastBand = layoutFor(window.innerWidth).vw;
 window.addEventListener('resize', () => {
