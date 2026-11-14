@@ -135,8 +135,9 @@ def ask(question: str, model: str | None = None) -> dict:
                     else:
                         try:
                             result, error = run_tool(c["name"], args)
-                        except Exception:  # one broken source must not sink the others' results
-                            log.exception("Tool %s failed", c["name"])
+                        except Exception as e:  # one broken source must not sink the others' results
+                            # Type only: the message or traceback can carry a provider URL with coordinates.
+                            log.error("Tool %s failed (%s)", c["name"], type(e).__name__)
                             result, error = None, SOURCE_DOWN
                     span.update(output=result if error is None else {"error": error}, **({"level": "ERROR"} if error else {}))
                 return {"name": c["name"], "arguments": args, "result": result, "error": error}

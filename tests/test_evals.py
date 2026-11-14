@@ -498,6 +498,20 @@ def test_no_data_anywhere_answer_must_have_no_numbers():
     assert run.check(case, bad)["numbers"] is False  # error text is not a tool result: no distance quoted
 
 
+@pytest.mark.parametrize("reason,ok", [
+    ("The weather station gave no result: no station within 100 km.", False),
+    ("The weather station gave no result: there is no station close enough.", True),
+])
+def test_failed_source_reason_in_words_only(reason, ok):
+    calls = multi([POWER, ERA5]) + [{"name": "detect_trend", "arguments": {**D_ARGS, "source": "ghcn"}, "result": None,
+                                     "error": "No GHCN-Daily station with air_temp_max data within 100 km of this point."}]
+    answer = ("The sources disagree about Delhi's hottest day of the month, January 1981 to December 2025. "
+              "NASA POWER (MERRA-2): clearly falling, by 0.25 °C per decade (range -0.41 to -0.09). "
+              "ERA5 reanalysis via Open-Meteo archive: no clear change, 0.12 °C per decade (range -0.03 to 0.27). "
+              f"{reason} Sources: https://power.larc.nasa.gov/, https://open-meteo.com/")
+    assert run.check(DELHI_CASE, fake_run(answer, calls))["numbers"] is ok
+
+
 def test_errored_source_need_not_be_named():
     calls = multi([POWER, ERA5]) + [{"name": "detect_trend", "arguments": {**D_ARGS, "source": "ghcn"}, "result": None,
                                      "error": "No weather station within 50 km of this point."}]

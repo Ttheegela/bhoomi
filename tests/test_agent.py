@@ -405,7 +405,8 @@ def test_unexpected_tool_exception_keeps_other_sources(fake, monkeypatch, caplog
     assert r["answer"] == "ok"
     assert [c["error"] for c in r["tool_calls"]] == [None, loop.SOURCE_DOWN, None]
     assert [x["content"].get("error") for x in fake.results[0]] == [None, loop.SOURCE_DOWN, None]
-    assert "Tool detect_trend failed" in caplog.text
+    assert "Tool detect_trend failed (KeyError)" in caplog.text
+    assert "hourly" not in caplog.text and "Traceback" not in caplog.text  # no message, no traceback
 
 
 def test_slow_source_is_reported_late_without_blocking(fake, monkeypatch):
@@ -538,7 +539,10 @@ def test_budget_spent_before_a_three_source_step(fake, monkeypatch):
     "Never pick a winner and never average them",
     "only from the results' caveats",
     "Never give a difference between sources",
-    "say in a few words that it gave no result, using the reason in its error",
+    "say in a few words that it gave no result, giving the reason from its error in words only, with no number from it",
+    "Sea level is measured by tide gauges on coasts",
+    "A place with no tide gauge nearby has no sea-level data: say that, and never estimate it",
+    "the one exception: the one-sentence offer of what could be checked instead",
     "in a no clear change line it keeps its sign",
     "The slope drops its sign only after a rising or falling word",
     "give about the same slope but disagree on whether the change is clear",
@@ -573,7 +577,8 @@ def test_prompt_rules(phrase):
 
 
 @pytest.mark.parametrize("phrase", ["Never pick the most dramatic one", "the verdict already says whether it is clear",
-                                    "If 120 words cannot hold everything", "has no data for this place"])
+                                    "If 120 words cannot hold everything", "has no data for this place",
+                                    "using the reason in its error", "US tide gauges", "US coasts"])
 def test_prompt_rules_removed(phrase):
     assert phrase not in prompts.SYSTEM
 
