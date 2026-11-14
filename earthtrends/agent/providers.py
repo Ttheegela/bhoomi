@@ -6,8 +6,18 @@ import os
 import httpx
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-MAX_TOKENS = 800  # so a reasoning model cannot run up the bill; shared by every provider
+MAX_TOKENS = 2000  # so a reasoning model cannot run up the bill
 TIMEOUT_S = 60
+
+
+# Why a step ended, the same words for every provider: "length" (hit MAX_TOKENS), "refusal", "tool", "end";
+# anything else passes through lower-cased.
+STOPS = {"length": "length", "max_tokens": "length", "refusal": "refusal", "content_filter": "refusal",
+         "tool_calls": "tool", "tool_use": "tool", "stop": "end", "end_turn": "end"}
+
+
+def norm_stop(reason) -> str | None:
+    return STOPS.get(reason.lower(), reason.lower()) if isinstance(reason, str) else None
 
 
 class NotConfigured(RuntimeError):
@@ -71,7 +81,7 @@ class OpenRouterProvider:
             "tool_calls": parsed,
             "usage": {"prompt_tokens": tokens[0], "completion_tokens": tokens[1],
                       "cost_usd": float(cost) if type(cost) in (int, float) and math.isfinite(cost) and cost >= 0 else None},
-            "stop": choice.get("finish_reason") if isinstance(choice.get("finish_reason"), str) else None,
+            "stop": norm_stop(choice.get("finish_reason")),
         }
 
     @staticmethod
@@ -147,7 +157,7 @@ class AnthropicProvider:
         calls = [{"id": b.id, "name": b.name, "arguments": b.input if isinstance(b.input, dict) else None,
                   "arguments_error": None if isinstance(b.input, dict) else "Tool arguments must be a JSON object."}
                  for b in r.content if b.type == "tool_use"]
-        return {"text": text, "tool_calls": calls, "usage": usage, "stop": r.stop_reason}
+        return {"text": text, "tool_calls": calls, "usage": usage, "stop": norm_stop(r.stop_reason)}
 
     def add_tool_results(self, results: list[dict]) -> None:
         self.messages.append({"role": "user", "content": [  # all results of one step in one user message

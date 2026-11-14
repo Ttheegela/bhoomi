@@ -72,7 +72,7 @@ def test_request_and_history(sdk):
     assert r["answer"] == "Sea level is rising." and (r["provider"], r["model"]) == ("anthropic", "claude-haiku-5-5")
     assert made == [{"api_key": "test-not-a-key", "timeout": 60, "max_retries": 0}]
     for s in sent:
-        assert s["model"] == "claude-haiku-5-5" and s["max_tokens"] == providers.MAX_TOKENS == 800
+        assert s["model"] == "claude-haiku-5-5" and s["max_tokens"] == providers.MAX_TOKENS == 2000
         assert s["tool_choice"] == {"type": "auto"} and s["output_config"] == {"effort": providers.ANTHROPIC_EFFORT}
         assert not {"temperature", "top_p", "top_k"} & s.keys()
         assert "sea_level" in s["system"]
@@ -99,12 +99,14 @@ def test_refusal_is_not_an_answer(sdk):
     assert len(p.messages) == 1  # nothing appended
 
 
-def test_stop_reason_reported(sdk):
+@pytest.mark.parametrize("reason,want", [("end_turn", "end"), ("tool_use", "tool"), ("max_tokens", "length"),
+                                         ("pause_turn", "pause_turn"), ("Model_Context_Window_Exceeded", "model_context_window_exceeded")])
+def test_stop_reason_normalised(sdk, reason, want):
     _, replies, _ = sdk
-    replies.append(msg(text("ok")))
+    replies.append(msg(text("ok"), stop=reason))
     p = providers.AnthropicProvider("claude-haiku-5-5")
     p.start("sys", "q", loop.TOOLS)
-    assert p.step()["stop"] == "end_turn"
+    assert p.step()["stop"] == want
 
 
 @pytest.mark.parametrize("model,want", [
@@ -158,7 +160,16 @@ def test_openrouter_cost_must_be_finite_and_non_negative(monkeypatch, cost, want
     p.start("sys", "q", loop.TOOLS)
     out = p._parse({"choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
                     "usage": {"prompt_tokens": 1, "completion_tokens": 1, "cost": cost}})
-    assert out["usage"]["cost_usd"] == want and out["stop"] == "stop"
+    assert out["usage"]["cost_usd"] == want and out["stop"] == "end"
+
+
+@pytest.mark.parametrize("reason,want", [("stop", "end"), ("length", "length"), ("tool_calls", "tool"),
+                                         ("content_filter", "refusal"), ("ERROR", "error"), (None, None), (3, None)])
+def test_openrouter_stop_normalised(monkeypatch, reason, want):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-not-a-key")
+    p = providers.OpenRouterProvider("a/b")
+    p.start("sys", "q", loop.TOOLS)
+    assert p._parse({"choices": [{"message": {"content": "hi"}, "finish_reason": reason}]})["stop"] == want
 
 
 def test_openrouter_deep_json_is_upstream_error(monkeypatch):
