@@ -80,7 +80,7 @@ function fmtNum(x, signed) {
   return signed && x > 0 ? '+' + s : s;
 }
 function fmtVal(x, units) { return fmtNum(x, true) + (units ? ' ' + units : ''); }
-function fmtP(p) { return p < 0.001 ? '< 0.001' : p.toFixed(3); }
+function fmtP(p) { return p < 0.001 ? '< 0.001' : String(p); }
 
 function stripParens(name) { return String(name).replace(/\s*\([^)]*\)\s*$/, ''); }
 function placeName(place) {
@@ -101,11 +101,11 @@ function verdictCopy(t, name, place) {
       p1: `${name} at ${place} is going down: ${s} per decade, from ${y0} to ${y1}.`,
       p2: `The 95% range is ${lo} to ${hi} per decade. Even the high end is below zero, so this is a clear fall.` };
   }
-  const lean = t.slope_per_decade >= 0 ? 'up' : 'down';
+  const sl = t.slope_per_decade;
   const incl = t.ci_low <= 0 && t.ci_high >= 0 ? 'includes zero' : 'is too wide to rule out no change';
   return { head: 'No clear change', shape: 'flat',
     p1: `We can't tell ${name} at ${place} apart from no change, ${y0} to ${y1}.`,
-    p2: `The data lean ${lean}: ${s} per decade. But the 95% range (${lo} to ${hi}) ${incl}. That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs.` };
+    p2: `${sl === 0 ? `The data show no lean either way: ${s} per decade.` : `The data lean ${sl > 0 ? 'up' : 'down'}: ${s} per decade.`} But the 95% range (${lo} to ${hi}) ${incl}. That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs.` };
 }
 
 function captionText(t, name, place) {
@@ -265,25 +265,23 @@ function setBusy(on, first) {
   const go = $('go');
   go.setAttribute('aria-disabled', String(on));
   go.textContent = on ? 'Working…' : 'Show trend';
-  $('loading').hidden = !on;
-  $('grey').hidden = !first;
-  $('loading-slow').hidden = true;
+  $('loading-text').textContent = on ? 'Looking up the data…' : '';
+  $('grey').hidden = !(on && first);
+  $('loading-slow').textContent = '';
   clearTimeout(state.slowTimer);
   if (on) {
     const id = state.req;
-    state.slowTimer = setTimeout(() => { if (id === state.req) $('loading-slow').hidden = false; }, 4000);
+    state.slowTimer = setTimeout(() => { if (id === state.req) $('loading-slow').textContent = 'Still working. This source can take a few seconds.'; }, 4000);
   }
 }
 
 async function run(params, user) {
   const id = ++state.req;
   state.params = params;
-  state.running = true;
   const first = !state.series && $('problem').hidden && $('verdict-card').hidden;
   setBusy(true, first);
   const [sr, tr] = await Promise.all([api('/api/series', params), api('/api/trend', params)]);
   if (id !== state.req) return; // stale
-  state.running = false;
   setBusy(false);
   show(sr, tr, params, user);
 }
@@ -308,6 +306,7 @@ function show(sr, tr, params, user) {
       state.trend = tr.ok ? tr.body : null;
       $('chart-wrap').hidden = false;
       renderChart(s, state.trend);
+      document.querySelectorAll('#legend .t-only').forEach((li) => { li.hidden = !state.trend; });
       renderTable(s);
       if (state.trend) {
         heading = renderVerdict(state.trend);
@@ -322,7 +321,7 @@ function show(sr, tr, params, user) {
 
 function problemFor(r, params) {
   const again = [{ label: 'Try again', fn: () => run(state.params, true) }];
-  if (r.net || r.status >= 500 && r.status !== 502) {
+  if (r.net || r.status !== 400 && r.status !== 422 && r.status !== 502) {
     return { heading: "We can't reach the server.", paras: ['Check your connection and try again.'], buttons: again };
   }
   if (r.status === 502) {
@@ -535,9 +534,8 @@ function renderChart(s, t) {
     rule.setAttribute('x1', x); rule.setAttribute('x2', x); rule.setAttribute('visibility', 'visible');
     const mi = ms[i] % 12, v = vals[i];
     if (v == null) { readout.textContent = `${monthLabel(times[i])}: no data.`; return; }
-    const d = des[i], mag = fmtNum(Math.abs(d), false);
-    const rel = Number(mag.replace(MINUS, '-')) === 0 ? `right at the usual ${MONTHS_LONG[mi]}` : `${mag} ${s.units} ${d > 0 ? 'above' : 'below'} the usual ${MONTHS_LONG[mi]}`;
-    readout.textContent = `${monthLabel(times[i])}: ${fmtNum(v, false)} ${s.units} raw, ${rel}.`;
+    const d = des[i], rel = d === 0 ? 'at' : d > 0 ? 'above' : 'below';
+    readout.textContent = `${monthLabel(times[i])}: ${v} ${s.units} raw, ${rel} the usual ${MONTHS_LONG[mi]}.`;
   };
   const at = (e) => {
     const r = root.getBoundingClientRect();
@@ -565,9 +563,8 @@ function renderChart(s, t) {
 
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
-  const lat = Number(h.get('lat')), lon = Number(h.get('lon'));
-  if (!h.get('variable') || !h.has('lat') || !h.has('lon') || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  return { variable: h.get('variable'), lat, lon };
+  if (!h.get('variable') || !h.has('lat') || !h.has('lon')) return null;
+  return { variable: h.get('variable'), lat: h.get('lat'), lon: h.get('lon') }; // raw text; submit() validates
 }
 
 async function init() {
@@ -585,23 +582,19 @@ async function init() {
   $('lat').value = start.lat; $('lon').value = start.lon; $('variable').value = start.variable;
   syncVariableUI();
   markChips();
-  const p = { variable: start.variable, lat: start.lat, lon: start.lon };
-  run(p, false);
+  submit(false);
 }
 
-if (typeof document !== 'undefined') {
-  buildChips();
-  $('controls').addEventListener('submit', (e) => { e.preventDefault(); if ($('go').getAttribute('aria-disabled') !== 'true') submit(true); });
-  $('variable').addEventListener('change', () => { syncVariableUI(); submit(true); });
-  $('source').addEventListener('change', () => submit(true));
-  $('locate').addEventListener('click', locate);
-  ['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => { state.fromGeo = false; markChips(); }));
-  let lastBand = layoutFor(window.innerWidth).vw;
-  window.addEventListener('resize', () => {
-    const b = layoutFor(window.innerWidth).vw;
-    if (b !== lastBand && state.series && !$('chart-wrap').hidden) { lastBand = b; renderChart(state.series, state.trend); }
-  });
-  init();
-} else {
-  module.exports = { median, monthIndex, deseasonalize, trendIntercept, niceTicks, yearStep, tickLabel, fmtNum, fmtVal, fmtP, stripParens, placeName, verdictCopy, captionText, layoutFor, nearestIndex };
-}
+buildChips();
+$('controls').addEventListener('submit', (e) => { e.preventDefault(); if ($('go').getAttribute('aria-disabled') !== 'true') submit(true); });
+$('variable').addEventListener('change', () => { syncVariableUI(); submit(true); });
+$('source').addEventListener('change', () => submit(true));
+$('locate').addEventListener('click', locate);
+['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => { state.fromGeo = false; markChips(); }));
+let lastBand = layoutFor(window.innerWidth).vw;
+window.addEventListener('resize', () => {
+  const b = layoutFor(window.innerWidth).vw;
+  if (b !== lastBand && state.series && !$('chart-wrap').hidden) { lastBand = b; renderChart(state.series, state.trend); }
+});
+init();
+
