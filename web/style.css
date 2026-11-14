@@ -290,3 +290,31 @@ textarea { width: 100%; min-height: 48px; padding: var(--s3); font: inherit; col
   #verdict-lean { order: 2; }
   .big { margin-bottom: var(--s1); }
 }
+
+/* round 2: first phone screen, wrapping text, spacing */
+.btn.example { padding: 12px 16px; }
+.msg-model { margin: 0; overflow-wrap: anywhere; }
+#ask-form > * + *, #ask-off > * + * { margin-top: var(--s3); }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
+.addr { width: 100%; min-height: 48px; resize: none; overflow-wrap: anywhere; }
+.pick.one .field-var { grid-column: 1 / -1; }
+.pick { row-gap: 0; }
+.help:empty { display: none; }
+@media (max-width: 599px) {
+  header { padding-top: var(--s2); }
+  .title-row { gap: var(--s1) var(--s3); }
+  /* eight example places in one sideways row; a cut-off chip at the right edge says there are more */
+  .chip-row { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; padding: 5px; margin: 0 -5px; scrollbar-width: thin; }
+  .chip { flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; }
+  /* measurement and source side by side */
+  .pick { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+  .field select { padding: 0 var(--s2); }
+  .copyrow { flex-direction: column; }
+  .copyrow > * { width: 100%; }
+  .copyrow > .copy-btn { width: auto; align-self: flex-start; }
+}
+@media (min-width: 900px) {
+  .field-var { flex: 0 1 400px; width: 400px; }
+  #source-field { width: 220px; }
+  .pick .help { flex: 0 0 100%; }
+}

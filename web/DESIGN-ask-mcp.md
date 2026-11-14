@@ -49,8 +49,8 @@ helper + counter
 ## 2.2 Words on screen (idle)
 - Lead (16 px): "Ask about a place in your own words. We look up public data and tell you whether it changed over time. We can't forecast the future."
 - Privacy (14 px grey): "Your question is sent to an AI model provider so it can be answered. Don't include personal details."
-- Textarea label (14 px grey): "Your question". Placeholder: "Is sea level rising in Atlantic City?". Button "Ask". Native `maxlength="500"`; counter "{n} of 500" from 400 characters (announced once at 450 and at 500 through the status line: "50 characters left." / "Limit reached: 500 characters."). Enter sends, Shift+Enter new line. Helper: "Press Enter to ask. Shift+Enter starts a new line."
-- Empty state (no messages): the thread area shows "Try one of these:" and four example buttons (real `<button>`s, 48 px, full width at 375, wrap on desktop; click sends at once): "Is sea level rising in Atlantic City?" / "Is it getting hotter in Delhi?" / "Is it getting warmer in Princeton, New Jersey?" / "Has anything changed at 17.69, 83.22 since 1981?". After the first message the buttons are replaced by the follow-up hint under the last answer: "Ask a follow-up, for example: \"What about Delhi?\"". Hint is plain text, not a button.
+- Textarea label (14 px grey): "Your question". Placeholder: "Is sea level rising in New York?". Button "Ask". Native `maxlength="500"`; counter "{n} of 500" from 400 characters (announced once at 450 and at 500 through the status line: "50 characters left." / "Limit reached: 500 characters."). Enter sends, Shift+Enter new line. Helper: "Press Enter to ask. Shift+Enter starts a new line."
+- Empty state (no messages): the thread area shows "Try one of these:" and four example buttons (real `<button>`s, 48 px, full width at 375, wrap on desktop; click sends at once): "Is sea level rising in New York?" / "Are the hottest days getting hotter in Delhi?" / "Is it getting warmer in Princeton, New Jersey?" / "Has anything changed at 17.69, 83.22 since 1981?". After the first message the buttons are replaced by the follow-up hint under the last answer: "Ask a follow-up, for example: \"What about Delhi?\"". Hint is plain text, not a button.
 - Until the history PR: after the first answer, grey 14 px line above the composer: "For now each question is answered on its own. Name the place again in a follow-up."
 
 ## 2.3 The API call (`POST /api/ask`, same origin)
@@ -78,7 +78,7 @@ Every number in the AI text must also be checkable: the "Show on chart" card car
 | Cancel | Aborts (`AbortController`). Block says "Cancelled." Text returns to the box, focus to the textarea. |
 | Stop at 150 s | "That took too long, so we stopped waiting. Try a shorter or simpler question." Button "Ask" ready. |
 | Answer | 2.4. Box clears and focus goes to the answer label line. Status: "Answer ready." |
-| Clarifying question (no tool call, text ends with "?") | Normal answer block without the "No data was looked up" line, plus "Answer in the box below to continue." Focus goes to the textarea (empty). If history is off, this line reads "Answer in the box below. Name the place and what to measure again." |
+| Clarifying question (no tool call, text contains a "?" anywhere) | Normal answer block without the "No data was looked up" line, plus "Answer in the box below to continue." Focus goes to the textarea (empty). If history is off, this line reads "Answer in the box below. Name the place and what to measure again." |
 | Declined (no tool call, text does not end with "?") | Answer block with the no-data line, then "We can tell you whether something changed over time at a place. Try one of these:" and the four example buttons again. |
 | "Could not finish" (answer starts with "Sorry, I could not finish") | Normal block plus "Try a shorter question, or pick a place on the Explore tab." and the button "Go to Explore". Not added to history. |
 | All `detect_trend` calls have `error` | Text block plus "We couldn't get the data for that: {error}" (verbatim) and "Try another place or measurement." If the error mentions a tide gauge add "Tide gauges sit along US coasts." |
@@ -156,10 +156,10 @@ Or put the VS Code block from "For developers" in `.vscode/mcp.json`. VS Code us
 
 **Any other AI agent** (replaces "Other"). Steps: "Open your AI agent's settings for MCP servers or connectors." / "Add a new server." / "Paste this address. No key and no sign-in are needed." With the server address and its Copy button, the hint "If it asks for a type, choose \"HTTP\" or \"streamable HTTP\"." and the link "About MCP ↗" to https://modelcontextprotocol.io.
 
-**Framing (Tarun, 2026-11-14).** The panel heading is "Use Trend Detective in your own AI agent" (the tab keeps its label "Use in your AI"). One grey line under the intro: "Works with AI agents such as Claude, ChatGPT and Copilot." A product is named only when its own official documentation confirms it can connect to a remote MCP server by URL. Checked 14 November 2026:
+**Framing (Tarun, 2026-11-14).** The panel heading is "Use Trend Detective in your own AI agent" (the tab keeps its label "Use in your AI"). One grey line under the intro: "Works with AI agents such as Claude, ChatGPT and GitHub Copilot." A product is named only when its own official documentation confirms it can connect to a remote MCP server by URL. Checked 14 November 2026:
 - Claude: https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp (custom connector by URL).
 - ChatGPT: https://developers.openai.com/api/docs/guides/developer-mode ("Connect your Model Context Protocol (MCP) server to ChatGPT as a plugin"; steps ask for a Server URL; on the web; workspace permissions apply). No plan is named, so the line does not name one.
-- Copilot: https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/extend-copilot-chat-with-mcp (remote servers defined with a URL in Visual Studio, JetBrains IDEs, Xcode and Eclipse) and https://code.visualstudio.com/docs/copilot/customization/mcp-servers (VS Code).
+- GitHub Copilot: https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/extend-copilot-chat-with-mcp (remote servers defined with a URL in Visual Studio, JetBrains IDEs, Xcode and Eclipse) and https://code.visualstudio.com/docs/copilot/customization/mcp-servers (VS Code).
 - Grok: dropped. https://docs.x.ai/docs/guides/tools/remote-mcp-tools confirms remote MCP only for the xAI developer API, not the Grok app, so it is not named.
 Detailed tabs with numbered steps stay only for apps whose steps were verified: Claude, Claude Code, Cursor, VS Code. ChatGPT has no tab of its own; its users follow "Any other AI agent".
 
@@ -184,12 +184,12 @@ h2 "What you can ask once connected". Three rows (name monospace left 200 px, pl
 - `list_variables`: "Lists what we can measure, such as air temperature and sea level, and where the data come from."
 - `get_series`: "Gets the month-by-month values for a place."
 - `detect_trend`: "Says whether it is changing at a place, how fast, and how sure we are, using the Mann-Kendall test and Sen's slope."
-Then "Try asking" (plain list): "Is sea level rising in Atlantic City?" / "Is it getting hotter in Delhi?" / "Has anything changed at 17.69, 83.22 since 1981?" Note: "Your AI app may ask your permission before it calls a tool."
+Then "Try asking" (plain list): "Is sea level rising in New York?" / "Are the hottest days getting hotter in Delhi?" / "Has anything changed at 17.69, 83.22 since 1981?" Note: "Your AI app may ask your permission before it calls a tool."
 
 ## 3.6 QA checklist
 - [ ] 375 px: tabs and app tabs have no horizontal scroll; every target 48 px; JSON block scrolls inside itself.
 - [ ] `#tab=connect&app=cursor` opens Cursor's panel; reload keeps it; arrow keys, Home, End switch app tabs.
-- [ ] JS off: three panels and six app panels show in order; no Copy buttons, no empty boxes.
+- [ ] JS off: three panels and five app panels show in order; no Copy buttons, no empty boxes.
 - [ ] Copy puts exactly the address (or command, or JSON) on the clipboard and shows "Copied" plus the status text.
 - [ ] Each app panel has its docs link and "Checked" date; Cursor carries its caveat note; no menu name appears that is not in section 3.3.
 - [ ] "What it can and can't do" is present; AI label and data sources visible.
@@ -226,3 +226,10 @@ Chosen by the agent here: hash `tab=` key and Explore keeping a key-less hash; p
 
 # Source help line (Explore, measurements with more than one source)
 Grey 14 px line under the "Data source" select, describing the selected source (catalog resolution text): NASA POWER "A NASA record of past weather on a grid about 50 km wide." / ERA5 "A European record of past weather on a grid about 25 km wide." / NOAA GHCN-Daily "Readings from the nearest weather station." Choosing a non-default source writes `&source=` into the share link; a link with a source the measurement does not offer opens the default. Changing the measurement keeps the chosen source when the new measurement has it. When a non-default source has no data for a place, the API sentence is shown unchanged with the button "Use NASA POWER for this place". The footer names every source with its link. An Ask answer shows one "Data: {source} ↗" line for each distinct source among its successful `detect_trend` calls; "Show on chart" uses the first.
+
+# Round 2 changes to the build
+- Ask: the model id is on its own small grey line under "Written by an AI model" (it wrapped inside the label at 375 px). The status line is cleared at the start of each send, so "Answer ready." never stays after an error. Once the box is off (503 or health off), the jump link and the "answered on its own" line stay hidden. Spacing inside the composer and the off message uses the page's 12 px rhythm. Example buttons have 12 px vertical padding.
+- Use in your AI: the server address is a read-only two-line text area (`rows="2"`), so the whole address wraps and can be read; config blocks and the command wrap (`pre-wrap`); on phones Copy sits below the block. After "Copy failed" the "Select the text and copy it yourself." line stays until the next click.
+- Explore, example places: eight chips (see `web/DESIGN.md` section 1 item 6). Below 600 px they sit in one sideways-scrolling row; from 600 px they wrap. The pressed chip is scrolled into view.
+- Explore, source control: the closed selects show short names on phones (NASA POWER, ERA5, GHCN-Daily, CO-OPS, PSMSL); after each result the control shows the source the result came from; the share link and the request carry `source` only when the user chose a non-default source by hand. A source link keeps its arrow on the last word (non-breaking space). Help lines: NASA POWER, ERA5, GHCN-Daily as above; NOAA CO-OPS "Readings from the nearest NOAA tide gauge (US coasts)."; PSMSL "Readings from the nearest tide gauge in a worldwide collection."; label "PSMSL tide gauges"; footer "Permanent Service for Mean Sea Level (PSMSL)", https://psmsl.org/. The sentence "Tide gauges sit along US coasts." is added to the no-gauge card only while sea level has a single source. The no-gauge card shows the API sentence and the ways out (Try New York, Show air temperature here, Use {default source} for this place) and never a number or placeholder.
+- A link typed into the address bar while the page is open that cannot be used (bad number, unknown measurement) falls back to New York and the hash is rewritten, as on a fresh load.

@@ -6,24 +6,33 @@ const MINUS = '−';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const PRESETS = [
-  { label: 'Atlantic City, NJ', lat: 39.36, lon: -74.42, variable: 'sea_level' },
-  { label: 'Delhi', lat: 28.61, lon: 77.21, variable: 'air_temp' },
-  { label: 'Visakhapatnam', lat: 17.69, lon: 83.22, variable: 'air_temp' },
+  { label: 'New York', lat: 40.71, lon: -74.01, variable: 'sea_level' },
   { label: 'Princeton, NJ', lat: 40.35, lon: -74.66, variable: 'air_temp' },
+  { label: 'Delhi', lat: 28.58, lon: 77.21, variable: 'air_temp_max' },
+  { label: 'Visakhapatnam', lat: 17.69, lon: 83.22, variable: 'air_temp' },
+  { label: 'Mumbai', lat: 19.08, lon: 72.88, variable: 'air_temp_max' },
+  { label: 'Chennai', lat: 13.08, lon: 80.27, variable: 'air_temp' },
+  { label: 'London', lat: 51.51, lon: -0.13, variable: 'air_temp' },
+  { label: 'Seattle', lat: 47.61, lon: -122.33, variable: 'sea_level' },
 ];
 const SOURCES = {
   power: { name: 'NASA POWER (MERRA-2)', url: 'https://power.larc.nasa.gov/' },
   era5: { name: 'ERA5 reanalysis via Open-Meteo archive', url: 'https://open-meteo.com/' },
   ghcn: { name: 'NOAA NCEI GHCN-Daily', url: 'https://www.ncei.noaa.gov/' },
   coops: { name: 'NOAA CO-OPS tide gauges', url: 'https://tidesandcurrents.noaa.gov/' },
+  psmsl: { name: 'Permanent Service for Mean Sea Level (PSMSL)', url: 'https://psmsl.org/' },
 };
 // One plain-words line under the source control (grid sizes as in the catalog's resolution text).
 const SOURCE_HELP = {
   power: 'A NASA record of past weather on a grid about 50 km wide.',
   era5: 'A European record of past weather on a grid about 25 km wide.',
   ghcn: 'Readings from the nearest weather station.',
+  coops: 'Readings from the nearest NOAA tide gauge (US coasts).',
+  psmsl: 'Readings from the nearest tide gauge in a worldwide collection.',
 };
-const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'GRACE/GRACE-FO' };
+// Shorter names for the closed select on phones; the open list keeps SOURCE_LABELS.
+const SOURCE_SHORT = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'GHCN-Daily', coops: 'CO-OPS', psmsl: 'PSMSL' };
+const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'GRACE/GRACE-FO', psmsl: 'PSMSL tide gauges' };
 
 /* ---------- pure helpers (no DOM; exported for a node check) ---------- */
 
@@ -205,6 +214,7 @@ function parseHash(raw) {
   const lat = num('lat'), lon = num('lon');
   const ok = !!h.get('variable') && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
   return {
+    exploreBad: !ok && (h.has('variable') || h.has('lat') || h.has('lon')), // looks like a place link but is not usable
     tab: t === 'ask' || t === 'connect' ? t : 'explore',
     app: APPS.includes(a) ? a : 'claude',
     explore: ok ? { variable: h.get('variable'), lat, lon, source: h.get('source') || null } : null,
@@ -226,6 +236,15 @@ function fixExplore(e, vars) {
   if (!v) return null;
   const ok = !!e.source && Array.isArray(v.sources) && v.sources.includes(e.source) && e.source !== v.sources[0];
   return { variable: e.variable, lat: e.lat, lon: e.lon, source: ok ? e.source : null };
+}
+
+// The source the page sends: only one the user chose by hand, offered by the measurement, and not its default.
+function sourceToSend(v, userSource) {
+  return v && Array.isArray(v.sources) && v.sources.length > 1 && userSource && v.sources.includes(userSource) && userSource !== v.sources[0] ? userSource : undefined;
+}
+// The source the control shows after a result: the one the result came from, when the measurement lists it.
+function pickShown(v, resultSourceId) {
+  return v && Array.isArray(v.sources) && v.sources.includes(resultSourceId) ? resultSourceId : null;
 }
 
 /* ---------- DOM helpers ---------- */
@@ -271,19 +290,19 @@ const isHttps = (src) => !!src && typeof src.url === 'string' && src.url.startsW
 function srcBlock(node, label, source) {
   clear(node);
   const name = source ? source.name : 'unknown';
-  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, `${label}: ${name} ↗`));
+  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, `${label}: ${name}\u00a0↗`));
   else node.append(el('span', { class: 'srclink' }, `${label}: ${name}`));
 }
 // Link with the name only (footer list).
 function srcLink(node, source, arrow) {
-  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, source.name + (arrow ? ' ↗' : '')));
+  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, source.name + (arrow ? '\u00a0↗' : '')));
   else node.append(source ? source.name : 'unknown');
 }
 
 /* ---------- state ---------- */
 
 const tabState = { tab: 'explore', app: 'claude' };
-const state = { variables: [], req: 0, series: null, trend: null, selIdx: null, fromGeo: false, params: null, slowTimer: 0, chart: null };
+const state = { userSource: null, variables: [], req: 0, series: null, trend: null, selIdx: null, fromGeo: false, params: null, slowTimer: 0, chart: null };
 
 function placeOf(t) {
   const q = state.params || {};
@@ -322,7 +341,12 @@ function markChips() {
   const lat = Number($('lat').value), lon = Number($('lon').value);
   document.querySelectorAll('.chip').forEach((b) => {
     const p = PRESETS[+b.dataset.i];
-    b.setAttribute('aria-pressed', String(p.lat === lat && p.lon === lon));
+    const on = p.lat === lat && p.lon === lon;
+    b.setAttribute('aria-pressed', String(on));
+    if (on) { // keep the pressed chip in view inside the sideways row (phones)
+      const row = $('chips'), r = row.getBoundingClientRect(), c = b.getBoundingClientRect();
+      if (c.left < r.left || c.right > r.right) row.scrollLeft += c.left - r.left - (r.width - c.width) / 2;
+    }
   });
 }
 function openCoords() { $('coords').open = true; }
@@ -336,8 +360,12 @@ function applyPreset(i) {
 }
 // At phone width the closed select shows the short name; the open list keeps full names.
 const narrowQ = window.matchMedia('(max-width: 599px)');
+let fullNames = false;
 function nameMode(full) {
-  [...$('variable').options].forEach((o) => { const v = varById(o.value); o.textContent = full || !narrowQ.matches ? v.name : stripParens(v.name); });
+  if (full !== undefined) fullNames = full;
+  const short = narrowQ.matches && !fullNames;
+  [...$('variable').options].forEach((o) => { const v = varById(o.value); o.textContent = short ? stripParens(v.name) : v.name; });
+  [...$('source').options].forEach((o) => { o.textContent = (short ? SOURCE_SHORT[o.value] : SOURCE_LABELS[o.value]) || o.value; });
 }
 function fillVariables() {
   const sel = $('variable');
@@ -348,18 +376,30 @@ function fillVariables() {
   sel.addEventListener('pointerdown', () => nameMode(true));
   sel.addEventListener('blur', () => nameMode(false));
   sel.addEventListener('change', () => setTimeout(() => nameMode(false), 0));
+  const src = $('source');
+  src.addEventListener('focus', () => nameMode(true));
+  src.addEventListener('pointerdown', () => nameMode(true));
+  src.addEventListener('blur', () => nameMode(false));
+  src.addEventListener('change', () => setTimeout(() => nameMode(false), 0));
 }
 function syncVariableUI() {
   const v = varById($('variable').value);
   $('variable-help').textContent = v ? `Good for: ${v.good_for}.` : '';
   const src = $('source');
-  const prev = src.value;
   clear(src);
-  const many = v && Array.isArray(v.sources) && v.sources.length > 1;
+  const many = !!v && Array.isArray(v.sources) && v.sources.length > 1;
   if (many) v.sources.forEach((s) => src.append(el('option', { value: s }, SOURCE_LABELS[s] || s)));
-  if (many && v.sources.includes(prev)) src.value = prev; // keep the chosen source when this measurement has it
+  // keep the source the user chose when this measurement has it; otherwise the default
+  if (many) src.value = v.sources.includes(state.userSource) ? state.userSource : v.sources[0];
   $('source-field').hidden = !many;
+  $('pick').classList.toggle('one', !many);
+  nameMode();
   sourceHelp();
+}
+// After a result the control shows the source the result came from (a fallback is not the user's choice).
+function showResultSource(res) {
+  const id = pickShown(varById($('variable').value), res && res.source && res.source.id);
+  if (id) { $('source').value = id; sourceHelp(); }
 }
 function sourceHelp() {
   $('source-help').textContent = $('source-field').hidden ? '' : (SOURCE_HELP[$('source').value] || '');
@@ -386,7 +426,8 @@ function readParams() {
   }
   const v = varById($('variable').value);
   const p = { variable: $('variable').value, lat, lon };
-  if (v && !$('source-field').hidden && $('source').value !== v.sources[0]) p.source = $('source').value;
+  const sent = sourceToSend(v, state.userSource);
+  if (sent) p.source = sent;
   return p;
 }
 
@@ -465,6 +506,7 @@ function show(sr, tr, params, user) {
     } else {
       state.series = s;
       state.trend = tr.ok ? tr.body : null;
+      showResultSource(state.trend || s);
       $('chart-wrap').hidden = false;
       renderChart(s, state.trend);
       document.querySelectorAll('#chart-fig .t-only').forEach((li) => { li.hidden = !state.trend; });
@@ -494,16 +536,17 @@ function problemFor(r, params) {
   const detail = r.body && typeof r.body.detail === 'string' ? r.body.detail : 'The request was not accepted.';
   const out = { heading: "We can't answer that for this place.", paras: [detail] };
   if (params.variable === 'sea_level') {
-    out.paras.push('Tide gauges sit along US coasts.');
+    // The US-coast sentence is only true while CO-OPS is the only tide-gauge source.
+    if (!(varById('sea_level') && varById('sea_level').sources.length > 1)) out.paras.push('Tide gauges sit along US coasts.');
     out.source = SOURCES.coops;
-    out.buttons = [{ label: 'Try Atlantic City, NJ', fn: () => applyPreset(0) }];
+    out.buttons = [{ label: 'Try New York', fn: () => applyPreset(0) }];
     if (varById('air_temp')) {
       out.buttons.push({ label: 'Show air temperature here', fn: () => { $('variable').value = 'air_temp'; syncVariableUI(); submit(true); } });
     }
   }
   const v = varById(params.variable), def = v && v.sources && v.sources[0];
   if (params.source && def && params.source !== def) {
-    out.buttons = (out.buttons || []).concat([{ label: `Use ${SOURCE_LABELS[def] || def} for this place`, fn: () => { $('source').value = def; sourceHelp(); submit(true); } }]);
+    out.buttons = (out.buttons || []).concat([{ label: `Use ${SOURCE_LABELS[def] || def} for this place`, fn: () => { state.userSource = null; syncVariableUI(); submit(true); } }]);
   }
   out.paras.push('Try another place or measurement.');
   return out;
@@ -799,24 +842,24 @@ function onLocation() {
   const h = parseHash(location.hash);
   if (typeof setApp === 'function' && h.app !== tabState.app) setApp(h.app);
   showTab(h.tab, false);
-  if (h.explore && state.variables.length) {
-    // An unknown measurement falls back like a bad link on first load. A repeat call (popstate, then hashchange)
-    // finds state.params already set, so it does not start a second request.
-    const e = fixExplore(h.explore, state.variables) || fixExplore(PRESETS[0], state.variables);
-    if (!sameExplore(e, state.params)) applyExplore(e, false);
+  if ((h.explore || h.exploreBad) && state.variables.length) {
+    // An unusable link (unknown measurement, bad number) falls back to the default place and the hash is
+    // rewritten, as on a fresh load. A repeat call (popstate, then hashchange) finds a good hash and
+    // state.params already set, so it starts no second request.
+    const fixed = h.explore && fixExplore(h.explore, state.variables);
+    const e = fixed || fixExplore(PRESETS[0], state.variables);
+    if (!fixed || !sameExplore(e, state.params)) applyExplore(e, false);
+    if (!fixed && tabState.tab !== 'explore') history.replaceState(null, '', '#' + writeHash({ tab: h.tab, app: h.app }));
   }
 }
 
 // Put a place, measurement and source into the controls and run it.
 function applyExplore(e, user) {
   state.fromGeo = false;
+  state.userSource = e.source || null;
   $('lat').value = e.lat; $('lon').value = e.lon;
   $('variable').value = e.variable;
   syncVariableUI();
-  if (!$('source-field').hidden) { // the link's source, else the default
-    $('source').value = e.source && [...$('source').options].some((o) => o.value === e.source) ? e.source : $('source').options[0].value;
-    sourceHelp();
-  }
   if (!PRESETS.some((p) => Math.abs(p.lat - e.lat) <= 0.005 && Math.abs(p.lon - e.lon) <= 0.005)) openCoords();
   markChips();
   submit(user);
@@ -848,7 +891,12 @@ async function init() {
 buildChips();
 $('controls').addEventListener('submit', (e) => { e.preventDefault(); if ($('go').getAttribute('aria-disabled') !== 'true') submit(true); });
 $('variable').addEventListener('change', () => { syncVariableUI(); submit(true); });
-$('source').addEventListener('change', () => { sourceHelp(); submit(true); });
+$('source').addEventListener('change', () => {
+  const v = varById($('variable').value);
+  state.userSource = v && $('source').value !== v.sources[0] ? $('source').value : null;
+  sourceHelp();
+  submit(true);
+});
 $('locate').addEventListener('click', locate);
 ['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => { state.fromGeo = false; markChips(); }));
 let lastBand = layoutFor(window.innerWidth).vw;

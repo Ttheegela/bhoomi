@@ -56,17 +56,17 @@
       </div>
     </details>
 
-    <div class="fields">
-      <div class="field span2 field-var">
+    <div id="pick" class="fields pick">
+      <div class="field field-var">
         <label for="variable">Measurement</label>
         <select id="variable" aria-describedby="variable-help"></select>
-        <p id="variable-help" class="help"></p>
       </div>
-      <div class="field span2" id="source-field" hidden>
+      <div class="field" id="source-field" hidden>
         <label for="source">Data source</label>
         <select id="source" aria-describedby="source-help"></select>
-        <p id="source-help" class="help"></p>
       </div>
+      <p id="variable-help" class="help span2"></p>
+      <p id="source-help" class="help span2"></p>
     </div>
   </form>
 
@@ -192,7 +192,7 @@
       <p id="ask-nohist" class="small" hidden>For now each question is answered on its own. Name the place again in a follow-up.</p>
       <label for="ask-q">Your question</label>
       <div class="ask-row">
-        <textarea id="ask-q" rows="2" maxlength="500" placeholder="Is sea level rising in Atlantic City?" aria-describedby="ask-help ask-privacy ask-count ask-err"></textarea>
+        <textarea id="ask-q" rows="2" maxlength="500" placeholder="Is sea level rising in New York?" aria-describedby="ask-help ask-privacy ask-count ask-err"></textarea>
         <div class="ask-btns">
           <button type="submit" id="ask-go" class="btn primary">Ask</button>
           <button type="button" id="ask-cancel" class="btn" hidden>Cancel</button>
@@ -207,11 +207,11 @@
 <div id="panel-connect" class="panel narrow">
   <h2 id="h-connect" tabindex="-1">Use Trend Detective in your own AI agent</h2>
   <p class="lead-p">Connect an AI app to Trend Detective and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named.</p>
-  <p class="small">Works with AI agents such as Claude, ChatGPT and Copilot.</p>
+  <p class="small">Works with AI agents such as Claude, ChatGPT and GitHub Copilot.</p>
 
   <div class="addr-block">
     <label for="addr-top">Trend Detective server address</label>
-    <div class="copyrow"><input id="addr-top" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+    <div class="copyrow"><textarea id="addr-top" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
     <p class="small">This address is for AI apps. It is not a web page. It needs no key and no sign-in.</p>
   </div>
   <p id="copy-status" class="sr-only" role="status"></p>
@@ -231,7 +231,7 @@
         <li>In a chat, click "+" at the lower left, then "Connectors", and switch Trend Detective on.</li>
       </ol>
       <label for="addr-claude">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-claude" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <div class="copyrow"><textarea id="addr-claude" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
       <p class="small">Free plans can add one custom connector. On Team and Enterprise plans an owner has to add it.</p>
       <a class="srclink" href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" rel="noopener">Claude setup docs ↗</a>
       <p class="small">Checked 14 November 2026</p>
@@ -250,7 +250,7 @@
       </ol>
       <p class="small">The command <code>claude mcp list</code> also shows it.</p>
       <label for="addr-claude-code">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-claude-code" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <div class="copyrow"><textarea id="addr-claude-code" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
       <a class="srclink" href="https://code.claude.com/docs/en/mcp" rel="noopener">Claude Code setup docs ↗</a>
       <p class="small">Checked 14 November 2026</p>
     </div>
@@ -263,7 +263,7 @@
         <li>Open Customize and check that Trend Detective is listed and on.</li>
       </ol>
       <label for="addr-cursor">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-cursor" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <div class="copyrow"><textarea id="addr-cursor" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
       <p class="small">We could not confirm the menu names for adding a server in the Cursor app, so we show the config file instead.</p>
       <a class="srclink" href="https://cursor.com/docs/context/mcp" rel="noopener">Cursor setup docs ↗</a>
       <p class="small">Checked 14 November 2026</p>
@@ -279,7 +279,7 @@
         <li>Accept the trust prompt after reading it, then ask Copilot a question and look for Trend Detective's tools.</li>
       </ol>
       <label for="addr-vscode">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-vscode" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <div class="copyrow"><textarea id="addr-vscode" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
       <p class="small">Or put the VS Code block from "For developers" in <code>.vscode/mcp.json</code>. VS Code uses <code>servers</code>, not <code>mcpServers</code>.</p>
       <a class="srclink" href="https://code.visualstudio.com/docs/copilot/customization/mcp-servers" rel="noopener">VS Code MCP servers docs ↗</a>
       <a class="srclink" href="https://code.visualstudio.com/docs/agents/reference/mcp-configuration" rel="noopener">VS Code MCP configuration reference ↗</a>
@@ -294,7 +294,7 @@
         <li>Paste this address. No key and no sign-in are needed.</li>
       </ol>
       <label for="addr-other">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-other" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <div class="copyrow"><textarea id="addr-other" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
       <p class="small">If it asks for a type, choose "HTTP" or "streamable HTTP".</p>
       <a class="srclink" href="https://modelcontextprotocol.io" rel="noopener">About MCP ↗</a>
     </div>
@@ -347,8 +347,8 @@
     </dl>
     <p>Try asking:</p>
     <ul>
-      <li>Is sea level rising in Atlantic City?</li>
-      <li>Is it getting hotter in Delhi?</li>
+      <li>Is sea level rising in New York?</li>
+      <li>Are the hottest days getting hotter in Delhi?</li>
       <li>Has anything changed at 17.69, 83.22 since 1981?</li>
     </ul>
     <p class="small">Your AI app may ask your permission before it calls a tool.</p>

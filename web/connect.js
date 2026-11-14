@@ -65,14 +65,14 @@ function addCopyButtons() {
       const ok = await copyText(text, node);
       clearTimeout(timer);
       btn.textContent = ok ? 'Copied' : 'Copy failed';
-      fail.hidden = ok;
+      fail.hidden = ok; // after "Copy failed" the line stays until the next click
       fail.textContent = ok ? '' : 'Select the text and copy it yourself.';
       status.textContent = '';
       setTimeout(() => { status.textContent = ok ? COPIED_SAYS[kind] : 'Copy failed. Select the text and copy it yourself.'; }, 50);
-      timer = setTimeout(() => { btn.textContent = 'Copy'; fail.hidden = true; }, 2000);
+      timer = setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
     });
   });
-  document.querySelectorAll('input.addr').forEach((i) => i.addEventListener('focus', () => i.select()));
+  document.querySelectorAll('.addr').forEach((i) => i.addEventListener('focus', () => i.select()));
 }
 
 /* ---------- start ---------- */

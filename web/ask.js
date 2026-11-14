@@ -12,8 +12,8 @@ const ASK_SLOW_MS = 15000;
 const ASK_STOP_MS = 150000;
 const GAVE_UP_PREFIX = 'Sorry, I could not finish';
 const EXAMPLES = [
-  'Is sea level rising in Atlantic City?',
-  'Is it getting hotter in Delhi?',
+  'Is sea level rising in New York?',
+  'Are the hottest days getting hotter in Delhi?',
   'Is it getting warmer in Princeton, New Jersey?',
   'Has anything changed at 17.69, 83.22 since 1981?',
 ];
@@ -67,7 +67,7 @@ function describeAnswer(body) {
   if (good.length) {
     const r = good[0].result, p = r.place || {}, per = r.period || {};
     const seen = new Set(), sources = [];
-    good.forEach((c) => { const s = c.result.source; if (s && !seen.has(s.id)) { seen.add(s.id); sources.push(s); } });
+    good.forEach((c) => { const s = c.result.source; if (s && !seen.has(s.id || s.name)) { seen.add(s.id || s.name); sources.push(s); } });
     const spots = new Set(good.map((c) => { const t = chartTarget(c), q = c.result.place || {}; return t ? `${t.lat.toFixed(2)},${t.lon.toFixed(2)}` : String(q.name); }));
     const place = p.name ? p.name : `the spot at ${Number(p.lat).toFixed(2)}, ${Number(p.lon).toFixed(2)}`;
     return Object.assign(out, {
@@ -79,7 +79,7 @@ function describeAnswer(body) {
     const e = trends[0].error;
     return Object.assign(out, { variant: 'dataerror', error: String(e), tide: /tide gauge/i.test(String(e)) });
   }
-  return Object.assign(out, { variant: text.endsWith('?') ? 'clarify' : 'declined' });
+  return Object.assign(out, { variant: text.includes('?') ? 'clarify' : 'declined' });
 }
 
 // r: { status, body, retryAfter, net, timedOut, cancelled } -> { kind, ... }
@@ -126,7 +126,7 @@ function youBlock(q) {
   return el('div', { class: 'msg you' }, el('p', { class: 'msg-label' }, 'You'), el('p', { class: 'msg-text' }, q));
 }
 function aiLabel(model) {
-  return el('p', { class: 'msg-label', tabindex: '-1' }, el('span', { class: 'badge', 'aria-hidden': 'true' }, 'AI'), ' Written by an AI model' + (model ? ` (${model})` : ''));
+  return el('p', { class: 'msg-label', tabindex: '-1' }, el('span', { class: 'badge', 'aria-hidden': 'true' }, 'AI'), ' Written by an AI model');
 }
 function goExplore() { showTab('explore', true); $('h-explore').focus(); }
 function goExploreButton() {
@@ -138,7 +138,7 @@ function goExploreButton() {
 // Returns { block, focus } for a described answer.
 function answerBlock(d) {
   const label = aiLabel(d.model);
-  const block = el('div', { class: 'msg ai' }, label, ...paras(d.text));
+  const block = el('div', { class: 'msg ai' }, label, ...(d.model ? [el('p', { class: 'msg-model small' }, d.model)] : []), ...paras(d.text));
   let focus = label;
   if (d.variant === 'data') {
     let line = `Looked up: ${nameOf(d.variable)} at ${d.place}, ${d.y0} to ${d.y1}.`;
@@ -211,6 +211,7 @@ async function send(raw) {
   const q = String(raw).trim();
   const err = $('ask-err');
   err.hidden = true;
+  say('');
   if (!q) { err.hidden = false; err.textContent = 'Type a question first.'; $('ask-q').focus(); return; }
 
   $('ask-q').value = q;
@@ -279,6 +280,7 @@ function countdown(n) {
 }
 
 function refreshThreadUI() {
+  if (askS.off) { ['ask-jump', 'ask-nohist', 'ask-hint'].forEach((id) => { $(id).hidden = true; }); return; }
   const answers = $('ask-thread').querySelectorAll('.msg.ai:not([role="status"])').length;
   $('ask-jump').hidden = answers < 3;
   $('ask-nohist').hidden = ASK_HISTORY || !askS.turns.some((t) => t.kind === 'answer');
