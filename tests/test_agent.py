@@ -7,7 +7,7 @@ import langfuse
 import pytest
 from fastapi.testclient import TestClient
 
-from earthtrends.agent import loop, providers, ratelimit, tools, tracing
+from earthtrends.agent import loop, prompts, providers, ratelimit, tools, tracing
 from earthtrends.app import app
 
 client = TestClient(app)
@@ -30,8 +30,8 @@ def call(name="detect_trend", arguments=ARGS, id="c1", error=None):
     return {"id": id, "name": name, "arguments": arguments, "arguments_error": error}
 
 
-def step(text=None, tool_calls=(), cost=0.001):
-    return {"text": text, "tool_calls": list(tool_calls), "usage": {"prompt_tokens": 100, "completion_tokens": 20, "cost_usd": cost}}
+def step(text=None, tool_calls=(), cost=0.001, tokens=20, **extra):
+    return {"text": text, "tool_calls": list(tool_calls), "usage": {"prompt_tokens": 100, "completion_tokens": tokens, "cost_usd": cost}, **extra}
 
 
 @pytest.fixture
@@ -115,12 +115,45 @@ def test_call_limit_ends_honestly(fake, monkeypatch):
     assert len(r["tool_calls"]) == len(ran) == loop.MAX_CALLS - 1
 
 
+def fake_clock(monkeypatch, readings):
+    it = iter(readings)
+    monkeypatch.setattr(loop, "time", type("T", (), {"monotonic": staticmethod(lambda: next(it))}))
+
+
 def test_time_budget_ends_honestly(fake, monkeypatch):
-    clock = iter(range(0, 10_000, 50))  # every reading is 50 s later
-    monkeypatch.setattr(loop, "time", type("T", (), {"monotonic": staticmethod(lambda: next(clock))}))
+    fake_clock(monkeypatch, range(0, 10_000, 50))  # every reading is 50 s later
     fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(10)]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 8  # 2 model calls fit in 120 s
+    # t0=0, model check 50, tool check 100 (runs), next model check 150: spent.
+    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 9 and len(r["tool_calls"]) == 1
+
+
+def test_budget_spent_before_tools_runs_none(fake, monkeypatch):
+    ran = []
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
+    fake_clock(monkeypatch, [0, 0, 120, 125])  # t0, model check, first tool check (spent), latency
+    fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step("never read")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and r["tool_calls"] == [] and ran == [] and fake.results == []
+
+
+def test_budget_spent_between_tools(fake, monkeypatch):
+    ran = []
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
+    fake_clock(monkeypatch, [0, 0, 1, 121, 125])  # t0, model check, tool a ok, tool b spent, latency
+    fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step("never read")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and len(ran) == 1
+    assert r["tool_calls"] == [{"name": "detect_trend", "arguments": ARGS, "result": TREND, "error": None}]
+    assert fake.results == []  # no model call left to read it
+
+
+def test_budget_normal_path_with_two_tools(fake, monkeypatch):
+    fake_clock(monkeypatch, [0, 0, 1, 2, 3, 4])  # t0, model, tool a, tool b, model, latency
+    fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step("Rising.")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == "Rising." and len(r["tool_calls"]) == 2
+    assert [x["id"] for x in fake.results[0]] == ["a", "b"]
 
 
 def test_unbuilt_provider_in_env_is_not_configured(monkeypatch):
@@ -142,6 +175,179 @@ def test_clarifying_question_has_no_tool_calls(fake):
 def test_empty_text_is_not_an_empty_answer(fake):
     fake.script = [step(None)]
     assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP
+
+
+# ---- cut-off answers ----
+
+CUT = step("Sea level is rising at 42.54 mm per decade. Source: NO", stop="length")
+
+
+def test_cut_off_answer_is_retried_once(fake):
+    fake.script = [step(tool_calls=[call()]), CUT, step("Sea level is rising. Source: NOAA, https://x")]
+    r = loop.ask("Is sea level rising?", model="fake:m")
+    assert r["answer"] == "Sea level is rising. Source: NOAA, https://x" and not fake.script
+    system, question, _ = fake.started  # the retry restarts with the results inline
+    assert question.startswith("Is sea level rising?" + loop.RETRY) and json.dumps(TREND) in question
+    assert r["usage"]["prompt_tokens"] == 300  # the retry is counted
+
+
+def test_second_cut_off_gives_up(fake):
+    fake.script = [step(tool_calls=[call()]), CUT, CUT, step("never read")]
+    assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP and len(fake.script) == 1
+
+
+def test_cut_off_by_token_count_without_stop_key(fake):
+    fake.script = [step(tool_calls=[call()]), step("Sea level is ris", tokens=providers.MAX_TOKENS), step("Rising.")]
+    assert loop.ask("q", model="fake:m")["answer"] == "Rising."
+
+
+def test_normal_final_step_is_unchanged(fake):
+    fake.script = [step(tool_calls=[call()]), step("Rising.", stop="stop", tokens=providers.MAX_TOKENS - 1), step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == "Rising." and fake.script == [step("never")]
+
+
+def test_cut_off_on_last_call_gives_up(fake):
+    fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(loop.MAX_CALLS - 1)] + [CUT, step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 1  # no call left for a retry
+
+
+def test_cut_off_retry_respects_budget(fake, monkeypatch):
+    fake_clock(monkeypatch, [0, 0, 1, 2, 120, 125])  # t0, model, tool, model (cut off), retry check: spent
+    fake.script = [step(tool_calls=[call()]), CUT, step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 1
+
+
+# ---- word limit ----
+
+def words(n, tag="w"):
+    return " ".join([tag] * n)
+
+
+def test_long_answer_retried_and_short_retry_returned(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step(words(95))]
+    r = loop.ask("Is sea level rising?", model="fake:m")
+    assert r["answer"] == words(95) and fake.started[1].startswith("Is sea level rising?" + loop.RETRY_LONG)
+    assert r["usage"]["prompt_tokens"] == 300 and r["usage"]["completion_tokens"] == 60  # both attempts counted
+
+
+def test_long_retry_returns_shorter_of_two(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step(words(125, "x"))]
+    assert loop.ask("q", model="fake:m")["answer"] == words(125, "x")
+
+
+def test_longer_retry_returns_original(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step(words(140, "x"))]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130)
+
+
+def test_limit_is_inclusive(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(loop.MAX_WORDS)), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == words(loop.MAX_WORDS) and fake.script == [step("never")]
+
+
+def test_cut_off_then_long_retry_returns_long(fake):
+    fake.script = [step(tool_calls=[call()]), CUT, step(words(130))]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130)
+
+
+def test_long_then_cut_off_retry_returns_long(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), CUT]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130)
+
+
+def test_long_answer_on_last_call_returned_as_is(fake):
+    fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(loop.MAX_CALLS - 1)] + [step(words(130)), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130) and len(fake.script) == 1
+
+
+def test_long_retry_respects_budget(fake, monkeypatch):
+    fake_clock(monkeypatch, [0, 0, 1, 2, 120, 125])  # t0, model, tool, model (long), retry check: spent
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130) and len(fake.script) == 1
+
+
+def test_whitespace_only_text_is_not_an_answer(fake):
+    fake.script = [step(tool_calls=[call()]), step("   \n ")]
+    assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP
+
+
+def test_long_then_empty_retry_returns_long(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step("")]
+    assert loop.ask("q", model="fake:m")["answer"] == words(130)
+
+
+def test_tool_call_on_retry_still_ends_with_shortest_answer(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130))] + [step(tool_calls=[call(id=str(i))]) for i in range(10)]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == words(130) and len(fake.script) == 10 - (loop.MAX_CALLS - 2)
+
+
+# ---- prompt ----
+
+@pytest.mark.parametrize("phrase", [
+    # new rules
+    "Plain text only: no markdown, no asterisks, no bullet symbols, no headings",
+    "Stay at or under 120 words, never more",
+    "never in scientific notation",
+    "would be very unlikely if nothing were really changing",
+    "give no number, only a plain phrase",
+    'write "less than 0.01"',
+    "From 0.045 up to 0.055, use three decimals",
+    '0.0549 is "0.055"), so it never prints as "0.05"',
+    "the range ends always keep their minus sign",
+    "Say the verdict once",
+    "Never quote the tool's verdict label or any field name",
+    "month and year in words",
+    "September 1911 to October 2026",
+    "Never drop any of the required parts above",
+    "shorten the caveats, don't remove them",
+    "round it to two decimals",
+    "below the usual 0.05 line",
+    "no change is plausible",
+    "we can't rule out no change",
+    "looks at all months of the year together",
+    "ONLY when the question asks about part of the year",
+    "Never say this for any other question",
+    "Never change a number's sign or turn it into zero",
+    "would print 0.00 or -0.00",
+    "as many decimals as it takes to show one non-zero digit",
+    "minus sign in front of the digits",
+    "Don't convert units and don't do arithmetic on the tool's numbers",
+    "in the tool's own units, rounded to two decimals",
+    "shorten the caveats first",
+    "and the p-value phrase second",
+    "Aim for 80 to 100 words",
+    "Leave out: closing advice, offers of a follow-up, suggestions about other datasets or who else to ask",
+    "explaining what a decade is more than once",
+    "0.0372 is 0.04, 0.0948 is 0.09, 42.536 is 42.54, 0.2031 is 0.20",
+    "-0.0004 is -0.0004",
+    "the only case where more than two decimals are allowed",
+    "-0.0008 is -0.001",
+    "gets no sentence about months at all",
+    "The data are monthly values; never call them yearly or daily data",
+    "rainfall in millimetres per day, measured monthly",
+    'never call it "daily rainfall"',
+    '"the usual 0.05 line", "less than 0.01", "95% range"',
+    '"a decade is ten years" or "every ten years"',
+    "No other number from outside the tool results",
+    "decline in one short sentence that counts inside the word budget",
+    "the range including zero is why",
+    '"falls by 0.40", not "falls by -0.40"',
+    # rules that must survive
+    "Never state a number that is not in a tool result",
+    "Never call a \"no_clear_change\" result rising or falling",
+    "slope_per_decade with its units, the 95% range (ci_low to ci_high), and the period",
+    "the source name and its URL",
+    "Pass on every caveat",
+    "ask which one they mean",
+    "When you cannot answer, say so plainly",
+    "Never pick the most dramatic one",
+])
+def test_prompt_rules(phrase):
+    assert phrase in prompts.SYSTEM
 
 
 # ---- model spec ----
@@ -205,7 +411,7 @@ def test_openrouter_request_body(openrouter, monkeypatch, arg, env, want):
         b = s["json"]
         assert s["url"] == "https://openrouter.ai/api/v1/chat/completions" and s["timeout"] == 60
         assert b["model"] == want and b["provider"]["data_collection"] == "deny" and b["usage"]["include"] is True
-        assert b["max_tokens"] == 800
+        assert b["max_tokens"] == 2000
         assert [t["function"]["name"] for t in b["tools"]] == ["list_variables", "detect_trend"]
     msgs = sent[1]["json"]["messages"]
     assert msgs[2]["tool_calls"][0]["id"] == "c1"

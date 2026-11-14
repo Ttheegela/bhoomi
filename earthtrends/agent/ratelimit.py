@@ -5,11 +5,13 @@ import time
 from collections import deque
 
 PER_CLIENT, CLIENT_WINDOW_S = 10, 60
+PER_CLIENT_HOUR, CLIENT_HOUR_S = 30, 3600  # so one client cannot spend the whole global cap
 GLOBAL, GLOBAL_WINDOW_S = 200, 3600
 MAX_CLIENTS = 10_000
 
-# ponytail: the counters live in one serverless instance's memory, so this slows a single abuser
-# but is not a global cap (each warm instance counts on its own, and a cold start resets it).
+# ponytail: three caps (10/min and 30/hour per client, 200/hour overall). The counters live in one
+# serverless instance's memory, so this slows a single abuser but is not a global cap (each warm instance
+# counts on its own, and a cold start resets it). Each client keeps at most 30 timestamps (one hour).
 # Upgrade: a Vercel Firewall rate-limit rule on /api/ask, or a shared store such as Redis.
 _lock = threading.Lock()
 _clients: dict[str, deque] = {}
@@ -31,15 +33,16 @@ def check(client: str, now: float | None = None) -> int:
     with _lock:
         _expire(_all, now - GLOBAL_WINDOW_S)
         q = _clients.get(client)
+        until = _all[0] + GLOBAL_WINDOW_S if len(_all) >= GLOBAL else 0  # the longest wait, not one then another
         if q is not None:
-            _expire(q, now - CLIENT_WINDOW_S)
-            if len(q) >= PER_CLIENT:
-                return _wait(q[0] + CLIENT_WINDOW_S, now)
-        if len(_all) >= GLOBAL:
-            return _wait(_all[0] + GLOBAL_WINDOW_S, now)
+            _expire(q, now - CLIENT_HOUR_S)
+            until = max(until, q[0] + CLIENT_HOUR_S if len(q) >= PER_CLIENT_HOUR else 0,
+                        q[-PER_CLIENT] + CLIENT_WINDOW_S if len(q) >= PER_CLIENT else 0)
+        if until > now:
+            return _wait(until, now)
         if q is None:
             if len(_clients) >= MAX_CLIENTS:
-                for k in [k for k, v in _clients.items() if not v or v[-1] <= now - CLIENT_WINDOW_S]:
+                for k in [k for k, v in _clients.items() if not v or v[-1] <= now - CLIENT_HOUR_S]:
                     del _clients[k]
                 while len(_clients) >= MAX_CLIENTS:  # still full of live clients: drop the oldest seen
                     del _clients[next(iter(_clients))]

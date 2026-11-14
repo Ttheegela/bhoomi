@@ -38,7 +38,8 @@ app = FastAPI(title="Trend Detective", lifespan=lifespan)
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok"}
+    """Cheap: tells the web page whether to show the question box. No outbound call, no key value."""
+    return {"status": "ok", "ask": bool(os.environ.get("OPENROUTER_API_KEY"))}
 
 
 app.mount("/mcp", mcp_app)
@@ -106,11 +107,12 @@ class AskBody(BaseModel):
 
 
 def client_id(request: Request) -> str:
-    """Who to count for the rate limit only. Vercel sets x-forwarded-for; never trust it for anything else."""
+    """Who to count for the rate limit only; never trust it for anything else. Vercel overwrites x-forwarded-for
+    with one address. Behind another proxy the last entry is the one the nearest proxy saw (earlier ones are
+    caller-supplied). Capped at 64 characters so a giant header cannot become a giant dict key."""
     h = request.headers
-    if xff := h.get("x-forwarded-for"):
-        return xff.split(",")[0].strip()
-    return h.get("x-real-ip") or (request.client.host if request.client else "unknown")
+    key = (h.get("x-forwarded-for") or "").split(",")[-1].strip()
+    return (key or h.get("x-real-ip") or (request.client.host if request.client else "unknown"))[:64]
 
 
 @app.post("/api/ask")
