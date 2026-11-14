@@ -7,7 +7,7 @@ import langfuse
 import pytest
 from fastapi.testclient import TestClient
 
-from earthtrends.agent import loop, providers, ratelimit, tools, tracing
+from earthtrends.agent import loop, prompts, providers, ratelimit, tools, tracing
 from earthtrends.app import app
 
 client = TestClient(app)
@@ -115,12 +115,45 @@ def test_call_limit_ends_honestly(fake, monkeypatch):
     assert len(r["tool_calls"]) == len(ran) == loop.MAX_CALLS - 1
 
 
+def fake_clock(monkeypatch, readings):
+    it = iter(readings)
+    monkeypatch.setattr(loop, "time", type("T", (), {"monotonic": staticmethod(lambda: next(it))}))
+
+
 def test_time_budget_ends_honestly(fake, monkeypatch):
-    clock = iter(range(0, 10_000, 50))  # every reading is 50 s later
-    monkeypatch.setattr(loop, "time", type("T", (), {"monotonic": staticmethod(lambda: next(clock))}))
+    fake_clock(monkeypatch, range(0, 10_000, 50))  # every reading is 50 s later
     fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(10)]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 8  # 2 model calls fit in 120 s
+    # t0=0, model check 50, tool check 100 (runs), next model check 150: spent.
+    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 9 and len(r["tool_calls"]) == 1
+
+
+def test_budget_spent_before_tools_runs_none(fake, monkeypatch):
+    ran = []
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
+    fake_clock(monkeypatch, [0, 0, 120, 125])  # t0, model check, first tool check (spent), latency
+    fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step("never read")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and r["tool_calls"] == [] and ran == [] and fake.results == []
+
+
+def test_budget_spent_between_tools(fake, monkeypatch):
+    ran = []
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
+    fake_clock(monkeypatch, [0, 0, 1, 121, 125])  # t0, model check, tool a ok, tool b spent, latency
+    fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step("never read")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and len(ran) == 1
+    assert r["tool_calls"] == [{"name": "detect_trend", "arguments": ARGS, "result": TREND, "error": None}]
+    assert fake.results == []  # no model call left to read it
+
+
+def test_budget_normal_path_with_two_tools(fake, monkeypatch):
+    fake_clock(monkeypatch, [0, 0, 1, 2, 3, 4])  # t0, model, tool a, tool b, model, latency
+    fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step("Rising.")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == "Rising." and len(r["tool_calls"]) == 2
+    assert [x["id"] for x in fake.results[0]] == ["a", "b"]
 
 
 def test_unbuilt_provider_in_env_is_not_configured(monkeypatch):
@@ -142,6 +175,34 @@ def test_clarifying_question_has_no_tool_calls(fake):
 def test_empty_text_is_not_an_empty_answer(fake):
     fake.script = [step(None)]
     assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP
+
+
+# ---- prompt ----
+
+@pytest.mark.parametrize("phrase", [
+    # new rules
+    "Plain text only: no markdown, no asterisks, no bullet symbols, no headings",
+    "Stay at or under 120 words",
+    "never in scientific notation",
+    "very unlikely to be chance",
+    "round it to two decimals",
+    "below the usual 0.05 line",
+    "no change is plausible",
+    "we can't rule out no change",
+    "looks at all months of the year together",
+    "shorten the caveat first and the p-value phrase second",
+    # rules that must survive
+    "Never state a number that is not in a tool result",
+    "Never call a \"no_clear_change\" result rising or falling",
+    "slope_per_decade with its units, the 95% range (ci_low to ci_high), and the period",
+    "the source name and its URL",
+    "Pass on every caveat",
+    "ask which one they mean",
+    "When you cannot answer, say so plainly",
+    "Never pick the most dramatic one",
+])
+def test_prompt_rules(phrase):
+    assert phrase in prompts.SYSTEM
 
 
 # ---- model spec ----

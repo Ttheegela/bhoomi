@@ -3,7 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from earthtrends.agent import loop, ratelimit
-from earthtrends.app import app
+from earthtrends.app import app, client_id
 
 client = TestClient(app)
 
@@ -34,6 +34,16 @@ def test_clients_are_independent():
     assert ratelimit.check("b", now=1) == 0
 
 
+def test_hourly_cap_per_client():
+    times = [i * 61 for i in range(30)]  # one a minute: the per-minute window is always clear
+    assert [ratelimit.check("a", now=t) for t in times] == [0] * 30
+    wait = ratelimit.check("a", now=times[-1] + 61)
+    assert wait == ratelimit.CLIENT_HOUR_S - (times[-1] + 61)  # until the first (t=0) leaves the hour
+    assert len(ratelimit._clients["a"]) == 30 and len(ratelimit._all) == 30  # refused: nothing recorded
+    assert ratelimit.check("b", now=times[-1] + 61) == 0  # other clients unaffected
+    assert ratelimit.check("a", now=ratelimit.CLIENT_HOUR_S + 0.5) == 0
+
+
 def test_global_cap():
     for i in range(ratelimit.GLOBAL):
         assert ratelimit.check(f"c{i}", now=i) == 0
@@ -45,10 +55,10 @@ def test_memory_bound(monkeypatch):
     monkeypatch.setattr(ratelimit, "MAX_CLIENTS", 5)
     for i in range(5):
         ratelimit.check(f"old{i}", now=0)
-    ratelimit.check("live", now=100)  # old ones expired: pruned
+    ratelimit.check("live", now=ratelimit.CLIENT_HOUR_S + 1)  # old ones left the hour window: pruned
     assert set(ratelimit._clients) == {"live"}
     for i in range(10):
-        ratelimit.check(f"x{i}", now=101)
+        ratelimit.check(f"x{i}", now=ratelimit.CLIENT_HOUR_S + 2)
     assert len(ratelimit._clients) <= 5
 
 
@@ -82,4 +92,26 @@ def test_client_from_forwarded_for(asked):
         client.post("/api/ask", json={"question": "hi"}, headers=h)
     assert client.post("/api/ask", json={"question": "hi"}, headers=h).status_code == 429
     assert client.post("/api/ask", json={"question": "hi"}, headers={"x-forwarded-for": "198.51.100.2"}).status_code == 200
-    assert "203.0.113.7" in ratelimit._clients
+    assert "10.0.0.1" in ratelimit._clients  # the last address: the one the nearest proxy saw
+
+
+class Req:
+    def __init__(self, headers, host="192.0.2.9"):
+        self.headers, self.client = headers, type("C", (), {"host": host})()
+
+
+@pytest.mark.parametrize("headers,want", [
+    ({"x-forwarded-for": "203.0.113.7"}, "203.0.113.7"),
+    ({"x-forwarded-for": "1.1.1.1, 2.2.2.2,3.3.3.3"}, "3.3.3.3"),
+    ({"x-forwarded-for": "  1.1.1.1 ,   203.0.113.7  "}, "203.0.113.7"),
+    ({"x-forwarded-for": "", "x-real-ip": "198.51.100.5"}, "198.51.100.5"),
+    ({"x-forwarded-for": " , "}, "192.0.2.9"),
+    ({}, "192.0.2.9"),
+])
+def test_client_id(headers, want):
+    assert client_id(Req(headers)) == want
+
+
+def test_client_id_is_capped():
+    assert len(client_id(Req({"x-forwarded-for": "x" * 60_000}))) <= 64
+    assert len(client_id(Req({"x-real-ip": "x" * 60_000}))) <= 64

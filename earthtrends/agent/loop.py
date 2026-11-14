@@ -11,7 +11,7 @@ from earthtrends.agent.tracing import Trace
 
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
 MAX_CALLS = 6
-BUDGET_S = 120  # total per question, checked before each model call; keeps us inside the serverless limit
+BUDGET_S = 120  # total per question, checked before each model call and each tool; keeps us inside the serverless limit
 SOURCE_DOWN = "The data source did not answer."
 GAVE_UP = ("Sorry, I could not finish working this out, so I have no answer to give you. "
            "Please try asking again, maybe in a simpler way.")
@@ -84,12 +84,16 @@ def ask(question: str, model: str | None = None) -> dict:
                 break
             results = []
             for c in step["tool_calls"]:
+                if time.monotonic() - t0 >= BUDGET_S:  # a data fetch can take 30 s; don't start one we can't afford
+                    break
                 args = c["arguments"] if c["arguments"] is not None else {}
                 with trace.child("tool", c["name"], input=args) as span:
                     result, error = (None, c["arguments_error"]) if c["arguments_error"] else run_tool(c["name"], args)
                     span.update(output=result if error is None else {"error": error}, **({"level": "ERROR"} if error else {}))
                 calls.append({"name": c["name"], "arguments": args, "result": result, "error": error})
                 results.append({"id": c["id"], "content": result if error is None else {"error": error}})
+            if len(results) < len(step["tool_calls"]):  # budget spent mid-step: answer stays None, so GAVE_UP
+                break
             provider.add_tool_results(results)
         answer = answer or GAVE_UP
     finally:
