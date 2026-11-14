@@ -1,5 +1,5 @@
 """Data lane: fetchers that return the TimeSeries shape from docs/CONTRACTS.md."""
-from . import coops, power
+from . import coops, era5, ghcn, monthly, power
 from .catalog import CATALOG
 
 __all__ = ["list_variables", "get_series"]
@@ -47,6 +47,24 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
         times, values = power.parse(power.fetch(param, lat, lon), param)
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
         src, notes = power.SOURCE, ["Grid cell about 50 km wide, not a single station."] + ([power.NOTES[variable]] if variable in power.NOTES else [])
+    elif source == "era5":
+        param = era5.PARAMS[variable]
+        times, values = monthly.daily_to_monthly(*era5.parse(era5.fetch(param, lat, lon), param), era5.HOW[variable])
+        place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
+        src = era5.SOURCE
+        notes = ["Grid cell about 25 km wide, not a single station.",
+                 f"Monthly values are built from daily ones; a month with fewer than {monthly.MIN_DAYS} valid days is left empty."]
+        notes += [era5.NOTES[variable]] if variable in era5.NOTES else []
+    elif source == "ghcn":
+        st, km, types, days, vals = ghcn.load(lat, lon, variable)
+        times, values = monthly.daily_to_monthly(days, vals, ghcn.HOW[variable])
+        place = {"name": st["name"], "lat": st["lat"], "lon": st["lon"]}
+        src = ghcn.SOURCE
+        notes = [f"Weather station {st['name']} ({st['id']}), {km:.0f} km from the point you asked about.",
+                 f"Station records have gaps: a month with fewer than {monthly.MIN_DAYS} valid days is left empty."]
+        if types == ("TMAX", "TMIN"):
+            notes.append("This station has no daily average temperature, so each day is the mean of its highest and lowest reading.")
+        notes += [ghcn.NOTES[variable]] if variable in ghcn.NOTES else []
     else:
         st, km = coops.nearest(lat, lon, coops.stations())
         times, values = coops.parse(coops.fetch(st["id"]), st["name"])
