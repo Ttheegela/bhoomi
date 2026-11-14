@@ -111,8 +111,8 @@ const askS = { off: false, busy: false, turns: [], ctrl: null, reason: '', timer
 
 function paras(text) { return text.split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean).map((t) => el('p', { class: 'msg-text' }, t)); }
 function reducedMotion() { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
-// Notes such as "Answer ready." are for screen readers only; errors and "not available" stay visible (visible = true).
-function say(t) { $('ask-status').textContent = t; } // screen readers only (the element is sr-only)
+// The status line is for screen readers only (the element is sr-only); anything shown on screen is its own block.
+function say(t) { $('ask-status').textContent = t; }
 
 function exampleButtons() {
   const box = el('div', { class: 'examples' });

@@ -313,6 +313,10 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
   .copyrow > * { width: 100%; }
   .copyrow > .copy-btn { width: auto; align-self: flex-start; }
 }
+/* below 360 px the two selects stack, each full width (the longest short name, "Air temperature", clips in half a row) */
+@media (max-width: 359px) {
+  .pick { grid-template-columns: minmax(0, 1fr); }
+}
 @media (min-width: 900px) {
   .field-var { flex: 0 1 400px; width: 400px; }
   #source-field { width: 220px; }
