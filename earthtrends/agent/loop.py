@@ -6,15 +6,21 @@ import time
 import httpx
 
 from earthtrends.agent import prompts, tools
-from earthtrends.agent.providers import PROVIDERS, NotConfigured, parse_spec
+from earthtrends.agent.providers import MAX_TOKENS, PROVIDERS, NotConfigured, parse_spec
 from earthtrends.agent.tracing import Trace
 
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
 MAX_CALLS = 6
-BUDGET_S = 120  # total per question, checked before each model call; keeps us inside the serverless limit
+BUDGET_S = 120  # total per question, checked before each model call and each tool; keeps us inside the serverless limit
 SOURCE_DOWN = "The data source did not answer."
 GAVE_UP = ("Sorry, I could not finish working this out, so I have no answer to give you. "
            "Please try asking again, maybe in a simpler way.")
+RETRY = ("\n\nYour first answer to this question was cut off because it was too long. Give the same answer again "
+         "in fewer words, following every rule. Do not call a tool: these are the tool results you already got:\n")
+MAX_WORDS = 120  # longest answer we return without asking for a shorter one
+RETRY_LONG = (f"\n\nYour first answer to this question was over {MAX_WORDS} words. Give the same answer again in at "
+              "most 100 words, following every rule: one short sentence per caveat, no unit explained twice, and "
+              "any declined request in a few words. Do not call a tool: these are the tool results you already got:\n")
 
 TOOLS = [
     {"name": "list_variables",
@@ -61,10 +67,11 @@ def ask(question: str, model: str | None = None) -> dict:
             raise
         raise NotConfigured("AGENT_MODEL names a provider that is not built yet.") from None
     provider = PROVIDERS[provider_name](model_id)
-    provider.start(prompts.system_prompt(tools.list_variables()), question, TOOLS)
+    system = prompts.system_prompt(tools.list_variables())
+    provider.start(system, question, TOOLS)
 
     trace = Trace(question, model_id)
-    calls, usage, costs, answer = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None
+    calls, usage, costs, answer, retried, too_long = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None, False, None
     try:
         for i in range(MAX_CALLS):
             if time.monotonic() - t0 >= BUDGET_S:
@@ -78,20 +85,40 @@ def ask(question: str, model: str | None = None) -> dict:
             usage["completion_tokens"] += step["usage"]["completion_tokens"]
             costs.append(step["usage"]["cost_usd"])
             if not step["tool_calls"]:
-                answer = step["text"] or GAVE_UP  # empty text: e.g. a reasoning model spent its token cap
-                break
+                # Cut off at the output cap: never show partial text. The token check covers providers without "stop".
+                cut = step.get("stop") == "length" or step["usage"]["completion_tokens"] >= MAX_TOKENS
+                text = step["text"]
+                if not cut:
+                    if not (text or "").strip():
+                        break  # empty text (e.g. reasoning spent the cap): falls through to too_long or GAVE_UP
+                    if len(text.split()) <= MAX_WORDS:
+                        answer = text
+                        break
+                    if too_long is None or len(text.split()) < len(too_long.split()):
+                        too_long = text  # complete but long: kept, so length alone never ends in GAVE_UP
+                if retried or i == MAX_CALLS - 1:  # no retry left, or no call left to run it
+                    break
+                # One fresh, shorter try per question, for either reason. The seam has no "add a user message", so
+                # restart with the results inline; the call limit and the budget still apply through the loop.
+                retried = True
+                provider.start(system, question + (RETRY if cut else RETRY_LONG) + json.dumps(calls), TOOLS)
+                continue
             if i == MAX_CALLS - 1:  # no model call left to read the results, so don't fetch data for nothing
                 break
             results = []
             for c in step["tool_calls"]:
+                if time.monotonic() - t0 >= BUDGET_S:  # a data fetch can take 30 s; don't start one we can't afford
+                    break
                 args = c["arguments"] if c["arguments"] is not None else {}
                 with trace.child("tool", c["name"], input=args) as span:
                     result, error = (None, c["arguments_error"]) if c["arguments_error"] else run_tool(c["name"], args)
                     span.update(output=result if error is None else {"error": error}, **({"level": "ERROR"} if error else {}))
                 calls.append({"name": c["name"], "arguments": args, "result": result, "error": error})
                 results.append({"id": c["id"], "content": result if error is None else {"error": error}})
+            if len(results) < len(step["tool_calls"]):  # budget spent mid-step: answer stays None, so GAVE_UP
+                break
             provider.add_tool_results(results)
-        answer = answer or GAVE_UP
+        answer = answer or too_long or GAVE_UP
     finally:
         trace_id = trace.end(answer)
 
