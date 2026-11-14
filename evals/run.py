@@ -49,6 +49,8 @@ VERDICT_WORDS = {
 }
 DISAGREE = re.compile(r"\b(?:disagree|differ|do not agree|don't agree)\b")  # whole words: "differently" is not it
 # For a rising/falling verdict, only these count as saying the opposite ("not clear why" must not).
+# A guessed reason for a difference between sources (the prompt allows only restating a caveat).
+GUESSED = ("likely because", "probably because", "likely due to", "probably due to", "differ somewhat")
 NO_CHANGE_CLAIMS = ("no clear change", "rule out no change", "no change is plausible", "not show a clear change",
                     "n't show a clear change")
 # The prompt's fixed phrases with an outside number; they are removed before numbers are checked.
@@ -179,6 +181,9 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                                                    for v in verdicts if v in VERDICT_WORDS)
         elif main and main.get("verdict") in VERDICT_WORDS:  # one verdict; with several sources, no false "disagree"
             out["wording"] = wording_agrees(answer, main["verdict"]) and not (len(by_src) > 1 and said_disagree)
+        if "wording" in out and len(by_src) > 1:
+            caveats = " ".join(c for r in by_src.values() for c in r.get("caveats") or []).lower()
+            out["wording"] = out["wording"] and not any(g in a and g not in caveats for g in GUESSED)
         out["numbers"] = not invented_numbers(answer, results)
         if by_src:
             out["source_named"] = all(_named(r.get("source") or {}, a) for r in by_src.values())

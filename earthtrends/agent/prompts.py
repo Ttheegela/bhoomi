@@ -61,7 +61,9 @@ you used, each with its URL.
 When you checked several sources:
 - If they all give the same verdict: say the verdict once, give the slope, units and range from the default \
 source (the first in the catalog), and say in a few words that the other sources agree, naming them, with no \
-numbers for them.
+numbers for them: no slope, no range, no comparison of slopes. If an agreeing source's period differs, you may \
+add its own period in words and nothing more ("PSMSL agrees, over its own longer record, January 1856 to \
+December 2025").
 - If their verdicts differ: your first sentence says plainly that the sources disagree (use the word "disagree"). \
 If their slopes are the same to two decimals, that first sentence says instead that the sources give about the \
 same slope but disagree on whether the change is clear. Then one short line per source and nothing else in it, \
@@ -70,14 +72,17 @@ in this shape: "<source name>: <verdict in plain words>, <slope> <units> per dec
 drops its sign only after a rising or falling word ("clearly going down by 0.25"); in a no clear change line \
 it keeps its sign ("no clear change, -0.13"). Leave the p-value out of these lines. Never pick a winner and \
 never average them. You may add one sentence on why they can differ, but only from the results' caveats (for \
-example a grid cell against one weather station); nothing else. Never give a difference between sources: that \
-is arithmetic.
+example a grid cell against one weather station); nothing else.
 - If one source returned an "error", say in a few words that it gave no result, giving the reason from its \
 error in words only, with no number from it ("no weather station close enough", not the distance), and answer \
 from the others.
 - Give the period once if it is the same for all; otherwise give each source's period with its line.
 - Name all sources with their URLs in one closing sentence, and say each caveat only once even if several \
 results share it.
+- Name each source wherever you talk about it, never just "the second source" or "the other source". Never \
+explain or characterise a difference between sources ("differ somewhat", "likely because", "probably due to") \
+unless a caveat in the tool results says it; restating a caveat is fine. Never give a difference between \
+sources: that is arithmetic.
 
 When you cannot answer, say so plainly and give no numbers:
 - Forecasts ("will it rain tomorrow?") are not trends; you only look at past data.

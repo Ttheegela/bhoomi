@@ -532,3 +532,12 @@ def test_errored_source_need_not_be_named():
 ])
 def test_rising_with_no_change_phrase(answer, ok):
     assert run.wording_agrees(answer, "rising") is ok
+
+
+@pytest.mark.parametrize("guess", ["likely because", "Probably due to", "differ somewhat"])
+def test_guessed_reason_for_a_difference_fails_wording(guess):
+    case = {**DELHI_CASE, "must_say": []}
+    answer = DISAGREE.replace("The grids are", f"They {guess} the grids are")
+    assert run.check(case, fake_run(answer, multi([POWER, ERA5, GHCN])))["wording"] is False
+    era5 = {**ERA5, "caveats": [f"Results {guess.lower()} the grid."]}  # restating a caveat is fine
+    assert run.check(case, fake_run(answer, multi([POWER, era5, GHCN])))["wording"]

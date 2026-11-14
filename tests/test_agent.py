@@ -649,6 +649,14 @@ def test_budget_spent_before_a_three_source_step(fake, monkeypatch):
     "with no numbers for them",
     'never the word "minus"',
     "say each caveat only once",
+    # agreeing sources, naming, no guessed reasons
+    "no slope, no range, no comparison of slopes",
+    "If an agreeing source's period differs, you may add its own period in words and nothing more",
+    "over its own longer record, January 1856 to December 2025",
+    'never just "the second source" or "the other source"',
+    "Never explain or characterise a difference between sources",
+    '"differ somewhat", "likely because", "probably due to"',
+    "unless a caveat in the tool results says it; restating a caveat is fine",
     # rules that must survive
     "Never state a number that is not in a tool result",
     "Never call a \"no_clear_change\" result rising or falling",
