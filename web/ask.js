@@ -112,7 +112,7 @@ const askS = { off: false, busy: false, turns: [], ctrl: null, reason: '', timer
 function paras(text) { return text.split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean).map((t) => el('p', { class: 'msg-text' }, t)); }
 function reducedMotion() { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
 // Notes such as "Answer ready." are for screen readers only; errors and "not available" stay visible (visible = true).
-function say(t, visible) { const s = $('ask-status'); s.classList.toggle('sr-only', !visible); s.textContent = t; }
+function say(t) { $('ask-status').textContent = t; } // screen readers only (the element is sr-only)
 
 function exampleButtons() {
   const box = el('div', { class: 'examples' });
@@ -243,8 +243,7 @@ async function send(raw) {
     const { block, focus: f } = answerBlock(o);
     thread.append(block);
     focus = f;
-    askS.turns.push({ q, a: o.text, kind: o.variant === 'gaveup' ? 'gaveup' : 'answer' });
-    askS.last = o.variant;
+    askS.turns.push({ q, a: o.text, kind: o.variant === 'gaveup' ? 'gaveup' : 'answer', variant: o.variant });
     $('ask-q').value = '';
     updateCount();
     say('Answer ready.');
@@ -256,7 +255,7 @@ async function send(raw) {
     askS.turns.push({ q, a: '', kind: 'error' });
     setOff();
     focus = $('ask-off-go');
-    say("Asking questions isn't available right now.", true);
+    say("Asking questions isn't available right now.");
   } else {
     askS.turns.push({ q, a: '', kind: 'error' });
     const b = errorBlock(o.text, o.retry ? q : null);
@@ -283,12 +282,18 @@ function countdown(n) {
   askS.cdTimer = setInterval(tick, 1000);
 }
 
+// The "answered on its own" line: shown once an answer exists, unless the latest answer or clarifying question is a clarifying one.
+function nohistHidden(turns, history) {
+  const last = turns.filter((t) => t.kind === 'answer').pop();
+  return history || !last || last.variant === 'clarify';
+}
+
 function refreshThreadUI() {
   if (askS.off) { ['ask-jump', 'ask-nohist', 'ask-hint'].forEach((id) => { $(id).hidden = true; }); return; }
   const answers = $('ask-thread').querySelectorAll('.msg.ai:not([role="status"])').length;
   $('ask-jump').hidden = answers < 3;
   // the clarifying-question line already says to name the place again, so the "on its own" line waits
-  $('ask-nohist').hidden = ASK_HISTORY || askS.last === 'clarify' || !askS.turns.some((t) => t.kind === 'answer');
+  $('ask-nohist').hidden = nohistHidden(askS.turns, ASK_HISTORY);
   $('ask-hint').hidden = !ASK_HISTORY || !askS.turns.some((t) => t.kind === 'answer');
 }
 

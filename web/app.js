@@ -359,13 +359,12 @@ function applyPreset(i) {
   syncVariableUI();
   submit(true);
 }
-// At phone width the closed select shows the short name; the open list keeps full names.
+// Below 600 px both lists use short names (a long one is cut off in the closed select); from 600 px the full names.
 const narrowQ = window.matchMedia('(max-width: 599px)');
-const VAR_SHORT = { air_temp_max: 'Hottest day' }; // the closed select on phones; the open list keeps the catalog name
-let fullNames = false;
-function nameMode(full) {
-  if (full !== undefined) fullNames = full;
-  const short = narrowQ.matches && !fullNames;
+const VAR_SHORT = { air_temp_max: 'Hottest day' };
+let narrowBound = false; // init() can run again ("Try again"): bind the listener once
+function nameMode() {
+  const short = narrowQ.matches;
   [...$('variable').options].forEach((o) => { const v = varById(o.value); o.textContent = short ? (VAR_SHORT[v.id] || stripParens(v.name)) : v.name; });
   [...$('source').options].forEach((o) => { o.textContent = (short ? SOURCE_SHORT[o.value] : SOURCE_LABELS[o.value]) || o.value; });
 }
@@ -373,15 +372,8 @@ function fillVariables() {
   const sel = $('variable');
   clear(sel);
   state.variables.forEach((v) => sel.append(el('option', { value: v.id }, v.name)));
-  nameMode(false);
-  sel.addEventListener('focus', () => nameMode(true));
-  sel.addEventListener('pointerdown', () => nameMode(true));
-  sel.addEventListener('blur', () => nameMode(false));
-  const src = $('source');
-  src.addEventListener('focus', () => nameMode(true));
-  src.addEventListener('pointerdown', () => nameMode(true));
-  src.addEventListener('blur', () => nameMode(false));
-  narrowQ.addEventListener('change', () => nameMode());
+  nameMode();
+  if (!narrowBound) { narrowQ.addEventListener('change', nameMode); narrowBound = true; }
 }
 function syncVariableUI() {
   const v = varById($('variable').value);

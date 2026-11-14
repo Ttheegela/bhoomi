@@ -226,7 +226,7 @@ pre { margin: 0; padding: var(--s3); background: var(--surface); border: 1px sol
 #panel-ask > * + *, #ask-ui > * + * { margin-top: var(--s3); }
 #ask-ui p { margin-bottom: 0; }
 #ask-thread > * + * { margin-top: var(--s3); }
-#ask-thread:empty, #ask-status:empty { display: none; }
+#ask-thread:empty { display: none; }
 textarea { width: 100%; min-height: 48px; padding: var(--s3); font: inherit; color: var(--ink); background: var(--bg);
   border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
 .ask-row { display: flex; flex-direction: column; gap: var(--s3); }
@@ -306,8 +306,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
   /* eight example places in one sideways row; a cut-off chip at the right edge says there are more */
   .chip-row { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; scroll-padding: 0 5px; padding: 5px; margin: 0 -5px; scrollbar-width: thin; }
   .chip { flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; }
-  /* measurement and source side by side */
-  .pick { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+  /* measurement and source side by side, equal columns so "NASA POWER" and the arrow fit at 360 */
+  .pick { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .field select { padding: 0 var(--s2); }
   .copyrow { flex-direction: column; }
   .copyrow > * { width: 100%; }
@@ -327,7 +327,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
   .addr { font-size: 12px; padding: 0 var(--s2); }
   .apptabs { grid-template-columns: repeat(2, 1fr); }
   .apptabs .tab { padding: 0 6px; }
-  .apptabs.cfgtabs { grid-template-columns: repeat(3, 1fr); }
+  .apptabs.cfgtabs { grid-template-columns: 1.5fr 1fr 1fr; } /* "Claude Code" is the long label */
   .apptabs.cfgtabs .tab { padding: 0 4px; }
 }
 @media (min-width: 600px) {

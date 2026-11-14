@@ -48,7 +48,7 @@ helper + counter
 
 ## 2.2 Words on screen (idle)
 - Lead (16 px): "Ask about a place in your own words. We look up public data and tell you whether it changed over time. We can't forecast the future."
-- Privacy (14 px grey): "Your question is sent to an AI model provider so it can be answered. Don't include personal details."
+- Privacy (16 px, normal text colour): "Your question is sent to an AI model provider so it can be answered. Don't include personal details."
 - Textarea label (14 px grey): "Your question". Placeholder: "Is sea level rising in New York?". Button "Ask". Native `maxlength="500"`; counter "{n} of 500" from 400 characters (announced once at 450 and at 500 through the status line: "50 characters left." / "Limit reached: 500 characters."). Enter sends, Shift+Enter new line. Helper: "Press Enter to ask. Shift+Enter starts a new line."
 - Empty state (no messages): the thread area shows "Try one of these:" and four example buttons (real `<button>`s, 48 px, full width at 375, wrap on desktop; click sends at once): "Is sea level rising in New York?" / "Are the hottest days getting hotter in Delhi?" / "Is it getting warmer in Princeton, New Jersey?" / "Has anything changed in Visakhapatnam (17.69, 83.22) since 1981?". After the first message the buttons are replaced by the follow-up hint under the last answer: "Ask a follow-up, for example: \"What about Delhi?\"". Hint is plain text, not a button.
 - Until the history PR: after the first answer, grey 14 px line above the composer: "For now each question is answered on its own. Name the place again in a follow-up."
@@ -78,7 +78,7 @@ Every number in the AI text must also be checkable: the "Show on chart" card car
 | Cancel | Aborts (`AbortController`). Block says "Cancelled." Text returns to the box, focus to the textarea. |
 | Stop at 150 s | "That took too long, so we stopped waiting. Try a shorter or simpler question." Button "Ask" ready. |
 | Answer | 2.4. Box clears and focus goes to the answer label line. Status: "Answer ready." |
-| Clarifying question (no tool call, text contains a "?" anywhere) | Normal answer block without the "No data was looked up" line, plus "Answer in the box below to continue." Focus goes to the textarea (empty). If history is off, this line reads "Answer in the box below. Name the place and what to measure again." |
+| Clarifying question (no tool call, text contains a "?" anywhere) | Normal answer block with the grey "No data was looked up for this answer" line, plus "Answer in the box below to continue." Focus goes to the textarea (empty). If history is off, this line reads "Answer in the box below. Name the place and what to measure again." |
 | Declined (no tool call, text does not end with "?") | Answer block with the no-data line, then "We can tell you whether something changed over time at a place. Try one of these:" and the four example buttons again. |
 | "Could not finish" (answer starts with "Sorry, I could not finish") | Normal block plus "Try a shorter question, or pick a place on the Explore tab." and the button "Go to Explore". Not added to history. |
 | All `detect_trend` calls have `error` | Text block plus "We couldn't get the data for that: {error}" (verbatim) and "Try another place or measurement." If the error mentions a tide gauge add "Tide gauges sit along US coasts." (only while sea level has a single source) |
@@ -109,7 +109,7 @@ Textarea has a visible label and `aria-describedby` (helper, privacy, counter, i
 h2 Use Trend Detective in your own AI agent
 lead
 Server address: read-only field + Copy
-Pick your AI app: tabs (375: 3 columns x 2 rows; >=600: one row)
+Pick your AI app: tabs (below 600: 2 columns; >=600: one row. The settings-file picker below has 3 columns, the first wider so "Claude Code" stays on one line)
    panel: h3, numbered steps, address field + Copy, "{App} setup docs ↗", "Checked {date}" (grey 14 px)
 Prefer a settings file?: JSON block + Copy config
 What you can ask once connected: 3 tool rows + example questions
