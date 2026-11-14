@@ -50,7 +50,8 @@ That is the only case where more than two decimals are allowed (p-values follow 
 Write negative numbers with a minus sign in front of the digits, never the word "minus". Explaining a unit in words ("mm per decade means \
 millimetres every ten years") is fine, since it adds no number.
 - The p-value gets one short phrase at most, never in scientific notation (never like 1e-5). Below 0.001, give no \
-number, only a plain phrase such as "a change this steady would be very unlikely if nothing were really changing", never "below 0.001". \
+number at all (not "below 0.001"), only a plain phrase such as "a change this steady would be very unlikely if \
+nothing were really changing". \
 From 0.001 up to 0.01, write "less than 0.01". From 0.045 up to 0.055, use three decimals (0.049 is "0.049", \
 0.0549 is "0.055"), so it never prints as "0.05". Otherwise round it to two decimals. Then say whether it is below \
 the usual 0.05 line.
@@ -63,7 +64,7 @@ When you checked several sources:
 default source (the first in the catalog). Then say in a few words that each other source agrees, by its name, \
 with no numbers for them: no slope, no range, no comparison of slopes. If an agreeing source's period differs \
 from the default source's, you may add that source's own period, from its own result, in words and nothing \
-more ("<source name> agrees, over its own record, <period>").
+more, in this shape: "<source name> agrees, over its own record, <period>."
 - If their verdicts differ: your first sentence says plainly that the sources disagree (use the word "disagree"). \
 If their slopes are the same to two decimals, that first sentence says instead that the sources give about the \
 same slope but disagree on whether the change is clear. Then one short line per source and nothing else in it, \
@@ -81,8 +82,8 @@ from the others.
 results share it.
 - Name each source every time you mention it; never write "the second source" or "the other source". Never \
 guess why sources differ: no "likely because", "probably due to", "differ somewhat". The only reason you may \
-give is a caveat from the results, said as a plain fact. Say nothing about how the sources relate to each other \
-(the same gauge, the same station, the same data) unless a caveat says it. Never give a difference between \
+give is a caveat from the results, said as a plain fact. Never say what the sources share or how they are linked \
+(the same gauge, the same station, the same data). Never give a difference between \
 sources: that is arithmetic.
 
 When you cannot answer, say so plainly and give no numbers:

@@ -152,11 +152,14 @@ def ask(question: str, model: str | None = None) -> dict:
                         break
                     if too_long is None or len(text.split()) < len(too_long.split()):
                         too_long = text  # complete but long: kept, so length alone never ends in GAVE_UP
-                if retried or i == MAX_CALLS - 1:  # no retry left, or no call left to run it
+                # No call left; or a long answer already had its one retry; or a cut-off one when a complete (long)
+                # answer is in hand. A cut-off step is retried until the call limit or the budget ends it.
+                if i == MAX_CALLS - 1 or (retried and (not cut or too_long)):
                     break
-                # One fresh, shorter try per question, for either reason. The seam has no "add a user message", so
-                # restart with the results inline; the call limit and the budget still apply through the loop.
+                # The seam has no "add a user message", so restart with the results inline.
                 retried = True
+                if cut:  # reasoning may have spent the cap: answer without it from now on
+                    provider.low_reasoning = True
                 again = RETRY if cut else RETRY_LONG.format(limit=limit, target=SHORTER[limit])
                 provider.start(system, question + again + json.dumps(for_model(calls)), TOOLS)
                 continue

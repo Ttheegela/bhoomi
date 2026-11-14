@@ -8,6 +8,12 @@ import httpx
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MAX_TOKENS = 2000  # so a reasoning model cannot run up the bill
 TIMEOUT_S = 60
+# OpenRouter's `reasoning` request parameter (https://openrouter.ai/docs/use-cases/reasoning-tokens, read 2026-11-14):
+# an effort level reasons on a share of max_tokens ("medium" about half; Anthropic models max(half, 1024)), so the
+# answer keeps the rest; "none" turns reasoning off. A provider without reasoning ignores the parameter
+# (https://openrouter.ai/docs/features/provider-routing: unknown parameters are ignored unless require_parameters).
+REASONING = "medium"
+REASONING_LOW = "none"  # after a step was cut off at the cap: the retry answers without reasoning
 
 
 # Why a step ended, the same words for every provider: "length" (hit MAX_TOKENS), "refusal", "tool", "end";
@@ -30,6 +36,7 @@ class UpstreamError(RuntimeError):
 
 class OpenRouterProvider:
     name = "openrouter"
+    low_reasoning = False  # the loop sets it after a cut-off step
 
     def __init__(self, model: str):
         self.model = model
@@ -44,6 +51,7 @@ class OpenRouterProvider:
     def step(self) -> dict:
         body = {
             "model": self.model, "messages": self.messages, "tools": self.tools, "max_tokens": MAX_TOKENS,
+            "reasoning": {"effort": REASONING_LOW if self.low_reasoning else REASONING},
             "provider": {"data_collection": "deny"}, "usage": {"include": True},
         }
         try:

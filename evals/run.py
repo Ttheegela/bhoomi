@@ -187,7 +187,8 @@ def check(case: dict, run: dict) -> dict[str, bool]:
             if len(verdicts) == 1:  # agreeing sources: no slope or range that only another source gave
                 others = [{k: r.get(k) for k in ("verdict", "slope_per_decade", "ci_low", "ci_high")}
                           for r in by_src.values() if r is not main]
-                leaked = [n for n in invented_numbers(answer, [main]) if not invented_numbers(n, others)]
+                base = [main] + [r.get("caveats") for r in by_src.values()]  # every caveat may be passed on
+                leaked = set(invented_numbers(answer, base)) - set(invented_numbers(answer, base + others))
                 out["wording"] = out["wording"] and not leaked
         out["numbers"] = not invented_numbers(answer, results)
         if by_src:

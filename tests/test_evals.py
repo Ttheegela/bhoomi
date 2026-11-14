@@ -576,3 +576,29 @@ def test_same_gauge_claim_fails_wording():
                            "about.")
     assert answer != NY_OK
     assert run.check(NY_CASE, fake_run(answer, multi([CO_OPS, PSMSL])))["wording"] is False
+
+
+def test_agree_answer_may_repeat_caveat_numbers():
+    era5 = {**ERA5, "verdict": "falling"}
+    ghcn = {**GHCN, "verdict": "falling", "caveats": ["Weather station X (id), 6 km from the point you asked about."]}
+    answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 "
+              "to December 2025. ERA5 reanalysis via Open-Meteo archive and NOAA NCEI GHCN-Daily agree; the "
+              "station is 6 km from the point you asked about. Sources: NASA POWER (MERRA-2), "
+              "https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
+    assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([POWER, era5, ghcn])))["wording"]
+    psmsl = {**PSMSL, "caveats": ["30 monthly values that PSMSL flags as doubtful were left out."]}
+    ny = NY_OK.replace(" Sources:", " 30 monthly values that PSMSL flags as doubtful were left out. Sources:")
+    assert run.check(NY_CASE, fake_run(ny, multi([CO_OPS, psmsl])))["wording"]
+
+
+def test_atlantic_city_agree_answer_passes():
+    co_ops = {**CO_OPS, "caveats": ["Tide gauge Atlantic City (8534720), 0 km from the point you asked about."]}
+    psmsl = {**PSMSL, "period": {"start": "1911-09", "end": "2025-12"},
+             "source": {**PSMSL["source"], "name": "Permanent Service for Mean Sea Level (PSMSL)"},
+             "caveats": ["Tide gauge ATLANTIC CITY (PSMSL id 180), 1 km from the point you asked about."]}
+    answer = ("Sea level at Atlantic City is clearly rising, by 31.79 mm per decade (95% range 30.62 to 32.96), "
+              "January 1900 to October 2026. Permanent Service for Mean Sea Level (PSMSL) agrees, over its own "
+              "record, September 1911 to December 2025. The PSMSL gauge is 1 km away. Sources: NOAA CO-OPS, "
+              "https://tidesandcurrents.noaa.gov/, https://psmsl.org/")
+    assert run.check(NY_CASE, fake_run(answer, multi([co_ops, psmsl])))["wording"]
+

@@ -37,7 +37,7 @@ def step(text=None, tool_calls=(), cost=0.001, tokens=20, **extra):
 @pytest.fixture
 def fake(monkeypatch):
     class Fake:
-        script, results, started = [], [], None
+        script, results, started, low = [], [], None, []
 
         def __init__(self, model):
             self.model = model
@@ -46,6 +46,7 @@ def fake(monkeypatch):
             Fake.started = (system, question, tools)
 
         def step(self):
+            Fake.low.append(getattr(self, "low_reasoning", False))
             return Fake.script.pop(0)
 
         def add_tool_results(self, results):
@@ -190,9 +191,32 @@ def test_cut_off_answer_is_retried_once(fake):
     assert r["usage"]["prompt_tokens"] == 300  # the retry is counted
 
 
-def test_second_cut_off_gives_up(fake):
-    fake.script = [step(tool_calls=[call()]), CUT, CUT, step("never read")]
-    assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP and len(fake.script) == 1
+def test_second_cut_off_is_retried_again(fake):
+    fake.script = [step(tool_calls=[call()]), CUT, CUT, step("Rising."), step("never read")]
+    assert loop.ask("q", model="fake:m")["answer"] == "Rising." and len(fake.script) == 1
+
+
+EMPTY_CUT = step(None, stop="length", tokens=providers.MAX_TOKENS)  # reasoning spent the whole cap
+
+
+def test_reasoning_spent_cap_retried_without_reasoning(fake):
+    three = [call(id=f"c{i}") for i in range(3)]
+    fake.script = [step(tool_calls=three), EMPTY_CUT, step("Hottest days: the sources disagree.")]
+    r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
+    assert r["answer"] == "Hottest days: the sources disagree." and len(r["tool_calls"]) == 3
+    assert fake.low == [False, False, True]  # only the retry turns reasoning down
+    assert fake.started[1].startswith("Are Delhi's hottest days getting hotter?" + loop.RETRY)
+
+
+def test_two_empty_cut_offs_still_answer(fake):
+    fake.script = [step(tool_calls=[call()]), EMPTY_CUT, EMPTY_CUT, step("Rising.")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == "Rising." and fake.low == [False, False, True, True]
+
+
+def test_endless_cut_offs_stop_at_call_limit(fake):
+    fake.script = [step(tool_calls=[call()])] + [EMPTY_CUT] * 10
+    assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP and len(fake.script) == 11 - loop.MAX_CALLS
 
 
 def test_cut_off_by_token_count_without_stop_key(fake):
@@ -573,7 +597,7 @@ def test_budget_spent_before_a_three_source_step(fake, monkeypatch):
     "Stay at or under 120 words, never more",
     "never in scientific notation",
     "would be very unlikely if nothing were really changing",
-    "give no number, only a plain phrase",
+    'give no number at all (not "below 0.001"), only a plain phrase',
     'write "less than 0.01"',
     "From 0.045 up to 0.055, use three decimals",
     '0.0549 is "0.055"), so it never prints as "0.05"',
@@ -654,6 +678,7 @@ def test_budget_spent_before_a_three_source_step(fake, monkeypatch):
     '"the second source"',
     "likely because",
     "Never give a difference between sources",
+    "Never say what the sources share or how they are linked",
     # rules that must survive
     "Never state a number that is not in a tool result",
     "Never call a \"no_clear_change\" result rising or falling",
@@ -735,11 +760,20 @@ def test_openrouter_request_body(openrouter, monkeypatch, arg, env, want):
         b = s["json"]
         assert s["url"] == "https://openrouter.ai/api/v1/chat/completions" and s["timeout"] == 60
         assert b["model"] == want and b["provider"]["data_collection"] == "deny" and b["usage"]["include"] is True
-        assert b["max_tokens"] == 2000
+        assert b["max_tokens"] == 2000 and b["reasoning"] == {"effort": "medium"}
         assert [t["function"]["name"] for t in b["tools"]] == ["list_variables", "detect_trend"]
     msgs = sent[1]["json"]["messages"]
     assert msgs[2]["tool_calls"][0]["id"] == "c1"
     assert msgs[3] == {"role": "tool", "tool_call_id": "c1", "content": json.dumps(TREND)}
+
+
+def test_openrouter_retry_after_empty_cut_off_turns_reasoning_off(openrouter):
+    sent, replies = openrouter
+    empty = {"model": "x", "choices": [{"message": {"role": "assistant", "content": None}, "finish_reason": "length"}],
+             "usage": {"prompt_tokens": 50, "completion_tokens": 2000, "cost": 0.001}}
+    replies += [or_response(TOOL_MSG), raw(empty), or_response({"role": "assistant", "content": "Rising."})]
+    assert loop.ask("q")["answer"] == "Rising."
+    assert [s["json"]["reasoning"] for s in sent] == [{"effort": "medium"}] * 2 + [{"effort": "none"}]
 
 
 def test_openrouter_bad_json_arguments(openrouter):
