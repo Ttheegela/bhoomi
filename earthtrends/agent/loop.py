@@ -108,18 +108,13 @@ def model_reason(error: str) -> str:
 
 MARKER = "[AGREEING SOURCES]"  # the model writes it where the agreeing sources' sentences go
 _MARK = r"\[\s*agreeing\s+sources\s*\]"
-# A sentence (up to . ! or ? before a space or the end), or the marker on its own.
-_UNIT = re.compile(rf"{_MARK}|\S.*?(?:[.!?](?=\s|$)|(?={_MARK})|\Z)", re.S | re.I)
+# A sentence (up to . ! or ? before a space, or the end of its line), or the marker on its own.
+_UNIT = re.compile(rf"{_MARK}|\S.*?(?:[.!?](?=\s|$)|(?={_MARK})|$)", re.M | re.I)
 AGREE_NOTE = ("Same verdict as the default source, so its own numbers are left out. Do not write a sentence about "
               "this source. Do list its name and URL in your sources line and pass on its caveats. "
               f"Write {MARKER} where the agreeing sources belong.")
 RESTORED_NOTE = ("These sources no longer all agree, so here are the full results of those sent earlier without "
                  "their numbers.")
-_AGREE = re.compile(r"\bagree[sd]?\b", re.I)
-# The prompt's verdict and direction words: a sentence with one of these says more than "X agrees".
-_VERDICT = re.compile(r"\b(?:ris(?:e|es|en|ing)|rose|fall(?:s|en|ing)?|fell|chang\w*|clear\w*|going up|going down"
-                      r"|increas\w*|decreas\w*|warm\w*|hot\w*|cool\w*|cold\w*|wet\w*|dr(?:y|ier|ying)|upward|downward"
-                      r"|steady|trend\w*|plausible)\b", re.I)
 _YM = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])")
 
 
@@ -164,13 +159,6 @@ def agree_sentence(result: dict, default: dict) -> str:
     return f"{name} agrees, over its own record, {_month(p['start'])} to {_month(p['end'])}."
 
 
-def _forms(src: dict) -> set[str]:
-    """Ways an answer names a source: id, name, name cut at "," or "(", a short form in brackets."""
-    name = (src.get("name") or "").lower()
-    return {f for f in {src.get("id") or "", name, name.split(",")[0].strip(), name.split("(")[0].strip(),
-                        *re.findall(r"\(([^)]+)\)", name)} if f}
-
-
 def _host(url: str) -> str:
     return re.sub(r"^https?://(www\.)?|/.*$", "", url or "").lower()
 
@@ -188,20 +176,16 @@ def _cut(text: str, s: int, e: int, mask: list[bool]) -> None:
 
 
 def compose(text: str, calls: list[dict]) -> str:
-    """The final text. With agreeing sources, their sentences go where the marker is (or, if it is missing or
-    inside a sentence, in front of the first sentence with a link, else at the end), with "Its data: <url>." after
-    a source whose link the text lacks. A model sentence that is only an agree claim is dropped: it names a
-    source, says agree(s), and has no verdict word and no number but a year. Extra markers are removed. Only the
-    space around what was removed or put in changes; text with no marker and no agreeing sources is unchanged."""
+    """The final text. The agreeing sources' sentences go where the marker is (or, if it is missing or inside a
+    sentence, in front of the first sentence or list line with a link, else at the end), each followed by
+    "Its data: <url>." if the text lacks its link. Only markers and exact copies of those sentences are removed;
+    every other model sentence stays. Any other source with a result whose link is missing gets
+    "Source: <name>, <url>." at the end. Only the space around a change is touched."""
     plan = agree_plan(calls)
-    marks = list(re.finditer(_MARK, text, re.I))
-    if not plan and not marks:
-        return text
     lead, others = plan or ({}, [])
     sents = [agree_sentence(r, lead) for r in others]
-    names = set().union(*(_forms(r["source"]) for r in [lead, *others])) if plan else set()
-    mask, at, link_at = [False] * len(text), None, None
-    for m in marks:
+    mask, at = [False] * len(text), None
+    for m in re.finditer(_MARK, text, re.I):
         before = text[:m.start()].rstrip()
         own = not before or before[-1] in ".!?" or "\n" in text[len(before):m.start()]  # not inside a sentence
         if at is None and sents and own:
@@ -209,34 +193,50 @@ def compose(text: str, calls: list[dict]) -> str:
             mask[m.start():m.end()] = [True] * (m.end() - m.start())
         else:
             _cut(text, m.start(), m.end(), mask)
-    for m in _UNIT.finditer(text) if sents else ():
-        u, low = m.group(), m.group().lower()
-        if re.fullmatch(_MARK, u, re.I):
-            continue
-        if (_AGREE.search(u) and not _VERDICT.search(u) and all(re.fullmatch(r"\d{4}", n) for n in re.findall(r"\d+", u))
-                and any(re.search(rf"\b{re.escape(f)}(?!\w)", low) for f in names)):
-            _cut(text, m.start(), m.end(), mask)
-            continue
-        for s in sents:  # an exact copy inside a kept sentence would make it twice
-            for c in re.finditer(re.escape(s), u):
-                _cut(text, m.start() + c.start(), m.start() + c.end(), mask)
-        if link_at is None and ("://" in u or any(_host(r["source"].get("url")) in low for r in [lead, *others])):
-            link_at = m.start()
+    for s in sents:  # the model's exact copy goes, so each sentence is there once
+        for c in re.finditer(re.escape(s), text):
+            _cut(text, c.start(), c.end(), mask)
     kept = "".join(ch for ch, gone in zip(text, mask) if not gone)
-    if not sents:
-        return kept
-    parts = []
-    for r, s in zip(others, sents):
-        url = r["source"].get("url")
-        parts.append(s if not url or _host(url) in kept.lower() else f"{s} Its data: {url}.")
-    if at is None:
-        at = link_at if link_at is not None else len(text.rstrip())
-    out = "".join(("\0" if i == at else "") + ("" if gone else ch) for i, (ch, gone) in enumerate(zip(text, mask)))
-    if at == len(text):
-        out += "\0"
-    out = re.sub(r"(?<=\S)\0", " \0", out)
-    out = re.sub(r"\0(?=\S)", "\0 ", out)
-    return out.replace("\0", " ".join(parts))
+    line = False  # put the sentences on a line of their own (in front of a list)
+    if sents and at is None:
+        hosts = {_host(r["source"].get("url")) for r in [lead, *others]} - {""}
+        for m in _UNIT.finditer(text):
+            if mask[m.start()] or not ("://" in m.group() or any(h in m.group().lower() for h in hosts)):
+                continue
+            at = m.start()
+            if (at == 0 or text[at - 1] == "\n") and re.match(r"(?:[-*•]|\d+[.)])\s", m.group()):
+                line = True
+                prev = text.rfind("\n", 0, at - 1) + 1  # a list header line ("Sources:") stays with its list
+                if at and text[prev:at - 1].rstrip().endswith(":"):
+                    at = prev
+            break
+        else:
+            at = len(text.rstrip())
+    left = "".join(ch for ch, gone in zip(text[:at], mask) if not gone) if sents else kept
+    right = "".join(ch for ch, gone in zip(text[at:], mask[at:]) if not gone) if sents else ""
+    if sents:
+        ins = " ".join(s if _host(r["source"].get("url")) in kept.lower() else f"{s} Its data: {r['source']['url']}."
+                       for r, s in zip(others, sents))
+        if line:
+            ins += "\n"
+        else:
+            ins = (" " if left and not left[-1].isspace() else "") + ins
+            ins += " " if right and not right[0].isspace() else ""
+        left += ins
+    out = left + right
+    # Every source with a result names its link: any still missing goes at the end.
+    srcs = {}
+    for c in calls:
+        if c["name"] == "detect_trend" and c.get("error") is None and isinstance(c.get("result"), dict):
+            src = c["result"].get("source") or {}
+            srcs.setdefault(src.get("id"), src)
+    # ponytail: a host without a dot ("https://x", test fakes) is not a link and is skipped
+    missing = [f"Source: {s['name'].split(',')[0].strip()}, {s['url']}." for s in srcs.values()
+               if "." in _host(s.get("url")) and _host(s.get("url")) not in out.lower() and s.get("name")]
+    if missing:
+        body = out.rstrip()
+        out = body + (" " if body else "") + " ".join(missing) + out[len(body):]
+    return out
 
 
 def _hidden(calls: list[dict]) -> set[int]:
@@ -366,8 +366,9 @@ def ask(question: str, model: str | None = None) -> dict:
             back = [calls[j]["result"] for j in sorted(sent_hidden - now)]
             sent_hidden = now
             if back:
-                first = content[0] if isinstance(content[0], dict) else {"result": content[0]}
-                content[0] = {**first, "earlier_results_in_full": {"note": RESTORED_NOTE, "results": back}}
+                k = next((j for j, x in enumerate(content) if isinstance(x, dict)), 0)  # a dict result keeps its shape
+                first = content[k] if isinstance(content[k], dict) else {"result": content[k]}
+                content[k] = {**first, "earlier_results_in_full": {"note": RESTORED_NOTE, "results": back}}
             provider.add_tool_results([{"id": c["id"], "content": x} for c, x in zip(todo, content)])
         answer = answer or too_long or GAVE_UP
     finally:

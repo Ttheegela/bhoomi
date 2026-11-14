@@ -335,6 +335,11 @@ SRC = {"power": ("NASA POWER (MERRA-2)", "https://power.larc.nasa.gov/"),
        "ghcn": ("NOAA NCEI GHCN-Daily", "https://www.ncei.noaa.gov/")}
 
 
+def link(*ids):
+    """The sentences the code appends for sources whose link the answer lacks."""
+    return " ".join(f"Source: {SRC[s][0]}, {SRC[s][1]}." for s in ids)
+
+
 def by_source(monkeypatch, verdicts, fail=()):
     """detect_trend fake: one result per source; a source in `fail` has no data here."""
     def detect(variable, lat, lon, source=None, **kw):
@@ -356,7 +361,8 @@ def test_three_sources_agree(fake, monkeypatch):
     r = loop.ask("Is Delhi getting hotter?", model="fake:m")
     # the code adds one sentence per agreeing source (same period: the short form), and its missing link
     assert r["answer"] == ("All three agree: rising. ERA5 reanalysis via Open-Meteo archive agrees. Its data: "
-                           "https://open-meteo.com/. NOAA NCEI GHCN-Daily agrees. Its data: https://www.ncei.noaa.gov/.")
+                           "https://open-meteo.com/. NOAA NCEI GHCN-Daily agrees. Its data: https://www.ncei.noaa.gov/. "
+                           + link("power"))
     assert [c["result"]["source"]["id"] for c in r["tool_calls"]] == ["power", "era5", "ghcn"]
     assert all(c["result"]["slope_per_decade"] == 41.0 for c in r["tool_calls"])  # the caller keeps full results
     assert ["slope_per_decade" in x["content"] for x in fake.results[0]] == [True, False, False]
@@ -368,7 +374,8 @@ def test_three_sources_disagree_get_the_longer_limit(fake, monkeypatch):
     by_source(monkeypatch, {"power": "falling", "era5": "no_clear_change", "ghcn": "rising"})
     fake.script = [step(tool_calls=three_calls()), step(words(150)), step("never")]
     r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
-    assert r["answer"] == words(150) and fake.script == [step("never")]  # 150 <= 180: no retry
+    # 150 words plus the three missing links stay <= 180: no retry
+    assert r["answer"] == words(150) + " " + link("power", "era5", "ghcn") and fake.script == [step("never")]
     assert {c["result"]["verdict"] for c in r["tool_calls"]} == {"falling", "no_clear_change", "rising"}
 
 
@@ -376,7 +383,7 @@ def test_multi_source_over_180_retried_with_its_own_numbers(fake, monkeypatch):
     by_source(monkeypatch, {"power": "falling", "era5": "no_clear_change", "ghcn": "rising"})
     fake.script = [step(tool_calls=three_calls()), step(words(190)), step(words(160))]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == words(160)
+    assert r["answer"] == words(160) + " " + link("power", "era5", "ghcn")
     assert loop.RETRY_LONG.format(limit=180, target=150) in fake.started[1]
 
 
@@ -387,7 +394,8 @@ def test_one_source_errors_two_answer(fake, monkeypatch):
     assert r["tool_calls"][2]["error"] == "No weather station within 50 km of this point."
     assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.STATION_REASON}}  # the model sees no digit
     # two sources returned results, so 180 applies; they agree, so the code adds ERA5's sentence
-    assert r["answer"] == words(150) + " ERA5 reanalysis via Open-Meteo archive agrees. Its data: https://open-meteo.com/."
+    assert r["answer"] == (words(150) + " ERA5 reanalysis via Open-Meteo archive agrees. Its data: "
+                           "https://open-meteo.com/. " + link("power"))
     assert "slope_per_decade" not in fake.results[0][1]["content"]  # the failed one doesn't stop the agree rule
 
 
@@ -415,6 +423,7 @@ NY_SOURCES = ("Sources: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.g
 WRONG_NY8 = ("NOAA CO-OPS tide gauges agrees with this, using the Permanent Service for Mean Sea Level (PSMSL) data, "
              "over its own record, January 1856 to December 2025.")
 WRONG_NY1 = "The PSMSL record agrees, over its own record, January 1856 to December 2025."
+COOPS_LINK = "Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/."
 
 
 def ny_sources(monkeypatch, psmsl=NY_PSMSL, coops=NY_COOPS):
@@ -437,13 +446,14 @@ def no_trend_numbers(content):
     # (b) nothing about PSMSL: the sentence goes in front of the sources sentence
     (f"{NY_HEAD} {NY_CAVEAT} {NY_SOURCES}", f"{NY_HEAD} {NY_CAVEAT} {NY_SENT} {NY_SOURCES}"),
     (f"{NY_HEAD}\n\n{NY_SOURCES}", f"{NY_HEAD}\n\n{NY_SENT} {NY_SOURCES}"),
-    (NY_HEAD, f"{NY_HEAD} {NY_SENT} Its data: https://psmsl.org/."),  # no URL at all: at the end, with its link
-    # (c) its own sentence as well: the model's is dropped, the code's stays, once
+    # no URL at all: at the end, with its link, and the default's link after it
+    (NY_HEAD, f"{NY_HEAD} {NY_SENT} Its data: https://psmsl.org/. {COOPS_LINK}"),
+    # (c) its own sentence as well: the model's stays (a known limit), the code's is there once
     (f"{NY_HEAD} {WRONG_NY1} [AGREEING SOURCES] {NY_CAVEAT} {NY_SOURCES}",
-     f"{NY_HEAD} {NY_SENT} {NY_CAVEAT} {NY_SOURCES}"),
-    (f"{NY_HEAD} {WRONG_NY8} {NY_CAVEAT} {NY_SOURCES}", f"{NY_HEAD} {NY_CAVEAT} {NY_SENT} {NY_SOURCES}"),
-    (f"{NY_HEAD} {NY_SENT} [AGREEING SOURCES] {NY_SOURCES}", f"{NY_HEAD} {NY_SENT} {NY_SOURCES}"),
-    (f"{NY_HEAD} PSMSL agrees. {NY_SOURCES}", f"{NY_HEAD} {NY_SENT} {NY_SOURCES}"),
+     f"{NY_HEAD} {WRONG_NY1} {NY_SENT} {NY_CAVEAT} {NY_SOURCES}"),
+    (f"{NY_HEAD} {WRONG_NY8} {NY_CAVEAT} {NY_SOURCES}", f"{NY_HEAD} {WRONG_NY8} {NY_CAVEAT} {NY_SENT} {NY_SOURCES}"),
+    (f"{NY_HEAD} {NY_SENT} [AGREEING SOURCES] {NY_SOURCES}", f"{NY_HEAD} {NY_SENT} {NY_SOURCES}"),  # exact copy: once
+    (f"{NY_HEAD} PSMSL agrees. {NY_SOURCES}", f"{NY_HEAD} PSMSL agrees. {NY_SENT} {NY_SOURCES}"),
 ])
 def test_two_sources_agree_code_writes_the_sentence(fake, monkeypatch, model_text, want):
     fake.script = [step(tool_calls=ny_sources(monkeypatch)), step(model_text)]
@@ -473,7 +483,7 @@ def test_two_agree_one_disagrees_is_unchanged(fake, monkeypatch):
     text = "The sources disagree. NASA POWER (MERRA-2): clearly rising, by 41.00 mm per decade."
     fake.script = [step(tool_calls=three_calls()), step(text)]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == text
+    assert r["answer"] == text + " " + link("power", "era5", "ghcn")  # only the missing links added
     assert all(x["content"]["slope_per_decade"] == 41.0 for x in fake.results[0])  # full results to the model
 
 
@@ -481,7 +491,7 @@ def test_default_failed_next_source_leads(fake, monkeypatch):
     by_source(monkeypatch, {"era5": "rising", "ghcn": "rising"}, fail={"power"})
     fake.script = [step(tool_calls=three_calls()), step("Rising. [AGREEING SOURCES]")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == "Rising. NOAA NCEI GHCN-Daily agrees. Its data: https://www.ncei.noaa.gov/."
+    assert r["answer"] == "Rising. NOAA NCEI GHCN-Daily agrees. Its data: https://www.ncei.noaa.gov/. " + link("era5")
     assert "slope_per_decade" in fake.results[0][1]["content"] and "slope_per_decade" not in fake.results[0][2]["content"]
 
 
@@ -537,7 +547,7 @@ def test_two_places_through_the_loop_get_full_results(fake, monkeypatch):
     four = [call(arguments={**p, "source": s}, id=f"{s}{p['lat']}") for p in (NY, SEATTLE) for s in ("coops", "psmsl")]
     fake.script = [step(tool_calls=four), step("Both rising.")]
     r = loop.ask("Compare how fast sea level is rising in New York and Seattle.", model="fake:m")
-    assert r["answer"] == "Both rising."
+    assert r["answer"] == f"Both rising. {COOPS_LINK} Source: Permanent Service for Mean Sea Level (PSMSL), https://psmsl.org/."
     assert [x["content"] for x in fake.results[0]] == [NY_COOPS, NY_PSMSL, SEA_COOPS, SEA_PSMSL]
 
 
@@ -568,16 +578,17 @@ def test_sentences_with_more_than_an_agree_claim_are_kept(sentence):
     NY_SENT,
     WRONG_NY8,
 ])
-def test_bare_agree_claims_are_dropped(sentence):
+def test_model_agree_claims_are_kept_only_exact_copies_go(sentence):
     out = loop.compose(f"{NY_HEAD} {sentence} [AGREEING SOURCES] {NY_SOURCES}", NY_CALLS)
-    assert out == f"{NY_HEAD} {NY_SENT} {NY_SOURCES}" and out.count(NY_SENT) == 1
+    kept = "" if sentence == NY_SENT else sentence + " "
+    assert out == f"{NY_HEAD} {kept}{NY_SENT} {NY_SOURCES}" and out.count(NY_SENT) == 1
 
 
 @pytest.mark.parametrize("text,want", [
     (f"October 2026.[AGREEING SOURCES]{NY_SOURCES}", f"October 2026. {NY_SENT} {NY_SOURCES}"),
     # inside a sentence: the marker goes, the sentence closes up, and the agree sentence goes before the link
     (f"Rising [AGREEING SOURCES] by 31.79 mm. {NY_SOURCES}", f"Rising by 31.79 mm. {NY_SENT} {NY_SOURCES}"),
-    (f"Rising by 31.79 mm [AGREEING SOURCES].", f"Rising by 31.79 mm. {NY_SENT} Its data: https://psmsl.org/."),
+    (f"Rising by 31.79 mm [AGREEING SOURCES].", f"Rising by 31.79 mm. {NY_SENT} Its data: https://psmsl.org/. {COOPS_LINK}"),
 ])
 def test_marker_spacing_and_marker_inside_a_sentence(text, want):
     assert loop.compose(text, NY_CALLS) == want
@@ -587,7 +598,7 @@ def test_only_the_space_around_a_change_is_touched():
     text = f"Rising  fast,  31.79.\n\n\n[AGREEING SOURCES]\n\n\nA caveat  here.  {NY_SOURCES}"
     assert loop.compose(text, NY_CALLS) == f"Rising  fast,  31.79.\n\n\n{NY_SENT}\n\n\nA caveat  here.  {NY_SOURCES}"
     dropped = f"Rising  fast,  31.79.\n\nPSMSL agrees.\n\nA caveat  here.  {NY_SOURCES}"
-    assert loop.compose(dropped, NY_CALLS) == f"Rising  fast,  31.79.\n\nA caveat  here.  {NY_SENT} {NY_SOURCES}"
+    assert loop.compose(dropped, NY_CALLS) == f"Rising  fast,  31.79.\n\nPSMSL agrees.\n\nA caveat  here.  {NY_SENT} {NY_SOURCES}"
 
 
 @pytest.mark.parametrize("period", [None, {"start": "1856", "end": "2025-12"}, {"start": "1856-13", "end": "x"}, "1856"])
@@ -630,7 +641,50 @@ def test_later_disagreeing_source_brings_back_earlier_numbers(fake, monkeypatch)
     sent = json.dumps(fake.results)
     assert all(x in sent for x in ("0.3187", "0.1234", "0.5321", "1940-01"))  # all sent, taken together
     assert fake.results[1][0]["content"]["earlier_results_in_full"]["results"] == [era5]
-    assert r["answer"] == "The sources disagree." and "agrees" not in r["answer"]
+    assert r["answer"] == "The sources disagree. " + link("power", "era5", "ghcn") and "agrees" not in r["answer"]
+    # restored results ride on a result that is already a dict, never on the catalog list
+    fake.results.clear()
+    fake.script = [step(tool_calls=s1), step(tool_calls=[call("list_variables", {}, id="lv"),
+                                                         call(arguments={**DELHI, "source": "ghcn"}, id="ghcn")]),
+                   step("ok")]
+    loop.ask("q", model="fake:m")
+    catalog, station = (x["content"] for x in fake.results[1])
+    assert catalog == tools.list_variables() and station["earlier_results_in_full"]["results"] == [era5]
+
+
+NY_BULLETS = ("Sources:\n- NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/\n"
+              "- Permanent Service for Mean Sea Level (PSMSL), https://psmsl.org/\n")
+
+
+def test_sources_as_a_bullet_list_stay_whole():
+    out = loop.compose(f"{NY_HEAD}\n\n{NY_BULLETS}", NY_CALLS)
+    assert out == f"{NY_HEAD}\n\n{NY_SENT}\n{NY_BULLETS}"  # its own line, every bullet unchanged
+    no_header = NY_BULLETS.split("\n", 1)[1]
+    assert loop.compose(f"{NY_HEAD}\n{no_header}", NY_CALLS) == f"{NY_HEAD}\n{NY_SENT}\n{no_header}"
+
+
+@pytest.mark.parametrize("kept", [
+    "PSMSL agrees, though its gauge moved in the past.",
+    "PSMSL agrees and its gauge is a kilometre from the point.",
+    "PSMSL agrees, but its record has gaps before 1900.",
+    "PSMSL agrees.",
+    WRONG_NY8,
+    "\n\n- PSMSL agrees\n- Its gauge moved in 1920\n- Data gaps exist\n\n",
+])
+def test_model_sentences_are_never_removed(kept):
+    out = loop.compose(f"{NY_HEAD} [AGREEING SOURCES] {kept} {NY_SOURCES}", NY_CALLS)
+    assert out == f"{NY_HEAD} {NY_SENT} {kept} {NY_SOURCES}"
+
+
+def test_agree_sentence_with_both_links_is_kept_and_needs_no_link():
+    both = "Both sources agree: NOAA CO-OPS (https://tidesandcurrents.noaa.gov/) and PSMSL (https://psmsl.org/)."
+    out = loop.compose(f"{NY_HEAD} [AGREEING SOURCES] {both}", NY_CALLS)
+    assert out == f"{NY_HEAD} {NY_SENT} {both}" and "Its data" not in out and "Source:" not in out
+
+
+def test_nul_in_model_text_does_not_double_the_sentence():
+    out = loop.compose(f"{NY_HEAD} \0 [AGREEING SOURCES] {NY_SOURCES}", NY_CALLS)
+    assert out.count(NY_SENT) == 1 and out == f"{NY_HEAD} \0 {NY_SENT} {NY_SOURCES}"
 
 
 # ---- error reasons the model reads: never a digit ----
@@ -722,14 +776,14 @@ def test_own_input_errors_stay_fixable_without_digits(message):
 def test_one_source_answering_keeps_120(fake, monkeypatch):
     by_source(monkeypatch, {"power": "rising"}, fail={"era5", "ghcn"})
     fake.script = [step(tool_calls=three_calls()), step(words(150)), step(words(100))]
-    assert loop.ask("q", model="fake:m")["answer"] == words(100)
+    assert loop.ask("q", model="fake:m")["answer"] == words(100) + " " + link("power")
 
 
 def test_user_named_source_is_one_call_and_120(fake, monkeypatch):
     by_source(monkeypatch, {"era5": "rising"})
     fake.script = [step(tool_calls=[call(arguments={**DELHI, "source": "era5"})]), step(words(150)), step(words(100))]
     r = loop.ask("According to ERA5, is London getting warmer?", model="fake:m")
-    assert len(r["tool_calls"]) == 1 and r["answer"] == words(100)
+    assert len(r["tool_calls"]) == 1 and r["answer"] == words(100) + " " + link("era5")
     assert loop.RETRY_LONG.format(limit=120, target=100) in fake.started[1]
 
 

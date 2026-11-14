@@ -686,6 +686,47 @@ def test_own_record_misattributed_or_shared_gauge_fails(sentence):
     assert not real_ny(sentence)
 
 
+POWER_LINK = "Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/."
+
+
+def test_default_source_link_added_when_all_agree():
+    rising = [{**r, "verdict": "rising"} for r in (POWER, ERA5, GHCN)]
+    calls = multi(rising)
+    raw = ("London is getting warmer, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 to December 2025. "
+           "[AGREEING SOURCES] Sources: NASA POWER, ERA5 (https://open-meteo.com/) and NOAA NCEI GHCN-Daily "
+           "(https://www.ncei.noaa.gov/).")
+    assert not run.check({**DELHI_CASE, "must_say": []}, fake_run(raw, calls))["source_named"]
+    answer = compose(raw, calls)
+    assert answer.count("power.larc.nasa.gov") == 1 and answer.endswith(POWER_LINK)
+    assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, calls))["source_named"]
+
+
+def test_disagree_answer_gets_only_its_missing_link():
+    calls = multi([POWER, ERA5, GHCN])
+    no_ghcn = DISAGREE.replace(", https://www.ncei.noaa.gov/", "")
+    assert compose(no_ghcn, calls) == no_ghcn + " Source: NOAA NCEI GHCN-Daily, https://www.ncei.noaa.gov/."
+    assert compose(DISAGREE, calls) == DISAGREE  # every link present: byte for byte
+
+
+@pytest.mark.parametrize("calls", [[], [{"name": "detect_trend", "arguments": D_ARGS, "result": None,
+                                         "error": "No tide gauge within 100 km of this point."}]])
+def test_no_result_no_link_added(calls):
+    for text in ("Which Springfield do you mean?", "There is no tide gauge near Delhi."):
+        assert compose(text, calls) == text
+
+
+@pytest.mark.parametrize("written", ["http://power.larc.nasa.gov", "www.power.larc.nasa.gov",
+                                     "(power.larc.nasa.gov)", "[https://www.power.larc.nasa.gov/]"])
+def test_link_written_another_way_counts(written):
+    text = DISAGREE.replace("https://power.larc.nasa.gov/", written)
+    assert compose(text, multi([POWER, ERA5, GHCN])) == text
+
+
+def test_one_source_asked_twice_gets_one_link():
+    calls = multi([POWER]) + [{**multi([POWER])[0], "arguments": {**D_ARGS, "lat": 19.08, "source": "power"}}]
+    assert compose("Rising.", calls) == "Rising. " + POWER_LINK
+
+
 def test_composed_answer_with_missing_link_names_every_source():
     calls = multi([REAL_COOPS, REAL_PSMSL])
     text = NY_HEAD + "[AGREEING SOURCES] Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/."
