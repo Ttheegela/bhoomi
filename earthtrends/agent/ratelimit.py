@@ -33,14 +33,13 @@ def check(client: str, now: float | None = None) -> int:
     with _lock:
         _expire(_all, now - GLOBAL_WINDOW_S)
         q = _clients.get(client)
+        until = _all[0] + GLOBAL_WINDOW_S if len(_all) >= GLOBAL else 0  # the longest wait, not one then another
         if q is not None:
             _expire(q, now - CLIENT_HOUR_S)
-            until = max(q[0] + CLIENT_HOUR_S if len(q) >= PER_CLIENT_HOUR else 0,  # wait for both, not one then the other
+            until = max(until, q[0] + CLIENT_HOUR_S if len(q) >= PER_CLIENT_HOUR else 0,
                         q[-PER_CLIENT] + CLIENT_WINDOW_S if len(q) >= PER_CLIENT else 0)
-            if until > now:
-                return _wait(until, now)
-        if len(_all) >= GLOBAL:
-            return _wait(_all[0] + GLOBAL_WINDOW_S, now)
+        if until > now:
+            return _wait(until, now)
         if q is None:
             if len(_clients) >= MAX_CLIENTS:
                 for k in [k for k, v in _clients.items() if not v or v[-1] <= now - CLIENT_HOUR_S]:

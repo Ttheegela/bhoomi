@@ -44,6 +44,35 @@ def test_hourly_cap_per_client():
     assert ratelimit.check("a", now=ratelimit.CLIENT_HOUR_S + 0.5) == 0
 
 
+def _fill(client, times):
+    for t in times:
+        assert ratelimit.check(client, now=t) == 0
+
+
+def test_both_client_caps_minute_wait_longer():
+    _fill("a", [i * 61 for i in range(20)] + [3590 + i for i in range(10)])
+    assert ratelimit.check("a", now=3599.5) == 51  # hour frees at 3600, but the minute window only at 3650
+
+
+def test_both_client_caps_hour_wait_longer():
+    _fill("a", [i * 61 for i in range(20)] + [1800 + i for i in range(10)])
+    assert ratelimit.check("a", now=1810) == 3600 - 1810  # minute frees at 1860, the hour only at 3600
+
+
+def test_client_and_global_caps_global_longer():
+    for i in range(ratelimit.GLOBAL - 10):
+        ratelimit.check(f"c{i}", now=0)
+    _fill("a", [100 + i for i in range(10)])
+    assert ratelimit.check("a", now=110) == ratelimit.GLOBAL_WINDOW_S - 110  # not the 50 s minute wait
+
+
+def test_client_and_global_caps_client_longer():
+    for i in range(ratelimit.GLOBAL - 30):
+        ratelimit.check(f"c{i}", now=0)
+    _fill("a", [100 + i * 61 for i in range(30)])
+    assert ratelimit.check("a", now=2000) == 100 + ratelimit.CLIENT_HOUR_S - 2000  # not the global 1600
+
+
 def test_global_cap():
     for i in range(ratelimit.GLOBAL):
         assert ratelimit.check(f"c{i}", now=i) == 0
@@ -104,6 +133,7 @@ class Req:
     ({"x-forwarded-for": "203.0.113.7"}, "203.0.113.7"),
     ({"x-forwarded-for": "1.1.1.1, 2.2.2.2,3.3.3.3"}, "3.3.3.3"),
     ({"x-forwarded-for": "  1.1.1.1 ,   203.0.113.7  "}, "203.0.113.7"),
+    ({"x-forwarded-for": "2001:db8::1, 2001:db8:85a3::8a2e:370:7334"}, "2001:db8:85a3::8a2e:370:7334"),
     ({"x-forwarded-for": "", "x-real-ip": "198.51.100.5"}, "198.51.100.5"),
     ({"x-forwarded-for": " , "}, "192.0.2.9"),
     ({}, "192.0.2.9"),
