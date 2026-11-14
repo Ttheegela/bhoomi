@@ -2,7 +2,7 @@
 
 Venue: Princeton Public Library, Tech Center and Spark Lab, 65 Witherspoon St. Local lead: Venu Sri Sabbavarapu.
 
-**Hard times:** local judging presentations **Sun 14:00**. Final submission **Sun 23:59**. Feature freeze **Sun 12:00**.
+**Hard times:** local judging presentations **Sun 14:00**. Final submission **Sun 23:59**. There is no feature freeze: work continues until the submission deadline. The one protected window is the presentation: **no merges to `main` on Sun from 13:00 to 15:00** (a merge deploys to production).
 
 ## Saturday
 
@@ -22,9 +22,9 @@ Venue: Princeton Public Library, Tech Center and Spark Lab, 65 Witherspoon St. L
 
 | Time | What |
 |---|---|
-| morning | Fixes, evals green, rehearse the demo twice |
-| **12:00** | **Feature freeze**: only bug fixes after this |
-| 13:00 | At the library: final rehearsal |
+| morning | The story first: the presentation and the 30 s video. Then fixes, evals green, rehearse the demo twice |
+| before 13:00 | Production stable. After the last deploy, open every demo place, measurement and source once on production so the answers are already cached on stage |
+| **13:00 to 15:00** | **No merges to `main`** (a merge deploys and clears the cache). At the library: final rehearsal |
 | **14:00** | **Local judging presentation** |
 | after judging | Fill the project page: title, summary, demo (7 slides or video of 30 s or less), repo link, SI disclosure. Aim to submit by 18:00, deadline 23:59 |
 
@@ -47,7 +47,7 @@ Venue: Princeton Public Library, Tech Center and Spark Lab, 65 Witherspoon St. L
 - Presentation, Sun 14:00: 7 to 10 minutes including Q&A. Everyone on the team talks. A live demo, or a video of 30 s or less.
 - Validity is what our checks are for: the eval runner and its results in `evals/results/`, the NOAA truth check (our Atlantic City sea-level trend 4.25 mm per year against NOAA's 4.24 ± 0.08) and the model comparison table. Keep them readable by a person.
 - The submission needs the code to be open source in a public repo. When to make the repo public is Tarun's call.
-- The production site must be stable before the Sun 12:00 freeze.
+- The production site must be stable and rehearsed before Sun 13:00, and nothing is deployed from 13:00 to 15:00.
 - Delhi "sources disagree" demo: it uses the hottest day of the month (`air_temp_max`) from NASA POWER, ERA5 and the Safdarjung station. Quote the numbers the tool returns on the day; the "days at or above 40 °C" figures in older notes do not reproduce.
 
 ## Rules that cost points if missed
