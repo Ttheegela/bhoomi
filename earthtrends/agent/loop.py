@@ -3,7 +3,6 @@ import contextvars
 import json
 import logging
 import os
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 
@@ -71,25 +70,32 @@ def run_tool(name: str, args: dict) -> tuple[dict | list | None, str | None]:
 STATION_REASON = "No weather station near this place has a long enough record."
 GAUGE_REASON = "No tide gauge near this place has a usable record."
 FALLBACK_REASON = "This source has no usable record for this place."
+CATALOG_REASON = "That variable or source id is not in the catalog; use the ids listed in your instructions."
 
 
 def model_reason(error: str) -> str:
     """What the model reads for a failed call. Never a digit, so an error's distances, years or coordinates can't
     reach an answer (the owner's rule: no numbers where no data exist). Digit-free messages pass unchanged; the API
     response, logs and traces keep the full text."""
-    if not re.search(r"\d", error):
+    if not any(ch.isdigit() or ch.isnumeric() for ch in error):  # superscripts and other numerals count too
         return error
     low = error.lower()
-    if "weather station" in low or "ghcn" in low:
-        return STATION_REASON
-    if "tide gauge" in low or "sea level" in low:
-        return GAUGE_REASON
-    if low.startswith(("latitude", "longitude")):  # the model's own bad call: it must learn to fix it, not "no data"
+    # The model's own bad call first: it must learn to fix it, not hear "no data". A wrong-source error lists
+    # "era5" and "ghcn", so it would otherwise match the station words below.
+    if "not available from" in low or low.startswith("unknown variable"):
+        return CATALOG_REASON
+    if low.startswith("unknown tool"):
+        return "That tool does not exist; use only the tools you were given."
+    if low.startswith(("latitude", "longitude")):
         return "The latitude or longitude given is not a valid place."
     if "must look like" in low:
         return "start and end must be a year, or a year and a month."
     if low.startswith("too many tool calls"):
         return "Too many tool calls at once; ask for fewer in one step."
+    if "weather station" in low or "ghcn" in low:
+        return STATION_REASON
+    if "tide gauge" in low or "sea level" in low:
+        return GAUGE_REASON
     return FALLBACK_REASON
 
 

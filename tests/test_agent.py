@@ -384,6 +384,20 @@ def test_unknown_reason_with_digit_gets_fallback(fake, monkeypatch):
     assert seen == loop.FALLBACK_REASON and r["tool_calls"][1]["error"] == "Open-Meteo returned no data: 429 limit reached."
 
 
+@pytest.mark.parametrize("message", [
+    "precip is not available from 'ERA5'. Available: power, era5, ghcn.",  # names ghcn: must not read as "no station"
+    "Unknown variable 'sea level 2'. Choose one of: air_temp, air_temp_max, precip, sea_level.",  # not the gauge reason
+])
+def test_wrong_catalog_id_gets_catalog_reason(message):
+    reason = loop.model_reason(message)
+    assert reason == loop.CATALOG_REASON and not any(ch.isdigit() for ch in reason)
+
+
+def test_unknown_tool_and_superscript_digit():
+    assert loop.model_reason("Unknown tool 'get_series2'.") == "That tool does not exist; use only the tools you were given."
+    assert loop.model_reason("Rainfall rose by x² here.") == loop.FALLBACK_REASON  # only a superscript two
+
+
 @pytest.mark.parametrize("message", ["Latitude must be between -90 and 90, got 95.0.",
                                      "start must look like 2015 or 2015-06, got 'x'.",
                                      "Too many tool calls at once; at most 6 per step."])
