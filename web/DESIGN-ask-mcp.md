@@ -50,7 +50,7 @@ helper + counter
 - Lead (16 px): "Ask about a place in your own words. We look up public data and tell you whether it changed over time. We can't forecast the future."
 - Privacy (14 px grey): "Your question is sent to an AI model provider so it can be answered. Don't include personal details."
 - Textarea label (14 px grey): "Your question". Placeholder: "Is sea level rising in New York?". Button "Ask". Native `maxlength="500"`; counter "{n} of 500" from 400 characters (announced once at 450 and at 500 through the status line: "50 characters left." / "Limit reached: 500 characters."). Enter sends, Shift+Enter new line. Helper: "Press Enter to ask. Shift+Enter starts a new line."
-- Empty state (no messages): the thread area shows "Try one of these:" and four example buttons (real `<button>`s, 48 px, full width at 375, wrap on desktop; click sends at once): "Is sea level rising in New York?" / "Are the hottest days getting hotter in Delhi?" / "Is it getting warmer in Princeton, New Jersey?" / "Has anything changed at 17.69, 83.22 since 1981?". After the first message the buttons are replaced by the follow-up hint under the last answer: "Ask a follow-up, for example: \"What about Delhi?\"". Hint is plain text, not a button.
+- Empty state (no messages): the thread area shows "Try one of these:" and four example buttons (real `<button>`s, 48 px, full width at 375, wrap on desktop; click sends at once): "Is sea level rising in New York?" / "Are the hottest days getting hotter in Delhi?" / "Is it getting warmer in Princeton, New Jersey?" / "Has anything changed in Visakhapatnam (17.69, 83.22) since 1981?". After the first message the buttons are replaced by the follow-up hint under the last answer: "Ask a follow-up, for example: \"What about Delhi?\"". Hint is plain text, not a button.
 - Until the history PR: after the first answer, grey 14 px line above the composer: "For now each question is answered on its own. Name the place again in a follow-up."
 
 ## 2.3 The API call (`POST /api/ask`, same origin)
@@ -81,7 +81,7 @@ Every number in the AI text must also be checkable: the "Show on chart" card car
 | Clarifying question (no tool call, text contains a "?" anywhere) | Normal answer block without the "No data was looked up" line, plus "Answer in the box below to continue." Focus goes to the textarea (empty). If history is off, this line reads "Answer in the box below. Name the place and what to measure again." |
 | Declined (no tool call, text does not end with "?") | Answer block with the no-data line, then "We can tell you whether something changed over time at a place. Try one of these:" and the four example buttons again. |
 | "Could not finish" (answer starts with "Sorry, I could not finish") | Normal block plus "Try a shorter question, or pick a place on the Explore tab." and the button "Go to Explore". Not added to history. |
-| All `detect_trend` calls have `error` | Text block plus "We couldn't get the data for that: {error}" (verbatim) and "Try another place or measurement." If the error mentions a tide gauge add "Tide gauges sit along US coasts." |
+| All `detect_trend` calls have `error` | Text block plus "We couldn't get the data for that: {error}" (verbatim) and "Try another place or measurement." If the error mentions a tide gauge add "Tide gauges sit along US coasts." (only while sea level has a single source) |
 | 400 | The API `detail`, verbatim. |
 | 422 | "Something went wrong with that question. Please try again." |
 | 429 | "Too many questions right now. Please wait {n} seconds and try again." (`n` from `Retry-After`; if missing use `detail`). The limit is 10 a minute and 30 an hour per person; for waits over 90 seconds say "about {m} minutes". Button reads "Ask again in {n}s", counts down visually (not live), becomes "Ask" at 0. Text stays in the box. |
@@ -111,7 +111,7 @@ lead
 Server address: read-only field + Copy
 Pick your AI app: tabs (375: 3 columns x 2 rows; >=600: one row)
    panel: h3, numbered steps, address field + Copy, "{App} setup docs ↗", "Checked {date}" (grey 14 px)
-For developers: JSON block + Copy config
+Prefer a settings file?: JSON block + Copy config
 What you can ask once connected: 3 tool rows + example questions
 What it can and can't do
 ```
@@ -143,7 +143,7 @@ The command has its own Copy button ("Copy command"). `claude mcp list` also sho
 **Cursor**. Docs: https://cursor.com/docs/context/mcp
 The docs say to manage servers from the Customize page and to put custom servers in an `mcp.json` file; they give no menu path for entering a URL. So:
 1. Create or open `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).
-2. Paste the entry from "For developers" below, using `url` and no `type` (Cursor's remote example has no `type`).
+2. Paste the entry from "Prefer a settings file?" below, using `url` and no `type` (Cursor's remote example has no `type`).
 3. Open Customize and check that Trend Detective is listed and on.
 Menu names for adding a server in the app were not confirmed; do not invent them.
 
@@ -151,8 +151,8 @@ Menu names for adding a server in the app were not confirmed; do not invent them
 1. Open the Command Palette and run "MCP: Add Server".
 2. Choose "HTTP (HTTP or Server-Sent Events)" and paste the server address.
 3. Name it "trend-detective", then choose Global (or the workspace if you prefer).
-4. Accept the trust prompt after reading it, then ask Copilot a question and look for Trend Detective's tools.
-Or put the VS Code block from "For developers" in `.vscode/mcp.json`. VS Code uses `servers`, not `mcpServers`.
+4. Accept the trust prompt after reading it, then ask GitHub Copilot a question and look for Trend Detective's tools.
+Or put the VS Code block from "Prefer a settings file?" in `.vscode/mcp.json`. VS Code uses `servers`, not `mcpServers`.
 
 **Any other AI agent** (replaces "Other"). Steps: "Open your AI agent's settings for MCP servers or connectors." / "Add a new server." / "Paste this address. No key and no sign-in are needed." With the server address and its Copy button, the hint "If it asks for a type, choose \"HTTP\" or \"streamable HTTP\"." and the link "About MCP ↗" to https://modelcontextprotocol.io.
 
@@ -184,7 +184,7 @@ h2 "What you can ask once connected". Three rows (name monospace left 200 px, pl
 - `list_variables`: "Lists what we can measure, such as air temperature and sea level, and where the data come from."
 - `get_series`: "Gets the month-by-month values for a place."
 - `detect_trend`: "Says whether it is changing at a place, how fast, and how sure we are, using the Mann-Kendall test and Sen's slope."
-Then "Try asking" (plain list): "Is sea level rising in New York?" / "Are the hottest days getting hotter in Delhi?" / "Has anything changed at 17.69, 83.22 since 1981?" Note: "Your AI app may ask your permission before it calls a tool."
+Then "Try asking" (plain list): "Is sea level rising in New York?" / "Are the hottest days getting hotter in Delhi?" / "Has anything changed in Visakhapatnam (17.69, 83.22) since 1981?" Note: "Your AI app may ask your permission before it calls a tool."
 
 ## 3.6 QA checklist
 - [ ] 375 px: tabs and app tabs have no horizontal scroll; every target 48 px; JSON block scrolls inside itself.
@@ -229,7 +229,13 @@ Grey 14 px line under the "Data source" select, describing the selected source (
 
 # Round 2 changes to the build
 - Ask: the model id is on its own small grey line under "Written by an AI model" (it wrapped inside the label at 375 px). The status line is cleared at the start of each send, so "Answer ready." never stays after an error. Once the box is off (503 or health off), the jump link and the "answered on its own" line stay hidden. Spacing inside the composer and the off message uses the page's 12 px rhythm. Example buttons have 12 px vertical padding.
-- Use in your AI: the server address is a read-only two-line text area (`rows="2"`), so the whole address wraps and can be read; config blocks and the command wrap (`pre-wrap`); on phones Copy sits below the block. After "Copy failed" the "Select the text and copy it yourself." line stays until the next click.
+- Use in your AI: (the server address field changed again in round 3, see below); config blocks and the command wrap (`pre-wrap`); on phones Copy sits below the block. After "Copy failed" the "Select the text and copy it yourself." line stays until the next click.
 - Explore, example places: eight chips (see `web/DESIGN.md` section 1 item 6). Below 600 px they sit in one sideways-scrolling row; from 600 px they wrap. The pressed chip is scrolled into view.
 - Explore, source control: the closed selects show short names on phones (NASA POWER, ERA5, GHCN-Daily, CO-OPS, PSMSL); after each result the control shows the source the result came from; the share link and the request carry `source` only when the user chose a non-default source by hand. A source link keeps its arrow on the last word (non-breaking space). Help lines: NASA POWER, ERA5, GHCN-Daily as above; NOAA CO-OPS "Readings from the nearest NOAA tide gauge (US coasts)."; PSMSL "Readings from the nearest tide gauge in a worldwide collection."; label "PSMSL tide gauges"; footer "Permanent Service for Mean Sea Level (PSMSL)", https://psmsl.org/. The sentence "Tide gauges sit along US coasts." is added to the no-gauge card only while sea level has a single source. The no-gauge card shows the API sentence and the ways out (Try New York, Show air temperature here, Use {default source} for this place) and never a number or placeholder.
 - A link typed into the address bar while the page is open that cannot be used (bad number, unknown measurement) falls back to New York and the hash is rewritten, as on a fresh load.
+
+# Round 3 changes to the build
+- Use in your AI: the app picker is an even two-column grid at 375 px. The settings-file group is headed "Prefer a settings file?" with "Paste this into your app's settings file instead of following the steps above. Field names differ between apps, so match yours." One plain sentence explains MCP before the steps: "MCP is a standard way for an AI app to use outside tools. Adding this server lets your AI look up these trends itself." The server address is a one-line read-only field again (12 px monospace at 375 px, scrolls inside itself on narrower screens); the config blocks and the command still wrap.
+- Ask: "Answer ready." and other success notes are visually hidden (read aloud only); errors and "not available" stay visible. After a clarifying question the "each question is answered on its own" line is hidden. A clarifying answer also carries the "No data was looked up" line. The privacy note uses body size and colour. The Ask column is 600 px wide.
+- "Show on chart" carries `source` only when the tool call asked for one; the result's source is never copied into the link. The no-gauge card names the source that was asked for, or no source when none was sent and the measurement has several.
+- Explore: the closed measurement select shows "Hottest day" for the hottest-day measurement on phones. A request that gives no result leaves the source control on the source that was sent (or the default).

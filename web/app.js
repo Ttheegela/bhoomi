@@ -334,6 +334,7 @@ function buildChips() {
   PRESETS.forEach((p, i) => {
     const b = el('button', { type: 'button', class: 'chip', 'aria-pressed': 'false', 'data-i': String(i) }, p.label);
     b.addEventListener('click', () => applyPreset(i));
+    b.addEventListener('focus', () => b.scrollIntoView({ inline: 'nearest', block: 'nearest' }));
     box.append(b);
   });
 }
@@ -341,7 +342,7 @@ function markChips() {
   const lat = Number($('lat').value), lon = Number($('lon').value);
   document.querySelectorAll('.chip').forEach((b) => {
     const p = PRESETS[+b.dataset.i];
-    const on = p.lat === lat && p.lon === lon;
+    const on = p.lat === lat && p.lon === lon && p.variable === $('variable').value;
     b.setAttribute('aria-pressed', String(on));
     if (on) { // keep the pressed chip in view inside the sideways row (phones)
       const row = $('chips'), r = row.getBoundingClientRect(), c = b.getBoundingClientRect();
@@ -360,11 +361,12 @@ function applyPreset(i) {
 }
 // At phone width the closed select shows the short name; the open list keeps full names.
 const narrowQ = window.matchMedia('(max-width: 599px)');
+const VAR_SHORT = { air_temp_max: 'Hottest day' }; // the closed select on phones; the open list keeps the catalog name
 let fullNames = false;
 function nameMode(full) {
   if (full !== undefined) fullNames = full;
   const short = narrowQ.matches && !fullNames;
-  [...$('variable').options].forEach((o) => { const v = varById(o.value); o.textContent = short ? stripParens(v.name) : v.name; });
+  [...$('variable').options].forEach((o) => { const v = varById(o.value); o.textContent = short ? (VAR_SHORT[v.id] || stripParens(v.name)) : v.name; });
   [...$('source').options].forEach((o) => { o.textContent = (short ? SOURCE_SHORT[o.value] : SOURCE_LABELS[o.value]) || o.value; });
 }
 function fillVariables() {
@@ -375,12 +377,11 @@ function fillVariables() {
   sel.addEventListener('focus', () => nameMode(true));
   sel.addEventListener('pointerdown', () => nameMode(true));
   sel.addEventListener('blur', () => nameMode(false));
-  sel.addEventListener('change', () => setTimeout(() => nameMode(false), 0));
   const src = $('source');
   src.addEventListener('focus', () => nameMode(true));
   src.addEventListener('pointerdown', () => nameMode(true));
   src.addEventListener('blur', () => nameMode(false));
-  src.addEventListener('change', () => setTimeout(() => nameMode(false), 0));
+  narrowQ.addEventListener('change', () => nameMode());
 }
 function syncVariableUI() {
   const v = varById($('variable').value);
@@ -400,6 +401,13 @@ function syncVariableUI() {
 function showResultSource(res) {
   const id = pickShown(varById($('variable').value), res && res.source && res.source.id);
   if (id) { $('source').value = id; sourceHelp(); }
+}
+// After a request that gave no result the control shows the source that was sent, or the default.
+function showSentSource(params) {
+  const v = varById(params.variable);
+  if (!v || $('source-field').hidden) return;
+  $('source').value = params.source && v.sources.includes(params.source) ? params.source : v.sources[0];
+  sourceHelp();
 }
 function sourceHelp() {
   $('source-help').textContent = $('source-field').hidden ? '' : (SOURCE_HELP[$('source').value] || '');
@@ -497,11 +505,13 @@ function show(sr, tr, params, user) {
   state.series = null; state.trend = null;
 
   if (!sr.ok) {
+    showSentSource(params);
     heading = showProblem(problemFor(sr, params));
   } else {
     const s = sr.body;
     const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
     if (!has) {
+      showSentSource(params);
       heading = showProblem({ heading: 'No data for this place.', paras: [`${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement. Try another place or measurement.`] });
     } else {
       state.series = s;
@@ -538,7 +548,10 @@ function problemFor(r, params) {
   if (params.variable === 'sea_level') {
     // The US-coast sentence is only true while CO-OPS is the only tide-gauge source.
     if (!(varById('sea_level') && varById('sea_level').sources.length > 1)) out.paras.push('Tide gauges sit along US coasts.');
-    out.source = SOURCES.coops;
+    // Name the source that was asked for; with none sent and several offered, no source line (it would guess).
+    const sv = varById('sea_level'), single = !sv || sv.sources.length < 2;
+    const named = params.source ? SOURCES[params.source] : (single ? SOURCES[sv ? sv.sources[0] : 'coops'] : null);
+    if (named) out.source = named;
     out.buttons = [{ label: 'Try New York', fn: () => applyPreset(0) }];
     if (varById('air_temp')) {
       out.buttons.push({ label: 'Show air temperature here', fn: () => { $('variable').value = 'air_temp'; syncVariableUI(); submit(true); } });
@@ -797,6 +810,7 @@ function renderChart(s, t) {
 
 function fillFooter() {
   const ul = $('footer-sources');
+  clear(ul); // init() can run again ("Try again")
   Object.values(SOURCES).forEach((src) => { const li = el('li', {}); srcLink(li, src); ul.append(li); });
 }
 

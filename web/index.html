@@ -168,7 +168,7 @@
   <noscript><p>Asking a question needs JavaScript. Turn it on to use this tab.</p></noscript>
   <div id="ask-ui" hidden>
     <p id="ask-lead" class="lead-p">Ask about a place in your own words. We look up public data and tell you whether it changed over time. We can't forecast the future.</p>
-    <p id="ask-privacy" class="small">Your question is sent to an AI model provider so it can be answered. Don't include personal details.</p>
+    <p id="ask-privacy">Your question is sent to an AI model provider so it can be answered. Don't include personal details.</p>
     <p id="ask-keep" class="small">Your conversation stays in this browser tab. Reloading clears it. Nothing is saved on our server.</p>
 
     <div id="ask-off" hidden>
@@ -208,10 +208,11 @@
   <h2 id="h-connect" tabindex="-1">Use Trend Detective in your own AI agent</h2>
   <p class="lead-p">Connect an AI app to Trend Detective and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named.</p>
   <p class="small">Works with AI agents such as Claude, ChatGPT and GitHub Copilot.</p>
+  <p>MCP is a standard way for an AI app to use outside tools. Adding this server lets your AI look up these trends itself.</p>
 
   <div class="addr-block">
     <label for="addr-top">Trend Detective server address</label>
-    <div class="copyrow"><textarea id="addr-top" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
+    <div class="copyrow"><input id="addr-top" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
     <p class="small">This address is for AI apps. It is not a web page. It needs no key and no sign-in.</p>
   </div>
   <p id="copy-status" class="sr-only" role="status"></p>
@@ -231,7 +232,7 @@
         <li>In a chat, click "+" at the lower left, then "Connectors", and switch Trend Detective on.</li>
       </ol>
       <label for="addr-claude">Trend Detective server address</label>
-      <div class="copyrow"><textarea id="addr-claude" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
+      <div class="copyrow"><input id="addr-claude" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
       <p class="small">Free plans can add one custom connector. On Team and Enterprise plans an owner has to add it.</p>
       <a class="srclink" href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" rel="noopener">Claude setup docs ↗</a>
       <p class="small">Checked 14 November 2026</p>
@@ -243,14 +244,14 @@
       <ol>
         <li>In your terminal run the command in the box.</li>
       </ol>
-      <div class="copyrow code"><pre tabindex="0" aria-label="Claude Code command" data-copy="command"><code>claude mcp add --transport http trend-detective https://trend-detective-six.vercel.app/mcp/</code></pre></div>
+      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="Claude Code command" data-copy="command"><code>claude mcp add --transport http trend-detective https://trend-detective-six.vercel.app/mcp/</code></pre></div>
       <ol start="2">
         <li>Start Claude Code and type <code>/mcp</code>. Trend Detective should show as connected.</li>
         <li>Optional: add <code>--scope user</code> to the command to use it in every project.</li>
       </ol>
       <p class="small">The command <code>claude mcp list</code> also shows it.</p>
       <label for="addr-claude-code">Trend Detective server address</label>
-      <div class="copyrow"><textarea id="addr-claude-code" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
+      <div class="copyrow"><input id="addr-claude-code" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
       <a class="srclink" href="https://code.claude.com/docs/en/mcp" rel="noopener">Claude Code setup docs ↗</a>
       <p class="small">Checked 14 November 2026</p>
     </div>
@@ -259,11 +260,11 @@
       <h3>Cursor</h3>
       <ol>
         <li>Create or open <code>~/.cursor/mcp.json</code> (all projects) or <code>.cursor/mcp.json</code> (one project).</li>
-        <li>Paste the entry from "For developers" below, using <code>url</code> and no <code>type</code>.</li>
+        <li>Paste the entry from "Prefer a settings file?" below, using <code>url</code> and no <code>type</code>.</li>
         <li>Open Customize and check that Trend Detective is listed and on.</li>
       </ol>
       <label for="addr-cursor">Trend Detective server address</label>
-      <div class="copyrow"><textarea id="addr-cursor" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
+      <div class="copyrow"><input id="addr-cursor" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
       <p class="small">We could not confirm the menu names for adding a server in the Cursor app, so we show the config file instead.</p>
       <a class="srclink" href="https://cursor.com/docs/context/mcp" rel="noopener">Cursor setup docs ↗</a>
       <p class="small">Checked 14 November 2026</p>
@@ -276,11 +277,11 @@
         <li>Open the Command Palette and run "MCP: Add Server".</li>
         <li>Choose "HTTP (HTTP or Server-Sent Events)" and paste the server address.</li>
         <li>Name it "trend-detective", then choose Global (or the workspace if you prefer).</li>
-        <li>Accept the trust prompt after reading it, then ask Copilot a question and look for Trend Detective's tools.</li>
+        <li>Accept the trust prompt after reading it, then ask GitHub Copilot a question and look for Trend Detective's tools.</li>
       </ol>
       <label for="addr-vscode">Trend Detective server address</label>
-      <div class="copyrow"><textarea id="addr-vscode" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
-      <p class="small">Or put the VS Code block from "For developers" in <code>.vscode/mcp.json</code>. VS Code uses <code>servers</code>, not <code>mcpServers</code>.</p>
+      <div class="copyrow"><input id="addr-vscode" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <p class="small">Or put the VS Code block from "Prefer a settings file?" in <code>.vscode/mcp.json</code>. VS Code uses <code>servers</code>, not <code>mcpServers</code>.</p>
       <a class="srclink" href="https://code.visualstudio.com/docs/copilot/customization/mcp-servers" rel="noopener">VS Code MCP servers docs ↗</a>
       <a class="srclink" href="https://code.visualstudio.com/docs/agents/reference/mcp-configuration" rel="noopener">VS Code MCP configuration reference ↗</a>
       <p class="small">Checked 14 November 2026</p>
@@ -294,19 +295,19 @@
         <li>Paste this address. No key and no sign-in are needed.</li>
       </ol>
       <label for="addr-other">Trend Detective server address</label>
-      <div class="copyrow"><textarea id="addr-other" class="addr" rows="2" readonly data-copy="server address">https://trend-detective-six.vercel.app/mcp/</textarea></div>
+      <div class="copyrow"><input id="addr-other" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
       <p class="small">If it asks for a type, choose "HTTP" or "streamable HTTP".</p>
       <a class="srclink" href="https://modelcontextprotocol.io" rel="noopener">About MCP ↗</a>
     </div>
   </section>
 
   <section aria-labelledby="h-dev">
-    <h2 id="h-dev">For developers</h2>
-    <p>Many apps read a config file. Field names differ between apps, so match yours.</p>
+    <h2 id="h-dev">Prefer a settings file?</h2>
+    <p>Paste this into your app's settings file instead of following the steps above. Field names differ between apps, so match yours.</p>
     <div id="cfgtabs" class="apptabs cfgtabs"></div>
     <div id="cfg-claude-code" class="cfg-panel">
       <p class="small">Claude Code, project file <code>.mcp.json</code>. Claude Code needs <code>"type": "http"</code>.</p>
-      <div class="copyrow code"><pre tabindex="0" aria-label="Claude Code config" data-copy="config"><code>{
+      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="Claude Code config" data-copy="config"><code>{
   "mcpServers": {
     "trend-detective": {
       "type": "http",
@@ -317,7 +318,7 @@
     </div>
     <div id="cfg-cursor" class="cfg-panel">
       <p class="small">Cursor, file <code>mcp.json</code>. No <code>type</code>.</p>
-      <div class="copyrow code"><pre tabindex="0" aria-label="Cursor config" data-copy="config"><code>{
+      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="Cursor config" data-copy="config"><code>{
   "mcpServers": {
     "trend-detective": {
       "url": "https://trend-detective-six.vercel.app/mcp/"
@@ -327,7 +328,7 @@
     </div>
     <div id="cfg-vscode" class="cfg-panel">
       <p class="small">VS Code, file <code>.vscode/mcp.json</code>.</p>
-      <div class="copyrow code"><pre tabindex="0" aria-label="VS Code config" data-copy="config"><code>{
+      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="VS Code config" data-copy="config"><code>{
   "servers": {
     "trend-detective": {
       "type": "http",
@@ -349,7 +350,7 @@
     <ul>
       <li>Is sea level rising in New York?</li>
       <li>Are the hottest days getting hotter in Delhi?</li>
-      <li>Has anything changed at 17.69, 83.22 since 1981?</li>
+      <li>Has anything changed in Visakhapatnam (17.69, 83.22) since 1981?</li>
     </ul>
     <p class="small">Your AI app may ask your permission before it calls a tool.</p>
   </section>

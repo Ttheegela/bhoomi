@@ -15,7 +15,7 @@ const EXAMPLES = [
   'Is sea level rising in New York?',
   'Are the hottest days getting hotter in Delhi?',
   'Is it getting warmer in Princeton, New Jersey?',
-  'Has anything changed at 17.69, 83.22 since 1981?',
+  'Has anything changed in Visakhapatnam (17.69, 83.22) since 1981?',
 ];
 
 // turns: [{ q, a, kind }], kind 'answer' | 'gaveup' | 'error' | 'cancelled'. Only 'answer' turns go in.
@@ -52,8 +52,9 @@ function chartTarget(call) {
   const variable = typeof a.variable === 'string' && a.variable ? a.variable : r.variable;
   const lat = firstNum(a.lat, p.lat), lon = firstNum(a.lon, p.lon);
   if (typeof variable !== 'string' || !variable || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-  const src = r.source && typeof r.source.id === 'string' ? r.source.id : (typeof a.source === 'string' ? a.source : null);
-  return { variable, lat, lon, source: src || null };
+  // Only a source the tool was asked for (a fallback source in the result is not a choice anyone made).
+  const src = typeof a.source === 'string' && a.source ? a.source : null;
+  return { variable, lat, lon, source: src };
 }
 
 // A 200 response -> what to show.
@@ -110,7 +111,8 @@ const askS = { off: false, busy: false, turns: [], ctrl: null, reason: '', timer
 
 function paras(text) { return text.split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean).map((t) => el('p', { class: 'msg-text' }, t)); }
 function reducedMotion() { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
-function say(t) { $('ask-status').textContent = t; }
+// Notes such as "Answer ready." are for screen readers only; errors and "not available" stay visible (visible = true).
+function say(t, visible) { const s = $('ask-status'); s.classList.toggle('sr-only', !visible); s.textContent = t; }
 
 function exampleButtons() {
   const box = el('div', { class: 'examples' });
@@ -156,10 +158,11 @@ function answerBlock(d) {
   } else if (d.variant === 'dataerror') {
     block.append(el('p', {}, `We couldn't get the data for that: ${d.error}`));
     block.append(el('p', {}, 'Try another place or measurement.'));
-    if (d.tide) block.append(el('p', {}, 'Tide gauges sit along US coasts.'));
+    if (d.tide && !(varById('sea_level') && varById('sea_level').sources.length > 1)) block.append(el('p', {}, 'Tide gauges sit along US coasts.'));
   } else if (d.variant === 'gaveup') {
     block.append(el('p', {}, 'Try a shorter question, or pick a place on the Explore tab.'), goExploreButton());
   } else if (d.variant === 'clarify') {
+    block.append(el('p', { class: 'small' }, 'No data was looked up for this answer, so treat any numbers in it as unchecked.'));
     block.append(el('p', { class: 'small' }, ASK_HISTORY ? 'Answer in the box below to continue.' : 'Answer in the box below. Name the place and what to measure again.'));
     focus = $('ask-q');
   } else {
@@ -241,6 +244,7 @@ async function send(raw) {
     thread.append(block);
     focus = f;
     askS.turns.push({ q, a: o.text, kind: o.variant === 'gaveup' ? 'gaveup' : 'answer' });
+    askS.last = o.variant;
     $('ask-q').value = '';
     updateCount();
     say('Answer ready.');
@@ -252,7 +256,7 @@ async function send(raw) {
     askS.turns.push({ q, a: '', kind: 'error' });
     setOff();
     focus = $('ask-off-go');
-    say("Asking questions isn't available right now.");
+    say("Asking questions isn't available right now.", true);
   } else {
     askS.turns.push({ q, a: '', kind: 'error' });
     const b = errorBlock(o.text, o.retry ? q : null);
@@ -283,7 +287,8 @@ function refreshThreadUI() {
   if (askS.off) { ['ask-jump', 'ask-nohist', 'ask-hint'].forEach((id) => { $(id).hidden = true; }); return; }
   const answers = $('ask-thread').querySelectorAll('.msg.ai:not([role="status"])').length;
   $('ask-jump').hidden = answers < 3;
-  $('ask-nohist').hidden = ASK_HISTORY || !askS.turns.some((t) => t.kind === 'answer');
+  // the clarifying-question line already says to name the place again, so the "on its own" line waits
+  $('ask-nohist').hidden = ASK_HISTORY || askS.last === 'clarify' || !askS.turns.some((t) => t.kind === 'answer');
   $('ask-hint').hidden = !ASK_HISTORY || !askS.turns.some((t) => t.kind === 'answer');
 }
 
