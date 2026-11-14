@@ -167,19 +167,19 @@ function monthLabel(t) { const m = monthIndex(t); return MONTHS[m % 12] + ' ' + 
 
 function verdictCopy(t, name, place) {
   const y0 = t.period.start.slice(0, 4), y1 = t.period.end.slice(0, 4), n = lcName(name);
-  const s = fmtVal(t.slope_per_decade, t.units), lo = fmtVal(t.ci_low, t.units), hi = fmtVal(t.ci_high, t.units);
+  const lo = fmtVal(t.ci_low, t.units), hi = fmtVal(t.ci_high, t.units);
   const sl = t.slope_per_decade;
   if (t.verdict === 'rising' || t.verdict === 'falling') {
     const up = t.verdict === 'rising';
     return { head: up ? 'Rising' : 'Falling', shape: up ? 'up' : 'down', lean: null,
-      p1: `From ${y0} to ${y1}, ${n} at ${place} ${up ? 'rose' : 'fell'} about ${s} per decade, and the data support a range of ${lo} to ${hi}.`,
+      p1: `From ${y0} to ${y1}, ${n} at ${place} ${up ? 'rose' : 'fell'} by about ${fmtAbs(sl, t.units)} per decade, and the data support a range of ${lo} to ${hi}.`,
       p2: up ? 'Even the low end of the range is above zero, so this is a clear rise.' : 'Even the high end of the range is below zero, so this is a clear fall.' };
   }
   const zeroIn = t.ci_low <= 0 && t.ci_high >= 0;
   const dir = sl > 0 ? 'up' : 'down';
   const p1 = sl === 0
     ? `From ${y0} to ${y1}, we can't tell ${n} at ${place} apart from no change: the data show no lean either way, and the range runs from ${lo} to ${hi}.`
-    : `From ${y0} to ${y1}, we can't tell ${n} at ${place} apart from no change: the data lean ${dir} about ${s} per decade, but the range runs from ${lo} to ${hi}.`;
+    : `From ${y0} to ${y1}, we can't tell ${n} at ${place} apart from no change: the data lean ${dir} about ${fmtAbs(sl, t.units)} per decade, but the range runs from ${lo} to ${hi}.`;
   const lean = sl === 0 ? `The data show no lean either way, and the range includes zero.`
     : `The data lean ${dir}, but ${zeroIn ? 'the range includes zero' : 'the p-value is not below 0.05'}.`;
   const p2 = zeroIn
