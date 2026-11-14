@@ -70,17 +70,17 @@ reference = "https://tidesandcurrents.noaa.gov/sltrends/sltrends_station.shtml?i
 
 [[case]]
 id = "delhi-hot-days-sources-disagree"
-question = "Are there more days above 40 °C in Delhi than there used to be?"
+question = "Are Delhi's hottest days getting hotter? Check more than one data source."
 expect_tool = "detect_trend"
-expect_variable = "air_temp_max"   # closest catalog variable (hottest day of the month); no "days above 40 °C" variable yet
+expect_variable = "air_temp_max"   # hottest day of the month; the #16 decision dropped "days above 40 °C"
 expect_place = [28.58, 77.21]
-# The reference slopes below count days at or above 40 °C, so they don't apply directly to air_temp_max.
-# This case needs era5 and ghcn sources (not built yet) to show the disagreement.
-# No expect_verdict: sources disagree for 1981-2015 (POWER -4.4/decade, ERA5 -2.9, Safdarjung station +2.0).
-# A correct answer checks more than one source and says they disagree.
-must_say = ["disagree"]
+# No expect_verdict: the sources disagree. Live check Sat 14 Nov, 1981-2025, °C per decade:
+# POWER -0.25 (falling), ERA5 +0.12 (no clear change), GHCN Safdarjung +0.25 (rising).
+# A correct answer checks more than one source and says they don't agree.
+# "agree" matches "disagree", "don't agree" and "do not agree".
+must_say = ["agree"]
 must_not_say = []
-reference = "Issue #16: POWER -4.4/decade, ERA5 -2.9/decade, GHCN Safdarjung +2.0/decade, 1981-2015"
+reference = "Issue #16 decision (Tarun, Sat 14 Nov): air_temp_max from power, era5 and ghcn"
 
 [[case]]
 id = "phoenix-air-temp"
@@ -158,9 +158,21 @@ reference = "https://doi.org/10.1029/2010GL046442"
 id = "mumbai-sea-level-no-gauge"
 question = "Is sea level rising in Mumbai?"
 expect_tool = "none"                # coops covers US coasts only; must say it has no tide gauge data there
+# Change when the worldwide PSMSL source lands (#46): Mumbai will then have a real trend (Apollo Bandar gauge).
 must_say = ["tide gauge"]
 must_not_say = ["mm/yr", "per decade"]
 reference = "docs/CONTRACTS.md: coops covers US coasts only"
+
+[[case]]
+id = "delhi-sea-level-inland"
+question = "Is sea level rising in Delhi?"
+expect_tool = "none"                # Delhi is inland: no coast, no tide gauge. Decline in plain words.
+# No numbers at all: no slope, no distance, no year, no estimate. The runner's "no invented numbers"
+# check fails any digit when there is no tool result. It must not switch to another place or measure
+# to have something to report; one short sentence offering what could be checked instead is fine.
+must_say = ["coast"]
+must_not_say = ["mm per", "per decade"]
+reference = "Issue #46: do not create numbers when no data exist"
 
 [[case]]
 id = "rain-tomorrow-forecast"
