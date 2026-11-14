@@ -46,7 +46,7 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
         param = power.PARAMS[variable]
         times, values = power.parse(power.fetch(param, lat, lon), param)
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
-        src, notes = power.SOURCE, ["Grid cell about 50 km wide, not a single station."]
+        src, notes = power.SOURCE, ["Grid cell about 50 km wide, not a single station."] + ([power.NOTES[variable]] if variable in power.NOTES else [])
     else:
         st, km = coops.nearest(lat, lon, coops.stations())
         times, values = coops.parse(coops.fetch(st["id"]), st["name"])
