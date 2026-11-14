@@ -182,7 +182,7 @@ def test_data_routes_limit_per_client(offline):
     a, b = {"X-Forwarded-For": "1.1.1.1"}, {"X-Forwarded-For": "2.2.2.2"}
     for i in range(ratelimit.DATA_PER_CLIENT):  # series and trend share one budget
         assert client.get(("/api/series", "/api/trend")[i % 2], params=q, headers=a).status_code == 200
-    for path in ("/api/series", "/api/trend"):  # the 61st and 62nd
+    for path in ("/api/series", "/api/trend"):  # the 121st and 122nd
         r = client.get(path, params=q, headers=a)
         assert r.status_code == 429 and int(r.headers["retry-after"]) > 0
         wait = r.headers["retry-after"]
@@ -196,7 +196,7 @@ def test_data_routes_limit_per_client(offline):
 def test_ask_limit_unchanged_and_separate(offline, monkeypatch):
     monkeypatch.setattr(loop, "ask", lambda q: {"answer": "ok"})
     a = {"X-Forwarded-For": "3.3.3.3"}
-    assert (ratelimit.PER_CLIENT, ratelimit.PER_CLIENT_HOUR, ratelimit.GLOBAL) == (10, 30, 200)
+    assert (ratelimit.PER_CLIENT, ratelimit.PER_CLIENT_HOUR, ratelimit.GLOBAL) == (10, 100, 200)
     for _ in range(ratelimit.PER_CLIENT):
         assert client.post("/api/ask", json={"question": "hi"}, headers=a).status_code == 200
     r = client.post("/api/ask", json={"question": "hi"}, headers=a)
@@ -215,3 +215,22 @@ def test_mcp_limit(mcp_client):
     r = mcp_client.post("/mcp/", headers=b, json=ping)
     assert r.status_code == 200 and r.json()["result"]["content"][0]["text"] == "pong"
     assert len(ratelimit._data_clients["5.5.5.5"]) == 1  # MCP requests count
+
+
+def test_ipv6_keyed_by_64(offline):
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42}
+    same = ["2001:db8:1:2::1", "2001:db8:1:2:ffff::9"]  # one /64
+    for i in range(ratelimit.DATA_PER_CLIENT):
+        assert ratelimit.check_data(client_id_of(same[i % 2])) == 0
+    assert client.get("/api/series", params=q, headers={"X-Forwarded-For": same[0]}).status_code == 429
+    assert client.get("/api/series", params=q, headers={"X-Forwarded-For": same[1]}).status_code == 429
+    for other in ("2001:db8:1:3::1", "203.0.113.7", "not-an-ip", "fe80::1%eth0"):  # another /64, IPv4, junk
+        assert client.get("/api/series", params=q, headers={"X-Forwarded-For": other}).status_code == 200
+    assert set(ratelimit._data_clients) == {"2001:db8:1:2::/64", "2001:db8:1:3::/64", "203.0.113.7", "not-an-ip",
+                                            "fe80::/64"}  # a zone id is dropped with the host bits
+    assert client_id_of("::ffff:198.51.100.4") == "198.51.100.4"  # IPv4-mapped: its own IPv4 address, not ::/64
+
+
+def client_id_of(xff):
+    from earthtrends.app import client_id
+    return client_id(type("R", (), {"headers": {"x-forwarded-for": xff}, "client": None})())

@@ -1,4 +1,5 @@
 import contextlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -135,10 +136,17 @@ class AskBody(BaseModel):
 def client_id(request: Request) -> str:
     """Who to count for the rate limit only; never trust it for anything else. Vercel overwrites x-forwarded-for
     with one address. Behind another proxy the last entry is the one the nearest proxy saw (earlier ones are
-    caller-supplied). Capped at 64 characters so a giant header cannot become a giant dict key."""
+    caller-supplied). Capped at 64 characters so a giant header cannot become a giant dict key. IPv6 is keyed
+    by its /64 (one host usually owns a whole /64, so the full address would be a fresh budget per request);
+    IPv4 and text that is not an address are kept as they are."""
     h = request.headers
     key = (h.get("x-forwarded-for") or "").split(",")[-1].strip()
-    return (key or h.get("x-real-ip") or (request.client.host if request.client else "unknown"))[:64]
+    key = (key or h.get("x-real-ip") or (request.client.host if request.client else "unknown"))[:64]
+    with contextlib.suppress(ValueError):
+        ip = ipaddress.ip_address(key)
+        if ip.version == 6:
+            key = str(ip.ipv4_mapped or ipaddress.ip_network(f"{ip}/64", strict=False))
+    return key
 
 
 @app.post("/api/ask")
