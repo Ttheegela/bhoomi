@@ -15,7 +15,7 @@ BASE = "https://psmsl.org/data/obtaining/rlr.monthly.data"
 SOURCE = {"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/"}
 MAX_KM = 100
 MIN_YEARS = 30  # valid monthly values needed to support a trend test
-MAX_STALE_YEARS = 10  # last valid month at most this long before the end of last year
+MAX_STALE_YEARS = 5  # last valid month at most this long before the end of last year
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)
 MAX_TRIES = 4  # gauge files fetched at most, to stay well inside the request limit
 MISSING = -99999
@@ -85,10 +85,14 @@ def parse(text: str) -> tuple[list[str], list[float | None], int]:
     return times, values, dropped
 
 
-def usable(times: list[str], values: list[float | None]) -> bool:
+def why_not(times: list[str], values: list[float | None]) -> str | None:
+    """None if the record can support a trend test, else a plain reason."""
     valid = [t for t, v in zip(times, values) if v is not None]
-    oldest_ok = f"{date.today().year - 1 - MAX_STALE_YEARS}-12"
-    return len(valid) >= MIN_YEARS * 12 and valid[-1] >= oldest_ok
+    if len(valid) < MIN_YEARS * 12:
+        return f"it has only {len(valid) / 12:.0f} years of valid monthly values ({valid[0]} to {valid[-1]})"
+    if valid[-1] < f"{date.today().year - 1 - MAX_STALE_YEARS}-12":
+        return f"its record ends in {valid[-1]}"
+    return None
 
 
 def fetch(station_id: int) -> str:
@@ -103,9 +107,10 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
         km, _, s = near[0]
         raise ValueError(f"There is no tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
                          f"The nearest gauge is {s['name']}, {km:.0f} km away.")
+    skipped = []
     for km, s in close[:MAX_TRIES]:
         times, values, dropped = parse(fetch(s["id"]))
-        if usable(times, values):
+        if (why := why_not(times, values)) is None:
             notes = [f"Tide gauge {s['name']} (PSMSL id {s['id']}), {km:.0f} km from the point you asked about.",
                      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, "
                      "so only the change over time matters, not the height itself.",
@@ -114,6 +119,6 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
             if dropped:
                 notes.append(f"{dropped} monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out.")
             return times, values, {"name": s["name"], "lat": s["lat"], "lon": s["lon"]}, notes
-    km, s = close[0]
-    raise ValueError(f"No tide gauge within {MAX_KM} km of this place has a record long and recent enough for a trend test; "
-                     f"the nearest, {s['name']}, {km:.0f} km away, was not used. {RULE}")
+        skipped.append(f"{s['name']}, {km:.0f} km away: {why}")
+    raise ValueError(f"There is no usable tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
+                     f"Gauges found but not used: {'; '.join(skipped)}. {RULE}")

@@ -1,5 +1,6 @@
 import gzip
 import json
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -428,9 +429,24 @@ def test_psmsl_skips_short_gauge_for_next_one(psmsl_offline):
 
 
 def test_psmsl_stale_record_skipped(psmsl_offline, monkeypatch):
-    old = "\n".join(f"{1950 + i // 12 + (i % 12 + 0.5) / 12:.4f}; 7000; 0;000" for i in range(12 * 40))  # 1950-1989
-    monkeypatch.setattr(psmsl, "fetch", lambda sid: old if sid == 43 else raw(f"psmsl_{sid}.rlrdata"))
-    with pytest.raises(ValueError, match="long and recent enough"):
+    monkeypatch.setattr(psmsl, "fetch", lambda sid: _record(1950, 1989, 12) if sid == 43 else raw(f"psmsl_{sid}.rlrdata"))
+    with pytest.raises(ValueError, match=r"no usable tide gauge within 100 km.*its record ends in 1989-12.*only 5 years") as e:
+        psmsl.series(18.92, 72.83)
+    assert "can't be measured" in str(e.value)
+
+
+def _record(y0, y1, m1):
+    n = (y1 - y0) * 12 + m1
+    return "\n".join(f"{y0 + i // 12 + (i % 12 + 0.5) / 12:.4f}; 7000; 0;000" for i in range(n))
+
+
+def test_psmsl_recency_boundary(psmsl_offline, monkeypatch):
+    edge = date.today().year - 1 - psmsl.MAX_STALE_YEARS  # end of last year minus 5 years: December of this year
+    assert psmsl.MAX_STALE_YEARS == 5
+    monkeypatch.setattr(psmsl, "fetch", lambda sid: _record(edge - 40, edge, 12))
+    assert psmsl.series(18.92, 72.83)[1][-1] == 7000  # last valid month exactly on the edge: kept
+    monkeypatch.setattr(psmsl, "fetch", lambda sid: _record(edge - 40, edge, 11))
+    with pytest.raises(ValueError, match=f"its record ends in {edge}-11"):  # one month earlier: skipped
         psmsl.series(18.92, 72.83)
 
 
