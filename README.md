@@ -21,7 +21,7 @@ Any MCP client that speaks streamable HTTP works the same way. Keep the trailing
 | Who | Lane |
 |---|---|
 | Tarun (@Ttheegela) | integration, merges, deploys |
-| Sairam (@sairam782) | to be picked at hour 0 |
+| Sairam (@sairam782) | data, stats, agent, UI + story |
 
 Lanes: data, stats, agent, UI + story (see `CLAUDE.md`). Every change goes issue, then branch, then pull request; `main` only accepts PRs that pass the tests and the secrets scan. Shared data shapes live in `docs/CONTRACTS.md`.
 
