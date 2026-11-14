@@ -47,7 +47,7 @@ VERDICT_WORDS = {
     "no_clear_change": ("no clear change", "no change is plausible", "rule out no change", "not show a clear change",
                         "n't show a clear change", "no clear", "not clear", "can't tell", "cannot tell"),
 }
-DISAGREE_WORDS = ("disagree", "do not agree", "don't agree", "differ")
+DISAGREE = re.compile(r"\b(?:disagree|differ|do not agree|don't agree)\b")  # whole words: "differently" is not it
 # For a rising/falling verdict, only these count as saying the opposite ("not clear why" must not).
 NO_CHANGE_CLAIMS = ("no clear change", "rule out no change", "no change is plausible", "not show a clear change",
                     "n't show a clear change")
@@ -95,7 +95,8 @@ def _numbers(text: str) -> list[tuple[str, str]]:
 
 def _pool(x, out: list[float]) -> list[float]:
     """Every number in the tool results: numeric fields as they are, plus numbers written inside text fields.
-    The slope also goes in without its sign: the prompt drops it after a direction word ("falls by 0.40")."""
+    A rising or falling slope also goes in without its sign: the prompt drops it after a direction word ("falls by
+    0.40"). A no-clear-change slope keeps its sign, since no word carries it."""
     if isinstance(x, bool):
         pass
     elif isinstance(x, (int, float)):
@@ -105,7 +106,8 @@ def _pool(x, out: list[float]) -> list[float]:
     elif isinstance(x, dict):
         for k, v in x.items():
             _pool(v, out)
-            if k == "slope_per_decade" and isinstance(v, (int, float)) and not isinstance(v, bool):
+            if (k == "slope_per_decade" and isinstance(v, (int, float)) and not isinstance(v, bool)
+                    and x.get("verdict") in ("rising", "falling")):
                 out.append(abs(float(v)))
     elif isinstance(x, list):
         for v in x:
@@ -171,10 +173,12 @@ def check(case: dict, run: dict) -> dict[str, bool]:
             out["source"] = case["expect_source"] in called
         if case.get("expect_verdict"):
             out["verdict"] = bool(main) and main.get("verdict") == case["expect_verdict"]
-        if len(verdicts) > 1:  # the sources disagree: the answer must say so, not one verdict
-            out["wording"] = any(w in a.replace("’", "'") for w in DISAGREE_WORDS)
-        elif main and main.get("verdict") in VERDICT_WORDS:
-            out["wording"] = wording_agrees(answer, main["verdict"])
+        said_disagree = bool(DISAGREE.search(a.replace("’", "'")))
+        if len(verdicts) > 1:  # the sources disagree: the answer must say so, and drop none of the verdicts
+            out["wording"] = said_disagree and all(any(w in a.replace("’", "'") for w in VERDICT_WORDS[v])
+                                                   for v in verdicts if v in VERDICT_WORDS)
+        elif main and main.get("verdict") in VERDICT_WORDS:  # one verdict; with several sources, no false "disagree"
+            out["wording"] = wording_agrees(answer, main["verdict"]) and not (len(by_src) > 1 and said_disagree)
         out["numbers"] = not invented_numbers(answer, results)
         if by_src:
             out["source_named"] = all(_named(r.get("source") or {}, a) for r in by_src.values())
@@ -185,7 +189,7 @@ def check(case: dict, run: dict) -> dict[str, bool]:
 
 
 def _named(src: dict, a: str) -> bool:
-    host = urlparse(src.get("url", "")).netloc.lower()
+    host = urlparse(src.get("url", "")).netloc.lower().removeprefix("www.")  # "ncei.noaa.gov" names it too
     return (bool(src.get("name")) and src["name"].lower() in a) or (bool(host) and host in a)
 
 

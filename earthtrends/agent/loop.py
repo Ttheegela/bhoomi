@@ -1,8 +1,10 @@
 """The agent loop: identical for every model; it talks to the model only through a provider."""
+import contextvars
 import json
+import logging
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 
 import httpx
 
@@ -14,7 +16,10 @@ DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
 MAX_CALLS = 6
 BUDGET_S = 120  # total per question, checked before each model call and each step's tools; keeps us inside the serverless limit
 MAX_TOOLS = 6  # tool calls run in one step; more get an error, so one step can't flood the data sources
+STEP_WAIT_S = 40  # longest wait for one step's tool calls (or the budget left, if less); later ones count as late
 SOURCE_DOWN = "The data source did not answer."
+LATE = "The data source did not answer in time."
+log = logging.getLogger(__name__)
 GAVE_UP = ("Sorry, I could not finish working this out, so I have no answer to give you. "
            "Please try asking again, maybe in a simpler way.")
 RETRY = ("\n\nYour first answer to this question was cut off because it was too long. Give the same answer again "
@@ -117,26 +122,39 @@ def ask(question: str, model: str | None = None) -> dict:
                 continue
             if i == MAX_CALLS - 1:  # no model call left to read the results, so don't fetch data for nothing
                 break
-            if time.monotonic() - t0 >= BUDGET_S:  # a data fetch can take 30 s; don't start any we can't afford
+            spent = time.monotonic() - t0
+            if spent >= BUDGET_S:  # a data fetch can take 30 s; don't start any we can't afford
                 break  # answer stays None, so GAVE_UP
             todo = step["tool_calls"]
 
-            def run_one(c, n):
+            def run_one(c):
                 args = c["arguments"] if c["arguments"] is not None else {}
                 with trace.child("tool", c["name"], input=args) as span:
-                    if n >= MAX_TOOLS:
-                        result, error = None, f"Too many tool calls at once; at most {MAX_TOOLS} per step."
-                    elif c["arguments_error"]:
+                    if c["arguments_error"]:
                         result, error = None, c["arguments_error"]
                     else:
-                        result, error = run_tool(c["name"], args)
+                        try:
+                            result, error = run_tool(c["name"], args)
+                        except Exception:  # one broken source must not sink the others' results
+                            log.exception("Tool %s failed", c["name"])
+                            result, error = None, SOURCE_DOWN
                     span.update(output=result if error is None else {"error": error}, **({"level": "ERROR"} if error else {}))
                 return {"name": c["name"], "arguments": args, "result": result, "error": error}
 
-            # One step's calls (e.g. one per source) fetch at the same time, so the slowest source sets the wait,
-            # not the sum. Every fetch has its own httpx timeout, so the pool always finishes.
-            with ThreadPoolExecutor(max_workers=max(1, min(len(todo), MAX_TOOLS))) as pool:
-                done = list(pool.map(run_one, todo, range(len(todo))))
+            def failed(c, error):
+                return {"name": c["name"], "arguments": c["arguments"] if c["arguments"] is not None else {},
+                        "result": None, "error": error}
+
+            # One step's calls (e.g. one per source) fetch at the same time, so the slowest source sets the wait, not
+            # the sum. The wait is bounded: a source still fetching after it is reported as late, and its thread is
+            # left to finish on its own (shutdown without waiting), so the answer goes on with what arrived.
+            run = todo[:MAX_TOOLS]
+            pool = ThreadPoolExecutor(max_workers=max(1, len(run)))
+            futs = [pool.submit(contextvars.copy_context().run, run_one, c) for c in run]  # keeps trace attributes
+            wait(futs, timeout=min(STEP_WAIT_S, BUDGET_S - spent))
+            pool.shutdown(wait=False, cancel_futures=True)
+            done = [f.result() if f.done() and not f.cancelled() else failed(c, LATE) for f, c in zip(futs, run)]
+            done += [failed(c, f"Too many tool calls at once; at most {MAX_TOOLS} per step.") for c in todo[MAX_TOOLS:]]
             calls += done
             provider.add_tool_results([{"id": c["id"], "content": d["result"] if d["error"] is None else {"error": d["error"]}}
                                        for c, d in zip(todo, done)])

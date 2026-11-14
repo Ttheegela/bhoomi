@@ -441,6 +441,51 @@ def test_agreeing_sources_use_single_verdict_wording():
     assert run.check(case, fake_run(contradicted, multi([POWER, era5, ghcn])))["wording"] is False
 
 
+def test_no_clear_change_slope_keeps_its_sign():
+    era5 = {**ERA5, "slope_per_decade": -0.1287, "ci_low": -0.27, "ci_high": 0.02}
+    assert run.invented_numbers("ERA5: no clear change, -0.13 °C per decade (range -0.27 to 0.02).", [era5]) == []
+    assert run.invented_numbers("ERA5: no clear change, 0.13 °C per decade (range -0.27 to 0.02).", [era5]) == ["0.13"]
+    assert run.invented_numbers("NASA POWER: clearly falling, by 0.25 °C per decade.", [POWER]) == []  # direction word
+
+
+def test_differently_is_not_disagree():
+    answer = DISAGREE.replace("The sources disagree about", "The sources agree, though measured differently, about")
+    assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([POWER, ERA5, GHCN])))["wording"] is False
+    assert run.DISAGREE.search("they differ") and not run.DISAGREE.search("different grids, differently")
+
+
+def test_false_disagree_when_sources_agree_fails():
+    era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
+    answer = ("The sources disagree. Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to "
+              "-0.09). Sources: https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
+    case = {**DELHI_CASE, "must_say": []}
+    assert run.check(case, fake_run(answer, multi([POWER, era5, ghcn])))["wording"] is False
+    assert run.check(case, fake_run(answer.replace("The sources disagree. ", ""), multi([POWER, era5, ghcn])))["wording"]
+
+
+def test_disagree_answer_must_keep_every_verdict():
+    dropped = DISAGREE.replace("NOAA NCEI GHCN-Daily: clearly rising, by", "NOAA NCEI GHCN-Daily: up by")
+    out = run.check(DELHI_CASE, fake_run(dropped, multi([POWER, ERA5, GHCN])))
+    assert out["wording"] is False  # the rising verdict is never said in words
+
+
+def test_same_slope_but_disagree_on_clearness_passes():
+    power = {**POWER, "verdict": "no_clear_change", "slope_per_decade": 0.0472, "ci_low": -0.0008, "ci_high": 0.0948}
+    era5 = {**ERA5, "verdict": "rising", "slope_per_decade": 0.0459, "ci_low": 0.0004, "ci_high": 0.0913}
+    answer = ("The sources give about the same slope but disagree on whether the change is clear. "
+              "NASA POWER (MERRA-2): no clear change, 0.05 °C per decade (95% range -0.001 to 0.09). "
+              "ERA5 reanalysis via Open-Meteo archive: clearly rising, by 0.05 °C per decade (95% range 0.0004 to "
+              "0.09). Both run January 1981 to December 2025. Sources: https://power.larc.nasa.gov/, https://open-meteo.com/")
+    out = run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([power, era5])))
+    assert all(out.values())
+
+
+def test_source_named_without_www():
+    answer = DISAGREE.replace("https://www.ncei.noaa.gov/", "ncei.noaa.gov").replace("NOAA NCEI GHCN-Daily", "NOAA")
+    assert run.check(DELHI_CASE, fake_run(answer, multi([POWER, ERA5, GHCN])))["source_named"]
+    assert not run._named({"name": "X", "url": "https://www.ncei.noaa.gov/"}, "see noaa.gov")
+
+
 def test_errored_source_need_not_be_named():
     calls = multi([POWER, ERA5]) + [{"name": "detect_trend", "arguments": {**D_ARGS, "source": "ghcn"}, "result": None,
                                      "error": "No weather station within 50 km of this point."}]
