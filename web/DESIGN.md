@@ -115,7 +115,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 ## 9. Review checklist (apply after every UI change)
 1. No sample data is shown as real. A demo value is labelled "sample" or not shown. Every number names its source with a link, including numbers inside error cards.
 2. What we computed is marked. The verdict, trend line, shaded band, yearly averages and "seasons removed" line carry a grey label: "Trend, range and verdict: our calculation." directly under the big number, then a "Raw data: {source} ↗" link. The legend groups "From the dataset" and "Our calculation".
-3. The verdict sentence holds the number and the uncertainty in plain words, for example "about +42.5 mm per decade; the shaded band shows where the true trend likely sits". Never "X% chance it's real" or "95% sure". Never claim more than the data show.
+3. The verdict sentence holds the number and the uncertainty in plain words, for example "rose by about 42.5 mm per decade; the shaded band shows where the true trend likely sits". Never "X% chance it's real" or "95% sure". Never claim more than the data show.
 4. Contrast meets WCAG AA in light and dark. Text is at least 4.5:1. Borders, icons and chart lines are at least 3:1. Recompute from the tokens after any token change, and measure muted text on the surface and the inverted verdict header in both themes.
 5. Labels are sentence case, grey, 14 px (12 px minimum), regular weight. No ALL CAPS, no small caps, no letter-spacing.
 6. Colour appears only inside the data and always with a legend. Today there is none; everything is monochrome.

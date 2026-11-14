@@ -167,7 +167,7 @@ function monthLabel(t) { const m = monthIndex(t); return MONTHS[m % 12] + ' ' + 
 
 function verdictCopy(t, name, place) {
   const y0 = t.period.start.slice(0, 4), y1 = t.period.end.slice(0, 4), n = lcName(name);
-  const s = fmtVal(t.slope_per_decade, t.units), lo = fmtVal(t.ci_low, t.units), hi = fmtVal(t.ci_high, t.units);
+  const lo = fmtVal(t.ci_low, t.units), hi = fmtVal(t.ci_high, t.units);
   const sl = t.slope_per_decade;
   if (t.verdict === 'rising' || t.verdict === 'falling') {
     const up = t.verdict === 'rising';
