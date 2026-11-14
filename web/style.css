@@ -188,3 +188,37 @@ footer li a { display: inline-flex; align-items: center; min-height: 48px; color
   .tab { padding: 0 var(--s5); }
 }
 .panel > h2 { margin-bottom: 0; }
+
+/* shared small pieces */
+.narrow { max-width: 720px; }
+.small { font-size: 14px; color: var(--ink-2); }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.panel h3 { font-size: 18px; margin: 0; line-height: 1.2; }
+.panel label { display: block; font-size: 14px; color: var(--ink-2); margin-bottom: var(--s1); }
+code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; }
+
+/* use in your AI */
+#panel-connect p, #panel-connect ol, #panel-connect ul { margin-bottom: 0; }
+#panel-connect > * + * { margin-top: var(--gap); }
+#panel-connect section > * + *, .app-panel > * + *, .cfg-panel > * + *, .addr-block > * + * { margin-top: var(--s3); }
+#panel-connect ol, #panel-connect ul { padding-left: var(--s5); max-width: 70ch; }
+#panel-connect li { margin-bottom: var(--s2); }
+.copyrow { display: flex; gap: var(--s2); align-items: stretch; }
+.copyrow > input, .copyrow > pre { flex: 1 1 auto; min-width: 0; }
+.addr { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; }
+.copy-btn { width: auto; min-width: 96px; flex: none; }
+pre { margin: 0; padding: var(--s3); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; }
+.copyrow.code { align-items: flex-start; }
+.copy-fail { margin: var(--s1) 0 0; }
+.apptabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); }
+.apptabs:empty { display: none; }
+.app-panel > .srclink { display: flex; }
+.tools { grid-template-columns: 1fr; gap: 0; }
+.tools > div { padding: var(--s3) 0; border-top: 1px solid var(--hairline); }
+.tools dd { margin: var(--s1) 0 0; }
+@media (min-width: 600px) {
+  .apptabs { display: flex; flex-wrap: wrap; }
+  .apptabs .tab { padding: 0 var(--s4); }
+  .tools > div { display: grid; grid-template-columns: 200px 1fr; gap: var(--s3); }
+  .tools dd { margin: 0; }
+}
