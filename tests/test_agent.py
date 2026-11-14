@@ -137,19 +137,18 @@ def test_budget_spent_before_tools_runs_none(fake, monkeypatch):
     assert r["answer"] == loop.GAVE_UP and r["tool_calls"] == [] and ran == [] and fake.results == []
 
 
-def test_budget_spent_between_tools(fake, monkeypatch):
+def test_budget_spent_by_slow_concurrent_tools(fake, monkeypatch):
     ran = []
     monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
-    fake_clock(monkeypatch, [0, 0, 1, 121, 125])  # t0, model check, tool a ok, tool b spent, latency
+    fake_clock(monkeypatch, [0, 0, 1, 121, 125])  # t0, model check, tools start (all), next model check spent, latency
     fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step("never read")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(ran) == 1
-    assert r["tool_calls"] == [{"name": "detect_trend", "arguments": ARGS, "result": TREND, "error": None}]
-    assert fake.results == []  # no model call left to read it
+    assert r["answer"] == loop.GAVE_UP and len(ran) == 2 and len(r["tool_calls"]) == 2
+    assert len(fake.script) == 1  # no model call after the budget ran out
 
 
 def test_budget_normal_path_with_two_tools(fake, monkeypatch):
-    fake_clock(monkeypatch, [0, 0, 1, 2, 3, 4])  # t0, model, tool a, tool b, model, latency
+    fake_clock(monkeypatch, [0, 0, 1, 2, 3])  # t0, model, tools (one check per step), model, latency
     fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step("Rising.")]
     r = loop.ask("q", model="fake:m")
     assert r["answer"] == "Rising." and len(r["tool_calls"]) == 2
@@ -229,7 +228,8 @@ def words(n, tag="w"):
 def test_long_answer_retried_and_short_retry_returned(fake):
     fake.script = [step(tool_calls=[call()]), step(words(130)), step(words(95))]
     r = loop.ask("Is sea level rising?", model="fake:m")
-    assert r["answer"] == words(95) and fake.started[1].startswith("Is sea level rising?" + loop.RETRY_LONG)
+    again = loop.RETRY_LONG.format(limit=120, target=100)
+    assert r["answer"] == words(95) and fake.started[1].startswith("Is sea level rising?" + again)
     assert r["usage"]["prompt_tokens"] == 300 and r["usage"]["completion_tokens"] == 60  # both attempts counted
 
 
@@ -285,6 +285,130 @@ def test_tool_call_on_retry_still_ends_with_shortest_answer(fake):
     assert r["answer"] == words(130) and len(fake.script) == 10 - (loop.MAX_CALLS - 2)
 
 
+# ---- several sources ----
+
+DELHI = {"variable": "air_temp_max", "lat": 28.58, "lon": 77.21}
+SRC = {"power": ("NASA POWER (MERRA-2)", "https://power.larc.nasa.gov/"),
+       "era5": ("ERA5 reanalysis via Open-Meteo archive", "https://open-meteo.com/"),
+       "ghcn": ("NOAA NCEI GHCN-Daily", "https://www.ncei.noaa.gov/")}
+
+
+def by_source(monkeypatch, verdicts, fail=()):
+    """detect_trend fake: one result per source; a source in `fail` has no data here."""
+    def detect(variable, lat, lon, source=None, **kw):
+        source = source or "power"
+        if source in fail:
+            raise ValueError("No weather station within 50 km of this point.")
+        name, url = SRC[source]
+        return {**TREND, "variable": variable, "verdict": verdicts[source], "source": {"id": source, "name": name, "url": url}}
+    monkeypatch.setattr(tools, "detect_trend", detect)
+
+
+def three_calls():
+    return [call(arguments={**DELHI, "source": s}, id=s) for s in ("power", "era5", "ghcn")]
+
+
+def test_three_sources_agree(fake, monkeypatch):
+    by_source(monkeypatch, {"power": "rising", "era5": "rising", "ghcn": "rising"})
+    fake.script = [step(tool_calls=three_calls()), step("All three agree: rising.", cost=0.002)]
+    r = loop.ask("Is Delhi getting hotter?", model="fake:m")
+    assert r["answer"] == "All three agree: rising."
+    assert [c["result"]["source"]["id"] for c in r["tool_calls"]] == ["power", "era5", "ghcn"]
+    assert [x["id"] for x in fake.results[0]] == ["power", "era5", "ghcn"]  # one model step reads all three
+    assert r["usage"] == {"prompt_tokens": 200, "completion_tokens": 40, "cost_usd": 0.003}
+
+
+def test_three_sources_disagree_get_the_longer_limit(fake, monkeypatch):
+    by_source(monkeypatch, {"power": "falling", "era5": "no_clear_change", "ghcn": "rising"})
+    fake.script = [step(tool_calls=three_calls()), step(words(150)), step("never")]
+    r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
+    assert r["answer"] == words(150) and fake.script == [step("never")]  # 150 <= 180: no retry
+    assert {c["result"]["verdict"] for c in r["tool_calls"]} == {"falling", "no_clear_change", "rising"}
+
+
+def test_multi_source_over_180_retried_with_its_own_numbers(fake, monkeypatch):
+    by_source(monkeypatch, {"power": "falling", "era5": "no_clear_change", "ghcn": "rising"})
+    fake.script = [step(tool_calls=three_calls()), step(words(190)), step(words(160))]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == words(160)
+    assert loop.RETRY_LONG.format(limit=180, target=150) in fake.started[1]
+
+
+def test_one_source_errors_two_answer(fake, monkeypatch):
+    by_source(monkeypatch, {"power": "rising", "era5": "rising"}, fail={"ghcn"})
+    fake.script = [step(tool_calls=three_calls()), step(words(150))]
+    r = loop.ask("q", model="fake:m")
+    assert r["tool_calls"][2]["error"] == "No weather station within 50 km of this point."
+    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": "No weather station within 50 km of this point."}}
+    assert r["answer"] == words(150)  # two sources returned results, so 180 applies
+
+
+def test_one_source_answering_keeps_120(fake, monkeypatch):
+    by_source(monkeypatch, {"power": "rising"}, fail={"era5", "ghcn"})
+    fake.script = [step(tool_calls=three_calls()), step(words(150)), step(words(100))]
+    assert loop.ask("q", model="fake:m")["answer"] == words(100)
+
+
+def test_user_named_source_is_one_call_and_120(fake, monkeypatch):
+    by_source(monkeypatch, {"era5": "rising"})
+    fake.script = [step(tool_calls=[call(arguments={**DELHI, "source": "era5"})]), step(words(150)), step(words(100))]
+    r = loop.ask("According to ERA5, is London getting warmer?", model="fake:m")
+    assert len(r["tool_calls"]) == 1 and r["answer"] == words(100)
+    assert loop.RETRY_LONG.format(limit=120, target=100) in fake.started[1]
+
+
+def test_single_source_variable_unchanged(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(150)), step(words(100))]
+    r = loop.ask("Is sea level rising in Atlantic City?", model="fake:m")
+    assert [c["arguments"] for c in r["tool_calls"]] == [ARGS] and r["answer"] == words(100)
+
+
+def test_same_source_twice_is_still_one_source(fake):
+    fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step(words(150)), step(words(100))]
+    assert loop.ask("q", model="fake:m")["answer"] == words(100)
+
+
+def test_tools_of_one_step_run_concurrently(fake, monkeypatch):
+    import threading
+    gate = threading.Barrier(3, timeout=5)  # only passes if all three fetches are in flight at once
+
+    def detect(variable, lat, lon, source=None, **kw):
+        gate.wait()
+        return {**TREND, "source": {"id": source}}
+    monkeypatch.setattr(tools, "detect_trend", detect)
+    fake.script = [step(tool_calls=three_calls()), step("ok")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == "ok" and [c["result"]["source"]["id"] for c in r["tool_calls"]] == ["power", "era5", "ghcn"]
+
+
+def test_too_many_tools_in_one_step(fake, monkeypatch):
+    ran = []
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
+    fake.script = [step(tool_calls=[call(id=str(i)) for i in range(loop.MAX_TOOLS + 2)]), step("ok")]
+    r = loop.ask("q", model="fake:m")
+    assert len(ran) == loop.MAX_TOOLS and len(fake.results[0]) == loop.MAX_TOOLS + 2  # every call gets an answer
+    assert [c["error"] is not None for c in r["tool_calls"]] == [False] * loop.MAX_TOOLS + [True, True]
+
+
+def test_call_limit_with_three_tools_per_step(fake, monkeypatch):
+    ran = []
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
+    fake.script = [step(tool_calls=three_calls()) for _ in range(10)]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 10 - loop.MAX_CALLS
+    assert len(ran) == len(r["tool_calls"]) == 3 * (loop.MAX_CALLS - 1)
+    assert r["usage"]["cost_usd"] == round(0.001 * loop.MAX_CALLS, 8)
+
+
+def test_budget_spent_before_a_three_source_step(fake, monkeypatch):
+    ran = []
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
+    fake_clock(monkeypatch, [0, 0, 120, 125])  # t0, model check, tool check (spent), latency
+    fake.script = [step(tool_calls=three_calls()), step("never read")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and ran == [] and r["tool_calls"] == []
+
+
 # ---- prompt ----
 
 @pytest.mark.parametrize("phrase", [
@@ -336,6 +460,20 @@ def test_tool_call_on_retry_still_ends_with_shortest_answer(fake):
     "decline in one short sentence that counts inside the word budget",
     "the range including zero is why",
     '"falls by 0.40", not "falls by -0.40"',
+    # several sources
+    "call detect_trend once for EACH of its sources",
+    "all in the same step",
+    "call detect_trend once with that source only",
+    "If the variable has only one source, call it once and leave source out",
+    'your first sentence says plainly that the sources disagree (use the word "disagree")',
+    "Never pick a winner and never average them",
+    "only from the results' caveats",
+    "Never give a difference between sources",
+    "say in a few words that it has no data for this place",
+    "say in a few words that the other sources agree, naming them",
+    "name every source you used, each with its URL",
+    "stay at or under 180 words, never more",
+    "without repeating their number",
     # rules that must survive
     "Never state a number that is not in a tool result",
     "Never call a \"no_clear_change\" result rising or falling",

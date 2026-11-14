@@ -2,6 +2,7 @@
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
@@ -11,15 +12,18 @@ from earthtrends.agent.tracing import Trace
 
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
 MAX_CALLS = 6
-BUDGET_S = 120  # total per question, checked before each model call and each tool; keeps us inside the serverless limit
+BUDGET_S = 120  # total per question, checked before each model call and each step's tools; keeps us inside the serverless limit
+MAX_TOOLS = 6  # tool calls run in one step; more get an error, so one step can't flood the data sources
 SOURCE_DOWN = "The data source did not answer."
 GAVE_UP = ("Sorry, I could not finish working this out, so I have no answer to give you. "
            "Please try asking again, maybe in a simpler way.")
 RETRY = ("\n\nYour first answer to this question was cut off because it was too long. Give the same answer again "
          "in fewer words, following every rule. Do not call a tool: these are the tool results you already got:\n")
 MAX_WORDS = 120  # longest answer we return without asking for a shorter one
-RETRY_LONG = (f"\n\nYour first answer to this question was over {MAX_WORDS} words. Give the same answer again in at "
-              "most 100 words, following every rule: one short sentence per caveat, no unit explained twice, and "
+MAX_WORDS_MULTI = 180  # the same, when results from two or more sources are reported
+SHORTER = {MAX_WORDS: 100, MAX_WORDS_MULTI: 150}  # what the length retry asks for
+RETRY_LONG = ("\n\nYour first answer to this question was over {limit} words. Give the same answer again in at "
+              "most {target} words, following every rule: one short sentence per caveat, no unit explained twice, and "
               "any declined request in a few words. Do not call a tool: these are the tool results you already got:\n")
 
 TOOLS = [
@@ -58,6 +62,13 @@ def run_tool(name: str, args: dict) -> tuple[dict | list | None, str | None]:
         return None, str(e)
 
 
+def word_limit(calls: list[dict]) -> int:
+    """120 words, or 180 when detect_trend results came back from two or more distinct sources."""
+    srcs = {(c["result"].get("source") or {}).get("id") for c in calls
+            if c["name"] == "detect_trend" and c["error"] is None and isinstance(c["result"], dict)}
+    return MAX_WORDS_MULTI if len(srcs) >= 2 else MAX_WORDS
+
+
 def ask(question: str, model: str | None = None) -> dict:
     t0 = time.monotonic()
     try:
@@ -87,11 +98,11 @@ def ask(question: str, model: str | None = None) -> dict:
             if not step["tool_calls"]:
                 # Cut off at the output cap: never show partial text. The token check covers providers without "stop".
                 cut = step.get("stop") == "length" or step["usage"]["completion_tokens"] >= MAX_TOKENS
-                text = step["text"]
+                text, limit = step["text"], word_limit(calls)
                 if not cut:
                     if not (text or "").strip():
                         break  # empty text (e.g. reasoning spent the cap): falls through to too_long or GAVE_UP
-                    if len(text.split()) <= MAX_WORDS:
+                    if len(text.split()) <= limit:
                         answer = text
                         break
                     if too_long is None or len(text.split()) < len(too_long.split()):
@@ -101,23 +112,34 @@ def ask(question: str, model: str | None = None) -> dict:
                 # One fresh, shorter try per question, for either reason. The seam has no "add a user message", so
                 # restart with the results inline; the call limit and the budget still apply through the loop.
                 retried = True
-                provider.start(system, question + (RETRY if cut else RETRY_LONG) + json.dumps(calls), TOOLS)
+                again = RETRY if cut else RETRY_LONG.format(limit=limit, target=SHORTER[limit])
+                provider.start(system, question + again + json.dumps(calls), TOOLS)
                 continue
             if i == MAX_CALLS - 1:  # no model call left to read the results, so don't fetch data for nothing
                 break
-            results = []
-            for c in step["tool_calls"]:
-                if time.monotonic() - t0 >= BUDGET_S:  # a data fetch can take 30 s; don't start one we can't afford
-                    break
+            if time.monotonic() - t0 >= BUDGET_S:  # a data fetch can take 30 s; don't start any we can't afford
+                break  # answer stays None, so GAVE_UP
+            todo = step["tool_calls"]
+
+            def run_one(c, n):
                 args = c["arguments"] if c["arguments"] is not None else {}
                 with trace.child("tool", c["name"], input=args) as span:
-                    result, error = (None, c["arguments_error"]) if c["arguments_error"] else run_tool(c["name"], args)
+                    if n >= MAX_TOOLS:
+                        result, error = None, f"Too many tool calls at once; at most {MAX_TOOLS} per step."
+                    elif c["arguments_error"]:
+                        result, error = None, c["arguments_error"]
+                    else:
+                        result, error = run_tool(c["name"], args)
                     span.update(output=result if error is None else {"error": error}, **({"level": "ERROR"} if error else {}))
-                calls.append({"name": c["name"], "arguments": args, "result": result, "error": error})
-                results.append({"id": c["id"], "content": result if error is None else {"error": error}})
-            if len(results) < len(step["tool_calls"]):  # budget spent mid-step: answer stays None, so GAVE_UP
-                break
-            provider.add_tool_results(results)
+                return {"name": c["name"], "arguments": args, "result": result, "error": error}
+
+            # One step's calls (e.g. one per source) fetch at the same time, so the slowest source sets the wait,
+            # not the sum. Every fetch has its own httpx timeout, so the pool always finishes.
+            with ThreadPoolExecutor(max_workers=max(1, min(len(todo), MAX_TOOLS))) as pool:
+                done = list(pool.map(run_one, todo, range(len(todo))))
+            calls += done
+            provider.add_tool_results([{"id": c["id"], "content": d["result"] if d["error"] is None else {"error": d["error"]}}
+                                       for c, d in zip(todo, done)])
         answer = answer or too_long or GAVE_UP
     finally:
         trace_id = trace.end(answer)

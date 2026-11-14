@@ -124,7 +124,7 @@ def test_source_named_by_url_and_must_not_say():
 def test_failed_tool_call_has_no_result_checks():
     calls = [{"name": "detect_trend", "arguments": ARGS, "result": None, "error": "No tide gauge within 100 km"}]
     out = run.check(CASE, fake_run("Sorry, there is no tide gauge near there.", calls))
-    assert out["tool"] and out["source"] is False and out["verdict"] is False
+    assert out["tool"] and out["source"] and out["verdict"] is False  # coops was called; it just had no data
     assert "wording" not in out and "source_named" not in out
 
 
@@ -339,6 +339,118 @@ def test_flipped_range_end_fails_but_unsigned_slope_passes():
     r = {**AC, "verdict": "falling", "slope_per_decade": -0.40, "ci_low": -0.51, "ci_high": -0.28}
     assert run.invented_numbers("It falls by 0.40 mm per decade, range -0.51 to -0.28.", [r]) == []
     assert run.invented_numbers("It falls by 0.40 mm per decade, range -0.51 to 0.28.", [r]) == ["0.28"]
+
+
+# ---- several sources ----
+
+DELHI_CASE = {"id": "delhi-hot-days-sources-disagree", "question": "Are Delhi's hottest days getting hotter?",
+              "expect_tool": "detect_trend", "expect_variable": "air_temp_max", "expect_place": [28.58, 77.21],
+              "must_say": ["disagree"], "must_not_say": []}
+D_ARGS = {"variable": "air_temp_max", "lat": 28.61, "lon": 77.21}
+PERIOD = {"start": "1981-01", "end": "2025-12"}
+
+
+def tr(src, verdict, slope, lo, hi, name, url, caveat):
+    return {"variable": "air_temp_max", "units": "degC", "verdict": verdict, "slope_per_decade": slope, "ci_low": lo,
+            "ci_high": hi, "p_value": 0.02, "period": PERIOD, "source": {"id": src, "name": name, "url": url},
+            "caveats": [caveat]}
+
+
+POWER = tr("power", "falling", -0.2512, -0.41, -0.09, "NASA POWER (MERRA-2)", "https://power.larc.nasa.gov/",
+           "Grid cell about 50 km wide, not a single station.")
+ERA5 = tr("era5", "no_clear_change", 0.1187, -0.03, 0.27, "ERA5 reanalysis via Open-Meteo archive",
+          "https://open-meteo.com/", "Grid cell about 25 km wide, not a single station.")
+GHCN = tr("ghcn", "rising", 0.2493, 0.08, 0.42, "NOAA NCEI GHCN-Daily", "https://www.ncei.noaa.gov/",
+          "Weather station NEW DELHI/SAFDARJUNG, 3 km from the point you asked about.")
+DISAGREE = ("The sources disagree about Delhi's hottest day of the month, January 1981 to December 2025. "
+            "NASA POWER (MERRA-2): clearly falling, by 0.25 °C per decade (range -0.41 to -0.09). "
+            "ERA5 reanalysis via Open-Meteo archive: no clear change, 0.12 °C per decade (range -0.03 to 0.27). "
+            "NOAA NCEI GHCN-Daily: clearly rising, by 0.25 °C per decade (range 0.08 to 0.42). "
+            "The grids are cells 50 km and 25 km wide; the station is one spot 3 km away. "
+            "Sources: https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
+
+
+def multi(results):
+    return [{"name": "detect_trend", "arguments": {**D_ARGS, "source": r["source"]["id"]}, "result": r, "error": None}
+            for r in results]
+
+
+def test_correct_disagree_answer_passes():
+    out = run.check(DELHI_CASE, fake_run(DISAGREE, multi([POWER, ERA5, GHCN])))
+    assert out == {k: True for k in ("answered", "tool", "variable", "place", "wording", "numbers", "source_named",
+                                     "must_say")}
+
+
+@pytest.mark.parametrize("phrase", ["do not agree", "don't agree", "don’t agree", "differ"])
+def test_disagree_synonyms(phrase):
+    answer = DISAGREE.replace("The sources disagree", f"The sources {phrase}")
+    assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([POWER, ERA5, GHCN])))["wording"]
+
+
+def test_disagreeing_sources_without_saying_so_fail_wording():
+    answer = DISAGREE.replace("The sources disagree about", "Here is")
+    out = run.check(DELHI_CASE, fake_run(answer, multi([POWER, ERA5, GHCN])))
+    assert out["wording"] is False and out["must_say"] is False
+
+
+def test_one_source_reported_of_three_fails_source_named():
+    answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09). "
+              "Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/")
+    out = run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([POWER, ERA5, GHCN])))
+    assert out["source_named"] is False and out["wording"] is False
+
+
+def test_sign_flipped_range_end_fails_with_several_sources():
+    bad = DISAGREE.replace("range -0.03 to 0.27", "range 0.03 to 0.27")
+    assert run.invented_numbers(bad, [POWER, ERA5, GHCN]) == ["0.03"]
+    assert run.check(DELHI_CASE, fake_run(bad, multi([POWER, ERA5, GHCN])))["numbers"] is False
+
+
+def test_every_call_must_match_variable_and_place():
+    calls = multi([POWER, ERA5, GHCN])
+    calls[1] = {**calls[1], "arguments": {**calls[1]["arguments"], "variable": "air_temp"}}
+    calls[2] = {**calls[2], "arguments": {**calls[2]["arguments"], "lat": 19.08, "lon": 72.88}}  # Mumbai
+    out = run.check(DELHI_CASE, fake_run(DISAGREE, calls))
+    assert out["tool"] and out["variable"] is False and out["place"] is False
+
+
+def test_expect_source_among_those_called_and_its_verdict_scored():
+    case = {**DELHI_CASE, "expect_source": "ghcn", "expect_verdict": "rising", "must_say": []}
+    out = run.check(case, fake_run(DISAGREE, multi([POWER, ERA5, GHCN])))
+    assert out["source"] and out["verdict"]
+    out = run.check({**case, "expect_verdict": "falling"}, fake_run(DISAGREE, multi([POWER, ERA5, GHCN])))
+    assert out["verdict"] is False  # the station's verdict, not the default source's
+    assert run.check(case, fake_run(DISAGREE, multi([POWER, ERA5])))["source"] is False
+
+
+def test_verdict_without_expect_source_uses_default_source():
+    case = {**DELHI_CASE, "expect_verdict": "falling", "must_say": []}
+    assert run.check(case, fake_run(DISAGREE, multi([ERA5, GHCN, POWER])))["verdict"]  # power: first in the catalog
+    out = run.check({**case, "expect_verdict": "rising"}, fake_run(DISAGREE, multi([ERA5, GHCN, POWER])))
+    assert out["verdict"] is False
+
+
+def test_agreeing_sources_use_single_verdict_wording():
+    era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
+    answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 "
+              "to December 2025. ERA5 reanalysis via Open-Meteo archive and NOAA NCEI GHCN-Daily agree. Sources: "
+              "NASA POWER (MERRA-2), https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
+    case = {**DELHI_CASE, "must_say": []}
+    assert all(run.check(case, fake_run(answer, multi([POWER, era5, ghcn]))).values())
+    contradicted = answer.replace("are clearly falling", "are falling, but we can't rule out no change")
+    assert run.check(case, fake_run(contradicted, multi([POWER, era5, ghcn])))["wording"] is False
+
+
+def test_errored_source_need_not_be_named():
+    calls = multi([POWER, ERA5]) + [{"name": "detect_trend", "arguments": {**D_ARGS, "source": "ghcn"}, "result": None,
+                                     "error": "No weather station within 50 km of this point."}]
+    answer = ("The sources disagree about Delhi's hottest day of the month, January 1981 to December 2025. "
+              "NASA POWER (MERRA-2): clearly falling, by 0.25 °C per decade (range -0.41 to -0.09). "
+              "ERA5 reanalysis via Open-Meteo archive: no clear change, 0.12 °C per decade (range -0.03 to 0.27). "
+              "The weather station source has no data for this place. "
+              "Sources: https://power.larc.nasa.gov/, https://open-meteo.com/")
+    out = run.check(DELHI_CASE, fake_run(answer, calls))
+    assert out["source_named"] and out["numbers"] and out["wording"]
 
 
 @pytest.mark.parametrize("answer,ok", [

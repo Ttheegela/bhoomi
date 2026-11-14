@@ -47,6 +47,7 @@ VERDICT_WORDS = {
     "no_clear_change": ("no clear change", "no change is plausible", "rule out no change", "not show a clear change",
                         "n't show a clear change", "no clear", "not clear", "can't tell", "cannot tell"),
 }
+DISAGREE_WORDS = ("disagree", "do not agree", "don't agree", "differ")
 # For a rising/falling verdict, only these count as saying the opposite ("not clear why" must not).
 NO_CHANGE_CLAIMS = ("no clear change", "rule out no change", "no change is plausible", "not show a clear change",
                     "n't show a clear change")
@@ -132,12 +133,28 @@ def wording_agrees(answer: str, verdict: str) -> bool:
     return verdict == "no_clear_change" or not any(w in a for w in NO_CHANGE_CLAIMS)
 
 
+def _src(r: dict) -> str | None:
+    return (r.get("source") or {}).get("id")
+
+
 def check(case: dict, run: dict) -> dict[str, bool]:
-    """Every applicable check for one case; a check that does not apply is left out."""
+    """Every applicable check for one case; a check that does not apply is left out. With several detect_trend
+    calls (one per source), tool/variable/place must hold for every call."""
     answer = run.get("answer") or ""
     calls = [c for c in run.get("tool_calls", []) if c["name"] == "detect_trend"]
     results = [c["result"] for c in run.get("tool_calls", []) if c.get("error") is None and c.get("result") is not None]
-    main = next((c["result"] for c in reversed(calls) if c.get("error") is None and c.get("result")), None)
+    by_src = {_src(c["result"]): c["result"] for c in calls if c.get("error") is None and c.get("result")}
+    defaults = {v["id"]: v["sources"][0] for v in list_variables()}
+    # A call's source: what its result says it used, else what it asked for (the variable's default if left out).
+    called = {(c.get("result") and _src(c["result"])) or c["arguments"].get("source")
+              or defaults.get(c["arguments"].get("variable")) for c in calls}
+    # The verdict to score: the expected source's result if the case names one, else the default source's.
+    if case.get("expect_source"):
+        main = by_src.get(case["expect_source"])
+    else:
+        var = ALIASES.get(case.get("expect_variable"), case.get("expect_variable"))
+        main = by_src.get(defaults.get(var)) or next(reversed(by_src.values()), None)
+    verdicts = {r.get("verdict") for r in by_src.values()}
     a = answer.lower()
     out = {"answered": bool(answer) and answer != GAVE_UP and not run.get("error")}
     if case["expect_tool"] == "none":
@@ -147,24 +164,29 @@ def check(case: dict, run: dict) -> dict[str, bool]:
         out["tool"] = bool(calls)
         if case.get("expect_variable"):
             want = ALIASES.get(case["expect_variable"], case["expect_variable"])
-            out["variable"] = any(c["arguments"].get("variable") == want for c in calls)
+            out["variable"] = bool(calls) and all(c["arguments"].get("variable") == want for c in calls)
         if case.get("expect_place"):
-            out["place"] = any(_km(c["arguments"], case["expect_place"]) <= MAX_KM for c in calls)
+            out["place"] = bool(calls) and all(_km(c["arguments"], case["expect_place"]) <= MAX_KM for c in calls)
         if case.get("expect_source"):
-            out["source"] = bool(main) and main.get("source", {}).get("id") == case["expect_source"]
+            out["source"] = case["expect_source"] in called
         if case.get("expect_verdict"):
             out["verdict"] = bool(main) and main.get("verdict") == case["expect_verdict"]
-        if main and main.get("verdict") in VERDICT_WORDS:
+        if len(verdicts) > 1:  # the sources disagree: the answer must say so, not one verdict
+            out["wording"] = any(w in a.replace("’", "'") for w in DISAGREE_WORDS)
+        elif main and main.get("verdict") in VERDICT_WORDS:
             out["wording"] = wording_agrees(answer, main["verdict"])
         out["numbers"] = not invented_numbers(answer, results)
-        if main:
-            src = main.get("source", {})
-            host = urlparse(src.get("url", "")).netloc.lower()
-            out["source_named"] = (bool(src.get("name")) and src["name"].lower() in a) or (bool(host) and host in a)
+        if by_src:
+            out["source_named"] = all(_named(r.get("source") or {}, a) for r in by_src.values())
     if case.get("must_say") or case.get("must_not_say"):
         out["must_say"] = (all(w.lower() in a for w in case.get("must_say", []))
                            and not any(w.lower() in a for w in case.get("must_not_say", [])))
     return out
+
+
+def _named(src: dict, a: str) -> bool:
+    host = urlparse(src.get("url", "")).netloc.lower()
+    return (bool(src.get("name")) and src["name"].lower() in a) or (bool(host) and host in a)
 
 
 def _km(args: dict, place: list) -> float:
