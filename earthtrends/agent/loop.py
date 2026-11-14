@@ -128,6 +128,7 @@ def ask(question: str, model: str | None = None) -> dict:
 
     trace = Trace(question, model_id)
     calls, usage, costs, answer, retried, too_long = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None, False, None
+    no_tools = False  # the current attempt was started without tools
     try:
         for i in range(MAX_CALLS):
             if time.monotonic() - t0 >= BUDGET_S:
@@ -140,6 +141,8 @@ def ask(question: str, model: str | None = None) -> dict:
             usage["prompt_tokens"] += step["usage"]["prompt_tokens"]
             usage["completion_tokens"] += step["usage"]["completion_tokens"]
             costs.append(step["usage"]["cost_usd"])
+            if step["tool_calls"] and no_tools:  # tools were not offered: run none, and this step is no answer
+                break
             if not step["tool_calls"]:
                 # Cut off at the output cap: never show partial text. The token check covers providers without "stop".
                 cut = step.get("stop") == "length" or step["usage"]["completion_tokens"] >= MAX_TOKENS
@@ -165,6 +168,7 @@ def ask(question: str, model: str | None = None) -> dict:
                     continue
                 again = (RETRY if cut else RETRY_LONG).format(limit=limit, target=SHORTER[limit])
                 provider.start(system, question + again + json.dumps(for_model(calls)), [])  # no tools: no refetch
+                no_tools = True
                 continue
             if i == MAX_CALLS - 1:  # no model call left to read the results, so don't fetch data for nothing
                 break

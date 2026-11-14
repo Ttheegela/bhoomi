@@ -53,7 +53,7 @@ NO_CHANGE_CLAIMS = ("no clear change", "rule out no change", "no change is plaus
                     "n't show a clear change")
 # With several sources: a guessed reason for a difference, or a claim about how they relate (no caveat says either).
 GUESSED = ("likely because", "probably because", "likely due to", "probably due to", "differ somewhat",
-           "same gauge", "same station")
+           "same gauge", "same station", "both used the gauge", "both use the gauge", "share a gauge", "shares a gauge")
 # The prompt's fixed phrases with an outside number; they are removed before numbers are checked.
 ALLOWED = re.compile(r"\b0\.05 line|less than 0\.01|\b95\s*(?:%|percent)", re.I)
 NUM = re.compile(r"(?<![\w.])([-\u2212]?)(\d+(?:\.\d+)?)")  # a minus only when it isn't a hyphen after a word
@@ -191,9 +191,11 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                 leaked = set(invented_numbers(answer, base)) - set(invented_numbers(answer, base + others))
                 out["wording"] = out["wording"] and not leaked
                 # "over its own record" belongs to an agreeing source, so its sentence must name one
+                # and the subject (the text before "agree") must name one: not "<default> agrees ... using PSMSL"
                 own = [s for s in re.split(r"(?<=[.!?])\s+", a) if "over its own record" in s]
+                subj = [s[:s.index("agree")] if "agree" in s[:s.index("over its own record")] else s for s in own]
                 out["wording"] = out["wording"] and all(
-                    any(_named(r.get("source") or {}, s) for r in by_src.values() if r is not main) for s in own)
+                    any(_short_named(r.get("source") or {}, s) for r in by_src.values() if r is not main) for s in subj)
         out["numbers"] = not invented_numbers(answer, results)
         if by_src:
             out["source_named"] = all(_named(r.get("source") or {}, a) for r in by_src.values())
@@ -206,6 +208,14 @@ def check(case: dict, run: dict) -> dict[str, bool]:
 def _named(src: dict, a: str) -> bool:
     host = urlparse(src.get("url", "")).netloc.lower().removeprefix("www.")  # "ncei.noaa.gov" names it too
     return (bool(src.get("name")) and src["name"].lower() in a) or (bool(host) and host in a)
+
+
+def _short_named(src: dict, a: str) -> bool:
+    """_named, or a short form the model writes: the id, the name cut at its first "," or "(", or a short form in
+    brackets ("(PSMSL)")."""
+    name = (src.get("name") or "").lower()
+    forms = {src.get("id") or "", re.split(r"[,(]", name)[0].strip(), *re.findall(r"\(([^)]+)\)", name)}
+    return _named(src, a) or any(re.search(rf"\b{re.escape(f)}\b", a) for f in forms if f)
 
 
 def _km(args: dict, place: list) -> float:

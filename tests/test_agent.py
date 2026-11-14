@@ -211,6 +211,14 @@ def test_reasoning_spent_cap_retried_without_reasoning(fake):
     assert fake.started[2] == []
 
 
+def test_tool_call_on_a_no_tools_retry_runs_nothing(fake, monkeypatch):
+    ran = []
+    monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: ran.append(1) or TREND)
+    fake.script = [step(tool_calls=[call()]), EMPTY_CUT, step(tool_calls=[call(id="c2")]), step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == loop.GAVE_UP and ran == [1] and len(r["tool_calls"]) == 1 and len(fake.script) == 1
+
+
 def test_cut_off_before_any_tool_restarts_plain_question(fake):
     fake.script = [EMPTY_CUT, step(tool_calls=[call()]), step("Rising.")]
     r = loop.ask("Is sea level rising?", model="fake:m")
@@ -316,7 +324,7 @@ def test_long_then_empty_retry_returns_long(fake):
 def test_tool_call_on_retry_still_ends_with_shortest_answer(fake):
     fake.script = [step(tool_calls=[call()]), step(words(130))] + [step(tool_calls=[call(id=str(i))]) for i in range(10)]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == words(130) and len(fake.script) == 10 - (loop.MAX_CALLS - 2)
+    assert r["answer"] == words(130) and len(fake.script) == 9  # the no-tools retry's tool call runs nothing
 
 
 # ---- several sources ----
