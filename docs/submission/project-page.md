@@ -1,12 +1,12 @@
-# Space Apps project page text (draft)
+# Space Apps project page text (final, ready to paste)
 
-Tarun pastes this into the Space Apps project page (he owns the team). Numbers below are from the live tool and the eval run on Sat 14 Nov; re-check them on Sunday. Aim to submit by Sun 18:00; the deadline is 23:59.
+Tarun pastes this into the Space Apps project page (he owns the team). Numbers below were checked on production on Sat 14 Nov at about 23:50 UTC, and the eval score is from the run that night; re-check on Sunday morning. Aim to submit by Sun 18:00; the deadline is 23:59. Each section below matches one field of the page; paste the text without the headings.
 
 ## Title
 Trend Detective: is this really changing here?
 
 ## Short summary
-Trend Detective is an AI agent and MCP server that answers one question for any place: *is this really changing here?* Ask in plain words, for example "Is sea level rising in Atlantic City?". It picks the right public NASA or NOAA dataset, pulls the time series, removes the seasonal cycle, and runs a proper significance test. Then it answers rising, falling, or no clear change, with the size of the change, an uncertainty range, and the data source. It covers air temperature, the hottest day of the month, rainfall, sea level at tide gauges worldwide, and water stored on land, weighed from space by NASA's GRACE satellites. When datasets disagree, it says so; when there is no data for a place, it says that too, with no made-up number. It's built for students and the public, and for anyone who needs a local trend they can trust.
+Trend Detective is an AI agent and MCP server that answers one question for any place: *is this really changing here?* Ask in plain words, for example "Is sea level rising in New York?" (rising, about 32 mm per decade at The Battery tide gauge since 1900, from NOAA). It picks the right public NASA or NOAA dataset, pulls the time series, removes the seasonal cycle, and runs a proper significance test. Then it answers rising, falling, or no clear change, with the size of the change, an uncertainty range, and the data source. It covers air temperature, the hottest day of the month, rainfall, sea level at tide gauges worldwide, and water stored on land, weighed from space by NASA's GRACE satellites. When datasets disagree, it says so; when there is no data for a place, it says that too, with no made-up number. It's built for students and the public, and for anyone who needs a local trend they can trust.
 
 ## How it works
 1. **Ask.** A student types a question. The AI agent works out the place and what to measure.
@@ -34,8 +34,13 @@ All six are used by the live build (checked Sat 14 Nov).
 ## Links
 - Live app: https://trend-detective-six.vercel.app
 - Code: https://github.com/Ttheegela/trend-detective
-- Demo: 8-slide deck (PDF), or a video of 30 s or less (`docs/submission/video.md`). Final choice: `TBD`.
-- Screenshots: `docs/submission/screenshots/` (Atlantic City on desktop, Delhi on a phone in dark mode).
+- Demo video (30 s or less, recorded from the live site; script in `docs/submission/video.md`): New York sea level, Delhi sources disagree, Delhi land water, Mumbai since 1878. Upload the MP4 to the page.
+- Slides: the 10-slide pitch deck as PDF (exported from Claude Slides). At local judging we demo live and keep the deck as backup.
+- Screenshots (`docs/submission/screenshots/`), in this order:
+  1. `new-york-sea-level-desktop.jpg`: Explore, New York sea level, rising, NOAA CO-OPS.
+  2. `delhi-sources-disagree-ask.jpg`: Ask, Delhi's hottest days, three sources that disagree.
+  3. `delhi-groundwater-phone.jpg`: Ask on a phone, Delhi land water falling, with the caveat that it isn't groundwater alone.
+  4. `atlantic-city-desktop.jpg`: Atlantic City, the trend we checked against NOAA's published one.
 
 ## Use of AI (SI disclosure)
 See `docs/SI.md`. Short version for the page: we used Claude (Anthropic) as a coding assistant to write and review most of the code, tests, docs and these slides, and an LLM through OpenRouter runs the agent inside the app. People chose the problem, the statistical method, the data sources and the expected answers in our evals, and reviewed every change. AI-made slides and video carry a visible "Built with AI assistance" label.
