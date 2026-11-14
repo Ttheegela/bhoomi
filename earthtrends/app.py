@@ -42,13 +42,30 @@ def health() -> dict:
     return {"status": "ok", "ask": bool(os.environ.get("OPENROUTER_API_KEY"))}
 
 
-app.mount("/mcp", mcp_app)
+def too_many(wait: int) -> str:
+    return f"Too many requests right now. Please wait {wait} seconds and try again."
+
+
+async def limited_mcp(scope, receive, send):
+    """Every /mcp/ request passes here before the MCP app (and its Host allowlist), so each one counts."""
+    if scope["type"] == "http" and (wait := ratelimit.check_data(client_id(Request(scope)))):
+        r = JSONResponse({"detail": too_many(wait)}, status_code=429, headers={"Retry-After": str(wait)})
+        return await r(scope, receive, send)
+    await mcp_app(scope, receive, send)
+
+
+app.mount("/mcp", limited_mcp)
 
 
 @app.get("/api/health/keys")
 def health_keys() -> dict:
-    """Which keys this deployment has, and whether OpenRouter and Langfuse accept them. Never returns key values."""
+    """Which keys this deployment has, and whether OpenRouter and Langfuse accept them. Never returns key values.
+    Hidden in production: it makes two authenticated outbound calls and has no rate limit. VERCEL_ENV is
+    production, preview or development, set at build and runtime:
+    https://vercel.com/docs/environment-variables/system-environment-variables"""
     env = os.environ.get
+    if env("VERCEL_ENV") == "production":
+        raise HTTPException(404)  # same body as an unknown route: {"detail": "Not Found"}
     out = {n: bool(env(n)) for n in ("OPENROUTER_API_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST")}
     if out["OPENROUTER_API_KEY"]:
         try:
@@ -80,22 +97,31 @@ def source_down(_: Request, e: Exception) -> JSONResponse:
     return JSONResponse({"detail": SOURCE_DOWN}, status_code=502)
 
 
+def limit_data(request: Request) -> None:
+    """Only requests that reach the app count: Vercel's CDN answers cached GETs (see CACHE) without calling it.
+    A 429 is raised before Cache-Control is set, so it is never cached."""
+    if wait := ratelimit.check_data(client_id(request)):
+        raise HTTPException(429, too_many(wait), headers={"Retry-After": str(wait)})
+
+
 @app.get("/api/variables")
 def variables() -> list[dict]:
     return tools.list_variables()
 
 
 @app.get("/api/series")
-def series(response: Response, variable: str, lat: float, lon: float,
+def series(request: Request, response: Response, variable: str, lat: float, lon: float,
            start: str | None = None, end: str | None = None, source: str | None = None) -> dict:
+    limit_data(request)
     out = tools.get_series(variable, lat, lon, start, end, source)
     response.headers["Cache-Control"] = CACHE
     return out
 
 
 @app.get("/api/trend")
-def trend(response: Response, variable: str, lat: float, lon: float,
+def trend(request: Request, response: Response, variable: str, lat: float, lon: float,
           start: str | None = None, end: str | None = None, source: str | None = None) -> dict:
+    limit_data(request)
     out = tools.detect_trend(variable, lat, lon, start, end, source)
     response.headers["Cache-Control"] = CACHE
     return out
