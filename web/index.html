@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trend Detective</title>
+<meta name="description" content="Is it really changing here? Pick a place and a measurement.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#answer">Skip to the answer</a>
+
+<header>
+  <div class="wrap">
+    <div class="title-row">
+      <h1>Trend Detective</h1>
+      <p class="ai-label">Built with AI assistance</p>
+    </div>
+    <p class="lead">Is it really changing here?<span class="lead-2"> Pick a place and a measurement.</span></p>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+
+  <form id="controls" novalidate autocomplete="off">
+    <fieldset class="chips">
+      <legend>Example places</legend>
+      <div id="chips" class="chip-row"></div>
+    </fieldset>
+
+    <details id="coords">
+      <summary><span class="mark" aria-hidden="true"></span>Type coordinates or use my location</summary>
+      <div class="fields">
+        <div class="field">
+          <label for="lat">Latitude</label>
+          <input id="lat" type="text" inputmode="decimal" aria-describedby="lat-err">
+          <p id="lat-err" class="field-err" hidden></p>
+        </div>
+        <div class="field">
+          <label for="lon">Longitude</label>
+          <input id="lon" type="text" inputmode="decimal" aria-describedby="lon-err">
+          <p id="lon-err" class="field-err" hidden></p>
+        </div>
+        <div class="field btn-field span2">
+          <button type="button" id="locate" class="btn">Use my location</button>
+          <p id="geo-msg" class="field-err" hidden></p>
+        </div>
+        <div class="field btn-field span2">
+          <button type="submit" id="go" class="btn primary">Show trend</button>
+        </div>
+      </div>
+    </details>
+
+    <div class="fields">
+      <div class="field span2 field-var">
+        <label for="variable">Measurement</label>
+        <select id="variable" aria-describedby="variable-help"></select>
+        <p id="variable-help" class="help"></p>
+      </div>
+      <div class="field span2" id="source-field" hidden>
+        <label for="source">Data source</label>
+        <select id="source"></select>
+      </div>
+    </div>
+  </form>
+
+  <section id="answer" tabindex="-1" aria-label="Answer" aria-busy="false">
+    <div id="loading" role="status">
+      <p id="loading-text" class="loading-text"></p>
+      <p id="loading-slow"></p>
+      <div id="grey" class="grey-block" hidden></div>
+    </div>
+
+    <div id="result" class="grid">
+      <div class="col-verdict">
+        <div id="verdict-card" class="card" hidden>
+          <p class="card-label">Our answer</p>
+          <h2 id="verdict-heading" tabindex="-1" class="verdict-head"></h2>
+          <div class="card-body">
+            <div id="verdict-source" class="srcline"></div>
+            <p id="verdict-p1"></p>
+            <p id="verdict-calc" class="source"></p>
+            <p id="verdict-p2"></p>
+            <p id="verdict-evidence"></p>
+          </div>
+        </div>
+        <div id="problem" class="card problem" role="alert" hidden>
+          <h2 id="problem-heading" tabindex="-1"></h2>
+          <div id="problem-body" class="card-body"></div>
+          <div id="problem-actions" class="actions"></div>
+        </div>
+      </div>
+
+      <div class="col-chart" id="chart-wrap" hidden>
+        <figure id="chart-fig">
+          <div id="chart-box"></div>
+          <div id="chart-source" class="srcline"></div>
+          <div id="legend" class="legend">
+            <div class="legend-group" role="group" aria-labelledby="lg-data">
+              <p id="lg-data" class="legend-label">From the dataset</p>
+              <ul>
+                <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-raw"/></svg>Raw monthly value</li>
+              </ul>
+            </div>
+            <div class="legend-group" role="group" aria-labelledby="lg-calc">
+              <p id="lg-calc" class="legend-label">Our calculation</p>
+              <ul>
+                <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-des"/></svg>Seasons removed</li>
+                <li><svg width="32" height="12" aria-hidden="true"><circle cx="16" cy="6" r="3.5" class="s-year"/></svg>Yearly average, seasons removed</li>
+                <li class="t-only"><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-trend"/></svg>Trend line</li>
+                <li class="t-only"><svg width="32" height="12" aria-hidden="true"><rect x="1" y="1" width="30" height="10" class="s-fan"/><line x1="1" y1="1" x2="31" y2="1" class="s-edge"/><line x1="1" y1="11" x2="31" y2="11" class="s-edge"/></svg>Range of the trend</li>
+              </ul>
+            </div>
+          </div>
+          <p class="note">Gaps in the line are months with no data.</p>
+          <p id="readout" class="readout" aria-live="polite">Tap or hover the chart to read a month.</p>
+          <figcaption>
+            <span id="chart-caption"></span>
+            <span id="chart-raw"></span>
+          </figcaption>
+        </figure>
+        <details id="table-details">
+          <summary><span class="mark" aria-hidden="true"></span>Show the data as a table</summary>
+          <div id="table-source" class="srcline"></div>
+          <div id="table-scroll" class="table-scroll" tabindex="0" role="region" aria-label="Monthly data table">
+            <table>
+              <caption id="table-caption"></caption>
+              <thead><tr><th scope="col">Month</th><th scope="col" id="table-col"></th></tr></thead>
+              <tbody id="table-body"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <div id="more" hidden>
+    <div class="two">
+      <section id="numbers" aria-labelledby="numbers-h">
+        <h2 id="numbers-h">The numbers</h2>
+        <dl id="numbers-list"></dl>
+        <div id="numbers-source" class="srcline"></div>
+      </section>
+      <section id="notes" aria-label="Caveats and notes">
+        <details open>
+          <summary><span class="mark" aria-hidden="true"></span><h2>Caveats and notes</h2></summary>
+          <ul id="notes-list"></ul>
+        </details>
+      </section>
+    </div>
+    <section id="howto" aria-labelledby="howto-h">
+      <h2 id="howto-h">How to read this</h2>
+      <p>Seasons removed: we subtract each calendar month's average, so summer and winter don't hide a slow change.</p>
+      <p>The shaded band: the range of slopes the data can support. If a flat line fits inside it, we can't call the change real.</p>
+      <p>p-value: smaller means harder to explain by luck alone. 0.05 is the usual line for calling a change clear.</p>
+      <p>This shows whether a measurement changed here. It doesn't say why.</p>
+      <p id="howto-ac"></p>
+    </section>
+  </div>
+
+  <section id="ask" hidden aria-label="Ask a question"></section>
+
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p class="ai-label">Built with AI assistance</p>
+    <p>Data come from the sources named next to each number. Only public data.</p>
+    <ul id="footer-sources"></ul>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
