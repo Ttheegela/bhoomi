@@ -53,7 +53,7 @@ NO_CHANGE_CLAIMS = ("no clear change", "rule out no change", "no change is plaus
                     "n't show a clear change")
 # With several sources: a guessed reason for a difference, or a claim about how they relate (no caveat says either).
 GUESSED = ("likely because", "probably because", "likely due to", "probably due to", "differ somewhat",
-           "same gauge", "same station", "both used the gauge", "both use the gauge", "share a gauge", "shares a gauge")
+           "same gauge", "same station", "both used the gauge", "both use the gauge", "share a gauge", "shares a gauge", "gauge is also")
 # The prompt's fixed phrases with an outside number; they are removed before numbers are checked.
 ALLOWED = re.compile(r"\b0\.05 line|less than 0\.01|\b95\s*(?:%|percent)", re.I)
 NUM = re.compile(r"(?<![\w.])([-\u2212]?)(\d+(?:\.\d+)?)")  # a minus only when it isn't a hyphen after a word

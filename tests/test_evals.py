@@ -673,6 +673,23 @@ def test_own_record_misattributed_or_shared_gauge_fails(sentence):
     assert not real_ny(sentence)
 
 
+def test_composed_answer_with_missing_link_names_every_source():
+    calls = multi([REAL_COOPS, REAL_PSMSL])
+    text = NY_HEAD + "[AGREEING SOURCES] Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/."
+    assert not run.check(NY_CASE, fake_run(text.replace("[AGREEING SOURCES] ", CODE_SENT + " "), calls))["source_named"]
+    answer = compose(text, calls)
+    assert answer.count("https://psmsl.org/") == 1 and answer.count(CODE_SENT) == 1
+    out = run.check(NY_CASE, fake_run(answer, calls))
+    assert out["source_named"] and out["wording"]
+
+
+@pytest.mark.parametrize("caveat,ok", [("PSMSL's gauge is also The Battery, 1 km away.", False),
+                                       ("Its gauge is also The Battery.", False),
+                                       ("The PSMSL gauge is 1 km away.", True)])
+def test_shared_gauge_wording_fails(caveat, ok):
+    assert real_ny(CODE_SENT + " " + caveat) is ok
+
+
 @pytest.mark.parametrize("start", ["1899-01", "1911-09"])
 def test_own_record_live_periods_pass(start):
     psmsl = {**REAL_PSMSL, "period": {"start": start, "end": "2025-12"}}
