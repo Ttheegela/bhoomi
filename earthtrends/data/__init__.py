@@ -135,7 +135,7 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
     keep = [i for i, t in enumerate(times) if (not lo or t >= lo) and (not hi or t <= hi)]
     r["times"], r["values"] = [times[i] for i in keep], [values[i] for i in keep]
     if not any(v is not None for v in r["values"]):
-        raise ValueError(f"No {ghcn.PLAIN_NAME.get(variable, 'sea level')} data for that place and period.")
+        raise ValueError(f"No {ghcn.PLAIN_NAME.get(variable, entry['name'].lower())} data for that place and period.")
     if source == "ghcn":
         # only the years we fetched count: 1981 and last year are our own limits, not the station's
         first, last = ghcn.FIRST_DAY[:7], ghcn.last_day()[:7]

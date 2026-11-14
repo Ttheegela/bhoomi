@@ -23,7 +23,8 @@ TIMEOUT = httpx.Timeout(30, connect=5, write=10)
 # Data types that give each variable; the first group a station has enough record for is used.
 NEED = {"air_temp": [("TAVG",), ("TMAX", "TMIN")], "air_temp_max": [("TMAX",)], "precip": [("PRCP",)]}
 # Plain names for sentences users read (ghcn.py is imported by __init__.py, so the shared mapping lives here).
-PLAIN_NAME = {"air_temp": "air temperature", "air_temp_max": "daily high temperature", "precip": "rainfall"}
+PLAIN_NAME = {"air_temp": "air temperature", "air_temp_max": "daily high temperature", "precip": "rainfall",
+              "sea_level": "sea level"}
 HOW = {"air_temp": "mean", "air_temp_max": "max", "precip": "mean"}  # daily -> monthly rule
 NOTES = {"air_temp_max": "Each monthly value is the hottest single day of that month, not the average of the daily highs."}
 
@@ -99,7 +100,7 @@ def _years(span: tuple[str, str, float]) -> float:
 
 def _no_station(variable: str, nearest: tuple[float, dict] | None) -> ValueError:
     """One wording for every measurement, using the catalog's plain name. `nearest` is (km, station)."""
-    msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {PLAIN_NAME[variable]} data since 1981."
+    msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {PLAIN_NAME.get(variable, variable.replace("_", " "))} data since 1981."
     if nearest:
         msg += f" The nearest is {nearest[1]['name']}, {nearest[0]:.0f} km away."
     return ValueError(msg)

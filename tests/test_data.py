@@ -417,6 +417,19 @@ def test_cache_is_cleared_between_tests_part_2(counted):
     assert len(counted) == 1  # a leaked entry would have served this call without any upstream request
 
 
+def test_no_data_message_uses_a_new_measurements_own_name(offline, monkeypatch):
+    new = {"id": "groundwater", "name": "Groundwater level", "units": "m", "sources": ["power"], "start_year": 1981,
+           "resolution": "test", "good_for": "test"}
+    monkeypatch.setattr(data, "CATALOG", [*data.CATALOG, new])
+    monkeypatch.setitem(power.PARAMS, "groundwater", "T2M")
+    with pytest.raises(ValueError, match=r"^No groundwater level data for that place and period\.$"):
+        data.get_series("groundwater", 39.36, -74.42, start="1950", end="1951")
+    with pytest.raises(ValueError, match=r"^No sea level data for that place and period\.$"):
+        data.get_series("sea_level", 39.36, -74.42, start="1850", end="1851")
+    # a station measurement with no plain name must not crash the error
+    assert str(ghcn._no_station("ground_water", None)).startswith("No weather station within 50 km has 30 years of ground water data")
+
+
 def test_no_data_message_uses_plain_names(offline):
     with pytest.raises(ValueError, match=r"^No air temperature data for that place and period\.$"):
         data.get_series("air_temp", 39.36, -74.42, start="1950", end="1951")
@@ -514,6 +527,9 @@ def test_station_period_notes(offline2, monkeypatch):
     s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
     assert "This station's record starts in October 1986." in s["notes"]
     assert not any("record ends" in n for n in s["notes"])
+    for start in ("1950", "1981"):  # asking from before the station began, or from our own cutoff: still says so
+        s = data.get_series("air_temp_max", 28.58, 77.21, start=start, source="ghcn")
+        assert "This station's record starts in October 1986." in s["notes"], start
     data._cache.clear()
     s = data.get_series("air_temp_max", 28.58, 77.21, start="1990", source="ghcn")  # asked from 1990: no start note
     assert not any("record starts" in n for n in s["notes"])
