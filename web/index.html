@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<a class="skip" href="#answer">Skip to the answer</a>
+<a class="skip" id="skip" href="#h-explore">Skip to the content</a>
 
 <header>
   <div class="wrap">
@@ -16,12 +16,16 @@
       <h1>Trend Detective</h1>
       <p class="ai-label">Built with AI assistance</p>
     </div>
-    <p class="lead">Is it really changing here?<span class="lead-2"> Pick a place and a measurement.</span></p>
   </div>
 </header>
 
+<div class="wrap"><div id="tabbar" class="tabbar"></div></div>
+
 <main>
 <div class="wrap">
+
+<div id="panel-explore" class="panel">
+  <h2 id="h-explore" class="lead" tabindex="-1">Is it really changing here?<span class="lead-2"> Pick a place and a measurement.</span></h2>
 
   <form id="controls" novalidate autocomplete="off">
     <fieldset class="chips">
@@ -52,16 +56,17 @@
       </div>
     </details>
 
-    <div class="fields">
-      <div class="field span2 field-var">
+    <div id="pick" class="fields pick">
+      <div class="field field-var">
         <label for="variable">Measurement</label>
         <select id="variable" aria-describedby="variable-help"></select>
-        <p id="variable-help" class="help"></p>
       </div>
-      <div class="field span2" id="source-field" hidden>
+      <div class="field" id="source-field" hidden>
         <label for="source">Data source</label>
-        <select id="source"></select>
+        <select id="source" aria-describedby="source-help"></select>
       </div>
+      <p id="variable-help" class="help span2"></p>
+      <p id="source-help" class="help span2"></p>
     </div>
   </form>
 
@@ -78,11 +83,18 @@
           <p class="card-label">Our answer</p>
           <h2 id="verdict-heading" tabindex="-1" class="verdict-head"></h2>
           <div class="card-body">
+            <p id="verdict-big" class="big"></p>
+            <p id="verdict-lean" class="source" hidden></p>
             <div id="verdict-source" class="srcline"></div>
             <p id="verdict-p1"></p>
             <p id="verdict-calc" class="source"></p>
             <p id="verdict-p2"></p>
             <p id="verdict-evidence"></p>
+            <dl id="facts" class="facts"></dl>
+            <div class="caveats">
+              <p class="source">Caveats</p>
+              <ul id="notes-list"></ul>
+            </div>
           </div>
         </div>
         <div id="problem" class="card problem" role="alert" hidden>
@@ -94,6 +106,8 @@
 
       <div class="col-chart" id="chart-wrap" hidden>
         <figure id="chart-fig">
+          <p id="chart-head" class="chart-head"></p>
+          <p class="source t-only">Trend and range: our calculation.</p>
           <div id="chart-box"></div>
           <div id="chart-source" class="srcline"></div>
           <div id="legend" class="legend">
@@ -109,6 +123,7 @@
                 <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-des"/></svg>Seasons removed</li>
                 <li><svg width="32" height="12" aria-hidden="true"><circle cx="16" cy="6" r="3.5" class="s-year"/></svg>Yearly average, seasons removed</li>
                 <li class="t-only"><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-trend"/></svg>Trend line</li>
+                <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="c-zero"/></svg>No-change line</li>
                 <li class="t-only"><svg width="32" height="12" aria-hidden="true"><rect x="1" y="1" width="30" height="10" class="s-fan"/><line x1="1" y1="1" x2="31" y2="1" class="s-edge"/><line x1="1" y1="11" x2="31" y2="11" class="s-edge"/></svg>Range of the trend</li>
               </ul>
             </div>
@@ -136,19 +151,6 @@
   </section>
 
   <div id="more" hidden>
-    <div class="two">
-      <section id="numbers" aria-labelledby="numbers-h">
-        <h2 id="numbers-h">The numbers</h2>
-        <dl id="numbers-list"></dl>
-        <div id="numbers-source" class="srcline"></div>
-      </section>
-      <section id="notes" aria-label="Caveats and notes">
-        <details open>
-          <summary><span class="mark" aria-hidden="true"></span><h2>Caveats and notes</h2></summary>
-          <ul id="notes-list"></ul>
-        </details>
-      </section>
-    </div>
     <section id="howto" aria-labelledby="howto-h">
       <h2 id="howto-h">How to read this</h2>
       <p>Seasons removed: we subtract each calendar month's average, so summer and winter don't hide a slow change.</p>
@@ -159,8 +161,205 @@
     </section>
   </div>
 
-  <section id="ask" hidden aria-label="Ask a question"></section>
+</div>
 
+<div id="panel-ask" class="panel narrow">
+  <h2 id="h-ask" tabindex="-1">Ask a question</h2>
+  <noscript><p>Asking a question needs JavaScript. Turn it on to use this tab.</p></noscript>
+  <div id="ask-ui" hidden>
+    <p id="ask-lead" class="lead-p">Ask about a place in your own words. We look up public data and tell you whether it changed over time. We can't forecast the future.</p>
+    <p id="ask-privacy">Your question is sent to an AI model provider so it can be answered. Don't include personal details.</p>
+    <p id="ask-keep" class="small">Your conversation stays in this browser tab. Reloading clears it. Nothing is saved on our server.</p>
+
+    <div id="ask-off" hidden>
+      <p><strong>Asking questions isn't available right now.</strong></p>
+      <p>You can still pick a place and a measurement.</p>
+      <button type="button" id="ask-off-go" class="btn">Go to Explore</button>
+    </div>
+
+    <a id="ask-jump" class="jump" href="#ask-q" hidden>Go to the question box</a>
+
+    <div id="ask-empty">
+      <p id="ask-try">Try one of these:</p>
+      <div id="ask-examples" class="examples"></div>
+    </div>
+
+    <div id="ask-thread" role="log" aria-label="Conversation"></div>
+    <p id="ask-hint" class="small" hidden>Ask a follow-up, for example: "What about Delhi?"</p>
+    <p id="ask-status" role="status" class="small"></p>
+
+    <form id="ask-form" novalidate>
+      <p id="ask-nohist" class="small" hidden>For now each question is answered on its own. Name the place again in a follow-up.</p>
+      <label for="ask-q">Your question</label>
+      <div class="ask-row">
+        <textarea id="ask-q" rows="2" maxlength="500" placeholder="Is sea level rising in New York?" aria-describedby="ask-help ask-privacy ask-count ask-err"></textarea>
+        <div class="ask-btns">
+          <button type="submit" id="ask-go" class="btn primary">Ask</button>
+          <button type="button" id="ask-cancel" class="btn" hidden>Cancel</button>
+        </div>
+      </div>
+      <p id="ask-err" class="field-err" hidden></p>
+      <p id="ask-help" class="help">Press Enter to ask. Shift+Enter starts a new line.</p>
+      <p id="ask-count" class="help" hidden></p>
+    </form>
+  </div>
+</div>
+<div id="panel-connect" class="panel narrow">
+  <h2 id="h-connect" tabindex="-1">Use Trend Detective in your own AI agent</h2>
+  <p class="lead-p">Connect an AI app to Trend Detective and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named.</p>
+  <p class="small">Works with AI agents such as Claude, ChatGPT and GitHub Copilot.</p>
+  <p>MCP is a standard way for an AI app to use outside tools. Adding this server lets your AI look up these trends itself.</p>
+
+  <div class="addr-block">
+    <label for="addr-top">Trend Detective server address</label>
+    <div class="copyrow"><input id="addr-top" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+    <p class="small">This address is for AI apps. It is not a web page. It needs no key and no sign-in.</p>
+  </div>
+  <p id="copy-status" class="sr-only" role="status"></p>
+
+  <section aria-labelledby="h-apps">
+    <h2 id="h-apps">Pick your AI app</h2>
+    <div id="apptabs" class="apptabs"></div>
+
+    <div id="app-claude" class="app-panel">
+      <h3>Claude</h3>
+      <p class="small">claude.ai and Claude desktop</p>
+      <ol>
+        <li>Open Customize, then Connectors.</li>
+        <li>Click "+ Add", then "Add custom connector".</li>
+        <li>Enter the name "Trend Detective" and paste the server address, then click "Continue".</li>
+        <li>Under Authentication choose "No sign in", then click "Add".</li>
+        <li>In a chat, click "+" at the lower left, then "Connectors", and switch Trend Detective on.</li>
+      </ol>
+      <label for="addr-claude">Trend Detective server address</label>
+      <div class="copyrow"><input id="addr-claude" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <p class="small">Free plans can add one custom connector. On Team and Enterprise plans an owner has to add it.</p>
+      <a class="srclink" href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" rel="noopener">Claude setup docs ↗</a>
+      <p class="small">Checked 14 November 2026</p>
+    </div>
+
+    <div id="app-claude-code" class="app-panel">
+      <h3>Claude Code</h3>
+      <p class="small">In your terminal</p>
+      <ol>
+        <li>In your terminal run the command in the box.</li>
+      </ol>
+      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="Claude Code command" data-copy="command"><code>claude mcp add --transport http trend-detective https://trend-detective-six.vercel.app/mcp/</code></pre></div>
+      <ol start="2">
+        <li>Start Claude Code and type <code>/mcp</code>. Trend Detective should show as connected.</li>
+        <li>Optional: add <code>--scope user</code> to the command to use it in every project.</li>
+      </ol>
+      <p class="small">The command <code>claude mcp list</code> also shows it.</p>
+      <label for="addr-claude-code">Trend Detective server address</label>
+      <div class="copyrow"><input id="addr-claude-code" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <a class="srclink" href="https://code.claude.com/docs/en/mcp" rel="noopener">Claude Code setup docs ↗</a>
+      <p class="small">Checked 14 November 2026</p>
+    </div>
+
+    <div id="app-cursor" class="app-panel">
+      <h3>Cursor</h3>
+      <ol>
+        <li>Create or open <code>~/.cursor/mcp.json</code> (all projects) or <code>.cursor/mcp.json</code> (one project).</li>
+        <li>Paste the entry from "Prefer a settings file?" below, using <code>url</code> and no <code>type</code>.</li>
+        <li>Open Customize and check that Trend Detective is listed and on.</li>
+      </ol>
+      <label for="addr-cursor">Trend Detective server address</label>
+      <div class="copyrow"><input id="addr-cursor" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <p class="small">We could not confirm the menu names for adding a server in the Cursor app, so we show the config file instead.</p>
+      <a class="srclink" href="https://cursor.com/docs/context/mcp" rel="noopener">Cursor setup docs ↗</a>
+      <p class="small">Checked 14 November 2026</p>
+    </div>
+
+    <div id="app-vscode" class="app-panel">
+      <h3>VS Code</h3>
+      <p class="small">With GitHub Copilot</p>
+      <ol>
+        <li>Open the Command Palette and run "MCP: Add Server".</li>
+        <li>Choose "HTTP (HTTP or Server-Sent Events)" and paste the server address.</li>
+        <li>Name it "trend-detective", then choose Global (or the workspace if you prefer).</li>
+        <li>Accept the trust prompt after reading it, then ask GitHub Copilot a question and look for Trend Detective's tools.</li>
+      </ol>
+      <label for="addr-vscode">Trend Detective server address</label>
+      <div class="copyrow"><input id="addr-vscode" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <p class="small">Or put the VS Code block from "Prefer a settings file?" in <code>.vscode/mcp.json</code>. VS Code uses <code>servers</code>, not <code>mcpServers</code>.</p>
+      <a class="srclink" href="https://code.visualstudio.com/docs/copilot/customization/mcp-servers" rel="noopener">VS Code MCP servers docs ↗</a>
+      <a class="srclink" href="https://code.visualstudio.com/docs/agents/reference/mcp-configuration" rel="noopener">VS Code MCP configuration reference ↗</a>
+      <p class="small">Checked 14 November 2026</p>
+    </div>
+
+    <div id="app-other" class="app-panel">
+      <h3>Any other AI agent</h3>
+      <ol>
+        <li>Open your AI agent's settings for MCP servers or connectors.</li>
+        <li>Add a new server.</li>
+        <li>Paste this address. No key and no sign-in are needed.</li>
+      </ol>
+      <label for="addr-other">Trend Detective server address</label>
+      <div class="copyrow"><input id="addr-other" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
+      <p class="small">If it asks for a type, choose "HTTP" or "streamable HTTP".</p>
+      <a class="srclink" href="https://modelcontextprotocol.io" rel="noopener">About MCP ↗</a>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-dev">
+    <h2 id="h-dev">Prefer a settings file?</h2>
+    <p>Paste this into your app's settings file instead of following the steps above. Field names differ between apps, so match yours.</p>
+    <div id="cfgtabs" class="apptabs cfgtabs"></div>
+    <div id="cfg-claude-code" class="cfg-panel">
+      <p class="small">Claude Code, project file <code>.mcp.json</code>. Claude Code needs <code>"type": "http"</code>.</p>
+      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="Claude Code config" data-copy="config"><code>{
+  "mcpServers": {
+    "trend-detective": {
+      "type": "http",
+      "url": "https://trend-detective-six.vercel.app/mcp/"
+    }
+  }
+}</code></pre></div>
+    </div>
+    <div id="cfg-cursor" class="cfg-panel">
+      <p class="small">Cursor, file <code>mcp.json</code>. No <code>type</code>.</p>
+      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="Cursor config" data-copy="config"><code>{
+  "mcpServers": {
+    "trend-detective": {
+      "url": "https://trend-detective-six.vercel.app/mcp/"
+    }
+  }
+}</code></pre></div>
+    </div>
+    <div id="cfg-vscode" class="cfg-panel">
+      <p class="small">VS Code, file <code>.vscode/mcp.json</code>.</p>
+      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="VS Code config" data-copy="config"><code>{
+  "servers": {
+    "trend-detective": {
+      "type": "http",
+      "url": "https://trend-detective-six.vercel.app/mcp/"
+    }
+  }
+}</code></pre></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-tools">
+    <h2 id="h-tools">What you can ask once connected</h2>
+    <dl class="tools">
+      <div><dt><code>list_variables</code></dt><dd>Lists what we can measure, such as air temperature and sea level, and where the data come from.</dd></div>
+      <div><dt><code>get_series</code></dt><dd>Gets the month-by-month values for a place.</dd></div>
+      <div><dt><code>detect_trend</code></dt><dd>Says whether it is changing at a place, how fast, and how sure we are, using the Mann-Kendall test and Sen's slope.</dd></div>
+    </dl>
+    <p>Try asking:</p>
+    <ul>
+      <li>Is sea level rising in New York?</li>
+      <li>Are the hottest days getting hotter in Delhi?</li>
+      <li>Has anything changed in Visakhapatnam (17.69, 83.22) since 1981?</li>
+    </ul>
+    <p class="small">Your AI app may ask your permission before it calls a tool.</p>
+  </section>
+
+  <section aria-labelledby="h-can">
+    <h2 id="h-can">What it can and can't do</h2>
+    <p>It can read public climate data from the sources named next to each result. It can't see your files, your chats or anything else on your device, and it can't change anything. It only reads.</p>
+  </section>
+</div>
 </div>
 </main>
 
@@ -173,5 +372,7 @@
 </footer>
 
 <script src="app.js"></script>
+<script src="connect.js"></script>
+<script src="ask.js"></script>
 </body>
 </html>
