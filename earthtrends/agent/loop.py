@@ -119,6 +119,7 @@ AGREE_NOTE = ("Same verdict as the default source, so its own numbers are left o
               f"Write {MARKER} where the agreeing sources belong.")
 RESTORED_NOTE = ("These sources no longer all agree, so here are the full results of those sent earlier without "
                  "their numbers.")
+DEG_C = re.compile(r"(?<![A-Za-z])degC(?![A-Za-z])")  # the unit on its own, not inside another word
 _YM = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])")
 
 
@@ -237,7 +238,7 @@ def compose(text: str, calls: list[dict]) -> str:
     if missing:
         body = out.rstrip()
         out = body + (" " if body else "") + " ".join(missing) + out[len(body):]
-    return out
+    return DEG_C.sub("\u00b0C", out)  # the tool spells the unit "degC"; the reader sees "°C", as on the page
 
 
 def _hidden(calls: list[dict]) -> set[int]:

@@ -76,6 +76,14 @@ def test_p_value_phrases_invented_when_untrue(phrase, p, bad):
     assert run.invented_numbers(f"The p-value is {phrase}.", [{**AC, "p_value": p}]) == bad
 
 
+def test_degree_sign_and_degc_score_the_same():
+    r = {**AC, "units": "degC", "slope_per_decade": 0.2512, "ci_low": 3.0, "ci_high": 0.42}
+    for unit in ("degC", "°C"):
+        assert run.invented_numbers(f"Rising by 0.25 {unit} per decade (range 3 {unit} to 0.42).", [r]) == []
+        assert run.invented_numbers(f"Rising by 0.26 {unit} per decade.", [r]) == ["0.26"]
+    assert run.invented_numbers("up 4 °C", [r]) == ["4"]  # a small number before °C is still checked
+
+
 def test_wrong_period_fails_wording():
     assert run.check(CASE, fake_run())["wording"] is True  # "from 1911 to 2026" is the result's period
     out = run.check(CASE, fake_run(ANSWER.replace("from 1911 to 2026", "from October 1911 to October 2026")))

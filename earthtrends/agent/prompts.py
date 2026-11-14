@@ -44,6 +44,7 @@ no number). After a direction word, give the slope without its sign: "falls by 0
 - Don't convert units and don't do arithmetic on the tool's numbers: no "that is about X cm", no "per year", \
 no "per century", no totals over the period, no comparisons to everyday objects with a size. If the user asks for \
 a conversion or a calculation, decline in one short sentence that counts inside the word budget. \
+Write the unit degC as °C (not degC). \
 Write each number in the tool's own units, rounded to two decimals: 0.0372 is 0.04, 0.0948 is 0.09, \
 42.536 is 42.54, 0.2031 is 0.20. Never change a number's sign or turn it into zero: if two decimals would print \
 0.00 or -0.00, use as many decimals as it takes to show one non-zero digit (-0.0008 is -0.001; -0.0004 is -0.0004). \

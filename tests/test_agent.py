@@ -1093,6 +1093,23 @@ def test_period_retry_respects_budget(fake, monkeypatch):
     assert loop.ask("q", model="fake:m")["answer"] == RIGHT and len(fake.script) == 1
 
 
+# ---- unit: the reader sees °C, the tool keeps degC ----
+
+@pytest.mark.parametrize("text,want", [
+    ("Rising by 0.25 degC per decade.", "Rising by 0.25 °C per decade."),
+    ("Rising by 0.25 °C per decade.", "Rising by 0.25 °C per decade."),  # already right: unchanged
+    ("Range (degC) and 0.1degC.", "Range (°C) and 0.1°C."),
+    ("The degCelsius and xdegC words stay.", "The degCelsius and xdegC words stay."),
+])
+def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
+    result = {**TREND, "units": "degC"}
+    monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: result)
+    fake.script = [step(tool_calls=[call()]), step(text), step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == want and len(fake.script) == 1
+    assert r["tool_calls"][0]["result"]["units"] == "degC"  # the tool result is not changed
+
+
 # ---- prompt ----
 
 @pytest.mark.parametrize("phrase", [
@@ -1103,6 +1120,7 @@ def test_period_retry_respects_budget(fake, monkeypatch):
     "would be very unlikely if nothing were really changing",
     'Below 0.001, write "below 0.001" or "less than 0.001", or only a plain phrase',
     "never its raw tiny number",
+    "Write the unit degC as °C (not degC).",
     'write "less than 0.01"',
     "From 0.045 up to 0.055, use three decimals",
     '0.0549 is "0.055"), so it never prints as "0.05"',
