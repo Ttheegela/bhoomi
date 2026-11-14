@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<a class="skip" href="#answer">Skip to the answer</a>
+<a class="skip" id="skip" href="#h-explore">Skip to the content</a>
 
 <header>
   <div class="wrap">
@@ -16,12 +16,16 @@
       <h1>Trend Detective</h1>
       <p class="ai-label">Built with AI assistance</p>
     </div>
-    <p class="lead">Is it really changing here?<span class="lead-2"> Pick a place and a measurement.</span></p>
   </div>
 </header>
 
+<div class="wrap"><div id="tabbar" class="tabbar"></div></div>
+
 <main>
 <div class="wrap">
+
+<div id="panel-explore" class="panel">
+  <h2 id="h-explore" class="lead" tabindex="-1">Is it really changing here?<span class="lead-2"> Pick a place and a measurement.</span></h2>
 
   <form id="controls" novalidate autocomplete="off">
     <fieldset class="chips">
@@ -159,7 +163,15 @@
     </section>
   </div>
 
-  <section id="ask" hidden aria-label="Ask a question"></section>
+</div>
+
+<div id="panel-ask" class="panel">
+  <h2 id="h-ask" tabindex="-1">Ask a question</h2>
+</div>
+
+<div id="panel-connect" class="panel">
+  <h2 id="h-connect" tabindex="-1">Use Trend Detective in your AI</h2>
+</div>
 
 </div>
 </main>

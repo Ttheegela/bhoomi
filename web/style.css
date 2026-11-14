@@ -45,8 +45,9 @@ header { padding: var(--s4) 0 0; }
 .ai-label { display: inline-block; margin: 0; padding: var(--s1) var(--s2); border: 1px solid var(--line);
   border-radius: 6px; font-size: 14px; color: var(--ink-2); }
 .lead { font-size: 18px; margin: var(--s3) 0 var(--s4); }
+h2.lead { font-weight: 400; margin: 0; }
 
-main > .wrap > * + * { margin-top: var(--gap); }
+main .panel > * + * { margin-top: var(--gap); }
 main > .wrap { padding-bottom: var(--gap); }
 
 /* controls */
@@ -170,9 +171,20 @@ footer li a { display: inline-flex; align-items: center; min-height: 48px; color
 .lead-2 { display: inline; }
 @media (max-width: 599px) {
   .lead-2 { display: none; }
-  .lead { margin: var(--s2) 0 var(--s3); }
-  main > .wrap > * + * { margin-top: var(--s3); }
+  main .panel > * + * { margin-top: var(--s3); }
   #coords, .fields { margin-top: var(--s3); }
   .card-label { padding: var(--s2) var(--s4) var(--s1); }
 }
 #coords summary { color: var(--ink); }
+
+/* tab bar (not sticky) */
+.tabbar { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: var(--s3); margin: var(--s3) 0 var(--s3); }
+.tabbar:empty { display: none; }
+.tab { min-height: 48px; padding: 0 var(--s2); font: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
+@media (min-width: 600px) {
+  .tabbar { display: flex; margin: var(--s4) 0; }
+  .tab { padding: 0 var(--s5); }
+}
+.panel > h2 { margin-bottom: 0; }

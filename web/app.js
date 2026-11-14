@@ -183,6 +183,38 @@ function nearestIndex(ms, m) {
   return Math.abs(ms[lo] - m) <= Math.abs(ms[hi] - m) ? lo : hi;
 }
 
+/* ---------- tabs and the URL hash (pure) ---------- */
+
+const TABS = [
+  { id: 'explore', label: 'Explore', title: 'Trend Detective' },
+  { id: 'ask', label: 'Ask', title: 'Trend Detective: Ask' },
+  { id: 'connect', label: 'Use in your AI', title: 'Trend Detective: Use in your AI' },
+];
+const APPS = ['claude', 'claude-code', 'chatgpt', 'cursor', 'vscode', 'other'];
+
+// Hash -> { tab, app, explore }. Missing or unknown tab = explore; unknown app = claude.
+// explore is set only for a complete, in-range variable/lat/lon (old share links); else null.
+function parseHash(raw) {
+  const h = new URLSearchParams(String(raw).replace(/^#/, ''));
+  const t = h.get('tab'), a = h.get('app');
+  const num = (k) => { const r = (h.get(k) || '').trim(); return r === '' ? NaN : Number(r); };
+  const lat = num('lat'), lon = num('lon');
+  const ok = !!h.get('variable') && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  return {
+    tab: t === 'ask' || t === 'connect' ? t : 'explore',
+    app: APPS.includes(a) ? a : 'claude',
+    explore: ok ? { variable: h.get('variable'), lat, lon, source: h.get('source') || null } : null,
+  };
+}
+// { tab, app, explore } -> hash text without '#'. Explore keeps its old key-less form.
+function writeHash(st) {
+  if (st.tab === 'ask') return 'tab=ask';
+  if (st.tab === 'connect') return 'tab=connect' + (st.app && st.app !== 'claude' ? '&app=' + st.app : '');
+  const e = st.explore;
+  if (!e) return '';
+  return `variable=${e.variable}&lat=${Number(e.lat).toFixed(2)}&lon=${Number(e.lon).toFixed(2)}` + (e.source ? '&source=' + encodeURIComponent(e.source) : '');
+}
+
 /* ---------- DOM helpers ---------- */
 
 const $ = (id) => document.getElementById(id);
@@ -202,6 +234,25 @@ function svg(tag, attrs, text) {
 }
 function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
 
+// Standard tabs pattern (automatic activation): arrows wrap, Home/End jump, one tab stop.
+function wireTablist(tabs, activate) {
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => activate(i, false));
+    t.addEventListener('keydown', (e) => {
+      const n = tabs.length;
+      const j = e.key === 'ArrowRight' ? (i + 1) % n : e.key === 'ArrowLeft' ? (i + n - 1) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
+      if (j < 0) return;
+      e.preventDefault();
+      tabs[j].focus();
+      activate(j, true);
+    });
+  });
+}
+function selectTab(tabs, panels, i) {
+  tabs.forEach((t, k) => { t.setAttribute('aria-selected', String(k === i)); t.tabIndex = k === i ? 0 : -1; });
+  panels.forEach((p, k) => { p.hidden = k !== i; });
+}
+
 const isHttps = (src) => !!src && typeof src.url === 'string' && src.url.startsWith('https://');
 // One block-level 48 px line: "<label>: <name> ↗" as a link (https URLs only), plain text without the arrow otherwise.
 function srcBlock(node, label, source) {
@@ -218,6 +269,7 @@ function srcLink(node, source) {
 
 /* ---------- state ---------- */
 
+const tabState = { tab: 'explore', app: 'claude' };
 const state = { variables: [], req: 0, series: null, trend: null, selIdx: null, fromGeo: false, params: null, slowTimer: 0, chart: null };
 
 function placeOf(t) {
@@ -318,7 +370,7 @@ function submit(user) {
     state.series = null; state.trend = null;
     return;
   }
-  if (!state.fromGeo) history.replaceState(null, '', `#variable=${p.variable}&lat=${p.lat.toFixed(2)}&lon=${p.lon.toFixed(2)}`);
+  if (!state.fromGeo && tabState.tab === 'explore') history.replaceState(null, '', '#' + writeHash({ tab: 'explore', explore: p }));
   markChips();
   run(p, user);
 }
@@ -656,18 +708,72 @@ function renderChart(s, t) {
 
 /* ---------- start ---------- */
 
-// Only a complete, in-range hash is used; anything else is ignored and the default preset loads.
-function readHash() {
-  const h = new URLSearchParams(location.hash.slice(1));
-  const num = (k) => { const r = (h.get(k) || '').trim(); return r === '' ? NaN : Number(r); };
-  const lat = num('lat'), lon = num('lon');
-  if (!h.get('variable') || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-  return { variable: h.get('variable'), lat, lon };
-}
-
 function fillFooter() {
   const ul = $('footer-sources');
   Object.values(SOURCES).forEach((src) => { const li = el('li', {}); srcLink(li, src); ul.append(li); });
+}
+
+/* ---------- the tab bar ---------- */
+
+let tabEls = [], panelEls = [];
+function hashFor(id) {
+  if (id === 'explore') return state.params && !state.fromGeo ? writeHash({ tab: 'explore', explore: state.params }) : '';
+  return writeHash({ tab: id, app: tabState.app });
+}
+function showTab(id, push) {
+  tabState.tab = id;
+  const i = TABS.findIndex((t) => t.id === id);
+  selectTab(tabEls, panelEls, i);
+  document.title = TABS[i].title;
+  $('skip').setAttribute('href', '#h-' + id);
+  if (push) {
+    const h = hashFor(id);
+    if (h !== location.hash.slice(1)) history.pushState(null, '', h ? '#' + h : location.pathname + location.search);
+  }
+}
+function buildTabbar() {
+  const bar = $('tabbar');
+  bar.setAttribute('role', 'tablist');
+  bar.setAttribute('aria-label', 'Sections');
+  TABS.forEach((t) => {
+    const b = el('button', { type: 'button', role: 'tab', id: 'tab-' + t.id, 'aria-controls': 'panel-' + t.id, class: 'tab' }, t.label);
+    bar.append(b);
+    const p = $('panel-' + t.id);
+    p.setAttribute('role', 'tabpanel');
+    p.setAttribute('aria-labelledby', 'tab-' + t.id);
+    tabEls.push(b); panelEls.push(p);
+  });
+  wireTablist(tabEls, (i) => showTab(TABS[i].id, true));
+}
+
+// The hash changed (Back, Forward, or an edited address): show what it says.
+function sameExplore(a, b) {
+  return !!a && !!b && a.variable === b.variable && Number(a.lat).toFixed(2) === Number(b.lat).toFixed(2)
+    && Number(a.lon).toFixed(2) === Number(b.lon).toFixed(2) && (a.source || null) === (b.source || null);
+}
+function onLocation() {
+  const h = parseHash(location.hash);
+  if (typeof setApp === 'function' && h.app !== tabState.app) setApp(h.app);
+  showTab(h.tab, false);
+  if (h.explore && state.variables.length && !sameExplore(h.explore, state.params)) applyExplore(h.explore, false);
+}
+
+// Put a place, measurement and source into the controls and run it.
+function applyExplore(e, user) {
+  state.fromGeo = false;
+  $('lat').value = e.lat; $('lon').value = e.lon;
+  $('variable').value = e.variable;
+  syncVariableUI();
+  if (e.source && [...$('source').options].some((o) => o.value === e.source)) $('source').value = e.source;
+  if (!PRESETS.some((p) => Math.abs(p.lat - e.lat) <= 0.005 && Math.abs(p.lon - e.lon) <= 0.005)) openCoords();
+  markChips();
+  submit(user);
+}
+// "Show on chart" from an Ask answer: a normal Explore hash entry, then the normal Explore flow.
+function showOnChart(e) {
+  history.pushState(null, '', '#' + writeHash({ tab: 'explore', explore: e }));
+  showTab('explore', false);
+  applyExplore(e, true);
 }
 
 async function init() {
@@ -681,13 +787,8 @@ async function init() {
   }
   state.variables = r.body;
   fillVariables();
-  const h = readHash();
-  const start = h && varById(h.variable) ? h : PRESETS[0];
-  $('lat').value = start.lat; $('lon').value = start.lon; $('variable').value = start.variable;
-  if (!PRESETS.some((p) => Math.abs(p.lat - start.lat) <= 0.005 && Math.abs(p.lon - start.lon) <= 0.005)) openCoords();
-  syncVariableUI();
-  markChips();
-  submit(false);
+  const h = parseHash(location.hash).explore;
+  applyExplore(h && varById(h.variable) ? h : PRESETS[0], false);
 }
 
 buildChips();
@@ -701,5 +802,9 @@ window.addEventListener('resize', () => {
   const b = layoutFor(window.innerWidth).vw;
   if (b !== lastBand && state.series && !$('chart-wrap').hidden) { lastBand = b; renderChart(state.series, state.trend); }
 });
+buildTabbar();
+showTab(parseHash(location.hash).tab, false);
+window.addEventListener('popstate', onLocation);
+window.addEventListener('hashchange', onLocation);
 init();
 
