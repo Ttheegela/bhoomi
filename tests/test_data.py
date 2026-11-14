@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from earthtrends import data
-from earthtrends.data import coops, era5, ghcn, monthly, power, psmsl, upstream
+from earthtrends.data import coops, era5, ghcn, grace, monthly, power, psmsl, upstream
 
 FX = Path(__file__).parent / "fixtures"
 
@@ -131,7 +131,7 @@ def test_tmax_label_and_note(offline):
 
 def test_catalog():
     assert {v["id"]: v["sources"][0] for v in data.list_variables()} == {
-        "air_temp": "power", "air_temp_max": "power", "precip": "power", "sea_level": "coops"}
+        "air_temp": "power", "air_temp_max": "power", "precip": "power", "sea_level": "coops", "water_storage": "grace"}
 
 
 # ---- era5 and ghcn ----
@@ -899,3 +899,136 @@ def test_station_error_wording_is_the_same_for_every_measurement():
             ghcn.ranked(28.58, 77.21, [far], variable)
         assert str(e.value).startswith(f"No weather station within 50 km has 30 years of {plain} data since 1981. The nearest is FARAWAY, ")
         assert "air_temp" not in str(e.value) and "PRCP" not in str(e.value)  # no raw ids
+
+
+# ---- grace: land water storage from NASA GSFC mascons ----
+# tests/fixtures/grace_{placement,main,times}.txt are cut from the provider's real files (GSFC.glb.200204_202606_RL06v2.0_OBP-ICE6GD,
+# fetched 2026-11-14 from https://earth.gsfc.nasa.gov/sites/default/files/geo/GSFC.glb_.200204_202606_RL06v2.0_OBP-ICE6GD.zip):
+# the header lines are real, except that the counts (mascons, solutions) are edited to match the few rows kept,
+# and the main file keeps only the first 4 columns of its rows.
+import importlib.util
+
+import numpy as np
+
+_spec = importlib.util.spec_from_file_location("build_grace", Path(__file__).parent.parent / "scripts" / "build_grace.py")
+build_grace = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(build_grace)
+
+
+@pytest.fixture
+def fake_grace(monkeypatch):
+    """fake_grace(cells, mm): cells are (lat, lon, area km2) per land mascon, mm one row per mascon, one value per month."""
+    def use(cells, mm, months=("2020-01", "2020-02", "2020-04")):
+        d = {"months": np.array(months), "lat": np.array([c[0] for c in cells], np.float32),
+             "lon": np.array([c[1] for c in cells], np.float32), "area": np.array([c[2] for c in cells], np.float32),
+             "mm": np.array(mm, np.int16)}
+        monkeypatch.setattr(grace, "load", lambda: d)
+    return use
+
+
+def block(lat0, lons, lats=(0, 1)):
+    return [(la + lat0, lo, 100.0) for la in lats for lo in lons]
+
+
+def test_grace_box_and_area_weighting(fake_grace):
+    cells = block(0, [-2, -1, 0, 1, 2])  # 10 cells inside the box around (0, 0)
+    cells += [(0, 2.5, 100.0), (2.5, 0, 100.0)]  # just outside: 2.5 degrees away
+    cells[0] = (cells[0][0], cells[0][1], 300.0)  # one cell with three times the area
+    fake_grace(cells, [[500, 0, 50]] + [[100, 0, 50]] * 9 + [[9999, 9999, 9999]] * 2)
+    s = data.get_series("water_storage", 0, 0)
+    # first month: (300*500 + 9*100*100) / 1200 = 200 mm = 20 cm; the two cells outside the box do not count
+    assert s["times"] == ["2020-01", "2020-02", "2020-03", "2020-04"]
+    assert s["values"] == [20.0, 0.0, None, 5.0]  # 2020-03 has no solution: null, and the axis has no gap
+    assert s["units"] == "cm" and s["freq"] == "monthly" and s["variable"] == "water_storage"
+    assert s["place"] == {"name": "Average of 10 land cells about 400 km across", "lat": 0.0, "lon": 0.0}
+    assert s["source"]["id"] == "grace" and s["source"]["url"].startswith("https://earth.gsfc.nasa.gov/")
+    assert "2004 to 2009 average" in " ".join(s["notes"]) and any("10 land cells" in n for n in s["notes"])
+    assert any("mid-2017 and mid-2018" in n for n in s["notes"])
+
+
+def test_grace_box_widens_with_latitude(fake_grace):
+    cells = [(60.0, -3 + 0.75 * k, 100.0) for k in range(9)] + [(60.0, 4.5, 100.0)]  # 9 cells within 3 degrees, one at 4.5
+    fake_grace(cells, [[10, 10, 10]] * 10)
+    # 2 degrees / cos(60 degrees) = 4 degrees of longitude, so 9 cells; a box 2 degrees wide would have only 5
+    assert data.get_series("water_storage", 60, 0)["place"]["name"].startswith("Average of 9 land cells")
+    fake_grace(cells[:9], [[10, 10, 10]] * 9)
+    with pytest.raises(ValueError, match="no land water storage"):  # at the equator the same cells give only 5
+        data.get_series("water_storage", 0, 0)
+
+
+def test_grace_date_line(fake_grace):
+    fake_grace(block(0, [178, 179, 180, -179, -178]), [[10, 10, 10]] * 10)
+    for lon, n in ((180, 10), (-179.5, 8), (179.5, 8)):  # cells 178 and -178 are 2.5 degrees from +-179.5 / 179.5
+        assert data.get_series("water_storage", 0.5, lon)["place"]["name"] == f"Average of {n} land cells about 400 km across"
+
+
+def test_grace_too_few_land_cells(fake_grace):
+    fake_grace(block(0, [0, 1, 2, 3, 4])[:grace.MIN_CELLS - 1], [[10, 10, 10]] * (grace.MIN_CELLS - 1))
+    for lat, lon in ((0.5, 1.5), (40, 100)):  # one cell short; none at all
+        with pytest.raises(ValueError) as e:
+            data.get_series("water_storage", lat, lon)
+        assert str(e.value) == grace.NO_DATA and "ocean or ice" in str(e.value)
+
+
+def test_grace_start_end_and_all_empty(fake_grace):
+    fake_grace(block(0, [0, 1, 2, 3, 4]), [[10, 20, 30]] * 10)
+    s = data.get_series("water_storage", 1, 2, start="2020-02", end="2020-03")
+    assert s["times"] == ["2020-02", "2020-03"] and s["values"] == [2.0, None]
+    with pytest.raises(ValueError, match="No land water storage data"):
+        data.get_series("water_storage", 1, 2, start="2020-03", end="2020-03")
+    with pytest.raises(ValueError, match="not available from 'power'"):
+        data.get_series("water_storage", 1, 2, source="power")
+
+
+def test_grace_catalog_entry():
+    e = next(v for v in data.list_variables() if v["id"] == "water_storage")
+    assert e["sources"] == ["grace"] and e["units"] == "cm" and e["start_year"] == 2002 and e["good_for"] and e["resolution"]
+
+
+def test_grace_committed_file():
+    d = grace.load()
+    assert d["mm"].shape == (len(d["lat"]), len(d["months"])) and d["mm"].dtype == np.int16
+    assert d["months"][0] == "2002-04" and len(d["months"]) == 258 and len(d["lat"]) > 11000
+    s = data.get_series("water_storage", 28.61, 77.21)  # Delhi: land
+    assert len(s["times"]) == 291 and sum(v is not None for v in s["values"]) == 258
+    assert s["values"][s["times"].index("2017-12")] is None
+    assert max(len(n) for n in s["notes"]) <= 200
+    for lat, lon in ((0, -30), (-80, 0)):  # mid-ocean, Antarctica
+        with pytest.raises(ValueError, match="ocean or ice"):
+            data.get_series("water_storage", lat, lon)
+
+
+# ---- scripts/build_grace.py ----
+
+def fx_lines(name):
+    return (FX / name).read_text().splitlines()
+
+
+def test_build_grace_parsers_on_real_layout():
+    lat, lon, area, flag = build_grace.parse_placement(fx_lines("grace_placement.txt"))
+    assert list(flag) == [1, 1, 80, 80, 80, 90] and lat[2] == 37.0 and area[2] == 12383.61
+    assert lon[0] == 315 - 360 and abs(lon[3] - (281.6027875 - 360)) < 1e-9  # 0 to 360 -> -180 to 180
+    assert build_grace.parse_times(fx_lines("grace_times.txt")) == ["2002-04", "2002-05", "2002-08", "2002-09"]  # gap: no 2002-06/07
+    head, rows = build_grace.split_header(fx_lines("grace_main.txt"))
+    assert build_grace.check_main_header(head) == (6, 4)
+    cm = build_grace.read_land_rows(rows, flag, 4)
+    assert cm.shape == (3, 4)  # only the three land rows
+    months, mm = build_grace.to_months(cm, ["2002-04", "2002-04", "2002-08", "2002-09"])  # two solutions in April: averaged
+    assert months == ["2002-04", "2002-08", "2002-09"] and mm.dtype == np.int16 and mm.shape == (3, 3)
+    assert mm[0, 0] == round((cm[0, 0] + cm[0, 1]) / 2 * 10)
+
+
+def test_build_grace_fails_loudly():
+    bad = [l.replace("(rows): 6", "(rows): 7") for l in fx_lines("grace_placement.txt")]
+    with pytest.raises(ValueError, match="header says 7"):
+        build_grace.parse_placement(bad)
+    head, rows = build_grace.split_header(fx_lines("grace_main.txt"))
+    flag = np.array([1, 1, 80, 80, 80, 90])
+    with pytest.raises(ValueError, match="main file has 5 rows"):
+        build_grace.read_land_rows(rows[:-1], flag, 4)
+    with pytest.raises(ValueError, match="header says 5"):
+        build_grace.read_land_rows(rows, flag, 5)
+    with pytest.raises(ValueError, match="do not fit int16"):
+        build_grace.to_months(np.array([[4000.0]]), ["2020-01"])
+    with pytest.raises(ValueError, match="unexpected units"):
+        build_grace.check_main_header(["Units: m"])

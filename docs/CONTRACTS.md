@@ -15,7 +15,7 @@ One variable can come from several sources. Tools take an optional `source`; res
 | `ghcn` | NOAA NCEI GHCN-Daily, nearest station, https://www.ncei.noaa.gov/ | weather stations worldwide |
 | `coops` | NOAA CO-OPS tide gauges, nearest station, https://tidesandcurrents.noaa.gov/ | US coasts |
 | `psmsl` | Permanent Service for Mean Sea Level (PSMSL), RLR monthly means, nearest tide gauge, https://psmsl.org/ | tide gauges worldwide |
-| `grace` | GRACE/GRACE-FO JPL mascon CRI RL06.3 v4 (PO.DAAC), https://podaac.jpl.nasa.gov/ | land, 2002 on |
+| `grace` | NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0, https://earth.gsfc.nasa.gov/geo/data/grace-mascons | land, 2002 on; a value is a regional average about 400 km across |
 
 ## TimeSeries — data lane produces, stats lane consumes
 
