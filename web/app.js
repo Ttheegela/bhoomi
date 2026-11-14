@@ -133,31 +133,26 @@ function placeFor(lat, lon, apiName, sourceId) {
 function monthLabel(t) { const m = monthIndex(t); return MONTHS[m % 12] + ' ' + Math.floor(m / 12); }
 
 function verdictCopy(t, name, place) {
-  const y0 = t.period.start.slice(0, 4), y1 = t.period.end.slice(0, 4);
+  const y0 = t.period.start.slice(0, 4), y1 = t.period.end.slice(0, 4), n = lcName(name);
   const s = fmtVal(t.slope_per_decade, t.units), lo = fmtVal(t.ci_low, t.units), hi = fmtVal(t.ci_high, t.units);
-  const band = `The shaded band on the chart, ${lo} to ${hi} per decade, shows where the true trend likely sits.`;
-  if (t.verdict === 'rising') {
-    return { head: 'Rising', shape: 'up',
-      p1: `${name} at ${place} is going up, about ${s} per decade from ${y0} to ${y1}. ${band}`,
-      p2: 'Even the low end of the band is above zero, so this is a clear rise.' };
+  const sl = t.slope_per_decade;
+  if (t.verdict === 'rising' || t.verdict === 'falling') {
+    const up = t.verdict === 'rising';
+    return { head: up ? 'Rising' : 'Falling', shape: up ? 'up' : 'down', lean: null,
+      p1: `From ${y0} to ${y1}, ${n} at ${place} ${up ? 'rose' : 'fell'} about ${s} per decade, and the data support a range of ${lo} to ${hi}.`,
+      p2: up ? 'Even the low end of the range is above zero, so this is a clear rise.' : 'Even the high end of the range is below zero, so this is a clear fall.' };
   }
-  if (t.verdict === 'falling') {
-    return { head: 'Falling', shape: 'down',
-      p1: `${name} at ${place} is going down, about ${s} per decade from ${y0} to ${y1}. ${band}`,
-      p2: 'Even the high end of the band is below zero, so this is a clear fall.' };
-  }
-  const sl = t.slope_per_decade, abs = fmtAbs(sl, t.units);
-  const lean = sl === 0 ? `The data show no lean either way (${s} per decade)` : `The data lean ${sl > 0 ? 'up' : 'down'} by ${abs} per decade`;
-  const head = `We can't tell ${lcName(name)} at ${place} apart from no change, ${y0} to ${y1}.`;
-  let p1;
-  if (t.ci_low > 0 || t.ci_high < 0) {
-    const side = t.ci_low > 0 ? 'above' : 'below';
-    p1 = `${head} ${lean} and the shaded band (${lo} to ${hi}) stays ${side} zero, but the test is not sure enough to call it a clear change (p-value ${fmtP(t.p_value)}).`;
-  } else {
-    p1 = `${head} ${lean}, but the shaded band (${lo} to ${hi}) includes zero.`;
-  }
-  return { head: 'No clear change', shape: 'flat', p1,
-    p2: 'That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs.' };
+  const zeroIn = t.ci_low <= 0 && t.ci_high >= 0;
+  const dir = sl > 0 ? 'up' : 'down';
+  const p1 = sl === 0
+    ? `From ${y0} to ${y1}, we can't tell ${n} at ${place} apart from no change: the data show no lean either way, and the range runs from ${lo} to ${hi}.`
+    : `From ${y0} to ${y1}, we can't tell ${n} at ${place} apart from no change: the data lean ${dir} about ${s} per decade, but the range runs from ${lo} to ${hi}.`;
+  const lean = sl === 0 ? `The data show no lean either way, and the range includes zero.`
+    : `The data lean ${dir}, but ${zeroIn ? 'the range includes zero' : 'the p-value is not below 0.05'}.`;
+  const p2 = zeroIn
+    ? 'That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs.'
+    : `The 95% range (${lo} to ${hi}) stays ${t.ci_low > 0 ? 'above' : 'below'} zero, but the p-value is ${fmtP(t.p_value)}, which is not below 0.05. We go by the stricter test, so we don't call this a clear change. Treat it as a hint, not a finding.`;
+  return { head: 'No clear change', shape: 'flat', lean, p1, p2 };
 }
 
 function captionText(t, name, place) {
@@ -169,7 +164,8 @@ function captionText(t, name, place) {
   return `${name} at ${place}, ${t.period.start} to ${t.period.end}. The trend line ${y} ${range}. Verdict: ${v}.`;
 }
 
-function rawLine(source) { return `Raw values: ${source ? source.name : 'unknown'}. Trend and range: our calculation.`; }
+function rawLine(source) { return `Raw values: ${source ? source.name : 'unknown'}. Trend and range: our calculation, the Mann-Kendall test with Sen's slope on monthly values with seasons removed.`; }
+function chartHead(t, name, place) { return `${name} at ${place}: ${fmtVal(t.slope_per_decade, t.units)} per decade, ${t.period.start.slice(0, 4)} to ${t.period.end.slice(0, 4)}`; }
 
 function layoutFor(w) {
   if (w <= 599) return { vw: 340, hA: 126, hB: 206 };
@@ -321,10 +317,20 @@ function applyPreset(i) {
   syncVariableUI();
   submit(true);
 }
+// At phone width the closed select shows the short name; the open list keeps full names.
+const narrowQ = window.matchMedia('(max-width: 599px)');
+function nameMode(full) {
+  [...$('variable').options].forEach((o) => { const v = varById(o.value); o.textContent = full || !narrowQ.matches ? v.name : stripParens(v.name); });
+}
 function fillVariables() {
   const sel = $('variable');
   clear(sel);
   state.variables.forEach((v) => sel.append(el('option', { value: v.id }, v.name)));
+  nameMode(false);
+  sel.addEventListener('focus', () => nameMode(true));
+  sel.addEventListener('pointerdown', () => nameMode(true));
+  sel.addEventListener('blur', () => nameMode(false));
+  sel.addEventListener('change', () => setTimeout(() => nameMode(false), 0));
 }
 function syncVariableUI() {
   const v = varById($('variable').value);
@@ -404,10 +410,12 @@ function setBusy(on, first) {
   }
 }
 
-async function run(params, user) {
+// keep = "Try again" on the same request: the old card stays, dimmed. Any new request clears the old answer.
+async function run(params, user, keep) {
   const id = ++state.req;
   state.params = params;
-  const first = !state.series && $('problem').hidden && $('verdict-card').hidden;
+  const first = !keep;
+  if (first) { ['chart-wrap', 'more', 'verdict-card'].forEach((i) => { $(i).hidden = true; }); state.series = null; state.trend = null; }
   $('problem').hidden = true;
   setBusy(true, first);
   const [sr, tr] = await Promise.all([api('/api/series', params), api('/api/trend', params)]);
@@ -439,8 +447,8 @@ function show(sr, tr, params, user) {
       document.querySelectorAll('#legend .t-only').forEach((li) => { li.hidden = !state.trend; });
       renderTable(s);
       if (state.trend) {
-        heading = renderVerdict(state.trend);
-        renderMore(state.trend, s);
+        heading = renderVerdict(state.trend, s);
+        renderMore(state.trend);
       } else {
         heading = showProblem(problemFor(tr, params));
       }
@@ -450,7 +458,7 @@ function show(sr, tr, params, user) {
 }
 
 function problemFor(r, params) {
-  const again = [{ label: 'Try again', fn: () => run(state.params, true) }];
+  const again = [{ label: 'Try again', fn: () => run(state.params, true, true) }];
   if (r.net || r.status !== 400 && r.status !== 422 && r.status !== 502) {
     return { heading: "We can't reach the server.", paras: ['Check your connection and try again.'], buttons: again };
   }
@@ -505,47 +513,50 @@ function shapeSvg(kind) {
   return s;
 }
 
-function renderVerdict(t) {
+function fact(label, node) { return el('div', {}, el('dt', {}, label), el('dd', {}, node)); }
+
+function renderVerdict(t, series) {
   const c = verdictCopy(t, nameOf(t.variable), placeOf(t));
   const h = $('verdict-heading');
   clear(h);
   h.append(shapeSvg(c.shape), c.head);
+  const big = $('verdict-big');
+  clear(big);
+  big.append(el('span', { class: 'big-n' }, fmtVal(t.slope_per_decade, t.units)), ' ', el('span', { class: 'big-u' }, 'per decade'));
+  $('verdict-lean').textContent = c.lean || '';
+  $('verdict-lean').hidden = !c.lean;
   $('verdict-p1').textContent = c.p1;
   $('verdict-p2').textContent = c.p2;
   $('verdict-evidence').textContent = `p-value: ${fmtP(t.p_value)}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change.`;
   srcBlock($('verdict-source'), 'Data', t.source);
   $('verdict-calc').textContent = "Trend, range and verdict: our calculation (Mann-Kendall test, Sen's slope).";
-  $('verdict-card').hidden = false;
-  return h;
-}
 
-function renderMore(t, s) {
-  const dl = $('numbers-list');
-  clear(dl);
-  const rows = [
-    ["How fast it's changing", "Sen's slope", fmtVal(t.slope_per_decade, t.units) + ' per decade'],
-    ['Range of trends the data support', 'confidence interval', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
-    ['How easily luck explains it', 'p-value', fmtP(t.p_value)],
-    ['Period', null, `${t.period.start} to ${t.period.end}`],
-    ['Months used', 'n', String(t.n)],
-    ['Seasons removed', 'deseasonalized', t.deseasonalized ? 'Yes' : 'No'],
-    ['Adjusted for neighbouring months', 'autocorrelation', t.autocorrelation_adjusted ? 'Yes' : 'No'],
-    ['Test', null, t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
-  ];
-  rows.forEach(([label, term, val]) => {
-    const dt = el('dt', {}, label);
-    if (term) dt.append(' ', el('span', { class: 'term' }, `(${term})`));
-    dl.append(el('div', {}, dt, el('dd', {}, val)));
-  });
-  srcBlock($('numbers-source'), 'Source', t.source);
+  const facts = $('facts');
+  clear(facts);
+  const srcNode = isHttps(t.source) ? el('a', { href: t.source.url, class: 'srclink' }, `${t.source.name} ↗`) : (t.source ? t.source.name : 'unknown');
+  [
+    ['Period', `${t.period.start} to ${t.period.end}`],
+    ['Months of data', String(t.n)],
+    ['Range of trends the data support', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
+    ['p-value', fmtP(t.p_value)],
+    ['Seasons removed', t.deseasonalized ? 'Yes' : 'No'],
+    ['Adjusted for neighbouring months', t.autocorrelation_adjusted ? 'Yes' : 'No'],
+    ['Source', srcNode],
+    ['Method', t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
+  ].forEach(([l, v]) => facts.append(fact(l, v)));
 
   const list = $('notes-list');
   clear(list);
   const notes = [];
-  (t.caveats || []).concat(s.notes || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
+  (t.caveats || []).concat(series.notes || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
   if (!notes.length) notes.push('No extra caveats from the source.');
   notes.forEach((n) => list.append(el('li', {}, n)));
 
+  $('verdict-card').hidden = false;
+  return h;
+}
+
+function renderMore(t) {
   $('howto-ac').textContent = t.autocorrelation_adjusted
     ? 'We adjusted for months that resemble their neighbours; without that the result would look surer than it is.'
     : 'We did not adjust for months that resemble their neighbours, so treat the result as less certain.';
@@ -622,6 +633,7 @@ function renderChart(s, t) {
   });
   root.append(svg('text', { x: ml + pw / 2, y: B.bot + 2 * fs + 6, 'text-anchor': 'middle', class: 'c-text' }, 'Year'));
   root.append(svg('line', { x1: ml, x2: vw - mr, y1: B.yS(0), y2: B.yS(0), class: 'c-zero' }));
+  root.append(svg('text', { x: vw - mr - 2, y: B.yS(0) - 5, 'text-anchor': 'end', class: 'c-text c-halo' }, 'No change'));
 
   const path = (P, arr) => {
     let d = '', pen = false;
@@ -665,6 +677,7 @@ function renderChart(s, t) {
   root.append(rule);
   box.append(root);
 
+  $('chart-head').textContent = t ? chartHead(t, name, place) : `${name} at ${place}`;
   $('chart-caption').textContent = t ? captionText(t, name, place) : `${name} at ${place}.`;
   srcBlock($('chart-source'), 'Source', t ? t.source : s.source);
   $('chart-raw').textContent = rawLine(t ? t.source : s.source);
