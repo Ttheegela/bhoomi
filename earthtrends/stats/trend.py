@@ -33,9 +33,13 @@ def compute_trend(series: dict) -> dict:
         idx, per_year = year, 1
         t = year.astype(float)
 
-    ok = ~np.isnan(x)
+    # Drop nulls, then sort by time: the contract doesn't promise sorted or unique times.
+    ok = np.flatnonzero(~np.isnan(x))
+    ok = ok[np.argsort(t[ok], kind="stable")]
     x, t, idx = x[ok], t[ok], idx[ok]
-    used = [tm for tm, k in zip(times, ok) if k]
+    used = [times[k] for k in ok]
+    if (dup := np.flatnonzero(np.diff(t) == 0)).size:
+        raise ValueError(f"Duplicate times in series: {used[dup[0]]} appears more than once.")
     n = len(x)
     if n < MIN_POINTS:
         raise ValueError(f"Too few data points: {n} valid, need at least {MIN_POINTS}.")
@@ -69,7 +73,7 @@ def compute_trend(series: dict) -> dict:
     c, big_n = 1.96 * math.sqrt(var_s), len(slopes)
     lo_i, hi_i = (min(max(round(r) - 1, 0), big_n - 1) for r in ((big_n - c) / 2, (big_n + c) / 2 + 1))
 
-    slope_d, lo_d, hi_d = (round(float(v) * 10, 4) for v in (slope, slopes[lo_i], slopes[hi_i]))
+    slope_d, lo_d, hi_d = (round(float(v) * 10, 4) + 0.0 for v in (slope, slopes[lo_i], slopes[hi_i]))  # + 0.0 turns -0.0 into 0.0
     p = float(f"{p:.3g}")
     # Verdict from the rounded numbers, so the output always agrees with the contract rule on its face.
     if p < 0.05 and lo_d > 0:
@@ -106,6 +110,6 @@ def _daily_to_monthly(times: list, values: list) -> tuple[list, list]:
     days: dict[str, list] = {}
     for tm, v in zip(times, values):
         days.setdefault(tm[:7], [])
-        if v is not None:
+        if v is not None and not math.isnan(v):
             days[tm[:7]].append(v)
     return list(days), [sum(d) / len(d) if len(d) >= MIN_DAYS_PER_MONTH else None for d in days.values()]

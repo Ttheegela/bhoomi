@@ -78,6 +78,48 @@ def test_hand_check_strictly_increasing_annual():
     assert r["verdict"] == "rising"
 
 
+def annual(values, start=2000):
+    return series("annual", [str(start + i) for i in range(len(values))], values)
+
+
+def test_hand_check_ties_and_ci_ranks():
+    # S = 36; Var(S) = (10*9*25 - 3 tie pairs * 2*1*9) / 18 = 122; residual r1 <= 0 so no AR step.
+    # C = 1.96*sqrt(122) = 21.65 -> CI ranks 12 and 34 of the 45 sorted slopes: 0.5 and 0.75 per year.
+    r = compute_trend(annual([1, 2, 2, 3, 1, 4, 5, 5, 6, 7]))
+    assert r["p_value"] == float(f"{math.erfc((36 - 1) / math.sqrt(122) / math.sqrt(2)):.3g}") == 0.00153
+    assert r["autocorrelation_adjusted"] is False
+    assert (r["slope_per_decade"], r["ci_low"], r["ci_high"]) == (6.6667, 5.0, 7.5)
+
+
+def test_all_equal_values():
+    r = compute_trend(annual([3.0] * 12))
+    assert (r["p_value"], r["ci_low"], r["ci_high"], r["slope_per_decade"]) == (1.0, 0.0, 0.0, 0.0)
+    assert r["verdict"] == "no_clear_change"
+
+
+def test_tiny_negative_slope_never_shows_negative_zero():
+    r = compute_trend(annual([-1e-8 * k for k in range(12)]))  # -1e-7 per decade rounds to -0.0
+    assert all(math.copysign(1, r[k]) == 1 for k in ("slope_per_decade", "ci_low", "ci_high"))
+
+
+def test_exactly_min_points_ok():
+    assert compute_trend(annual(range(10)))["n"] == 10
+
+
+def test_shuffled_times_same_as_sorted():
+    s = monthly(synthetic(0.3, years=20, seed=6))
+    perm = np.random.default_rng(7).permutation(len(s["times"]))
+    shuffled = {**s, "times": [s["times"][k] for k in perm], "values": [s["values"][k] for k in perm]}
+    assert compute_trend(shuffled) == compute_trend(s)
+
+
+def test_duplicate_time_raises():
+    s = annual(range(12))
+    s["times"][5] = s["times"][4]
+    with pytest.raises(ValueError, match="Duplicate times"):
+        compute_trend(s)
+
+
 def test_nulls_skipped():
     x = list(synthetic(0.3, years=20))
     for k in (0, 5, 100, 239):
@@ -98,6 +140,16 @@ def test_daily_aggregates_to_monthly():
     assert r["period"] == {"start": "2015-01", "end": "2020-12"}
     assert "Daily values averaged to monthly." in r["caveats"]
     assert "Short record: trends over less than 10 years are unreliable." in r["caveats"]
+
+
+def test_daily_partial_months_and_nan_days():
+    days = [dt.date(2015, 1, 15) + dt.timedelta(d) for d in range((dt.date(2026, 12, 10) - dt.date(2015, 1, 15)).days + 1)]
+    values = [float(d.month) + 0.01 * k / 365 for k, d in enumerate(days)]
+    values[100] = float("nan")  # one NaN day must not poison its month
+    r = compute_trend(series("daily", [d.isoformat() for d in days], values))
+    assert r["period"] == {"start": "2015-02", "end": "2026-11"}  # Jan 2015 (17 days), Dec 2026 (10 days) -> null
+    assert r["n"] == 12 * 12 - 2
+    assert all(isinstance(r[k], float) and not math.isnan(r[k]) for k in ("slope_per_decade", "ci_low", "ci_high", "p_value"))
 
 
 def test_annual_not_deseasonalized():
