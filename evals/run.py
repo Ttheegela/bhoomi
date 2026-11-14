@@ -190,6 +190,10 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                 base = [main] + [r.get("caveats") for r in by_src.values()]  # every caveat may be passed on
                 leaked = set(invented_numbers(answer, base)) - set(invented_numbers(answer, base + others))
                 out["wording"] = out["wording"] and not leaked
+                # "over its own record" belongs to an agreeing source, so its sentence must name one
+                own = [s for s in re.split(r"(?<=[.!?])\s+", a) if "over its own record" in s]
+                out["wording"] = out["wording"] and all(
+                    any(_named(r.get("source") or {}, s) for r in by_src.values() if r is not main) for s in own)
         out["numbers"] = not invented_numbers(answer, results)
         if by_src:
             out["source_named"] = all(_named(r.get("source") or {}, a) for r in by_src.values())

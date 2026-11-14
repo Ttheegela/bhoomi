@@ -64,7 +64,8 @@ When you checked several sources:
 default source (the first in the catalog). Then say in a few words that each other source agrees, by its name, \
 with no numbers for them: no slope, no range, no comparison of slopes. If an agreeing source's period differs \
 from the default source's, you may add that source's own period, from its own result, in words and nothing \
-more, in this shape: "<source name> agrees, over its own record, <period>."
+more, in this shape: "<name of the source that agrees> agrees, over its own record, <that source's period>." \
+The default source, whose numbers you just gave, is never the one that "agrees".
 - If their verdicts differ: your first sentence says plainly that the sources disagree (use the word "disagree"). \
 If their slopes are the same to two decimals, that first sentence says instead that the sources give about the \
 same slope but disagree on whether the change is clear. Then one short line per source and nothing else in it, \

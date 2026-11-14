@@ -602,3 +602,11 @@ def test_atlantic_city_agree_answer_passes():
               "https://tidesandcurrents.noaa.gov/, https://psmsl.org/")
     assert run.check(NY_CASE, fake_run(answer, multi([co_ops, psmsl])))["wording"]
 
+
+def test_own_record_sentence_must_name_an_agreeing_source():
+    wrong = NY_OK.replace("PSMSL agrees, over its own record", "NOAA CO-OPS tide gauges agrees, over its own record")
+    assert wrong != NY_OK
+    assert run.check(NY_CASE, fake_run(wrong, multi([CO_OPS, PSMSL])))["wording"] is False
+    full = NY_OK.replace("PSMSL agrees", "Permanent Service for Mean Sea Level (PSMSL) agrees")
+    assert run.check(NY_CASE, fake_run(full, multi([CO_OPS, PSMSL])))["wording"]
+

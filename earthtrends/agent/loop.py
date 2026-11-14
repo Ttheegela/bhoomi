@@ -23,8 +23,8 @@ LATE = "The data source did not answer in time."
 log = logging.getLogger(__name__)
 GAVE_UP = ("Sorry, I could not finish working this out, so I have no answer to give you. "
            "Please try asking again, maybe in a simpler way.")
-RETRY = ("\n\nYour first answer to this question was cut off because it was too long. Give the same answer again "
-         "in fewer words, following every rule. Do not call a tool: these are the tool results you already got:\n")
+RETRY = ("\n\nYour answer did not fit. Answer now, in at most {target} words, following every rule, from these "
+         "tool results; do not call a tool:\n")
 MAX_WORDS = 120  # longest answer we return without asking for a shorter one
 MAX_WORDS_MULTI = 180  # the same, when results from two or more sources are reported
 SHORTER = {MAX_WORDS: 100, MAX_WORDS_MULTI: 150}  # what the length retry asks for
@@ -160,8 +160,11 @@ def ask(question: str, model: str | None = None) -> dict:
                 retried = True
                 if cut:  # reasoning may have spent the cap: answer without it from now on
                     provider.low_reasoning = True
-                again = RETRY if cut else RETRY_LONG.format(limit=limit, target=SHORTER[limit])
-                provider.start(system, question + again + json.dumps(for_model(calls)), TOOLS)
+                if not calls:  # nothing fetched yet: start again from the plain question, tools offered
+                    provider.start(system, question, TOOLS)
+                    continue
+                again = (RETRY if cut else RETRY_LONG).format(limit=limit, target=SHORTER[limit])
+                provider.start(system, question + again + json.dumps(for_model(calls)), [])  # no tools: no refetch
                 continue
             if i == MAX_CALLS - 1:  # no model call left to read the results, so don't fetch data for nothing
                 break

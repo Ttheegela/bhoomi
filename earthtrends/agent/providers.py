@@ -8,12 +8,11 @@ import httpx
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MAX_TOKENS = 2000  # so a reasoning model cannot run up the bill
 TIMEOUT_S = 60
-# OpenRouter's `reasoning` request parameter (https://openrouter.ai/docs/use-cases/reasoning-tokens, read 2026-11-14):
-# an effort level reasons on a share of max_tokens ("medium" about half; Anthropic models max(half, 1024)), so the
-# answer keeps the rest; "none" turns reasoning off. A provider without reasoning ignores the parameter
-# (https://openrouter.ai/docs/features/provider-routing: unknown parameters are ignored unless require_parameters).
-REASONING = "medium"
-REASONING_LOW = "none"  # after a step was cut off at the cap: the retry answers without reasoning
+# OpenRouter's `reasoning` request parameter (https://openrouter.ai/docs/use-cases/reasoning-tokens, read 2026-11-14).
+# Normal steps send none (the model's own default). After a step was cut off at the cap, the retry sends "none"
+# (reasoning off); a model that cannot turn it off answers 400 (GLM: "Reasoning is mandatory"), so that step is sent
+# once more with "low", and "low" stays for the rest of the question. A provider without reasoning ignores the
+# parameter (https://openrouter.ai/docs/features/provider-routing: unknown parameters are ignored).
 
 
 # Why a step ended, the same words for every provider: "length" (hit MAX_TOKENS), "refusal", "tool", "end";
@@ -37,6 +36,7 @@ class UpstreamError(RuntimeError):
 class OpenRouterProvider:
     name = "openrouter"
     low_reasoning = False  # the loop sets it after a cut-off step
+    reduced = "none"  # the effort sent while low_reasoning is set
 
     def __init__(self, model: str):
         self.model = model
@@ -50,19 +50,28 @@ class OpenRouterProvider:
 
     def step(self) -> dict:
         body = {
-            "model": self.model, "messages": self.messages, "tools": self.tools, "max_tokens": MAX_TOKENS,
-            "reasoning": {"effort": REASONING_LOW if self.low_reasoning else REASONING},
+            "model": self.model, "messages": self.messages, "max_tokens": MAX_TOKENS,
             "provider": {"data_collection": "deny"}, "usage": {"include": True},
+            **({"tools": self.tools} if self.tools else {}),
+            **({"reasoning": {"effort": self.reduced}} if self.low_reasoning else {}),
         }
         try:
-            r = httpx.post(OPENROUTER_URL, json=body, timeout=TIMEOUT_S,
-                           headers={"Authorization": f"Bearer {self.key}"})
-            r.raise_for_status()
-            out = self._parse(r.json())
+            try:
+                out = self._post(body)
+            except httpx.HTTPStatusError as e:
+                if not (self.low_reasoning and self.reduced == "none" and e.response.status_code == 400):
+                    raise
+                self.reduced = "low"  # reasoning cannot be turned off here
+                out = self._post({**body, "reasoning": {"effort": "low"}})
         except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, AttributeError, RecursionError) as e:
             # Any unexpected shape is an upstream failure (502). The body stays out: it never reaches the user.
             raise UpstreamError(f"OpenRouter failed: {type(e).__name__}") from None
         return out
+
+    def _post(self, body: dict) -> dict:
+        r = httpx.post(OPENROUTER_URL, json=body, timeout=TIMEOUT_S, headers={"Authorization": f"Bearer {self.key}"})
+        r.raise_for_status()
+        return self._parse(r.json())
 
     def _parse(self, data: dict) -> dict:
         choice = data["choices"][0]
@@ -129,6 +138,7 @@ def anthropic_cost(model: str, input_tokens: int, output_tokens: int) -> float |
 class AnthropicProvider:
     """Claude through the Anthropic API. Needs `uv sync --group evals`; the deployed app does not ship the SDK."""
     name = "anthropic"
+    low_reasoning = False  # the loop sets it after a cut-off step
 
     def __init__(self, model: str):
         self.model = model
@@ -152,7 +162,8 @@ class AnthropicProvider:
             # No temperature/top_p and no forced tool choice: current Claude models reject them.
             r = self.client.messages.create(
                 model=self.model, max_tokens=MAX_TOKENS, system=self.system, messages=self.messages,
-                tools=self.tools, tool_choice={"type": "auto"}, output_config={"effort": ANTHROPIC_EFFORT})
+                **({"tools": self.tools, "tool_choice": {"type": "auto"}} if self.tools else {}),
+                output_config={"effort": "low" if self.low_reasoning else ANTHROPIC_EFFORT})
             return self._parse(r)
         except (*self._errors, ValueError, KeyError, TypeError, AttributeError) as e:
             raise UpstreamError(f"Anthropic failed: {type(e).__name__}") from None
