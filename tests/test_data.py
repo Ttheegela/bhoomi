@@ -2,6 +2,7 @@ import gzip
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 
 from earthtrends import data
@@ -245,8 +246,62 @@ def test_ghcn_deadline(offline2, monkeypatch):
         return found
     monkeypatch.setattr(ghcn, "search", slow_search)
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: pytest.fail("no request may start after the deadline"))
-    with pytest.raises(ValueError, match="slow right now"):
+    with pytest.raises(httpx.TimeoutException, match="slow right now"):  # a provider problem: the API answers 502
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+
+
+def test_ghcn_provider_timeout_is_an_httpx_error(monkeypatch):
+    ghcn.search.cache_clear()
+
+    def boom(*a, **k):
+        raise httpx.ReadTimeout("read timed out")
+    monkeypatch.setattr(ghcn.httpx, "get", boom)
+    with pytest.raises(httpx.HTTPError):  # not ValueError, so app.py answers 502 instead of 400
+        data.get_series("air_temp", 28.58, 77.21, source="ghcn")
+    ghcn.search.cache_clear()
+
+
+def test_ghcn_next_station_after_timeout(offline2, monkeypatch):
+    near = {"id": "N", "name": "NEAR", "lat": 28.58, "lon": 77.21, "types": {"TMAX": ("1950-01-01", "2024-12-31", 100.0)}}
+    far = dict(near, id="F", name="FAR", lat=28.7)
+    monkeypatch.setattr(ghcn, "search", lambda la, lo, types: [near, far])
+    calls = []
+
+    def fetch(sid, types):
+        calls.append(sid)
+        if sid == "N":
+            raise httpx.ReadTimeout("slow")
+        return load_gz("ghcn_daily_tmax_safdarjung.json.gz")
+    monkeypatch.setattr(ghcn, "fetch", fetch)
+    s = data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    assert calls == ["N", "F"] and s["place"]["name"] == "FAR"
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: (_ for _ in ()).throw(httpx.ReadTimeout("slow")))
+    with pytest.raises(httpx.ReadTimeout):  # every station timed out: a provider problem
+        data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+
+
+def test_ghcn_parse_junk_and_duplicate_dates():
+    rows = [{"DATE": "garbage", "TMAX": "1"}, {"DATE": "2000-13-45", "TMAX": "1"},
+            {"DATE": "2000-01-01", "TMAX": "10", "TMIN": "2"},
+            {"DATE": "2000-01-01", "TMAX": "99", "TMIN": "4"},  # duplicate: first real value per type wins
+            {"DATE": "2000-01-02", "TMAX": "NaN", "TMIN": "3"},
+            {"DATE": "2000-01-02", "TMAX": "8"}]  # duplicate fills the missing TMAX, TMIN stays from the first row
+    assert ghcn.parse(rows, ("TMAX",)) == (["2000-01-01", "2000-01-02"], [10.0, 8.0])
+    assert ghcn.parse(rows, ("TMAX", "TMIN")) == (["2000-01-01", "2000-01-02"], [6.0, 5.5])
+
+
+def test_ghcn_station_coordinates_and_ids():
+    def station(**over):
+        st = {"id": "A", "name": "A", "dataTypes": []}
+        st.update(over)
+        return {"stations": [st], "boundingPoints": [{"coordinates": over.pop("xy", [1.0, 2.0])}]}
+    assert len(ghcn.parse_search({"results": [station()]})) == 1
+    for bad in ({"id": 7}, {"id": ["A"]}, {"name": None}, {"name": 3}):
+        assert ghcn.parse_search({"results": [station(**bad)]}) == [], bad
+    for xy in ([float("inf"), 2.0], [1.0, float("-inf")], [181.0, 2.0], [1.0, 91.0], [1.0, -91.0], [-180.5, 0.0]):
+        res = station()
+        res["boundingPoints"][0]["coordinates"] = xy
+        assert ghcn.parse_search({"results": [res]}) == [], xy
 
 
 def test_era5_length_mismatch():
