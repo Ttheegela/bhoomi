@@ -117,7 +117,7 @@ span.srclink { color: var(--ink-2); }
 .rm { position: absolute; top: -8px; right: -8px; z-index: 1; width: 20px; height: 20px; padding: 0; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); font-size: 14px; line-height: 1; cursor: pointer; border-radius: 50%; opacity: 0; }
 .pinrow:hover .rm, .pinrow:focus-within .rm, .rm:focus-visible, .pins.show-rm .rm { opacity: 1; }
 .rm:hover { color: var(--ink); background: var(--bg); }
-@media (hover: none) { .rm { opacity: 1; } }
+@media (hover: none) { .rm { opacity: 1; width: 24px; height: 24px; top: -10px; right: -10px; } }
 
 .main { padding: 24px 32px 120px; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .ph h1 { font-size: 30px; letter-spacing: -.4px; }
