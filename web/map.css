@@ -1,1 +1,29 @@
-/* Trend Detective map module styles: empty until its builder fills them (web/design/00-frame.md section 7). */
+/* Module 01: the map. Classes prefixed map-. The library's own sheet comes first. Spec: web/design/01-map.md */
+@import url("vendor/maplibre-gl/maplibre-gl.css");
+.map-frame { position: relative; height: var(--map-h); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.map-canvas { position: absolute; inset: 0; }
+.map-wait { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s3); text-align: center; margin: 0; padding: var(--s4); color: var(--ink-2); font-size: 16px; max-width: none; pointer-events: none; }
+.map-wait[hidden] { display: none; }
+.map-failed .map-wait { background: var(--surface); pointer-events: auto; }
+.map-failed .maplibregl-ctrl-top-right { display: none; }
+.map-retry { min-height: 48px; }
+.map-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.map-status { margin: var(--s2) 0; min-height: 24px; display: flex; align-items: center; flex: 1 1 auto; }
+.map-undo { min-width: 48px; min-height: 48px; }
+.map-credit { display: flex; flex-wrap: wrap; align-items: center; gap: 0 16px; margin: 0; font-size: 14px; color: var(--ink-2); }
+.map-credit a { display: inline-flex; align-items: center; min-height: 48px; color: var(--ink); }
+.map-pin { width: 20px; height: 20px; border-radius: 50%; background: var(--ink); border: 3px solid var(--bg); box-shadow: 0 0 0 2px var(--ink); }
+/* a quiet map: one grey, no hue (colour is for the data only); dark mode inverts the same grey map */
+.map-canvas .maplibregl-canvas { filter: grayscale(1); }
+.map-canvas .maplibregl-ctrl-group { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; box-shadow: none; }
+.map-canvas .maplibregl-ctrl-group button { width: 48px; height: 48px; }
+.map-canvas .maplibregl-ctrl-group button + button { border-top: 1px solid var(--line); }
+.map-canvas .maplibregl-ctrl button:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; box-shadow: none; }
+.map-canvas .maplibregl-cooperative-gesture-screen { background: color-mix(in srgb, var(--ink) 82%, transparent); color: var(--bg); font: 16px/1.4 Inter, system-ui, sans-serif; }
+@media (prefers-color-scheme: dark) {
+  .map-canvas .maplibregl-canvas { filter: grayscale(1) invert(1) brightness(.9); }
+  .map-canvas .maplibregl-ctrl-icon { filter: invert(1); }
+}
+@media (forced-colors: active) {
+  .map-pin { border: 3px solid Canvas; background: CanvasText; }
+}

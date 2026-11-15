@@ -1,1 +1,13 @@
-/* Trend Detective guide module styles: empty until its builder fills them (web/design/00-frame.md section 7). */
+/* Module 04: guided first visit. Classes prefixed guide-. Selectors start with .card.quiet.guide-card to beat the frame's .card.quiet h2 / p rules. */
+.card.quiet.guide-card { max-width: 760px; padding: var(--s4); }
+.card.quiet.guide-card p, .card.quiet.guide-card h2 { padding: 0; }
+.card.quiet.guide-card .guide-step, .card.quiet.guide-card .guide-note { font-size: 14px; color: var(--ink-2); margin: 0 0 var(--s2); }
+.card.quiet.guide-card .guide-note { margin-top: var(--s3); }
+.card.quiet.guide-card .guide-h { font-family: var(--font-head); font-size: 20px; font-weight: 700; margin: 0 0 var(--s3); }
+.card.quiet.guide-card .guide-plan { margin: 0 0 var(--s2); }
+.guide-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+.guide-chip { width: 100%; min-width: 0; padding: var(--s2) var(--s4); overflow-wrap: anywhere; }
+.guide-skip, .guide-actions .btn { width: auto; }
+.guide-skip { margin-top: var(--s2); }
+.guide-actions { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; margin-top: var(--s3); }
+@media (min-width: 600px) { .guide-chips { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
