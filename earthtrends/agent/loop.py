@@ -578,14 +578,17 @@ def best(kept: list[str], calls: list[dict]) -> str | None:
 
 EXAMPLES = "These are examples, not a ranking."
 PLACE_KM = 50  # lookups this far apart are different places
-CANNOT_RANK = re.compile(r"\b(?:cannot|can not|can['’]t)\s+rank\b", re.I)  # the broad-question rule's opener
+# The broad-question rule's own opener, not any "can't rank" ("I can't rank which home is safer").
+CANNOT_RANK = re.compile(r"\b(?:cannot|can not|can['’]t)\s+rank\s+a\s+whole\s+region\b", re.I)
+_SENT_END = re.compile(r"[.!?](?=\s|$)")  # a decimal point is followed by a digit, so "9.36" is no sentence end
 
 
 def add_examples(text: str, calls: list[dict]) -> str:
-    """EXAMPLES once, at the end of the first paragraph, only for a broad answer: this turn's lookups cover two or
-    more places, the text says it cannot rank, and it has no "not a ranking" yet. Places the user named (a
-    comparison) never get it: there the text has no cannot-rank phrase."""
-    if not CANNOT_RANK.search(text) or "not a ranking" in text.lower():
+    """EXAMPLES once, right after the sentence that says it cannot rank a whole region, when all hold: that phrase
+    is in the text, the text has no "not a ranking" yet, and this turn's lookups cover two or more places. Any other
+    text comes back unchanged."""
+    m = CANNOT_RANK.search(text)
+    if not m or "not a ranking" in text.lower():
         return text
     pts = []
     for c in calls:
@@ -598,8 +601,9 @@ def add_examples(text: str, calls: list[dict]) -> str:
             pts.append(p)
     if len(pts) < 2:
         return text
-    head, sep, rest = text.partition("\n\n")
-    return f"{head.rstrip()} {EXAMPLES}{sep}{rest}"
+    end = _SENT_END.search(text, m.end())
+    at = end.end() if end else len(text.rstrip())
+    return f"{text[:at]} {EXAMPLES}{text[at:]}"
 
 
 FOUND_HEAD = "Here is what I found."

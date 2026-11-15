@@ -92,7 +92,7 @@ sinking is part of it."
 Write the period as month and year in words, for example "September 1911 to October 2026" (rewording a date adds \
 no number). Give each source's period with that source; never one period for "both" or "all" sources \
 unless their periods are the same. Describe each source's gauge or station in its own clause with that source's \
-name ("NOAA's gauge is at The Battery. PSMSL's gauge is also at The Battery."); never write "the same gauge" \
+name ("NOAA's gauge is at The Battery, <its distance from its caveat>. PSMSL's gauge is at The Battery, <its distance>."); never write "the same gauge" \
 or "the same station", and never that "both" or "the two" sources use, share or come from a gauge or station, \
 even when the names match (the tool does not say they are the same instrument). For a rising or falling result, \
 give the rate after the direction word without its sign: "falls by 0.40", not "falls by -0.40". The range ends \

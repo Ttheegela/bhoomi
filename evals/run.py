@@ -238,9 +238,10 @@ def check(case: dict, run: dict) -> dict[str, bool]:
         elif main and main.get("verdict") in VERDICT_WORDS:  # one verdict; with several sources, no false "disagree"
             out["wording"] = wording_agrees(answer, main["verdict"]) and not (len(by_src) > 1 and said_disagree)
         multi = bool(case.get("multi_measure"))
-        # The two-sources checks (SHARED, GUESSED, agreeing sentences) assume one measurement: not for multi_measure.
-        if "wording" in out and len(by_src) > 1 and not multi:
-            out["wording"] = out["wording"] and not any(g in a for g in GUESSED) and not SHARED.search(answer)
+        # multi_measure skips only the verdict-word branch above: the two-source checks still hold for it.
+        if ("wording" in out or multi) and len(by_src) > 1:
+            out["wording"] = (out.get("wording", True) and not any(g in a for g in GUESSED)
+                              and not SHARED.search(answer))
             plan = agree_plan(run.get("tool_calls", []))
             if plan:  # agreeing sources: no slope or range that only another source gave
                 lead, agreeing = plan
