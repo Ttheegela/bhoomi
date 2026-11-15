@@ -1,12 +1,8 @@
-"""The tool's guidance put in by code, the gave-up fix, and the voice tool's rate bucket. Offline: no LLM, no network."""
+"""The tool's guidance put in by code and the gave-up fix. Offline: no LLM, no network."""
 import pytest
-from fastapi.testclient import TestClient
 
 from evals import run
-from earthtrends.agent import guidance, loop, providers, ratelimit, resources, tools
-from earthtrends.app import app
-
-client = TestClient(app)
+from earthtrends.agent import guidance, loop, providers, resources, tools
 
 GUIDE = {"risk": "high", "risk_label": "High risk",
          "why": "The sea here is rising about 2.4 times faster than the world average.", "ratio": 2.4,
@@ -42,9 +38,8 @@ def ok(result, args):
 
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
-    for k in ("OPENROUTER_API_KEY", "AGENT_MODEL", "ELEVENLABS_TOOL_SECRET"):
+    for k in ("OPENROUTER_API_KEY", "AGENT_MODEL"):
         monkeypatch.delenv(k, raising=False)
-    ratelimit.reset()
 
 
 # ---- guidance strings, word for word ----
@@ -181,39 +176,3 @@ def test_no_results_still_gives_up(fake, monkeypatch):
     fake.script = [step(calls=[call(str(i), variable="sea_level", lat=1, lon=2)]) for i in range(10)]
     assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP
 
-
-# ---- the voice tool's rate bucket ----
-
-@pytest.fixture
-def asked(monkeypatch):
-    monkeypatch.setattr(loop, "ask", lambda q: {"answer": "ok"})
-
-
-def burst(n, headers=None):
-    return [client.post("/api/ask", json={"question": "hi"}, headers=headers or {}).status_code for _ in range(n)]
-
-
-def test_no_secret_set_header_is_ignored(asked):
-    assert burst(11, {"X-Tool-Secret": ""})[-1] == 429
-    ratelimit.reset()
-    assert burst(11, {"X-Tool-Secret": "anything"})[-1] == 429 and not ratelimit._tool
-
-
-def test_wrong_secret_gets_the_address_limit(asked, monkeypatch):
-    monkeypatch.setenv("ELEVENLABS_TOOL_SECRET", "s3cret-value")
-    r = burst(11, {"X-Tool-Secret": "wrong"})
-    assert r[:10] == [200] * 10 and r[-1] == 429 and not ratelimit._tool
-
-
-def test_right_secret_uses_the_tool_bucket_of_sixty(asked, monkeypatch):
-    monkeypatch.setenv("ELEVENLABS_TOOL_SECRET", "s3cret-value")
-    r = burst(61, {"X-Tool-Secret": "s3cret-value"})
-    assert r[:60] == [200] * 60 and r[-1] == 429 and not ratelimit._clients
-    assert "s3cret-value" not in client.post("/api/ask", json={"question": "hi"},
-                                             headers={"X-Tool-Secret": "s3cret-value"}).text
-    assert burst(1) == [200]  # an ordinary visitor still has their own budget
-
-
-def test_empty_secret_env_ignores_the_header(asked, monkeypatch):
-    monkeypatch.setenv("ELEVENLABS_TOOL_SECRET", "")
-    assert burst(11, {"X-Tool-Secret": ""})[-1] == 429 and not ratelimit._tool

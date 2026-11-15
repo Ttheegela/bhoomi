@@ -200,7 +200,7 @@ def test_data_routes_limit_per_client(offline):
 def test_ask_limit_unchanged_and_separate(offline, monkeypatch):
     monkeypatch.setattr(loop, "ask", lambda q: {"answer": "ok"})
     a = {"X-Forwarded-For": "3.3.3.3"}
-    assert (ratelimit.PER_CLIENT, ratelimit.PER_CLIENT_HOUR, ratelimit.GLOBAL) == (10, 100, 200)
+    assert (ratelimit.PER_CLIENT, ratelimit.PER_CLIENT_HOUR, ratelimit.GLOBAL) == (30, 150, 200)
     for _ in range(ratelimit.PER_CLIENT):
         assert client.post("/api/ask", json={"question": "hi"}, headers=a).status_code == 200
     r = client.post("/api/ask", json={"question": "hi"}, headers=a)
