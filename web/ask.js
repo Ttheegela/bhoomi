@@ -78,7 +78,7 @@ function describeAnswer(body) {
   }
   if (trends.length) {
     const e = trends[0].error;
-    return Object.assign(out, { variant: 'dataerror', error: String(e), tide: /tide gauge/i.test(String(e)) });
+    return Object.assign(out, { variant: 'dataerror', tide: /tide gauge/i.test(String(e)) });
   }
   return Object.assign(out, { variant: text.includes('?') ? 'clarify' : 'declined' });
 }
@@ -156,7 +156,7 @@ function answerBlock(d) {
       block.append(a);
     }
   } else if (d.variant === 'dataerror') {
-    block.append(el('p', {}, `We couldn't get the data for that: ${d.error}`));
+    block.append(el('p', {}, d.tide ? 'No tide gauge near this place.' : "We couldn't get the data for that."));
     block.append(el('p', {}, 'Try another place or measurement.'));
     if (d.tide && !(varById('sea_level') && varById('sea_level').sources.length > 1)) block.append(el('p', {}, 'Tide gauges sit along US coasts.'));
   } else if (d.variant === 'gaveup') {

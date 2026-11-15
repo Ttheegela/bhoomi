@@ -10,6 +10,7 @@ from .upstream import NAME, fit, text
 BASE = "https://api.tidesandcurrents.noaa.gov"
 SOURCE = {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"}
 MAX_KM = 100
+NAME_NEAREST_KM = 1000  # beyond this the nearest gauge is not worth naming
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)  # the station-list fetch: at most 5 + 10 + 30 = 45 s
 
 
@@ -43,9 +44,10 @@ def nearest(lat: float, lon: float, station_list: list[dict]) -> tuple[dict, flo
     st = min(station_list, key=lambda s: haversine_km(lat, lon, float(s["lat"]), float(s["lng"])))
     km = haversine_km(lat, lon, float(st["lat"]), float(st["lng"]))
     if km > MAX_KM:
-        raise ValueError(
-            f"No tide gauge within {MAX_KM} km of ({lat}, {lon}); the nearest is {text(st['name'], NAME)}, {km:.0f} km away."
-        )
+        msg = f"No tide gauge within {MAX_KM} km of ({lat}, {lon})"
+        if km <= NAME_NEAREST_KM:
+            msg += f"; the nearest is {text(st['name'], NAME)}, {km:.0f} km away"
+        raise ValueError(msg + ".")
     return st, km
 
 
