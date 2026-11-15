@@ -145,9 +145,20 @@ def test_outlook_about_and_falling():
     assert "forecast" not in json.dumps(g).lower()
 
 
-def test_outlook_only_with_30_years_and_a_clear_verdict():
-    assert guidance_for(res(start="1996-01", end="2025-12"))["outlook"]  # 30 years
-    assert guidance_for(res(start="1997-01", end="2025-12"))["outlook"] == []  # 29 years
+@pytest.mark.parametrize("start,years", [("1997-01", [2035, 2050, 2075]),  # 30 years
+                                         ("1998-01", [2035, 2050]),  # 29 years
+                                         ("2008-01", [])])  # 19 years: not enough data
+def test_outlook_years_by_record_length(start, years):
+    assert [o["year"] for o in guidance_for(res(start=start, end="2026-12"))["outlook"]] == years
+
+
+def test_water_storage_24_years_falling():
+    # Punjab-like: about -40 cm every 10 years, 2002 to 2026
+    g = guidance_for(res("water_storage", "falling", -40.0, lo=-44.0, hi=-36.0, start="2002-04", end="2026-03"))
+    assert [o["text"] for o in g["outlook"]] == ["−40 to −32 cm by 2035", "−106 to −86 cm by 2050"]
+
+
+def test_outlook_only_with_a_clear_verdict():
     assert guidance_for(res(verdict="no_clear_change", lo=-1.0, hi=3.0, start="1950-01"))["outlook"] == []
 
 

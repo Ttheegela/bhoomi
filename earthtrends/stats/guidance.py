@@ -127,9 +127,9 @@ def _future_link(place) -> dict:
 
 
 def _outlook(ci_low: Decimal, ci_high: Decimal, factor: Decimal, unit: str, last_year: int, rain: bool,
-             falling: bool) -> list[dict]:
+             falling: bool, targets: tuple) -> list[dict]:
     out = []
-    for year in OUTLOOK:
+    for year in targets:
         if year <= last_year:
             continue
         k = Decimal(year - last_year) / 10
@@ -223,6 +223,7 @@ def guidance_for(result: dict, mean: float | None = None) -> dict:
                      "note": {"value": float(-mm if down else mm), "unit": "mm", "text": f"about {mm:f} mm {more} a year"}}
     risk, why, ratio, key = _risk(var, verdict, slope, mean)
     g.update(risk=risk, risk_label=LABEL[risk], why=why, ratio=ratio, recommendation=RECOMMEND[var][key])
-    if years[0] >= OUTLOOK_YEARS:
-        g["outlook"] = _outlook(lo, hi, factor, unit, years[1], var == "precip", verdict == "falling")
+    # 20 to 29 years of record: 2035 and 2050 only; a look-ahead should not reach much further than the record is long
+    targets = OUTLOOK if years[0] >= OUTLOOK_YEARS else OUTLOOK[:2]
+    g["outlook"] = _outlook(lo, hi, factor, unit, years[1], var == "precip", verdict == "falling", targets)
     return g
