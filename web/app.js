@@ -820,6 +820,7 @@ function renderTable(s, withTrend) {
 
 /* ---------- chart ---------- */
 
+let chartW = 0; // box width (px) the chart was last drawn at
 function renderChart(s, t) {
   const box = $('chart-box');
   clear(box);
@@ -830,22 +831,24 @@ function renderChart(s, t) {
   const name = nameOf(s.variable), place = placeOf(t || s);
   const units = unitLabel(s.units);
   const LY = layoutFor(window.innerWidth);
-  const cw = box.clientWidth || LY.vw;
-  const fs = Math.max(12, Math.round(12 * LY.vw / cw));
-  const ml = Math.round(fs * 3.4) + 4, mr = 8, vw = LY.vw;
-  const axis = Math.max(40, 2 * fs + 12);
+  // The drawing is as wide as its box (1 unit = 1 px), so the font is 12 px on screen at every width.
+  // A box that is not laid out yet (hidden) falls back to the band's width.
+  const fs = 12;
+  const vw = Math.max(280, Math.round(box.clientWidth || LY.vw)), cw = vw;
+  chartW = box.clientWidth;
+  const ml = Math.round(fs * 3.4) + 4, mr = 8;
+  const axis = Math.max(40, Math.round(3.2 * fs) + 6);
   const gap = fs + 8; // between the upper panel's bottom and the lower panel's title
   const vh = LY.hA + gap + LY.hB + axis;
-  const hh = Math.round(fs * 3.25); // panel header: title, y label, then room above the top tick label
+  const hh = Math.round(fs * 3.5); // panel header: title, y label, then room above the top tick label
   const pw = vw - ml - mr;
   const xS = (m) => ml + (m1 === m0 ? 0 : (m - m0) / (m1 - m0) * pw);
 
   const nn = (a) => a.filter((v) => v != null);
-  const rawT = niceTicks(Math.min(...nn(vals)), Math.max(...nn(vals)));
-  const desT = niceTicks(Math.min(0, ...nn(des)), Math.max(0, ...nn(des)));
-  const A = { top: hh, bot: LY.hA - 4, t: rawT, y0: 0 };
+  const nTicks = (h) => Math.min(5, Math.max(3, Math.floor(h / (1.6 * fs)))); // ticks at least 19 px apart
+  const A = { top: hh, bot: LY.hA - 4, t: niceTicks(Math.min(...nn(vals)), Math.max(...nn(vals)), nTicks(LY.hA - 4 - hh)), y0: 0 };
   const yB = LY.hA + gap;
-  const B = { top: yB + hh, bot: yB + LY.hB, t: desT, y0: yB };
+  const B = { top: yB + hh, bot: yB + LY.hB, t: niceTicks(Math.min(0, ...nn(des)), Math.max(0, ...nn(des)), nTicks(LY.hB - hh)), y0: yB };
   [A, B].forEach((p) => { p.yS = (v) => p.top + (p.t.hi - v) / (p.t.hi - p.t.lo) * (p.bot - p.top); });
 
   const root = svg('svg', { viewBox: `0 0 ${vw} ${vh}`, role: 'img', tabindex: '0', 'aria-labelledby': 'c-title c-desc', 'font-size': fs });
@@ -856,7 +859,7 @@ function renderChart(s, t) {
 
   const panel = (P, title, ylabel) => {
     root.append(svg('text', { x: 0, y: P.y0 + fs, class: 'c-text c-title' }, title));
-    root.append(svg('text', { x: 0, y: P.y0 + Math.round(fs * 2.15), class: 'c-text' }, ylabel));
+    root.append(svg('text', { x: 0, y: P.y0 + Math.round(fs * 2.3), class: 'c-text' }, ylabel));
     xt.forEach((y) => root.append(svg('line', { x1: xS(y * 12), x2: xS(y * 12), y1: P.top, y2: P.bot, class: 'c-grid' })));
     P.t.ticks.forEach((v) => {
       const y = P.yS(v);
@@ -869,9 +872,9 @@ function renderChart(s, t) {
   xt.forEach((y) => {
     const x = xS(y * 12), hw = 0.3 * fs * String(y).length; // half the label width, roughly
     const edge = x + hw > vw ? ['end', vw] : x - hw < 0 ? ['start', 0] : ['middle', x];
-    root.append(svg('text', { x: edge[1], y: B.bot + fs + 3, 'text-anchor': edge[0], class: 'c-text' }, String(y)));
+    root.append(svg('text', { x: edge[1], y: B.bot + Math.round(fs * 1.5) + 2, 'text-anchor': edge[0], class: 'c-text' }, String(y)));
   });
-  root.append(svg('text', { x: ml + pw / 2, y: B.bot + 2 * fs + 6, 'text-anchor': 'middle', class: 'c-text' }, 'Year'));
+  root.append(svg('text', { x: ml + pw / 2, y: B.bot + Math.round(fs * 2.9) + 4, 'text-anchor': 'middle', class: 'c-text' }, 'Year'));
   root.append(svg('line', { x1: ml, x2: vw - mr, y1: B.yS(0), y2: B.yS(0), class: 'c-zero' }));
   const noText = svg('text', { class: 'c-text c-halo' }, 'No change'); // placed once the trend line is known
   root.append(noText);
@@ -911,7 +914,7 @@ function renderChart(s, t) {
   const nc = trendLine ? noChangeLabel(trendLine.y1, trendLine.y2, B.yS(0)) : { end: 'right', below: false };
   noText.setAttribute('x', nc.end === 'left' ? ml + 4 : vw - mr - 2);
   noText.setAttribute('text-anchor', nc.end === 'left' ? 'start' : 'end');
-  noText.setAttribute('y', nc.below ? B.yS(0) + fs + 3 : B.yS(0) - 5);
+  noText.setAttribute('y', nc.below ? B.yS(0) + fs + 3 : Math.max(B.top + 0.9 * fs, B.yS(0) - 5)); // above the line, but never above the panel's top
 
   // Yearly averages (dots) sit over the faint monthly line; the solid trend line goes on top. Drawing only: never printed.
   const dots = yearlyAverages(ms, des);
@@ -1311,6 +1314,12 @@ $('locate').addEventListener('click', locate);
 }));
 $('coords-toggle').addEventListener('click', () => setCoords($('coords').hidden));
 $('change-place').addEventListener('click', (e) => { e.preventDefault(); $('h-explore').scrollIntoView({ block: 'start' }); $('place').focus({ preventScroll: true }); });
+// Re-draw when the chart's box width changes by 8 px or more. One observer for the page's life, so none pile up;
+// a re-draw changes the box's height at most, never its width, so it cannot trigger itself.
+if (window.ResizeObserver) new ResizeObserver(() => {
+  const w = $('chart-box').clientWidth;
+  if (w && Math.abs(w - chartW) >= 8 && state.series && !$('chart-wrap').hidden) renderChart(state.series, state.trend);
+}).observe($('chart-box'));
 let lastBand = layoutFor(window.innerWidth).vw;
 window.addEventListener('resize', () => {
   const b = layoutFor(window.innerWidth).vw;

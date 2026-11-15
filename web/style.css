@@ -509,6 +509,8 @@ html[data-guide="open"] #examples { display: none; }
 @media (min-width: 900px) { #change-place { display: none; } }
 #answer-wrap { scroll-margin-top: 8px; }
 #noise-slot { margin-top: var(--gap); }
+@media (min-width: 900px) { #examples { max-width: 960px; } }
+@media print { #map-slot, #guide-slot, #saved-slot, #noise-slot, #share-slot { display: none; } }
 @media (min-width: 900px) {
   #panel-explore { display: grid; grid-template-columns: var(--map-col) minmax(0, 1fr); column-gap: 32px; align-items: start;
     grid-template-rows: auto auto auto auto auto 1fr auto;
