@@ -1,14 +1,16 @@
-/* Module 01: the map. Fills #map-slot. Spec: web/design/01-map.md. Optional extra: the search box does everything. */
+/* Module 01: the map. One map for the page, re-used across the five measurement windows. Fills #map-slot.
+   A marker per pinned place (risk in words and colour), a click on empty map pins that point, tide gauge dots on Sea level. */
 (function () {
   'use strict';
   var slot = document.getElementById('map-slot');
   if (!slot || !window.TD) return;
-  var STYLE = 'https://tiles.openfreemap.org/styles/positron';
-  var SEARCH = 'You can still search for a place above.';
-  var map = null, pin = null, lib = null, prev = null, cur = null;
-  var gauges = null, gaugeSrcs = [], gTries = 0, gLoading = false, wantDots = false, hideTimer = 0, snap = null;
-  var legend = null, gCredits = [], tip = null, tipFor = null;
-  var curGeo = false, loaded = false, failed = false, retried = false, slowTimer = 0;
+  var STYLES = { light: 'https://tiles.openfreemap.org/styles/positron', detailed: 'https://tiles.openfreemap.org/styles/liberty' };
+  var map = null, lib = null, loaded = false, failed = false, retried = false, slowTimer = 0;
+  var markers = Object.create(null), fitKey = null, fitSel = null, baseKey = 'light', userMoved = false, rzFrame = 0;
+  var gauges = null, gaugeSrcs = [], gTries = 0, gLoading = false, wantDots = false, hideTimer = 0;
+  var legend = null, tip = null, tipFor = null;
+  var hoverOK = matchMedia('(hover: hover)').matches;
+  var OP = ['step', ['zoom'], 0.65, 4, 0.9];
 
   function h(tag, cls, text) {
     var e = document.createElement(tag);
@@ -17,35 +19,25 @@
     return e;
   }
   function reduced() { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
-  function fmt(lat, lon) {
-    return Math.abs(lat).toFixed(2) + '° ' + (lat >= 0 ? 'N' : 'S') + ', ' + Math.abs(lon).toFixed(2) + '° ' + (lon >= 0 ? 'E' : 'W');
+  function win() { return TD.window; }
+  function inSettings() { return win() === 'settings'; }
+  // the map preferences for the window on screen (defaults: light base map, labels on, stations on)
+  function prefs() {
+    var m = null;
+    try { m = window.TDPrefs && TDPrefs.get().maps && TDPrefs.get().maps[win()]; } catch (e) {}
+    m = m || {};
+    return { base: m.base === 'detailed' ? 'detailed' : 'light', labels: m.labels !== false, stations: m.stations !== false };
   }
 
   var frame = h('div', 'map-frame');
   frame.setAttribute('role', 'group');
-  frame.setAttribute('aria-label', 'Map. Optional: you can also search for a place above.');
+  frame.setAttribute('aria-label', 'Map of your pinned places');
   var canvas = h('div', 'map-canvas');
   canvas.id = 'map-canvas';
   var wait = h('p', 'map-wait', 'Loading the map…');
   frame.append(canvas, wait);
-  var status = h('p', 'help map-status', 'Tap the map to pick a place, or search above.');
-  status.id = 'map-status';
-  status.setAttribute('role', 'status');
-  var undo = h('button', 'linkbtn map-undo', 'Undo');
-  undo.type = 'button';
-  undo.hidden = true;
-  var row = h('div', 'map-row');
-  row.append(status, undo);
-  var credit = h('p', 'map-credit');
-  var a1 = h('a', '', 'OpenFreeMap © OpenMapTiles');
-  a1.href = 'https://openfreemap.org/';
-  var a2 = h('a', '', 'Data from OpenStreetMap');
-  a2.href = 'https://www.openstreetmap.org/copyright';
-  a1.rel = a2.rel = 'noopener';
-  credit.append(a1, a2);
-  slot.append(frame, row, credit);
+  slot.append(frame);
   slot.hidden = false;
-  if (TD.addCredit) TD.addCredit('map', 'Map: OpenFreeMap © OpenMapTiles, data from OpenStreetMap', 'https://www.openstreetmap.org/copyright');
 
   function fail(msg, canRetry) {
     if (failed) return;
@@ -62,27 +54,131 @@
     }
   }
 
-  function put(lat, lon, fly) {
-    if (!map || !loaded) return;
-    if (!pin) {
-      var el = h('div', 'map-pin');
-      el.setAttribute('aria-hidden', 'true');
-      pin = new lib.Marker({ element: el }).setLngLat([lon, lat]).addTo(map);
-    } else {
-      pin.setLngLat([lon, lat]);
-    }
-    if (fly) map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 4.5), duration: reduced() ? 0 : 900, essential: false });
+  // the control opens itself when it is added; start collapsed (just the info button) until the visitor taps it
+  function collapseAttrib() {
+    var a = canvas.querySelector('.maplibregl-ctrl-attrib');
+    if (a) { a.removeAttribute('open'); a.classList.remove('maplibregl-compact-show'); }
   }
 
   // no WebGL or the library did not import: no retry (a failed module import is cached by the browser)
-  function noMap() {
-    fail("Your browser can't show the map. Search for a place above.", false);
-    status.textContent = SEARCH;
+  function noMap() { fail("Your browser can't show the map. Your places are still listed on the left.", false); }
+
+  function riskOf(p) {
+    var g = p.trend && p.trend.guidance;
+    if (!g || typeof g !== 'object') return { cls: 'low', label: '' };
+    return { cls: g.risk === 'high' ? 'high' : g.risk === 'moderate' ? 'moderate' : 'low', label: typeof g.risk_label === 'string' ? g.risk_label : '' };
+  }
+
+  // one marker per pin: a button (click or Enter selects it); the selected pin is bigger and carries a tag. Risk is in words, never colour alone.
+  function syncMarkers() {
+    if (!map) return;
+    var pins = (TD.pins && TD.pins()) || [], seen = Object.create(null);
+    pins.forEach(function (p) {
+      if (!p || typeof p.lat !== 'number' || typeof p.lon !== 'number') return;
+      seen[p.key] = true;
+      var r = riskOf(p), label = String(p.label || 'Place'), m = markers[p.key];
+      if (!m) {
+        var el = h('button', 'map-mk');
+        el.type = 'button';
+        el.addEventListener('click', function (e) { e.stopPropagation(); if (TD.select) TD.select(p.key); });
+        m = markers[p.key] = { el: el, tag: null, mk: new lib.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map) };
+      } else {
+        m.mk.setLngLat([p.lon, p.lat]);
+      }
+      // classList only: MapLibre put its own classes (maplibregl-marker, the anchor) on this element
+      m.el.classList.add('map-mk');
+      ['high', 'moderate', 'low'].forEach(function (c) { m.el.classList.toggle(c, c === r.cls); });
+      m.el.classList.toggle('sel', !!p.selected);
+      m.el.setAttribute('aria-label', r.label ? label + ', ' + r.label : label);
+      if (p.selected) {
+        if (!m.tag) { m.tag = h('span', 'map-tag'); m.tag.setAttribute('aria-hidden', 'true'); m.el.append(m.tag); }
+        m.tag.textContent = r.label ? label + ' · ' + r.label : label;
+      } else if (m.tag) {
+        m.tag.remove();
+        m.tag = null;
+      }
+    });
+    Object.keys(markers).forEach(function (k) { if (!seen[k]) { markers[k].mk.remove(); delete markers[k]; } });
+    placeTags();
+  }
+
+  // a tag opens to the right of its marker; in the right 45% of the map it opens to the left so the map's edge never cuts it
+  function placeTags() {
+    if (!map) return;
+    var w = frame.offsetWidth;
+    Object.keys(markers).forEach(function (k) {
+      var m = markers[k];
+      if (!m.tag) return;
+      // measure the tag at its widest (220 px, wrapping beyond that), then take the side of the marker with room; if neither side has
+      // enough, take the roomier side and narrow the tag to fit. 22 = half the marker + the gap + a 4 px margin at the map's edge.
+      m.tag.style.maxWidth = '220px'; // CSSOM: a computed width, not a design value
+      var x = map.project(m.mk.getLngLat()).x, tw = m.tag.offsetWidth, rr = w - x - 22, lr = x - 22;
+      var left = tw <= rr ? false : tw <= lr ? true : lr > rr;
+      m.tag.classList.toggle('left', left);
+      m.tag.style.maxWidth = Math.max(80, Math.min(220, left ? lr : rr)) + 'px';
+    });
+  }
+
+  function km(a, b) { // great-circle distance in km
+    var r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 12742 * Math.asin(Math.min(1, Math.sqrt(x)));
+  }
+
+  // the view: the selected pin and every pin within 1,000 km of it (zoom 6 at most; zoom 5 when it has no neighbour); with no selection, all pins.
+  // Runs on window entry, when the set of pins changes, and when the selection changes (then only if the visitor has not moved the map
+  // themselves, or the newly selected pin is outside the view).
+  function fit(force) {
+    if (!map || inSettings() || !frame.offsetWidth) return;
+    var pins = ((TD.pins && TD.pins()) || []).filter(function (p) { return p && typeof p.lat === 'number' && typeof p.lon === 'number'; });
+    var key = win() + ':' + pins.map(function (p) { return p.key; }).sort().join('|');
+    var sel = pins.filter(function (p) { return p.selected; })[0] || null, selKey = sel ? sel.key : '';
+    var setChanged = key !== fitKey, selChanged = selKey !== fitSel;
+    if (!force && !setChanged && !selChanged) return;
+    fitKey = key;
+    fitSel = selKey;
+    if (!pins.length) return;
+    if (!force && !setChanged && sel && userMoved && map.getBounds().contains([sel.lon, sel.lat])) return;
+    userMoved = false;
+    var dur = reduced() ? 0 : 600;
+    if (!sel) {
+      var all = new lib.LngLatBounds([pins[0].lon, pins[0].lat], [pins[0].lon, pins[0].lat]);
+      pins.forEach(function (p) { all.extend([p.lon, p.lat]); });
+      map.fitBounds(all, { padding: padFor(), maxZoom: 9, duration: dur });
+      return;
+    }
+    var near = pins.filter(function (p) { return p !== sel && km(sel, p) <= 1000; });
+    if (!near.length) { map.flyTo({ center: [sel.lon, sel.lat], zoom: 5, padding: padFor(), duration: dur, essential: true }); return; }
+    var b = new lib.LngLatBounds([sel.lon, sel.lat], [sel.lon, sel.lat]);
+    // shift a neighbour across the antimeridian (by 360) so the box stays tight around the selected pin
+    near.forEach(function (p) { b.extend([p.lon - 360 * Math.round((p.lon - sel.lon) / 360), p.lat]); });
+    map.fitBounds(b, { padding: padFor(), maxZoom: 6, duration: dur });
+  }
+  function padFor() { return frame.offsetWidth < 420 ? 30 : { top: 40, bottom: 40, left: 40, right: 190 }; } // room on the right for the selected tag
+
+  // base map, labels and stations from the preferences of the window on screen
+  function applyPrefs() {
+    if (!map || inSettings()) return;
+    var p = prefs();
+    frame.classList.toggle('map-detailed', p.base === 'detailed');
+    if (p.base !== baseKey) {
+      baseKey = p.base;
+      map.setStyle(STYLES[baseKey], { diff: false }); // the style.load handler re-adds labels and the gauge layer
+      return;
+    }
+    if (loaded) { applyLabels(); setWant(win() === 'sea_level' && p.stations); }
+  }
+
+  function applyLabels() {
+    var on = prefs().labels, st = map.getStyle();
+    ((st && st.layers) || []).forEach(function (l) {
+      if (l.type === 'symbol') map.setLayoutProperty(l.id, 'visibility', on ? 'visible' : 'none');
+    });
   }
 
   function start() {
-    if (map) { map.remove(); map = null; pin = null; tip = null; tipFor = null; }
-    failed = false; loaded = false;
+    if (map) { map.remove(); map = null; tip = null; tipFor = null; markers = Object.create(null); }
+    failed = false; loaded = false; fitKey = null; fitSel = null;
     frame.classList.remove('map-failed');
     wait.hidden = false;
     wait.textContent = 'Loading the map…';
@@ -90,11 +186,13 @@
     slowTimer = setTimeout(function () {
       if (!loaded && !failed) wait.textContent = 'Loading the map… Still loading. The map is optional.';
     }, 8000);
+    baseKey = prefs().base;
+    frame.classList.toggle('map-detailed', baseKey === 'detailed');
     import('./vendor/maplibre-gl/maplibre-gl.mjs').then(function (m) {
       lib = m;
       try {
         map = new lib.Map({
-          container: canvas, style: STYLE, center: [15, 28], zoom: window.innerWidth < 600 ? 0.4 : 1.1,
+          container: canvas, style: STYLES[baseKey], center: [15, 28], zoom: 1.1,
           minZoom: 0.3, maxZoom: 11, renderWorldCopies: true, attributionControl: false,
           cooperativeGestures: true, doubleClickZoom: false, dragRotate: false, touchPitch: false, pitchWithRotate: false,
           fadeDuration: reduced() ? 0 : 300,
@@ -112,20 +210,27 @@
       var cv = map.getCanvas();
       cv.tabIndex = -1;
       cv.setAttribute('aria-hidden', 'true');
+      // the style carries the base-map credit itself; the compact control also shows the gauge credits
+      map.addControl(new lib.AttributionControl({ compact: true }), 'bottom-right');
+      collapseAttrib();
+      map.on('resize', collapseAttrib);
       map.addControl(new lib.NavigationControl({ showCompass: false, visualizePitch: false }), 'top-right');
       map.touchZoomRotate.disableRotation();
+      function afterStyle() { collapseAttrib(); applyLabels(); setWant(!inSettings() && win() === 'sea_level' && prefs().stations); applyDots(); }
+      map.on('style.load', function () { if (loaded) afterStyle(); });
       map.on('load', function () {
         loaded = true;
         failed = false;
         clearTimeout(slowTimer);
         frame.classList.remove('map-failed');
         wait.hidden = true;
-        if (cur) put(cur.lat, cur.lon, true);
-        maybeFetch();
-        applyDots();
+        map.resize();
+        applyPrefs();
+        afterStyle();
+        fit(true);
       });
       // errors after load (a missed tile on a slow line) are ignored on purpose
-      map.on('error', function () { if (!loaded) fail("The map couldn't load. " + SEARCH, true); });
+      map.on('error', function () { if (!loaded) fail("The map couldn't load. Your places are still listed on the left.", true); });
       map.on('mousemove', function (e) {
         if (!hoverOK) return;
         var hit = nearest(e);
@@ -138,35 +243,33 @@
         tip.setDOMContent(t).setLngLat([hit.lng, hit.g.lat]).addTo(map);
         tip.getElement().setAttribute('aria-hidden', 'true');
       });
+      map.on('moveend', placeTags);
       map.on('mouseout', tipOff);
+      // the visitor moved or zoomed the map (events with an original event): do not refit over it on a resize
+      ['dragstart', 'zoomstart'].forEach(function (n) { map.on(n, function (e) { if (e && e.originalEvent) userMoved = true; }); });
       map.on('zoom', function () { if (map.getZoom() < 4) tipOff(); });
+      // a click on empty map pins that point (or the gauge under it); markers stop their own clicks
       map.on('click', function (e) {
-        var s = TD.state;
-        prev = s.place ? { lat: s.place.lat, lon: s.place.lon, label: s.place.label, variable: s.variable, source: s.source, start: s.start, end: s.end, geo: curGeo } : null;
+        if (!TD.addPlace) return;
         var hit = nearest(e), lat, lon, label;
-        snap = null;
         if (hit) {
           lat = hit.g.lat; lon = hit.g.lon;
           label = (TD.cleanPlace && TD.cleanPlace(hit.g.name)) || 'Tide gauge';
-          snap = { lat: lat, lon: lon, label: label };
         } else {
           lat = Math.max(-85, Math.min(85, e.lngLat.lat));
           lon = (((e.lngLat.lng + 180) % 360) + 360) % 360 - 180;
-          label = 'Pinned spot (' + fmt(lat, lon) + ')';
+          label = 'Pinned spot';
         }
-        cur = { lat: lat, lon: lon };
-        put(lat, lon, false);
-        TD.loadPlace({ lat: lat, lon: lon, label: label, origin: 'map' });
+        Promise.resolve(TD.addPlace({ label: label, lat: lat, lon: lon })).then(function (r) {
+          if (r && r.ok === false && r.reason === 'full' && TD.announce) TD.announce('You can pin up to 6 places. Remove one first.');
+        }).catch(function () {});
       });
+      syncMarkers();
     }).catch(noMap);
   }
 
-  // ---- tide gauge dots (spec: web/design/07-gauges.md); only while the measurement is sea level ----
-  var hoverOK = matchMedia('(hover: hover)').matches;
-  var OP = ['step', ['zoom'], 0.65, 4, 0.9];
-
-  function setWant(v) {
-    var on = v === 'sea_level';
+  // ---- tide gauge dots (web/design/07-gauges.md); Sea level only, and only with "Measuring stations" on ----
+  function setWant(on) {
     if (on === wantDots) return;
     wantDots = on;
     maybeFetch();
@@ -215,6 +318,20 @@
       .then(function () { clearTimeout(timer); gLoading = false; applyDots(); });
   }
 
+  // display only: the jargon ", RLR monthly means" is dropped from the credit name (the link and the route are unchanged)
+  function creditName(x) { return 'Gauge locations: ' + x.name.replace(/,\s*RLR monthly means\s*$/, ''); }
+  function isHttps(u) { return typeof u === 'string' && u.indexOf('https://') === 0; }
+  function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+  // the gauges source's own attribution (HTML, built only from escaped text and https addresses): the control shows it while the layer is shown
+  function gaugeAttribution() {
+    return gaugeSrcs.map(function (x) {
+      var text = esc(creditName(x));
+      // each credit in its own block (div is allowed by the control's sanitizer)
+      return '<div>' + (isHttps(x.url) ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + text + '</a>' : text) + '</div>';
+    }).join(' ');
+  }
+
   function buildLegend() {
     legend = h('p', 'map-legend');
     legend.setAttribute('aria-hidden', 'true');
@@ -227,26 +344,20 @@
     var c = document.createElementNS(ns, 'circle');
     c.setAttribute('cx', '5'); c.setAttribute('cy', '5'); c.setAttribute('r', '4');
     svg.append(c);
-    legend.append(svg, document.createTextNode('Tide gauge. Zoom in and tap one. A gauge with only a few years of readings cannot give a clear answer.'));
-    slot.insertBefore(legend, credit);
+    legend.append(svg, document.createTextNode('Dots are tide gauges. Zoom in and click one to pin it.'));
+    slot.append(legend);
     gaugeSrcs.forEach(function (x) {
-      var text = 'Gauge locations: ' + x.name;
-      var https = typeof x.url === 'string' && x.url.indexOf('https://') === 0;
-      var el = h(https ? 'a' : 'span', 'map-gauge-credit', text);
-      if (https) { el.href = x.url; el.rel = 'noopener'; }
-      credit.append(el);
-      gCredits.push(el);
-      if (TD.addCredit) TD.addCredit('gauges-' + x.id, text, https ? x.url : undefined);
+      if (TD.addCredit) TD.addCredit('gauges-' + x.id, creditName(x), isHttps(x.url) ? x.url : undefined);
     });
   }
 
-  // draws, shows or fades out the dots; runs when the map or the list arrives, and when the measurement changes
+  // draws, shows or fades out the dots; runs when the map or the list arrives, after a style change, and when the preferences change
   function applyDots() {
     if (!map || !loaded || !gauges) return;
     var show = wantDots;
     if (!map.getSource('gauges')) {
       var feats = gauges.map(function (g, i) { return { type: 'Feature', properties: { i: i }, geometry: { type: 'Point', coordinates: [g.lon, g.lat] } }; });
-      map.addSource('gauges', { type: 'geojson', data: { type: 'FeatureCollection', features: feats } });
+      map.addSource('gauges', { type: 'geojson', attribution: gaugeAttribution(), data: { type: 'FeatureCollection', features: feats } });
       map.addLayer({
         id: 'gauges-dots', type: 'circle', source: 'gauges',
         layout: { visibility: show ? 'visible' : 'none' },
@@ -258,6 +369,7 @@
         }
       });
       if (!legend) buildLegend();
+      collapseAttrib();
     }
     clearTimeout(hideTimer);
     map.setPaintProperty('gauges-dots', 'circle-opacity-transition', { duration: reduced() ? 0 : 200 });
@@ -273,7 +385,6 @@
       tipOff();
     }
     legend.hidden = !show;
-    gCredits.forEach(function (el) { el.hidden = !show; });
   }
 
   // the nearest dot within 14 px of the pointer (dots on, zoom 4 or more); { g: gauge, lng: its longitude in the world copy shown }
@@ -292,9 +403,31 @@
     return best;
   }
 
-  var sel = document.getElementById('variable');
-  if (sel) sel.addEventListener('change', function () { setWant(sel.value); });
-  if (TD.ready) TD.ready.then(function () { if (sel) setWant(sel.value); });
+  // a measurement window came on screen (the map was laid out at zero size while it was hidden)
+  function route() {
+    if (inSettings()) return;
+    syncMarkers();
+    applyPrefs();
+    if (map) requestAnimationFrame(function () { if (map) { map.resize(); fit(true); } });
+  }
+
+  document.addEventListener('td:route', route);
+  document.addEventListener('td:prefs', function () { applyPrefs(); });
+  document.addEventListener('td:pins', function () { if (inSettings()) return; syncMarkers(); fit(false); });
+  if (TD.ready) TD.ready.then(function () { if (!inSettings()) { applyPrefs(); setWant(win() === 'sea_level' && prefs().stations); } });
+
+  // the slot can change size after the map is made (the row grows when the card fills in): keep the canvas, and so the DOM markers, in step
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () {
+      if (rzFrame) return;
+      rzFrame = requestAnimationFrame(function () {
+        rzFrame = 0;
+        if (!map || !loaded || inSettings() || !frame.offsetWidth) return;
+        map.resize();
+        if (!userMoved) fit(true);
+      });
+    }).observe(frame);
+  }
 
   var io = null;
   if ('IntersectionObserver' in window) {
@@ -305,26 +438,4 @@
   } else {
     start();
   }
-
-  document.addEventListener('td:place-pick', function (e) {
-    var d = e.detail, fromMap = d.origin === 'map';
-    cur = { lat: d.lat, lon: d.lon };
-    curGeo = d.origin === 'geo';
-    if (!fromMap) put(d.lat, d.lon, true);
-    if (fromMap && snap && Math.abs(snap.lat - d.lat) <= 0.005 && Math.abs(snap.lon - d.lon) <= 0.005) {
-      status.textContent = 'Pinned the tide gauge at ' + snap.label + '.';
-    } else {
-      status.textContent = (fromMap ? 'Pinned ' : 'Showing ') + fmt(d.lat, d.lon) + '. We use the nearest data we have.';
-    }
-    snap = null;
-    if (d.variable) setWant(d.variable);
-    undo.hidden = !(fromMap && prev);
-  });
-
-  undo.addEventListener('click', function () {
-    var p = prev;
-    prev = null;
-    undo.hidden = true;
-    if (p) TD.loadPlace({ lat: p.lat, lon: p.lon, label: p.label, variable: p.variable, source: p.source, start: p.start, end: p.end, origin: p.geo ? 'geo' : 'undo' });
-  });
 })();

@@ -4,208 +4,167 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Trend Detective</title>
-<meta name="description" content="Is this really changing where you live? Search for a place and see what public records say.">
+<meta name="description" content="Is this really changing where you live? Pin your places and see what public records say.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="Trend Detective">
-<meta property="og:description" content="Is this really changing where you live? Search for a place and see what public records say.">
+<meta property="og:description" content="Is this really changing where you live? Pin your places and see what public records say.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://trend-detective-six.vercel.app/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Trend Detective">
-<meta name="twitter:description" content="Is this really changing where you live? Search for a place and see what public records say.">
+<meta name="twitter:description" content="Is this really changing where you live? Pin your places and see what public records say.">
+<script src="prefs.js"></script>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="map.css">
-<link rel="stylesheet" href="meaning.css">
-<link rel="stylesheet" href="memory.css">
-<link rel="stylesheet" href="guide.css">
+<link rel="stylesheet" href="compare.css">
+<link rel="stylesheet" href="settings.css">
 <link rel="stylesheet" href="noise.css">
+<link rel="stylesheet" href="chat.css">
 </head>
 <body>
 <p id="td-live" class="sr-only" role="status"></p>
-<a class="skip" id="skip" href="#h-explore">Skip to the content</a>
+<a class="skip" id="skip" href="#main">Skip to the content</a>
 
-<header>
-  <div class="wrap">
-    <div class="title-row">
-      <h1>Trend Detective</h1>
-      <p class="ai-label">Built with AI assistance</p>
-    </div>
+<header class="top">
+  <span class="brand">Trend Detective</span>
+  <nav id="nav" class="nav" aria-label="Measurements"></nav>
+  <div class="right">
+    <a id="settings-link" class="btn ghost" href="#settings">Settings</a>
+    <span class="ai-label">Built with AI assistance</span>
   </div>
 </header>
 
-<div class="wrap"><div id="tabbar" class="tabbar"></div></div>
-
-<main>
-<div class="wrap">
-
-<div id="panel-explore" class="panel">
-  <section id="hero" aria-labelledby="h-explore">
-    <h2 id="h-explore" class="lead" tabindex="-1">Is this really changing where I live?</h2>
-    <p id="hero-lead" class="hero-lead">Search for your town or tap the map. We check public NASA and NOAA records and tell you in plain words.</p>
-
-    <form id="controls" novalidate autocomplete="off">
-      <div id="search" class="search">
-        <div class="search-head">
-          <label for="place" id="place-label">Search for a place</label>
-          <span class="search-links"><button type="button" id="coords-toggle" class="linkbtn" aria-expanded="false" aria-controls="coords"><span class="mark" aria-hidden="true"></span>Use coordinates instead</button></span>
-        </div>
-        <div class="combo">
-          <input id="place" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="place-list" aria-describedby="place-status" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="80" placeholder="Type a city or town">
-          <ul id="place-list" role="listbox" aria-labelledby="place-label" hidden></ul>
-        </div>
-        <p id="place-status" class="help" role="status"></p>
-        <p id="place-credit" class="help" hidden></p>
-      </div>
-
-      <fieldset id="examples" class="chips">
-        <legend class="sr-only">Example places</legend>
-        <div class="ex-head"><p class="ex-label" aria-hidden="true">Or try an example</p><button type="button" id="guide-reopen" class="linkbtn" hidden>Quick start</button></div>
-        <div id="chips" class="chip-row"></div>
-      </fieldset>
-
-      <div id="coords" class="fields coords" hidden>
-        <div class="field">
-          <label for="lat">Latitude</label>
-          <input id="lat" type="text" inputmode="decimal" aria-describedby="lat-err">
-          <p id="lat-err" class="field-err" hidden></p>
-        </div>
-        <div class="field">
-          <label for="lon">Longitude</label>
-          <input id="lon" type="text" inputmode="decimal" aria-describedby="lon-err">
-          <p id="lon-err" class="field-err" hidden></p>
-        </div>
-        <div class="field btn-field span2">
-          <button type="button" id="locate" class="btn">Use my location</button>
-          <p id="geo-msg" class="field-err" hidden></p>
-        </div>
-        <div class="field btn-field span2">
-          <button type="submit" id="go" class="btn primary">Show trend</button>
-        </div>
-      </div>
-    </form>
-  </section>
-
-  <section id="guide-slot" hidden aria-label="Quick start"></section>
-  <section id="map-slot" hidden aria-label="Map"></section>
-
-  <div id="pick" class="fields pick">
-    <div class="field field-var">
-      <label for="variable">Measurement</label>
-      <select id="variable" aria-describedby="variable-help"></select>
+<div id="win-measure" class="shell">
+  <aside class="side" aria-label="Your places">
+    <div class="lbl" id="places-lbl">Your places</div>
+    <div class="search" id="search">
+      <label for="place" class="sr-only" id="place-label">Search for a place</label>
+      <span class="mag" aria-hidden="true">⌕</span>
+      <input id="place" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="place-list" aria-describedby="place-status" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="80" placeholder="Search a town or city">
+      <ul id="place-list" role="listbox" aria-labelledby="place-label" hidden></ul>
     </div>
-    <div class="field" id="source-field" hidden>
-      <label for="source">Data source</label>
-      <select id="source" aria-describedby="source-help"></select>
+    <p id="place-status" class="help" role="status"></p>
+    <p id="place-credit" class="help" hidden></p>
+    <ul id="pins" class="pins" aria-label="Pinned places"></ul>
+    <p class="hint" id="pin-hint">Pin up to 6 places to compare. Click one to see its recommendation.</p>
+    <div id="src-field" hidden>
+      <div class="lbl" id="src-lbl">Measured by</div>
+      <div id="seg-source" class="seg" role="radiogroup" aria-labelledby="src-lbl"></div>
+      <p id="src-help" class="hint"></p>
+      <p id="src-note" class="hint" hidden></p>
     </div>
-    <p id="pick-help" class="help span2"><span id="variable-help"></span> <span id="source-help"></span></p>
+    <div>
+      <div class="lbl" id="units-lbl">Units</div>
+      <div id="seg-units" class="seg" role="radiogroup" aria-labelledby="units-lbl"></div>
+    </div>
+    <div>
+      <div class="lbl" id="look-lbl">Look ahead to</div>
+      <div id="seg-look" class="seg" role="radiogroup" aria-labelledby="look-lbl"></div>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+    <div class="ph">
+      <h1 id="win-h1" tabindex="-1"></h1>
+      <p id="win-q"></p>
+    </div>
+    <p id="status-line" class="status-line" role="status" hidden></p>
+    <div class="row">
+      <section id="rec" class="card rec" aria-busy="false"></section>
+      <div id="map-slot" class="map-slot"></div>
+    </div>
+    <section class="card ch"><div id="compare-chart-slot"></div></section>
+    <section class="card tb"><div id="compare-table-slot"></div></section>
+    <footer class="foot">
+      <p id="foot-data"></p>
+      <ul id="footer-sources"></ul>
+    </footer>
+  </main>
+</div>
+
+<div id="win-settings" class="settings-wrap" hidden>
+  <div id="settings-slot"></div>
+</div>
+
+<dialog id="how-dialog" aria-labelledby="how-title">
+  <div class="dlg-head">
+    <h2 id="how-title" tabindex="-1">How we calculated this</h2>
+    <button type="button" id="how-close" class="btn ghost">Close</button>
   </div>
-
-  <section id="saved-slot" hidden aria-label="Saved places"></section>
-
-  <div id="answer-wrap">
-  <div id="empty" class="card quiet">
-    <h2 id="empty-h">Pick a place to see the answer</h2>
-    <p>Search for your town, tap the map, or try an example. We show what the public records say, in plain words.</p>
-  </div>
-  <section id="answer" tabindex="-1" aria-label="Answer" aria-busy="false">
-    <div id="answer-bar" class="answer-bar" hidden>
-      <p id="answer-place" class="answer-place"></p>
-      <div id="share-slot" class="share-slot"></div>
-      <a id="change-place" class="linkbtn" href="#h-explore">Change the place</a>
-    </div>
-    <section id="meaning-slot" hidden aria-label="What this means for you"></section>
-    <div id="loading" role="status">
-      <p id="loading-text" class="loading-text"></p>
-      <p id="loading-slow"></p>
-      <div id="grey" class="grey-block" hidden></div>
-    </div>
-
-    <div id="result" class="grid">
-      <div class="col-verdict">
-        <div id="verdict-card" class="card" hidden>
-          <p class="card-label">Our answer</p>
-          <h2 id="verdict-heading" tabindex="-1" class="verdict-head"></h2>
-          <div class="card-body">
-            <div class="numrow"><p id="verdict-big" class="big"></p><div id="spark" class="spark" hidden></div></div>
-            <p id="verdict-calc" class="source"></p>
-            <div id="verdict-source" class="srcline"></div>
-            <p id="verdict-p1"></p>
-            <p id="verdict-lean" class="source" hidden></p>
-            <p id="verdict-p2"></p>
-            <p id="verdict-evidence"></p>
-            <div id="scene" class="scene-mount" hidden></div>
-            <dl id="facts" class="facts"></dl>
-            <div class="caveats">
-              <p class="source">Caveats</p>
-              <ul id="notes-list"></ul>
-            </div>
-          </div>
+  <div id="how-detail" class="dlg-body">
+    <p id="how-place" class="how-place"></p>
+    <figure id="chart-fig">
+      <p id="chart-head" class="chart-head"></p>
+      <div id="chart-source" class="srcline"></div>
+      <div id="chart-box"></div>
+      <p id="readout" class="readout" aria-live="polite">Tap or hover the chart to read a month.</p>
+      <p id="chart-key" class="note"></p>
+    </figure>
+    <section class="how-part">
+      <h3>Exact rate and range</h3>
+      <p id="verdict-p1"></p>
+      <p id="verdict-lean" class="source" hidden></p>
+      <p id="verdict-p2"></p>
+    </section>
+    <section class="how-part">
+      <h3>How easily luck explains it</h3>
+      <p id="verdict-evidence"></p>
+    </section>
+    <section class="how-part">
+      <h3>The numbers</h3>
+      <dl id="facts" class="facts"></dl>
+    </section>
+    <section class="how-part">
+      <h3>Caveats and notes</h3>
+      <ul id="notes-list"></ul>
+    </section>
+    <section class="how-part">
+      <h3>How to read the chart</h3>
+      <div id="legend" class="legend">
+        <div class="legend-group" role="group" aria-labelledby="lg-data">
+          <p id="lg-data" class="legend-label">From the dataset</p>
+          <ul>
+            <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-raw"/></svg>Raw monthly value (upper chart)</li>
+          </ul>
         </div>
-        <div id="problem" class="card problem" role="alert" hidden>
-          <h2 id="problem-heading" tabindex="-1"></h2>
-          <div id="problem-body" class="card-body"></div>
-          <div id="problem-actions" class="actions"></div>
+        <div class="legend-group" role="group" aria-labelledby="lg-calc">
+          <p id="lg-calc" class="legend-label">Our calculation</p>
+          <ul>
+            <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-des"/></svg>Seasons removed (lower chart)</li>
+            <li><svg width="32" height="12" aria-hidden="true"><circle cx="16" cy="6" r="3.5" class="s-year"/></svg>Yearly average, seasons removed</li>
+            <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-trend"/></svg>Trend line</li>
+            <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="c-zero"/></svg>No-change line</li>
+            <li><svg width="32" height="12" aria-hidden="true"><rect x="1" y="1" width="30" height="10" class="s-fan"/><line x1="1" y1="1" x2="31" y2="1" class="s-edge"/><line x1="1" y1="11" x2="31" y2="11" class="s-edge"/></svg>Range of the trend</li>
+          </ul>
         </div>
       </div>
-
-      <div class="col-chart" id="chart-wrap" hidden>
-        <figure id="chart-fig">
-          <p id="chart-head" class="chart-head"></p>
-          <div id="chart-source" class="srcline"></div>
-          <p class="source t-only">Trend and range: our calculation.</p>
-          <div id="chart-box"></div>
-          <div id="legend" class="legend">
-            <div class="legend-group" role="group" aria-labelledby="lg-data">
-              <p id="lg-data" class="legend-label">From the dataset</p>
-              <ul>
-                <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-raw"/></svg>Raw monthly value (upper chart)</li>
-              </ul>
-            </div>
-            <div class="legend-group" role="group" aria-labelledby="lg-calc">
-              <p id="lg-calc" class="legend-label">Our calculation</p>
-              <ul>
-                <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-des"/></svg>Seasons removed (lower chart)</li>
-                <li><svg width="32" height="12" aria-hidden="true"><circle cx="16" cy="6" r="3.5" class="s-year"/></svg>Yearly average, seasons removed</li>
-                <li class="t-only"><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="s-trend"/></svg>Trend line</li>
-                <li><svg width="32" height="12" aria-hidden="true"><line x1="1" y1="6" x2="31" y2="6" class="c-zero"/></svg>No-change line</li>
-                <li class="t-only"><svg width="32" height="12" aria-hidden="true"><rect x="1" y="1" width="30" height="10" class="s-fan"/><line x1="1" y1="1" x2="31" y2="1" class="s-edge"/><line x1="1" y1="11" x2="31" y2="11" class="s-edge"/></svg>Range of the trend</li>
-              </ul>
-            </div>
-          </div>
-          <p class="note">Gaps in the line are months with no data.</p>
-          <p id="readout" class="readout" aria-live="polite">Tap or hover the chart to read a month.</p>
-          <figcaption>
-            <span id="chart-caption"></span>
-            <span id="chart-raw"></span>
-          </figcaption>
-        </figure>
-        <div id="year-stripes" class="stripes" hidden>
-          <p class="sc-label">Year by year</p>
-          <div id="stripes-art"></div>
-          <p class="source">One stripe per year, seasons removed. The two ends of the key are this place's own lowest and highest years, however small the gap.</p>
-          <p class="source">Year stripes: our calculation.</p>
-          <div id="stripes-source" class="srcline"></div>
+      <p class="note">Gaps in the line are months with no data.</p>
+      <p id="chart-caption" class="source"></p>
+      <p id="chart-raw" class="source"></p>
+    </section>
+    <section id="year-stripes" class="how-part stripes" hidden>
+      <h3>Year by year</h3>
+      <div id="stripes-art"></div>
+      <p class="source">One stripe per year, seasons removed. The two ends of the key are this place's own lowest and highest years, however small the gap.</p>
+      <p class="source">Year stripes: our calculation.</p>
+      <div id="stripes-source" class="srcline"></div>
+    </section>
+    <section id="noise-slot" hidden aria-label="Real or noise?"></section>
+    <section class="how-part">
+      <details id="table-details">
+        <summary><span class="mark" aria-hidden="true"></span>Show the data as a table</summary>
+        <div id="table-source" class="srcline"></div>
+        <div id="table-scroll" class="table-scroll" tabindex="0" role="region" aria-label="Monthly data table">
+          <table>
+            <caption id="table-caption"></caption>
+            <thead><tr><th scope="col">Month</th><th scope="col" id="table-col"></th></tr></thead>
+            <tbody id="table-body"></tbody>
+          </table>
         </div>
-        <details id="table-details">
-          <summary><span class="mark" aria-hidden="true"></span>Show the data as a table</summary>
-          <div id="table-source" class="srcline"></div>
-          <div id="table-scroll" class="table-scroll" tabindex="0" role="region" aria-label="Monthly data table">
-            <table>
-              <caption id="table-caption"></caption>
-              <thead><tr><th scope="col">Month</th><th scope="col" id="table-col"></th></tr></thead>
-              <tbody id="table-body"></tbody>
-            </table>
-          </div>
-        </details>
-      </div>
-    </div>
-  </section>
-  <section id="noise-slot" hidden aria-label="Real or noise?"></section>
-  </div>
-
-  <div id="more" hidden>
-    <section id="howto" aria-labelledby="howto-h">
-      <h2 id="howto-h">How to read this</h2>
+      </details>
+    </section>
+    <section id="howto" class="how-part" aria-labelledby="howto-h">
+      <h3 id="howto-h">How to read this</h3>
       <p>Seasons removed: we subtract each calendar month's average, so summer and winter don't hide a slow change.</p>
       <p>The shaded band: the range of slopes the data can support. If a flat line fits inside it, we can't call the change real.</p>
       <p>p-value: smaller means harder to explain by luck alone. 0.05 is the usual line for calling a change clear.</p>
@@ -213,226 +172,15 @@
       <p id="howto-ac"></p>
     </section>
   </div>
-
-</div>
-
-<div id="panel-ask" class="panel narrow">
-  <h2 id="h-ask" tabindex="-1">Ask a question</h2>
-  <noscript><p>Asking a question needs JavaScript. Turn it on to use this tab.</p></noscript>
-  <div id="ask-ui" hidden>
-    <p id="ask-lead" class="lead-p">Ask about a place in your own words. We look up public data and tell you whether it changed over time. We can't forecast the future.</p>
-    <p id="ask-privacy">Your question and the earlier messages in this chat are sent to an AI model provider so it can be answered. Don't include personal details.</p>
-    <p id="ask-keep" class="small">Your conversation stays in this browser tab. Reloading clears it. Questions and answers are recorded by a quality-checking service (Langfuse); nothing else about you is kept.</p>
-
-    <div id="ask-off" hidden>
-      <p><strong>Asking questions isn't available right now.</strong></p>
-      <p>You can still pick a place and a measurement.</p>
-      <button type="button" id="ask-off-go" class="btn">Go to Explore</button>
-    </div>
-
-    <a id="ask-jump" class="jump" href="#ask-q" hidden>Go to the question box</a>
-
-    <div id="ask-empty">
-      <p id="ask-try">Try one of these:</p>
-      <div id="ask-examples" class="examples"></div>
-    </div>
-
-    <div id="ask-thread" role="log" aria-label="Conversation"></div>
-    <p id="ask-hint" class="small" hidden>Ask a follow-up, for example: "What about Delhi?"</p>
-    <p id="ask-status" role="status" class="small sr-only"></p>
-
-    <form id="ask-form" novalidate>
-      <p id="ask-nohist" class="small" hidden>For now each question is answered on its own. Name the place again in a follow-up.</p>
-      <label for="ask-q">Your question</label>
-      <div class="ask-row">
-        <textarea id="ask-q" rows="2" maxlength="500" placeholder="Is sea level rising in New York?" aria-describedby="ask-help ask-privacy ask-count ask-err"></textarea>
-        <div class="ask-btns">
-          <button type="submit" id="ask-go" class="btn primary">Ask</button>
-          <button type="button" id="ask-cancel" class="btn" hidden>Cancel</button>
-        </div>
-      </div>
-      <p id="ask-err" class="field-err" hidden></p>
-      <p id="ask-help" class="help">Press Enter to ask. Shift+Enter starts a new line.</p>
-      <p id="ask-count" class="help" hidden></p>
-    </form>
-  </div>
-</div>
-<div id="panel-connect" class="panel narrow">
-  <h2 id="h-connect" tabindex="-1">Use Trend Detective in your own AI agent</h2>
-  <p class="lead-p">Connect an AI app to Trend Detective and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named.</p>
-  <p class="small">Works with AI agents such as Claude and GitHub Copilot.</p>
-  <p>MCP is a standard way for an AI app to use outside tools. Adding this server lets your AI look up these trends itself.</p>
-
-  <div class="addr-block">
-    <label for="addr-top">Trend Detective server address</label>
-    <div class="copyrow"><input id="addr-top" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
-    <p class="small">This address is for AI apps. It is not a web page. It needs no key and no sign-in.</p>
-  </div>
-  <p id="copy-status" class="sr-only" role="status"></p>
-
-  <section aria-labelledby="h-apps">
-    <h2 id="h-apps">Pick your AI app</h2>
-    <div id="apptabs" class="apptabs"></div>
-
-    <div id="app-claude" class="app-panel">
-      <h3>Claude</h3>
-      <p class="small">claude.ai and Claude desktop</p>
-      <ol>
-        <li>Open Customize, then Connectors.</li>
-        <li>Click "+ Add", then "Add custom connector".</li>
-        <li>Enter the name "Trend Detective" and paste the server address, then click "Continue".</li>
-        <li>Under Authentication choose "No sign in", then click "Add".</li>
-        <li>In a chat, click "+" at the lower left, then "Connectors", and switch Trend Detective on.</li>
-      </ol>
-      <label for="addr-claude">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-claude" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
-      <p class="small">Free plans can add one custom connector. On Team and Enterprise plans an owner has to add it.</p>
-      <a class="srclink" href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" rel="noopener">Claude setup docs ↗</a>
-      <p class="small">Checked 14 November 2026</p>
-    </div>
-
-    <div id="app-claude-code" class="app-panel">
-      <h3>Claude Code</h3>
-      <p class="small">In your terminal</p>
-      <ol>
-        <li>In your terminal run the command in the box.</li>
-      </ol>
-      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="Claude Code command" data-copy="command"><code>claude mcp add --transport http trend-detective https://trend-detective-six.vercel.app/mcp/</code></pre></div>
-      <ol start="2">
-        <li>Start Claude Code and type <code>/mcp</code>. Trend Detective should show as connected.</li>
-        <li>Optional: add <code>--scope user</code> to the command to use it in every project.</li>
-      </ol>
-      <p class="small">The command <code>claude mcp list</code> also shows it.</p>
-      <label for="addr-claude-code">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-claude-code" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
-      <a class="srclink" href="https://code.claude.com/docs/en/mcp" rel="noopener">Claude Code setup docs ↗</a>
-      <p class="small">Checked 14 November 2026</p>
-    </div>
-
-    <div id="app-cursor" class="app-panel">
-      <h3>Cursor</h3>
-      <ol>
-        <li>Create or open <code>~/.cursor/mcp.json</code> (all projects) or <code>.cursor/mcp.json</code> (one project).</li>
-        <li>Paste the entry from "Prefer a settings file?" below, using <code>url</code> and no <code>type</code>.</li>
-        <li>Open Customize and check that Trend Detective is listed and on.</li>
-      </ol>
-      <label for="addr-cursor">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-cursor" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
-      <p class="small">We could not confirm the menu names for adding a server in the Cursor app, so we show the config file instead.</p>
-      <a class="srclink" href="https://cursor.com/docs/context/mcp" rel="noopener">Cursor setup docs ↗</a>
-      <p class="small">Checked 14 November 2026</p>
-    </div>
-
-    <div id="app-vscode" class="app-panel">
-      <h3>VS Code</h3>
-      <p class="small">With GitHub Copilot</p>
-      <ol>
-        <li>Open the Command Palette and run "MCP: Add Server".</li>
-        <li>Choose "HTTP (HTTP or Server-Sent Events)" and paste the server address.</li>
-        <li>Name it "trend-detective", then choose Global (or the workspace if you prefer).</li>
-        <li>Accept the trust prompt after reading it, then ask GitHub Copilot a question and look for Trend Detective's tools.</li>
-      </ol>
-      <label for="addr-vscode">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-vscode" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
-      <p class="small">Or put the VS Code block from "Prefer a settings file?" in <code>.vscode/mcp.json</code>. VS Code uses <code>servers</code>, not <code>mcpServers</code>.</p>
-      <a class="srclink" href="https://code.visualstudio.com/docs/copilot/customization/mcp-servers" rel="noopener">VS Code MCP servers docs ↗</a>
-      <a class="srclink" href="https://code.visualstudio.com/docs/agents/reference/mcp-configuration" rel="noopener">VS Code MCP configuration reference ↗</a>
-      <p class="small">Checked 14 November 2026</p>
-    </div>
-
-    <div id="app-other" class="app-panel">
-      <h3>Any other AI agent</h3>
-      <ol>
-        <li>Open your AI agent's settings for MCP servers or connectors.</li>
-        <li>Add a new server.</li>
-        <li>Paste this address. No key and no sign-in are needed.</li>
-      </ol>
-      <label for="addr-other">Trend Detective server address</label>
-      <div class="copyrow"><input id="addr-other" class="addr" type="text" readonly value="https://trend-detective-six.vercel.app/mcp/" data-copy="server address"></div>
-      <p class="small">If it asks for a type, choose "HTTP" or "streamable HTTP".</p>
-      <a class="srclink" href="https://modelcontextprotocol.io" rel="noopener">About MCP ↗</a>
-    </div>
-  </section>
-
-  <section aria-labelledby="h-dev">
-    <h2 id="h-dev">Prefer a settings file?</h2>
-    <p>Paste this into your app's settings file instead of following the steps above. Field names differ between apps, so match yours.</p>
-    <div id="cfgtabs" class="apptabs cfgtabs"></div>
-    <div id="cfg-claude-code" class="cfg-panel">
-      <p class="small">Claude Code, project file <code>.mcp.json</code>. Claude Code needs <code>"type": "http"</code>.</p>
-      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="Claude Code config" data-copy="config"><code>{
-  "mcpServers": {
-    "trend-detective": {
-      "type": "http",
-      "url": "https://trend-detective-six.vercel.app/mcp/"
-    }
-  }
-}</code></pre></div>
-    </div>
-    <div id="cfg-cursor" class="cfg-panel">
-      <p class="small">Cursor, file <code>mcp.json</code>. No <code>type</code>.</p>
-      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="Cursor config" data-copy="config"><code>{
-  "mcpServers": {
-    "trend-detective": {
-      "url": "https://trend-detective-six.vercel.app/mcp/"
-    }
-  }
-}</code></pre></div>
-    </div>
-    <div id="cfg-vscode" class="cfg-panel">
-      <p class="small">VS Code, file <code>.vscode/mcp.json</code>.</p>
-      <div class="copyrow code"><pre role="group" tabindex="0" aria-label="VS Code config" data-copy="config"><code>{
-  "servers": {
-    "trend-detective": {
-      "type": "http",
-      "url": "https://trend-detective-six.vercel.app/mcp/"
-    }
-  }
-}</code></pre></div>
-    </div>
-  </section>
-
-  <section aria-labelledby="h-tools">
-    <h2 id="h-tools">What you can ask once connected</h2>
-    <dl class="tools">
-      <div><dt><code>list_variables</code></dt><dd>Lists what we can measure, such as air temperature and sea level, and where the data come from.</dd></div>
-      <div><dt><code>get_series</code></dt><dd>Gets the month-by-month values for a place.</dd></div>
-      <div><dt><code>detect_trend</code></dt><dd>Says whether it is changing at a place, how fast, and how sure we are, using the Mann-Kendall test and Sen's slope.</dd></div>
-    </dl>
-    <p>Try asking:</p>
-    <ul>
-      <li>Is sea level rising in New York?</li>
-      <li>Are the hottest days getting hotter in Delhi?</li>
-      <li>Has anything changed in Visakhapatnam (17.69, 83.22) since 1981?</li>
-    </ul>
-    <p class="small">Your AI app may ask your permission before it calls a tool.</p>
-  </section>
-
-  <section aria-labelledby="h-can">
-    <h2 id="h-can">What it can and can't do</h2>
-    <p>It can read public climate data from the sources named next to each result. It can't see your files, your chats or anything else on your device, and it can't change anything. It only reads.</p>
-  </section>
-</div>
-</div>
-</main>
-
-<footer>
-  <div class="wrap">
-    <p class="ai-label">Built with AI assistance</p>
-    <p>Data come from the sources named next to each number. Only public data.</p>
-    <ul id="footer-sources"></ul>
-    <section id="privacy-slot" hidden aria-label="Your data and privacy"></section>
-  </div>
-</footer>
+</dialog>
 
 <script defer src="scene.js"></script>
 <script defer src="app.js"></script>
 <script defer src="map.js"></script>
-<script defer src="meaning.js"></script>
-<script defer src="memory.js"></script>
-<script defer src="guide.js"></script>
+<script defer src="compare.js"></script>
+<script defer src="settings.js"></script>
 <script defer src="noise.js"></script>
-<script defer src="connect.js"></script>
-<script defer src="ask.js"></script>
+<script defer src="chat.js"></script>
+<div id="chat-slot"></div>
 </body>
 </html>
