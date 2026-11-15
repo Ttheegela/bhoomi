@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -22,10 +23,20 @@ def load(name):
     return json.loads((FX / name).read_text())
 
 
+def coops_long():
+    """The fixture's real rows (1911 to 2021, with gaps, too few valid months for the 30-year rule) topped up with
+    synthetic monthly rows from 1990 to last December, so the gauge meets the minimum-record rule."""
+    d = load("coops_monthly.json")
+    have = {(int(r["year"]), int(r["month"])) for r in d["data"]}
+    extra = [{"year": str(y), "month": str(m), "MSL": f"{0.05 + 0.0001 * (y - 1990):.4f}"}
+             for y in range(1990, date.today().year) for m in range(1, 13) if (y, m) not in have]
+    return {**d, "data": d["data"] + extra}
+
+
 @pytest.fixture
 def offline(monkeypatch):
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: load("power_monthly.json"))
-    monkeypatch.setattr(coops, "fetch", lambda sid: load("coops_monthly.json"))
+    monkeypatch.setattr(coops, "fetch", lambda sid: coops_long())
     monkeypatch.setattr(coops, "stations", lambda: load("coops_stations.json")["stations"])
 
 

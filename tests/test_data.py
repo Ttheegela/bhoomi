@@ -16,10 +16,20 @@ def load(name):
     return json.loads((FX / name).read_text())
 
 
+def coops_long():
+    """The fixture's real rows (1911 to 2021, with gaps, too few valid months for the 30-year rule) topped up with
+    synthetic monthly rows from 1990 to last December, so the gauge meets the minimum-record rule."""
+    d = load("coops_monthly.json")
+    have = {(int(r["year"]), int(r["month"])) for r in d["data"]}
+    extra = [{"year": str(y), "month": str(m), "MSL": f"{0.05 + 0.0001 * (y - 1990):.4f}"}
+             for y in range(1990, date.today().year) for m in range(1, 13) if (y, m) not in have]
+    return {**d, "data": d["data"] + extra}
+
+
 @pytest.fixture
 def offline(monkeypatch):
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: load("power_monthly.json"))
-    monkeypatch.setattr(coops, "fetch", lambda sid: load("coops_monthly.json"))
+    monkeypatch.setattr(coops, "fetch", lambda sid: coops_long())
     monkeypatch.setattr(coops, "stations", lambda: load("coops_stations.json")["stations"])
 
 
@@ -89,8 +99,8 @@ def test_coops_error_body(offline, monkeypatch):
     with pytest.raises(ValueError, match="No monthly sea level at Foo: No data was found"):
         coops.parse(load("coops_error.json"), "Foo")
     monkeypatch.setattr(coops, "fetch", lambda sid: load("coops_error.json"))
-    with pytest.raises(ValueError, match="Atlantic City"):
-        data.get_series("sea_level", 39.36, -74.42)
+    with pytest.raises(ValueError, match=r"Atlantic City, 0 km away: No monthly sea level at Atlantic City"):
+        data.get_series("sea_level", 39.36, -74.42, source="coops")  # no gauge parses: skipped, then none usable
 
 
 def test_coops_sorted_and_gap_filled():
@@ -1094,3 +1104,126 @@ def test_station_names_are_readable_in_series_and_sentences(offline2, psmsl_offl
 def test_readable_never_lengthens_a_name():
     assert len(upstream.readable(upstream.text("X" + "İ" * 200, upstream.NAME))) <= upstream.NAME
     assert len(upstream.readable("İSTANBUL")) == len("İSTANBUL") and upstream.readable("İSTANBUL").startswith("İ")
+
+
+# ---- CO-OPS minimum record: the same rule as PSMSL, nearest qualifying gauge within 100 km ----
+def _msl_rows(y0, n):
+    """n monthly rows from January y0 in CO-OPS shape (metres)."""
+    return {"data": [{"year": str(y0 + i // 12), "month": str(i % 12 + 1), "MSL": "0.1"} for i in range(n)]}
+
+
+LONG = _msl_rows(date.today().year - 41, 40 * 12)  # ends last December
+
+
+def _gauges(monkeypatch, replies):
+    """Gauges C1.. about 1 km apart going north from (40, -74), replies[i] = C{i+1}'s monthly reply. Returns the fetched ids."""
+    monkeypatch.setattr(coops, "stations", lambda: [{"id": f"C{i}", "name": f"Gauge {i}", "lat": 40 + i * 0.01, "lng": -74.0} for i in range(1, len(replies) + 1)])
+    fetched = []
+
+    def fetch(sid):
+        fetched.append(sid)
+        r = replies[int(sid[1:]) - 1]
+        if isinstance(r, Exception):
+            raise r
+        return r
+    monkeypatch.setattr(coops, "fetch", fetch)
+    return fetched
+
+
+def test_coops_nearest_long_gauge_is_used_with_rule_note(monkeypatch):
+    fetched = _gauges(monkeypatch, [LONG, LONG])
+    times, values, place, notes = coops.series(40.0, -74.0)
+    assert fetched == ["C1"] and place == {"name": "Gauge 1", "lat": 40.01, "lon": -74.0} and len(times) == len(values) == 480
+    assert notes == ["Tide gauge Gauge 1 (C1), 1 km from the point you asked about.",
+                     "Sea level relative to the land at the gauge, so land sinking or rising is included.", psmsl.RULE]
+
+
+def test_coops_short_gauge_is_skipped_for_the_next(monkeypatch):
+    fetched = _gauges(monkeypatch, [_msl_rows(2020, 17), LONG])
+    _, _, place, notes = coops.series(40.0, -74.0)
+    assert fetched == ["C1", "C2"] and place["name"] == "Gauge 2" and "Gauge 2 (C2), 2 km" in notes[0]
+
+
+def test_coops_stale_gauge_is_skipped(monkeypatch):
+    _gauges(monkeypatch, [_msl_rows(1950, 40 * 12)])
+    with pytest.raises(ValueError, match=r"Gauge 1, 1 km away: its record ends in 1989-12"):
+        coops.series(40.0, -74.0)
+
+
+def test_coops_unparseable_gauge_is_skipped_with_its_reason(monkeypatch):
+    _gauges(monkeypatch, [{"error": {"message": "No data was found."}}, {"data": []}, LONG])
+    assert coops.series(40.0, -74.0)[2]["name"] == "Gauge 3"
+    _gauges(monkeypatch, [{"error": {"message": "No data was found."}}])
+    with pytest.raises(ValueError, match=r"Gauge 1, 1 km away: No monthly sea level at Gauge 1: No data was found"):
+        coops.series(40.0, -74.0)
+
+
+def test_coops_exactly_thirty_years_qualifies(monkeypatch):
+    y = date.today().year - 31  # 360 months from January y end in December of the year before last: not stale
+    _gauges(monkeypatch, [_msl_rows(y, 360)])
+    assert len(coops.series(40.0, -74.0)[0]) == 360
+    _gauges(monkeypatch, [_msl_rows(y, 359)])
+    with pytest.raises(ValueError, match="it has only 29 years"):
+        coops.series(40.0, -74.0)
+
+
+def test_coops_none_qualifies_falls_back_to_psmsl_with_its_own_note(offline, psmsl_offline, monkeypatch):
+    _gauges(monkeypatch, [_msl_rows(2020, 17)])
+    monkeypatch.setattr(coops, "stations", lambda: [{"id": "C1", "name": "Gauge 1", "lat": 18.95, "lng": 72.83}])
+    s = data.get_series("sea_level", 18.95, 72.83)
+    assert s["source"]["id"] == "psmsl" and "PSMSL id 43" in s["notes"][0]
+    assert s["notes"][-1] == "No NOAA CO-OPS tide gauge within 100 km of this point has a long enough record, so the nearest PSMSL gauge was used."
+    assert not any("has no tide gauge within" in n for n in s["notes"])
+
+
+def test_coops_fallback_fetches_each_gauge_once_and_psmsl_error_follows(monkeypatch):
+    fetched = _gauges(monkeypatch, [_msl_rows(2020, 17), _msl_rows(2020, 17)])
+    monkeypatch.setattr(psmsl, "stations", lambda: [])
+    monkeypatch.setattr(psmsl, "series", lambda la, lo: (_ for _ in ()).throw(ValueError("PSMSL has nothing")))
+    with pytest.raises(ValueError, match="PSMSL has nothing"):
+        data.get_series("sea_level", 40.0, -74.0)
+    assert fetched == ["C1", "C2"]  # one lookup, not two
+
+
+def test_coops_named_source_has_no_fallback(monkeypatch):
+    called = []
+    monkeypatch.setattr(psmsl, "series", lambda la, lo: called.append(1))
+    _gauges(monkeypatch, [_msl_rows(2020, 17), _msl_rows(1950, 40 * 12)])
+    with pytest.raises(ValueError, match=r"no usable NOAA tide gauge within 100 km.*Gauge 1, 1 km away: it has only 1 years") as e:
+        data.get_series("sea_level", 40.0, -74.0, source="coops")
+    assert _plain(e.value, ValueError) and called == []
+
+
+def test_coops_outages_reach_the_caller_and_do_not_switch_source(monkeypatch):
+    called = []
+    monkeypatch.setattr(psmsl, "series", lambda la, lo: called.append(1))
+    _gauges(monkeypatch, [httpx.ReadTimeout("slow"), LONG])
+    with pytest.raises(httpx.HTTPError):  # a gauge fetch fails: not skipped for the next
+        data.get_series("sea_level", 40.0, -74.0)
+    _gauges(monkeypatch, [json.JSONDecodeError("not json", "<html>", 0), LONG])  # a maintenance page where JSON was due
+    with pytest.raises(httpx.HTTPError):
+        data.get_series("sea_level", 40.0, -74.0)
+    monkeypatch.setattr(coops, "stations", lambda: (_ for _ in ()).throw(httpx.ConnectError("down")))
+    with pytest.raises(httpx.HTTPError):
+        data.get_series("sea_level", 40.0, -74.0)
+    assert called == []
+
+
+def _row_of_coops(monkeypatch, n=7):
+    return _gauges(monkeypatch, [_msl_rows(2020, 17)] * n)
+
+
+def test_coops_gives_up_after_6_tries(monkeypatch):
+    fetched = _row_of_coops(monkeypatch)
+    with pytest.raises(ValueError, match="no usable NOAA tide gauge") as e:
+        coops.series(40.0, -74.0)
+    assert fetched == [f"C{i}" for i in range(1, 7)] and _plain(e.value, ValueError)
+
+
+def test_coops_deadline_is_a_provider_failure(monkeypatch):
+    fetched = _row_of_coops(monkeypatch)
+    clock = iter([0.0, 1.0, 2.0, 41.0, 42.0])  # start, before gauge 1, before gauge 2, then past the 40 s deadline
+    monkeypatch.setattr(coops.time, "monotonic", lambda: next(clock))
+    with pytest.raises(httpx.HTTPError) as e:
+        coops.series(40.0, -74.0)
+    assert not isinstance(e.value, ValueError) and fetched == ["C1", "C2"]

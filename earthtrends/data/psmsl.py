@@ -4,26 +4,22 @@ Station list: semicolon rows "id; lat; lon; name; coastline; station code; qc fl
 Gauge file: rows "decimal year; mean sea level (mm); missing days; flag", -99999 = no value.
 """
 import time
-from datetime import date
 from functools import lru_cache
 from math import isfinite
 
 import httpx
 
 from .coops import haversine_km
-from .upstream import LIMIT, NAME, readable, text
+from .upstream import LIMIT, MAX_STALE_YEARS, MIN_YEARS, NAME, readable, rule, text, why_not  # noqa: F401 (the shared rule is re-exported)
 
 BASE = "https://psmsl.org/data/obtaining/rlr.monthly.data"
 SOURCE = {"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/"}
 MAX_KM = 100
-MIN_YEARS = 30  # valid monthly values needed to support a trend test
-MAX_STALE_YEARS = 5  # last valid month at most this long before the end of last year
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)
 MAX_TRIES = 12  # gauge files fetched at most
 DEADLINE_S = 40  # the lookup starts no new request after this; one request can still take up to 5 + 10 + 30 s
 MISSING = -99999
-RULE = (f"The gauge used is the nearest one within {MAX_KM} km with at least {MIN_YEARS} years of valid monthly values "
-        f"and a last valid month no more than {MAX_STALE_YEARS} years before the end of last year.")
+RULE = rule(MAX_KM)
 
 
 def _get(url: str, left: float | None = None) -> str:
@@ -90,18 +86,6 @@ def parse(text: str) -> tuple[list[str], list[float | None], int]:
         times.append(f"{y:04d}-{m + 1:02d}")
         values.append(by_month.get((y, m + 1)))
     return times, values, dropped
-
-
-def why_not(times: list[str], values: list[float | None]) -> str | None:
-    """None if the record can support a trend test, else a plain reason."""
-    valid = [t for t, v in zip(times, values) if v is not None]
-    if not valid:
-        return "its file has no valid values"
-    if len(valid) < MIN_YEARS * 12:
-        return f"it has only {len(valid) // 12} years of valid monthly values ({valid[0]} to {valid[-1]})"
-    if valid[-1] < f"{date.today().year - 1 - MAX_STALE_YEARS}-12":
-        return f"its record ends in {valid[-1]}"
-    return None
 
 
 def fetch(station_id: int, left: float | None = None) -> str:

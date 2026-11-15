@@ -1,18 +1,22 @@
 """NOAA CO-OPS monthly mean sea level, no key."""
 import json
+import time
 from datetime import date
 from functools import lru_cache
 from math import asin, cos, isfinite, radians, sin, sqrt
 
 import httpx
 
-from .upstream import NAME, fit, text
+from .upstream import LIMIT, NAME, fit, rule, text, why_not
 
 BASE = "https://api.tidesandcurrents.noaa.gov"
 SOURCE = {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"}
 MAX_KM = 100
 NAME_NEAREST_KM = 1000  # beyond this the nearest gauge is not worth naming
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)  # the station-list fetch: at most 5 + 10 + 30 = 45 s
+MAX_TRIES = 6  # gauges whose monthly means are fetched at most
+DEADLINE_S = 40  # no new request after this; one request can still take up to 30 s
+RULE = rule(MAX_KM)
 
 
 def haversine_km(lat1, lon1, lat2, lon2) -> float:
@@ -96,3 +100,33 @@ def fetch(station_id: str) -> dict:
         return r.json()
     r.raise_for_status()
     return r.json()
+
+
+def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str]]:
+    """Nearest gauge within MAX_KM that meets the shared minimum-record rule -> (times, values, place, notes)."""
+    gauges = stations()
+    deadline = time.monotonic() + DEADLINE_S
+    near = sorted(((haversine_km(lat, lon, float(s["lat"]), float(s["lng"])), s["id"], s) for s in gauges), key=lambda t: t[:2])
+    close = [(km, s) for km, _, s in near if km <= MAX_KM]
+    if not close:
+        nearest(lat, lon, gauges)  # raises the "no gauge within 100 km" error
+    skipped = []
+    for km, s in close[:MAX_TRIES]:
+        if time.monotonic() >= deadline:
+            raise httpx.TimeoutException("NOAA CO-OPS is slow right now. Try again in a minute.")
+        try:
+            reply = fetch(s["id"])
+        except json.JSONDecodeError as e:  # a maintenance page: the provider's failure (a ValueError would be read as "this gauge has no data")
+            raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.") from e
+        try:
+            times, values = parse(reply, s["name"])
+            why = why_not(times, values)
+        except ValueError as e:  # this gauge has no usable monthly values; httpx errors are not caught here
+            why = text(e, LIMIT)
+        if why is None:
+            notes = [f"Tide gauge {s['name']} ({s['id']}), {km:.0f} km from the point you asked about.",
+                     "Sea level relative to the land at the gauge, so land sinking or rising is included.", RULE]
+            return times, values, {"name": s["name"], "lat": float(s["lat"]), "lon": float(s["lng"])}, notes
+        skipped.append(f"{s['name']}, {km:.0f} km away: {why}")
+    raise ValueError(text(f"There is no usable NOAA tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
+                          f"Gauges found but not used: {'; '.join(skipped)}.", LIMIT))
