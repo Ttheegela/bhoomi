@@ -91,12 +91,12 @@
     }
     function go(variable) {
       remember();
-      TD.loadPlace({ lat: r.lat, lon: r.lon, label: r.label, variable: variable, origin: 'guide' });
       close(false);
+      TD.loadPlace({ lat: r.lat, lon: r.lon, label: r.label, variable: variable, origin: 'guide' });
     }
     btn('btn primary', 'Show me', function () { go(r.variable); });
     btn('btn', 'Choose a different place', function () { close(true, 'place'); });
-    if (r.alt && hasVar(r.alt.variable)) btn('btn alt', r.alt.text, function () { go(r.alt.variable); });
+    if (r.alt && hasVar(r.alt.variable)) btn('btn guide-alt', r.alt.text, function () { go(r.alt.variable); });
     btn('linkbtn', 'Back', function () { step1(true); });
     el('p', 'guide-note', NOTE, c);
     h.focus();

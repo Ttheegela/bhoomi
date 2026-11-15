@@ -69,3 +69,6 @@ Nothing missing: `#guide-reopen`, `html[data-guide]` rule and the slot are in 00
 - The "Result seen" column in section 4 is the designer note from one test run; the page never shows it.
 - Not Explore means the hash has `tab=` other than `explore`.
 - "Show me" and the alt button remember the dismissal before calling `TD.loadPlace`.
+- Fix round 1: CSS selectors start with `.card.quiet.guide-card` to beat the frame's `.card.quiet h2`/`p` padding; the chip grid uses `minmax(0, 1fr)` and chips may wrap.
+- "Show me" and the alt button now remember and close the guide before calling `TD.loadPlace`, so the frame's scroll starts on a page without the card.
+- The alt button class is `guide-alt` (nothing styles it); the repeated `.linkbtn` min-height is removed.
