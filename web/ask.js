@@ -8,7 +8,13 @@
 const ASK_HISTORY = false;      // switch on when the backend accepts "history"
 const HISTORY_MAX_MSGS = 6;
 const HISTORY_MAX_CHARS = 4000;
-const ASK_SLOW_MS = 15000;
+// Waiting words by elapsed seconds (the server streams nothing, so no source is named).
+const ASK_STAGES = [
+  [0, 'Reading your question and choosing what to look up.'],
+  [3, 'Fetching public data and running the trend test. This usually takes 10 to 20 seconds.'],
+  [20, 'Still working. Some data sources answer slowly.'],
+  [40, 'Still working. Some questions take up to a minute.'],
+];
 const ASK_STOP_MS = 150000;
 const GAVE_UP_PREFIX = 'Sorry, I could not finish';
 const EXAMPLES = [
@@ -222,19 +228,26 @@ async function send(raw) {
   $('ask-empty').hidden = true;
   const thread = $('ask-thread');
   const you = youBlock(q);
-  const wait = el('div', { class: 'msg ai', role: 'status' }, el('p', { class: 'msg-text' }, 'Reading your question and looking up the data. This usually takes 4 to 15 seconds.'));
+  const wait = el('div', { class: 'msg ai ask-wait', role: 'status' }, el('p', { class: 'msg-text' }, ASK_STAGES[0][1]), el('span', { class: 'small ask-secs', 'aria-hidden': 'true' }, '0 s'));
   thread.append(you, wait);
   you.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
   askBusy(true);
   askS.reason = '';
   askS.ctrl = new AbortController();
+  const t0 = Date.now();
+  askS.tick = setInterval(() => {
+    const sec = Math.floor((Date.now() - t0) / 1000);
+    wait.lastChild.textContent = `${sec} s`;
+    const words = ASK_STAGES.filter(([from]) => sec >= from).pop()[1];
+    if (wait.firstChild.textContent !== words) wait.firstChild.textContent = words; // live region changes only at a stage change
+  }, 1000);
   askS.timers = [
-    setTimeout(() => { wait.firstChild.textContent = 'Still working. Some questions take up to a minute.'; }, ASK_SLOW_MS),
     setTimeout(() => { askS.reason = 'timeout'; askS.ctrl.abort(); }, ASK_STOP_MS),
   ];
 
   const r = await postAsk(q, askS.ctrl.signal);
   askS.timers.forEach(clearTimeout);
+  clearInterval(askS.tick);
   askBusy(false);
   wait.remove();
   const o = classifyAsk(r);

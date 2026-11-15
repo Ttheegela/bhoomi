@@ -73,8 +73,8 @@ Every number in the AI text must also be checkable: the "Show on chart" card car
 |---|---|
 | Health off (`/api/health` returns `"ask": false`, or a 503 on send) | Composer, examples and privacy line hidden. Panel shows: "Asking questions isn't available right now." and "You can still pick a place and a measurement." with button "Go to Explore". Remembered for the page session. If `/api/health` itself fails, treat as on and let the send decide. |
 | Empty | 2.2 |
-| Sending | You block added. AI block shows "Reading your question and looking up the data. This usually takes 4 to 15 seconds." Button "Asking…" (`aria-disabled`, focus stays) plus a "Cancel" button (48 px). Textarea is read-only and keeps its text until the answer arrives, then clears. |
-| After 15 s | Text becomes "Still working. Some questions take up to a minute." Announced once. |
+| Sending | You block added. AI block shows "Reading your question and choosing what to look up." and a small grey seconds counter ("5 s", `aria-hidden`, tabular numbers via the `.ask-secs` class, no inline style; updated each second). Button "Asking…" (`aria-disabled`, focus stays) plus a "Cancel" button (48 px). Textarea is read-only and keeps its text until the answer arrives, then clears. |
+| By elapsed time | From 3 s: "Fetching public data and running the trend test. This usually takes 10 to 20 seconds." From 20 s: "Still working. Some data sources answer slowly." From 40 s: "Still working. Some questions take up to a minute." No source is named and no step is claimed done (the server does not stream). Timers and counter are cleared on answer, error, cancel and stop. |
 | Cancel | Aborts (`AbortController`). Block says "Cancelled." Text returns to the box, focus to the textarea. |
 | Stop at 150 s | "That took too long, so we stopped waiting. Try a shorter or simpler question." Button "Ask" ready. |
 | Answer | 2.4. Box clears and focus goes to the answer label line. Status: "Answer ready." |
