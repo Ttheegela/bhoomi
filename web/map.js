@@ -121,6 +121,7 @@
         frame.classList.remove('map-failed');
         wait.hidden = true;
         if (cur) put(cur.lat, cur.lon, true);
+        maybeFetch();
         applyDots();
       });
       // errors after load (a missed tile on a slow line) are ignored on purpose
@@ -129,14 +130,16 @@
         if (!hoverOK) return;
         var hit = nearest(e);
         if (hit && hit.g === tipFor) return;
-        tipFor = hit && hit.g;
-        map.getCanvas().style.cursor = hit ? 'pointer' : '';
-        if (!hit) { if (tip) tip.remove(); return; }
+        if (!hit) { tipOff(); return; }
+        tipFor = hit.g;
+        map.getCanvas().style.cursor = 'pointer';
         var t = h('span', '', hit.g.name);
         if (!tip) tip = new lib.Popup({ className: 'map-tip', closeButton: false, closeOnClick: false, offset: 10, focusAfterOpen: false });
         tip.setDOMContent(t).setLngLat([hit.lng, hit.g.lat]).addTo(map);
         tip.getElement().setAttribute('aria-hidden', 'true');
       });
+      map.on('mouseout', tipOff);
+      map.on('zoom', function () { if (map.getZoom() < 4) tipOff(); });
       map.on('click', function (e) {
         var s = TD.state;
         prev = s.place ? { lat: s.place.lat, lon: s.place.lon, label: s.place.label, variable: s.variable, source: s.source, start: s.start, end: s.end, geo: curGeo } : null;
@@ -166,8 +169,19 @@
     var on = v === 'sea_level';
     if (on === wantDots) return;
     wantDots = on;
-    if (on && !gauges && !gLoading && gTries < 2) fetchGauges();
+    maybeFetch();
     applyDots();
+  }
+
+  // not when the map failed (rows that can never be drawn); a map that has not started or loaded yet is fine
+  function maybeFetch() {
+    if (wantDots && !gauges && !gLoading && gTries < 2 && !failed) fetchGauges();
+  }
+
+  function tipOff() {
+    tipFor = null;
+    if (tip) tip.remove();
+    if (map) map.getCanvas().style.cursor = '';
   }
 
   function fetchGauges() {
@@ -178,14 +192,15 @@
     fetch('/api/gauges', { signal: ctl.signal })
       .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
       .then(function (body) {
-        var seen = {}, list = [], ids = {};
+        var seen = Object.create(null), list = [], ids = Object.create(null);
         (Array.isArray(body.gauges) ? body.gauges : []).forEach(function (g) {
           if (!g || typeof g.name !== 'string' || !g.name.trim() || typeof g.lat !== 'number' || typeof g.lon !== 'number') return;
           if (!isFinite(g.lat) || !isFinite(g.lon) || Math.abs(g.lat) > 90 || Math.abs(g.lon) > 180) return;
-          ids[g.source] = true;
           var k = g.lat.toFixed(3) + ',' + g.lon.toFixed(3);
-          if (seen[k] || list.length >= 5000) return;
+          if (seen[k]) { ids[g.source] = true; return; }
+          if (list.length >= 5000) return;
           seen[k] = true;
+          ids[g.source] = true;
           var n = g.name.trim();
           if (!/\p{Ll}/u.test(n)) n = n.toLowerCase().replace(/(^|[\s\-\/(])(\p{L})/gu, function (m, a, b) { return a + b.toUpperCase(); });
           list.push({ name: n, lat: g.lat, lon: g.lon });
@@ -255,9 +270,7 @@
       map.setPaintProperty('gauges-dots', 'circle-opacity', 0);
       map.setPaintProperty('gauges-dots', 'circle-stroke-opacity', 0);
       hideTimer = setTimeout(function () { if (map && map.getLayer('gauges-dots') && !wantDots) map.setLayoutProperty('gauges-dots', 'visibility', 'none'); }, reduced() ? 0 : 200);
-      tipFor = null;
-      if (tip) tip.remove();
-      map.getCanvas().style.cursor = '';
+      tipOff();
     }
     legend.hidden = !show;
     gCredits.forEach(function (el) { el.hidden = !show; });
@@ -298,7 +311,7 @@
     cur = { lat: d.lat, lon: d.lon };
     curGeo = d.origin === 'geo';
     if (!fromMap) put(d.lat, d.lon, true);
-    if (fromMap && snap && snap.lat === d.lat && snap.lon === d.lon) {
+    if (fromMap && snap && Math.abs(snap.lat - d.lat) <= 0.005 && Math.abs(snap.lon - d.lon) <= 0.005) {
       status.textContent = 'Pinned the tide gauge at ' + snap.label + '. Not every gauge has enough years of readings, so we use the nearest one that does.';
     } else {
       status.textContent = (fromMap ? 'Pinned ' : 'Showing ') + fmt(d.lat, d.lon) + '. We use the nearest data we have.';

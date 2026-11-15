@@ -31,7 +31,6 @@
 .map-legend { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--s2); font-size: 14px; color: var(--ink-2); max-width: none; }
 .map-legend[hidden], .map-gauge-credit[hidden] { display: none; }
 .map-legend svg { flex: 0 0 auto; fill: var(--ink); stroke: var(--bg); stroke-width: 1; }
-.map-gauge-credit { display: inline-flex; align-items: center; min-height: 48px; color: var(--ink); }
-.map-tip { max-width: none; }
+.map-gauge-credit { overflow-wrap: anywhere; display: inline-flex; align-items: center; min-height: 48px; color: var(--ink); }
 .map-tip .maplibregl-popup-tip { display: none; }
 .map-tip .maplibregl-popup-content { max-width: 28ch; padding: 4px 8px; font: 14px/1.4 Inter, system-ui, sans-serif; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; box-shadow: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
