@@ -85,7 +85,10 @@
       } else {
         m.mk.setLngLat([p.lon, p.lat]);
       }
-      m.el.className = 'map-mk ' + r.cls + (p.selected ? ' sel' : '');
+      // classList only: MapLibre put its own classes (maplibregl-marker, the anchor) on this element
+      m.el.classList.add('map-mk');
+      ['high', 'moderate', 'low'].forEach(function (c) { m.el.classList.toggle(c, c === r.cls); });
+      m.el.classList.toggle('sel', !!p.selected);
       m.el.setAttribute('aria-label', r.label ? label + ', ' + r.label : label);
       if (p.selected) {
         if (!m.tag) { m.tag = h('span', 'map-tag'); m.tag.setAttribute('aria-hidden', 'true'); m.el.append(m.tag); }
