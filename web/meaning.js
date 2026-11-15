@@ -67,6 +67,12 @@
     if (d && d.ok && d.trend) build(d.trend); else hide();
   });
 
+  // A new place clears the frame's old answer (state.trend is null): the old card would name no place.
+  document.addEventListener('td:load-start', function () {
+    var st = window.TD.state;
+    if (!st || !st.trend) hide();
+  });
+
   var s = window.TD.state; // read once, in case this script loaded after the last event
   if (s && s.status === 'loaded' && s.trend) build(s.trend);
 })();

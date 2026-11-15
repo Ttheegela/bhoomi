@@ -63,4 +63,6 @@ Nothing missing. Note for the frame builder (not a change request): `#loading` t
 - `#meaning-heading` gets a 3 px `--focus` ring when the frame focuses it.
 - The source line is left out when `trend.source.name` is missing (nothing to name).
 - A reply whose four strings are not all strings, or whose `confidence` is not one of the three words, hides the card (old cached replies have no `meaning`).
-- No `td:load-start` listener: dimming is CSS only (`aria-busy`), and on a first load the slot is simply still hidden.
+- `td:load-start` now hides and empties the card when `TD.state.trend` is null (the frame cleared the old answer for a new place), because an old card naming no place would be the only result on screen. When the frame keeps the old answer dimmed, the card stays dimmed as specified.
+- High-contrast mode (`forced-colors: active`): filled bars keep a `CanvasText` fill so they do not look empty.
+- Gap before the source line is 12 px.

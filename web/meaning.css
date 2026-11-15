@@ -11,6 +11,7 @@
 .mean-mark.on { background: var(--ink); border-color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .mean-limit { margin: var(--s3) var(--s4) 0; padding-top: var(--s3); border-top: 1px solid var(--hairline); }
 .mean-limit-text { margin: 0; max-width: 70ch; font-size: 16px; color: var(--ink-2); }
-.mean .source { margin: var(--s2) 0 0; padding: 0 var(--s4); }
+.mean .source { margin: var(--s3) 0 0; padding: 0 var(--s4); }
 .mean .srcline { display: flex; align-items: center; gap: var(--s1); padding: 0 var(--s4); font-size: 14px; color: var(--ink-2); }
 #answer[aria-busy="true"] #meaning-slot { opacity: .5; }
+@media (forced-colors: active) { .mean-mark.on { forced-color-adjust: none; background: CanvasText; } }
