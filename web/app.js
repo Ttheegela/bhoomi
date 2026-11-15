@@ -557,7 +557,7 @@ function dropErrors(win, key) {
 function enqueue(win, p) {
   const k = resKey(win, p);
   if (results[k]) return;
-  results[k] = { status: 'loading', trend: null, series: null, error: null };
+  results[k] = { status: 'loading', trend: null, series: null, error: null, t0: Date.now() };
   queue.push({ win, p, k, params: Object.assign({ variable: win, lat: p.lat, lon: p.lon }, sourceFor(win) ? { source: sourceFor(win) } : {}) });
   pump();
 }
@@ -613,7 +613,7 @@ function pinList(win) {
   if (!e) return [];
   return e.pins.map((p) => {
     const key = pinKeyOf(p.lat, p.lon), r = results[resKey(win, p)] || { status: 'loading', trend: null, series: null, error: null };
-    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, trend: r.trend, series: r.series, link: !!p.link };
+    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, trend: r.trend, series: r.series, link: !!p.link, started: r.t0 || 0 };
   });
 }
 function selectedPin(win) { return pinList(win).find((p) => p.selected) || null; }
@@ -628,10 +628,38 @@ function renderSrcNote() {
   n.textContent = show ? `This place is measured by ${shownName(pin.trend.source)}.` : '';
 }
 
+// While a place in the shown window is loading, a one-second timer updates only the loading texts.
+let loadTimer = 0;
+const secsSince = (p) => Math.max(0, Math.floor((Date.now() - p.started) / 1000));
+// the usual time for the window's source: weather stations send a long daily record
+function usualSecs() { const v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]); return sid === 'ghcn' ? 20 : 5; }
+function loadingLine(p) {
+  const n = secsSince(p), v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]);
+  if (sid === 'ghcn') return `Reading daily weather-station records from NOAA since 1981. ${n > 20 ? 'This is taking longer than usual; still reading.' : 'This usually takes 5 to 20 seconds for each place.'} ${n} s so far.`;
+  if (n > 15) return `This is taking longer than usual; still checking. ${n} s so far.`;
+  return `Checking the records for ${p.label}…${n >= 3 ? ` ${n} s so far.` : ''}`;
+}
+function tickLoading() {
+  const pins = curWin === 'settings' ? [] : pinList(curWin);
+  document.querySelectorAll('#pins .pn-line').forEach((s) => {
+    const p = pins.find((x) => x.key === s.getAttribute('data-key'));
+    if (p && p.status === 'loading') s.textContent = pinLine(p);
+  });
+  const sel = pins.find((p) => p.selected), prog = $('rec-prog');
+  if (sel && sel.status === 'loading' && prog) { prog.value = Math.min(secsSince(sel), usualSecs() - 0.5); $('rec-load-text').textContent = loadingLine(sel); }
+  syncTimer();
+}
+function syncTimer() {
+  const any = curWin !== 'settings' && pinList(curWin).some((p) => p.status === 'loading');
+  if (any && !loadTimer) loadTimer = setInterval(tickLoading, 1000);
+  else if (!any && loadTimer) { clearInterval(loadTimer); loadTimer = 0; }
+}
+
 function changed() {
   renderSrcNote();
   renderSidebar();
   renderRec();
+  syncTimer();
   const pins = pinList(curWin);
   const sel = pins.find((p) => p.selected);
   document.dispatchEvent(new CustomEvent('td:pins', { detail: { window: curWin, pins, selected: sel ? sel.key : null } }));
@@ -689,7 +717,7 @@ const riskClass = (g) => (g && ['high', 'moderate', 'low', 'unknown'].includes(g
 
 // The line under a pinned place's name.
 function pinLine(p) {
-  if (p.status === 'loading') return 'Checking…';
+  if (p.status === 'loading') { const n = secsSince(p); return n < 2 ? 'Checking…' : `Checking… ${n} s`; }
   if (p.status === 'error') return 'No record here';
   const t = p.trend, rate = fmt.rate(t);
   if (rate) return t.guidance.rate.unit === '%' ? `${rate} every 10 years` : `${rate} ${perOf(t)}`.trim(); // the sign already gives the direction
@@ -739,7 +767,7 @@ function renderSidebar() {
     const g = p.trend && p.trend.guidance;
     const btn = el('button', { type: 'button', class: 'pin' + (p.selected ? ' on' : ''), 'aria-pressed': String(p.selected) },
       el('i', { class: p.selected ? 'dot sel' : `dot s${p.slot}`, 'aria-hidden': 'true' }),
-      el('span', { class: 'pn' }, el('b', {}, p.label), el('small', {}, pinLine(p))),
+      el('span', { class: 'pn' }, el('b', {}, p.label), el('small', { class: 'pn-line', 'data-key': p.key }, pinLine(p))),
       g && g.risk_label ? el('span', { class: `risk ${riskClass(g)}` }, riskShort(g)) : '');
     btn.addEventListener('click', () => TD.select(p.key));
     const rm = el('button', { type: 'button', class: 'rm', 'aria-label': `Remove ${p.label}` }, '×');
@@ -762,7 +790,11 @@ function renderRec() {
     return;
   }
   const h2 = (txt) => el('h2', { tabindex: '-1', id: 'rec-h' }, txt);
-  if (pin.status === 'loading') { box.append(h2(pin.label), el('p', { class: 'say' }, `Checking the records for ${pin.label}…`)); return; }
+  if (pin.status === 'loading') {
+    const max = usualSecs();
+    box.append(h2(pin.label), el('progress', { id: 'rec-prog', max: String(max), value: String(Math.min(secsSince(pin), max - 0.5)), 'aria-label': `Loading ${pin.label}` }), el('p', { class: 'say', id: 'rec-load-text' }, loadingLine(pin)));
+    return;
+  }
   if (pin.status === 'error') {
     box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."), el('p', { class: 'say' }, 'Try another place.'));
     if (curWin === 'sea_level') box.append(el('p', { class: 'say' }, el('a', { href: 'https://sealevel.nasa.gov/ipcc-ar6-sea-level-projection-tool', target: '_blank', rel: 'noopener' }, 'Future sea level (NASA projection tool)\u00a0↗')));
@@ -953,6 +985,7 @@ function showWindow(id) {
     ensureLoaded(id);
     changed();
   }
+  syncTimer();
   document.dispatchEvent(new CustomEvent('td:route', { detail: { window: id } }));
   if (settings) document.dispatchEvent(new CustomEvent('td:pins', { detail: { window: id, pins: [], selected: null } }));
 }
