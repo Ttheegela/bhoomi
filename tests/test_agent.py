@@ -1898,9 +1898,16 @@ def test_table_sentences_have_no_digit_outside_their_address_and_urls_is_complet
         assert loop.stated_numbers(t) == []  # "data_tools/17" is an address, not a stated number
 
 
-def test_digits_in_an_address_are_not_a_number_but_other_numbers_still_are():
-    assert loop.stated_numbers("See https://example.org/data_tools/17 for 29.15 mm.") == [("", "29.15")]
-    assert loop.stated_numbers("It rose 17 mm (https://sealevel.nasa.gov/data_tools/17).") == [("", "17")]
+@pytest.mark.parametrize("text,want", [
+    ("It rose 17 mm (https://sealevel.nasa.gov/data_tools/17).", [("", "17")]),
+    ("https://tidesandcurrents.noaa.gov/stationhome.html?id=8518750", [("", "8518750")]),  # any other address counts
+    ("https://x/31.79", [("", "31.79")]),
+    ("see https://psmsl.org/,31.79 mm", [("", "31.79")]),
+    ("https://sealevel.nasa.gov/data_tools/17 31.79 mm", [("", "31.79")]),
+    ("https://sealevel.nasa.gov/data_tools/1731.79", [("", "31.79")]),  # the glued number is still found
+])
+def test_only_the_official_addresses_hide_their_numbers(text, want):
+    assert loop.stated_numbers(text) == want
 
 
 def test_sea_projection_link_after_a_no_lookup_answer_is_not_a_made_up_number(fake, monkeypatch):
