@@ -4,8 +4,6 @@
   var slot = document.getElementById('map-slot');
   if (!slot || !window.TD) return;
   var STYLE = 'https://tiles.openfreemap.org/styles/positron';
-  // the words the style itself carries (OpenFreeMap, OpenMapTiles, OpenStreetMap); an identical string is shown once
-  var ATTRIB = '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">\u00a9 OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
   var SEARCH = 'You can still search for a place above.';
   var map = null, pin = null, lib = null, prev = null, cur = null;
   var gauges = null, gaugeSrcs = [], gTries = 0, gLoading = false, wantDots = false, hideTimer = 0, snap = null;
@@ -70,6 +68,12 @@
   }
 
   // no WebGL or the library did not import: no retry (a failed module import is cached by the browser)
+  // the control opens itself when it is added; start collapsed (just the info button) until the visitor taps it
+  function collapseAttrib() {
+    var a = canvas.querySelector('.maplibregl-ctrl-attrib');
+    if (a) { a.removeAttribute('open'); a.classList.remove('maplibregl-compact-show'); }
+  }
+
   function noMap() {
     fail("Your browser can't show the map. Search for a place above.", false);
     status.textContent = SEARCH;
@@ -108,7 +112,10 @@
       cv.tabIndex = -1;
       cv.setAttribute('aria-hidden', 'true');
       // the required credit lives inside the map, bottom right (compact: an info button that opens the words)
-      map.addControl(new lib.AttributionControl({ compact: true, customAttribution: ATTRIB }), 'bottom-right');
+      // the style carries the base-map credit itself, so no custom copy (it would show twice)
+      map.addControl(new lib.AttributionControl({ compact: true }), 'bottom-right');
+      collapseAttrib();
+      map.on('resize', collapseAttrib);
       map.addControl(new lib.NavigationControl({ showCompass: false, visualizePitch: false }), 'top-right');
       map.touchZoomRotate.disableRotation();
       map.on('load', function () {
@@ -119,6 +126,7 @@
         wait.hidden = true;
         if (cur) put(cur.lat, cur.lon, true);
         maybeFetch();
+        collapseAttrib();
         applyDots();
       });
       // errors after load (a missed tile on a slow line) are ignored on purpose
@@ -260,6 +268,7 @@
         }
       });
       if (!legend) buildLegend();
+      collapseAttrib();
     }
     clearTimeout(hideTimer);
     map.setPaintProperty('gauges-dots', 'circle-opacity-transition', { duration: reduced() ? 0 : 200 });
