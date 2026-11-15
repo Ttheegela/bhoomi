@@ -3,6 +3,7 @@
    the browser's own arithmetic is for drawing (see the "pure helpers" block). */
 
 // What the page does on a first visit with no link: null = no data request (only /api/variables), the empty start shows.
+// A place set here loads with origin 'share-link' (no scroll, no focus, and the first-visit guide stays closed).
 // For the old behaviour use { variable: 'sea_level', lat: 40.71, lon: -74.01, place: 'New York' }.
 const FIRST_LOAD = null;
 const GEO_LABEL = 'your location'; // the label of a "Use my location" pick; its link and search box stay empty
@@ -341,7 +342,11 @@ const state = { userSource: null, variables: [], req: 0, series: null, trend: nu
 function placeOf(t) {
   const q = state.params || {};
   const lat = q.lat !== undefined ? q.lat : t.place.lat, lon = q.lon !== undefined ? q.lon : t.place.lon;
-  return placeFor(lat, lon, t.place && t.place.name, t.source && t.source.id);
+  const named = placeFor(lat, lon, t.place && t.place.name, t.source && t.source.id);
+  // Only coordinates from the data (gridded sources) and a place the visitor named: say the visitor's word, not numbers.
+  if (!state.place || named !== `${fixed(Number(lat), 2)}, ${fixed(Number(lon), 2)}`) return named;
+  if (state.place.label === GEO_LABEL) return GEO_LABEL;
+  return cleanPlace(state.place.label.split(',')[0]) || named;
 }
 function varById(id) { return state.variables.find((v) => v.id === id); }
 function nameOf(id) { const v = varById(id); return stripParens(v ? v.name : String(id).replace(/_/g, ' ')); }
@@ -374,7 +379,7 @@ function buildChips() {
 }
 function markChips() {
   const lat = Number($('lat').value), lon = Number($('lon').value);
-  document.querySelectorAll('.chip').forEach((b) => {
+  document.querySelectorAll('#examples .chip').forEach((b) => {
     const p = PRESETS[+b.dataset.i];
     const on = p.lat === lat && p.lon === lon && p.variable === $('variable').value;
     b.setAttribute('aria-pressed', String(on));
@@ -389,7 +394,7 @@ function markChips() {
 const glyphs = { key: '', map: {} };
 const GLYPH_WORD = { rising: 'rising', falling: 'falling', none: 'no clear change' };
 function paintGlyphs() {
-  document.querySelectorAll('.chip').forEach((b) => {
+  document.querySelectorAll('#examples .chip').forEach((b) => {
     const g = glyphs.map[b.dataset.i], old = b.querySelector('.chip-g');
     if (old) old.remove();
     const label = PRESETS[+b.dataset.i].label;
@@ -490,13 +495,17 @@ function fire(name, detail) {
 function submit(user) {
   const p = readParams();
   if (!p) {
+    // Modules saw a request start or an answer: tell them it is over. The id is the request being closed when one
+    // was running, else the new id (the one this attempt took).
+    const was = state.status === 'loading', shown = !!state.series;
+    const endId = was ? state.req : state.req + 1;
     state.req++; // drop any answer still on its way
     setBusy(false);
     ['chart-wrap', 'more', 'verdict-card', 'problem', 'answer-bar'].forEach((id) => { $(id).hidden = true; });
     state.series = null; state.trend = null;
-    if (state.status === 'loading') { // a module saw td:load-start: tell it the request is over
+    if (was || shown) {
       state.status = 'error'; state.err = { status: 422, heading: 'Check the latitude and longitude.' };
-      fire('td:load-end', { id: state.req, ok: false, params: state.params, place: state.params ? placeNow() : null, series: null, trend: null, error: state.err, origin: state.origin });
+      fire('td:load-end', { id: endId, ok: false, params: state.params, place: state.params ? placeNow() : null, series: null, trend: null, error: state.err, origin: state.origin });
     }
     return;
   }
@@ -545,18 +554,24 @@ async function run(params, user, keep) {
   state.status = 'loading'; state.err = null;
   setBusy(true, first);
   fire('td:load-start', { id, params, place: placeNow(), origin: state.origin });
-  if (user && first) scrollToAnswer();
+  state.scrollId = 0;
+  if (user && first) { state.scrollId = id; visitorScrolled = false; scrollToAnswer(); }
   const [sr, tr] = await Promise.all([api('/api/series', params), api('/api/trend', params)]);
   if (id !== state.req) return; // stale
   setBusy(false);
   show(sr, tr, params, user, id);
 }
 
-// Phones: bring the answer to the top once, when a request starts. From 900 px only if its top is off screen.
+// Phones: bring the answer to the top when a request starts, and again just after it ends (the page above it can
+// change in between, for example a guide card closing). From 900 px only if its top is off screen. The jump is
+// instant; the second one is skipped when the visitor scrolled in between.
+let visitorScrolled = false;
+['wheel', 'touchmove'].forEach((ev) => window.addEventListener(ev, () => { visitorScrolled = true; }, { passive: true }));
+window.addEventListener('keydown', (e) => { if (/^(Page(Up|Down)|Home|End|Arrow(Up|Down)| )$/.test(e.key) && e.target === document.body) visitorScrolled = true; });
 function scrollToAnswer() {
   const w = $('answer-wrap');
   if (window.innerWidth >= 900) { const t = w.getBoundingClientRect().top; if (t >= 0 && t < window.innerHeight) return; }
-  w.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  w.scrollIntoView({ block: 'start', behavior: 'auto' });
 }
 // "40.71° N, 74.01° W"
 function coordText(lat, lon) { return `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(2)}° ${lon >= 0 ? 'E' : 'W'}`; }
@@ -592,7 +607,7 @@ function show(sr, tr, params, user, id) {
       renderTable(s, !!state.trend);
       if (state.trend) {
         heading = renderVerdict(state.trend, s);
-        noteGlyph(state.trend, params);
+        if (!params.start && !params.end) noteGlyph(state.trend, params); // a chip opens the full record, so a windowed answer is not its arrow
         renderMore(state.trend);
       } else {
         heading = problem(problemFor(tr, params), tr.status);
@@ -607,6 +622,7 @@ function show(sr, tr, params, user, id) {
     $('answer-place').textContent = 'Showing: ' + (state.place && state.place.label || pl && cleanPlace(pl.name) || coordText(params.lat, params.lon));
   }
   fire('td:load-end', { id, ok, params, place: placeNow(), series: state.series, trend: state.trend, error: err, origin: state.origin });
+  if (state.scrollId === id) setTimeout(() => { if (id === state.req && !visitorScrolled) scrollToAnswer(); }, 60);
   // A module may have filled #meaning-slot while handling td:load-end: it gets the focus, else the verdict heading.
   const mh = $('meaning-heading');
   if (user && heading) (ok && mh && !$('meaning-slot').hidden ? mh : heading).focus({ preventScroll: true });
@@ -809,7 +825,7 @@ function renderChart(s, t) {
   const ms = times.map(monthIndex);
   const des = deseasonalize(times, vals);
   const m0 = ms[0], m1 = ms[ms.length - 1];
-  const name = nameOf(s.variable), place = t ? placeOf(t) : placeFor(state.params.lat, state.params.lon, s.place && s.place.name, s.source && s.source.id);
+  const name = nameOf(s.variable), place = placeOf(t || s);
   const units = unitLabel(s.units);
   const LY = layoutFor(window.innerWidth);
   const cw = box.clientWidth || LY.vw;
@@ -1029,12 +1045,11 @@ function onLocation() {
 // A source that is undefined keeps the one the user chose; a measurement that is missing keeps the current one.
 function applyExplore(e, user, origin) {
   state.origin = origin || 'share-link';
-  state.fromGeo = state.origin === 'geo';
+  state.fromGeo = state.origin === 'geo' || e.place === GEO_LABEL; // that place never reaches the link, whatever the origin
   if (e.source !== undefined) state.userSource = e.source || null;
   state.win = e.start || e.end ? { start: e.start || null, end: e.end || null } : null;
   state.place = e.place ? { label: e.place } : null;
-  $('place').value = e.place && !state.fromGeo ? e.place : '';
-  closeList(); setPlaceStatus(''); showCredit(null);
+  $('place').value = e.place && !state.fromGeo ? e.place : '';  closeList(); setPlaceStatus(''); showCredit(null);
   const lat = Number(Number(e.lat).toFixed(2)), lon = Number(Number(e.lon).toFixed(2));
   $('lat').value = lat; $('lon').value = lon;
   if (e.variable) $('variable').value = e.variable;
@@ -1095,7 +1110,8 @@ async function init() {
 const search = { seq: 0, timer: 0, items: [], active: -1, cache: new Map(), last: null };
 const placeLabel = (r) => [r.name, r.admin1, r.country].filter(Boolean).join(', ');
 const goodPlace = (r) => !!r && typeof r.name === 'string' && r.name !== '' && Number.isFinite(r.lat) && Number.isFinite(r.lon) && Math.abs(r.lat) <= 90 && Math.abs(r.lon) <= 180;
-function setPlaceStatus(text) { $('place-status').textContent = text; }
+// Written only when the text changes, so a screen reader does not repeat it on every key.
+function setPlaceStatus(text) { const s = $('place-status'); if (s.textContent !== text) s.textContent = text; }
 function closeList() {
   const l = $('place-list');
   l.hidden = true; clear(l);
@@ -1145,9 +1161,9 @@ function showResults(res, q) {
 async function runSearch(q, enter) {
   const id = ++search.seq;
   closeList(); showCredit(null);
-  setPlaceStatus('Looking for places…');
   let r = search.cache.get(q);
   if (!r) {
+    setPlaceStatus('Looking for places…'); // only when a request really starts
     r = await api('/api/places', { q });
     if (id !== search.seq) return; // an older reply: drop it
     if (r.ok && r.body && Array.isArray(r.body.results)) { search.cache.set(q, r); if (search.cache.size > 30) search.cache.delete(search.cache.keys().next().value); }
@@ -1171,7 +1187,7 @@ function queued() {
   closeList(); showCredit(null);
   if (!q) { setPlaceStatus(''); return; }
   if (q.length < 3) { setPlaceStatus('Type at least 3 letters to see suggestions.'); return; }
-  setPlaceStatus('Looking for places…');
+  setPlaceStatus('');
   search.timer = setTimeout(() => runSearch(q), 350);
 }
 function pickPlace(r) {
@@ -1184,6 +1200,8 @@ function pickPlace(r) {
 $('place').addEventListener('input', queued);
 $('place').addEventListener('keydown', (e) => {
   const n = search.items.length, open = !$('place-list').hidden;
+  // a held key sends no more requests (moving through an open list is not a request)
+  if (e.repeat && (e.key === 'Enter' || (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')))) { e.preventDefault(); return; }
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault();
     if (!open) { // open the last list for this text, or search now
@@ -1224,7 +1242,7 @@ window.TD = {
   get state() {
     const p = state.params;
     return { place: p ? placeNow() : null, variable: p ? p.variable : ($('variable').value || null), source: p && p.source || null,
-      start: p && p.start || null, end: p && p.end || null, status: state.status, series: state.series, trend: state.trend, error: state.err };
+      start: p && p.start || null, end: p && p.end || null, status: state.status, series: state.series, trend: state.trend, error: state.err ? Object.assign({}, state.err) : null };
   },
   // Validates, fills the controls, writes the link, scrolls and fires place-pick, load-start, load-end. Never rejects.
   loadPlace(spec) {
@@ -1238,7 +1256,7 @@ window.TD = {
     applyExplore({ lat, lon, variable: spec.variable, source: spec.source, place: cleanPlace(spec.label), start, end }, true, ORIGINS.includes(spec.origin) ? spec.origin : 'coords');
     return done;
   },
-  fetchTrend(params) { return api('/api/trend', params); },
+  fetchTrend(params) { return api('/api/trend', params).then((r) => ({ ok: r.ok, status: r.status, body: r.body, retryAfter: r.retryAfter === undefined ? null : r.retryAfter })); },
   linkFor(s) {
     s = s || TD.state;
     const pl = s.place;

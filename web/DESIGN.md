@@ -138,7 +138,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Theme: follow the device setting (light or dark); no theme switch.
 - Ask box: a chat thread with follow-up questions.
 - Eight example places: New York, Princeton, Delhi, Visakhapatnam, Mumbai, Chennai, London and Seattle (his words, 2026-11-14: "instead of atlantic city add princeton,new york,vizag,delhi,bombay,chennai", plus London and Seattle).
-- New York replaces Atlantic City as the example (follows from "instead of atlantic city"). It no longer loads on its own: see "Map first" below.
+- New York replaces Atlantic City as the example (follows from "instead of atlantic city"). That it no longer loads on its own is the agent's choice (see "Chosen by the agent").
 - Tab bar on desktop: left-aligned.
 - Grey labels stay at 14 px. This overrides the 'about 12 px' label rule from the Konam checklist.
 - Use in your AI: framed as 'use Trend Detective in your own AI agent'; example agents (Claude, GitHub Copilot) named in one line only when their docs confirm remote MCP support; detailed tabs only for apps with verified steps; one 'Any other AI agent' tab; no ChatGPT tab.

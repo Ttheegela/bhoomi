@@ -47,7 +47,7 @@
       <div id="search" class="search">
         <div class="search-head">
           <label for="place" id="place-label">Search for a place</label>
-          <span class="search-links"><button type="button" id="guide-reopen" class="linkbtn" hidden>Quick start</button><button type="button" id="coords-toggle" class="linkbtn" aria-expanded="false" aria-controls="coords"><span class="mark" aria-hidden="true"></span>Use coordinates instead</button></span>
+          <span class="search-links"><button type="button" id="coords-toggle" class="linkbtn" aria-expanded="false" aria-controls="coords"><span class="mark" aria-hidden="true"></span>Use coordinates instead</button></span>
         </div>
         <div class="combo">
           <input id="place" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="place-list" aria-describedby="place-status" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="80" placeholder="Type a city or town">
@@ -59,7 +59,7 @@
 
       <fieldset id="examples" class="chips">
         <legend class="sr-only">Example places</legend>
-        <p class="ex-label" aria-hidden="true">Or try an example</p>
+        <div class="ex-head"><p class="ex-label" aria-hidden="true">Or try an example</p><button type="button" id="guide-reopen" class="linkbtn" hidden>Quick start</button></div>
         <div id="chips" class="chip-row"></div>
       </fieldset>
 
