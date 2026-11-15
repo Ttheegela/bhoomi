@@ -6,7 +6,7 @@
   if (!slot || !window.TD) return;
   var STYLES = { light: 'https://tiles.openfreemap.org/styles/positron', detailed: 'https://tiles.openfreemap.org/styles/liberty' };
   var map = null, lib = null, loaded = false, failed = false, retried = false, slowTimer = 0;
-  var markers = Object.create(null), fitKey = null, baseKey = 'light';
+  var markers = Object.create(null), fitKey = null, baseKey = 'light', userMoved = false, rzFrame = 0;
   var gauges = null, gaugeSrcs = [], gTries = 0, gLoading = false, wantDots = false, hideTimer = 0;
   var legend = null, tip = null, tipFor = null;
   var hoverOK = matchMedia('(hover: hover)').matches;
@@ -105,6 +105,7 @@
     var key = win() + ':' + pins.map(function (p) { return p.key; }).sort().join('|');
     if (!force && key === fitKey) return;
     fitKey = key;
+    userMoved = false;
     if (!pins.length) return;
     var b = new lib.LngLatBounds([pins[0].lon, pins[0].lat], [pins[0].lon, pins[0].lat]);
     pins.forEach(function (p) { b.extend([p.lon, p.lat]); });
@@ -179,6 +180,7 @@
         clearTimeout(slowTimer);
         frame.classList.remove('map-failed');
         wait.hidden = true;
+        map.resize();
         applyPrefs();
         afterStyle();
         fit(true);
@@ -198,6 +200,8 @@
         tip.getElement().setAttribute('aria-hidden', 'true');
       });
       map.on('mouseout', tipOff);
+      // the visitor moved or zoomed the map (events with an original event): do not refit over it on a resize
+      ['dragstart', 'zoomstart'].forEach(function (n) { map.on(n, function (e) { if (e && e.originalEvent) userMoved = true; }); });
       map.on('zoom', function () { if (map.getZoom() < 4) tipOff(); });
       // a click on empty map pins that point (or the gauge under it); markers stop their own clicks
       map.on('click', function (e) {
@@ -366,6 +370,19 @@
   document.addEventListener('td:prefs', function () { applyPrefs(); });
   document.addEventListener('td:pins', function () { if (inSettings()) return; syncMarkers(); fit(false); });
   if (TD.ready) TD.ready.then(function () { if (!inSettings()) { applyPrefs(); setWant(win() === 'sea_level' && prefs().stations); } });
+
+  // the slot can change size after the map is made (the row grows when the card fills in): keep the canvas, and so the DOM markers, in step
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () {
+      if (rzFrame) return;
+      rzFrame = requestAnimationFrame(function () {
+        rzFrame = 0;
+        if (!map || !loaded || inSettings() || !frame.offsetWidth) return;
+        map.resize();
+        if (!userMoved) fit(true);
+      });
+    }).observe(frame);
+  }
 
   var io = null;
   if ('IntersectionObserver' in window) {

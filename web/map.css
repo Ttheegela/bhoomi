@@ -1,5 +1,7 @@
 /* Module 01: the map. Classes prefixed map-. The library's own sheet comes first. Dark theme hangs off :root[data-theme="dark"]. */
 @import url("vendor/maplibre-gl/maplibre-gl.css");
+:root { --mk-mod: #F2B88A; --mk-low: #BDBDBD; }
+:root[data-theme="dark"] { --mk-mod: #E0955A; --mk-low: #9A9A9A; }
 #map-slot:not([hidden]) { display: flex; flex-direction: column; }
 .map-frame { position: relative; flex: 1 1 auto; min-height: 440px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); }
 .map-canvas { position: absolute; inset: 0; }
@@ -9,11 +11,11 @@
 .map-failed .maplibregl-ctrl-top-right { display: none; }
 .map-retry { min-height: 48px; }
 /* markers: one button per pinned place; fill by risk (the risk is also in the accessible name and the tag) */
-.map-mk { position: relative; box-sizing: border-box; width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--ink); background: var(--risk-low); cursor: pointer; }
+.map-mk { position: relative; box-sizing: border-box; width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--ink); background: var(--mk-low); cursor: pointer; }
 .map-mk::before { content: ""; position: absolute; inset: -17px; }
 .map-mk.high { background: var(--risk-high); }
-.map-mk.moderate { background: var(--risk-mod); }
-.map-mk.low { background: var(--risk-low); }
+.map-mk.moderate { background: var(--mk-mod); }
+.map-mk.low { background: var(--mk-low); }
 .map-mk.sel { width: 20px; height: 20px; box-shadow: 0 0 0 2px var(--ink); z-index: 2; }
 .map-mk:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
 .map-tag { position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%); padding: 4px 8px; border-radius: 6px; background: var(--ink); color: var(--bg); font: 600 12px/16px Inter, system-ui, sans-serif; white-space: nowrap; pointer-events: none; }
