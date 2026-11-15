@@ -17,11 +17,20 @@ from earthtrends.agent.providers import NotConfigured, UpstreamError
 from earthtrends.data import coops, psmsl, search_places
 from earthtrends.mcp_server import SOURCE_DOWN, mcp
 
+# Public addresses people have in their AI apps: always accepted, whatever the environment says.
+PUBLIC_HOSTS = ("bhoomi.earth", "www.bhoomi.earth", "trend-detective-six.vercel.app")
+
+
+def mcp_allowed_hosts(environ=os.environ) -> list[str]:
+    """Host headers the /mcp endpoint accepts (DNS-rebinding protection): MCP_ALLOWED_HOSTS (default local only),
+    this Vercel deployment's own URLs (system env vars set by Vercel at runtime), and PUBLIC_HOSTS."""
+    hosts = environ.get("MCP_ALLOWED_HOSTS", "127.0.0.1:*,localhost:*").split(",")
+    hosts += [h for k in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL") if (h := environ.get(k))]
+    return hosts + [h for h in PUBLIC_HOSTS if h not in hosts]
+
+
 # Remote MCP endpoint (streamable HTTP) for agents that connect over the network.
-# DNS-rebinding protection: only these Host headers are accepted (add the deployed domain in prod).
-allowed_hosts = os.environ.get("MCP_ALLOWED_HOSTS", "127.0.0.1:*,localhost:*,bhoomi.earth,www.bhoomi.earth").split(",")
-# On Vercel, also accept this deployment's own URLs (system env vars set by Vercel at runtime).
-allowed_hosts += [h for k in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL") if (h := os.environ.get(k))]
+allowed_hosts = mcp_allowed_hosts()
 mcp_app = mcp.streamable_http_app(
     streamable_http_path="/",
     stateless_http=True,

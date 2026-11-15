@@ -1,10 +1,10 @@
-# Trend Detective
+# Bhoomi
 
-Trend Detective answers one question about a place: is this really changing here? People say the summers are hotter or the sea is higher than it used to be. A line drawn through noisy data always slopes one way or the other, so a chart alone can't tell a real change from a bad year. Trend Detective pulls the record for the place from public data (NASA, NOAA and other open providers), removes the seasons, runs a significance test, and answers "rising", "falling" or "no clear change". Every answer gives the size of the change, a 95% range and the data source. It is a web page, an AI agent and an MCP server for students and the public. It was built at the NASA Space Apps Challenge 2026 (challenge: *Be An Earth System Trend Detective!*).
+Bhoomi answers one question about a place: is this really changing here? People say the summers are hotter or the sea is higher than it used to be. A line drawn through noisy data always slopes one way or the other, so a chart alone can't tell a real change from a bad year. Bhoomi pulls the record for the place from public data (NASA, NOAA and other open providers), removes the seasons, runs a significance test, and answers "rising", "falling" or "no clear change". Every answer gives the size of the change, a 95% range and the data source. It is a web page, an AI agent and an MCP server for students and the public. It was built at the NASA Space Apps Challenge 2026 (challenge: *Be An Earth System Trend Detective!*), where it was called Trend Detective. The repository, the Python package and the commands keep the old name (`earthtrends`, `trend-detective-mcp`).
 
 ## Try it
 
-Live site: https://trend-detective-six.vercel.app
+Live site: https://bhoomi.earth
 
 The page has three tabs:
 
@@ -12,10 +12,10 @@ The page has three tabs:
 - **Ask.** Type a question in your own words, for example "Is sea level rising in Atlantic City?". An AI agent works out the place and the measurement, calls the same tools, and answers in plain words. This tab is rate limited, because every question costs money: 30 questions a minute and 150 an hour per client, and 200 an hour in total. The data routes and the MCP endpoint are limited to 120 requests a minute and 1,200 an hour per client.
 - **Use in your AI.** Steps to connect your own AI app to the MCP server below.
 
-MCP endpoint (streamable HTTP, no key, no sign-in): `https://trend-detective-six.vercel.app/mcp/`. Keep the trailing slash.
+MCP endpoint (streamable HTTP, no key, no sign-in): `https://bhoomi.earth/mcp/`. Keep the trailing slash. The old address, `https://trend-detective-six.vercel.app/mcp/`, keeps working.
 
 ```bash
-claude mcp add --transport http trend-detective https://trend-detective-six.vercel.app/mcp/
+claude mcp add --transport http bhoomi https://bhoomi.earth/mcp/
 ```
 
 The endpoint offers four tools:
