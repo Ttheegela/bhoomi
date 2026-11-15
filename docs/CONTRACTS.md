@@ -95,7 +95,7 @@ The UI calls the same three functions through `/api/variables`, `/api/series` an
 
 ## Web routes that are not MCP tools — served by `earthtrends/app.py`, UI lane consumes
 
-The page calls these two routes on its own origin. Outside agents use the MCP tools above instead.
+The page calls these three routes on its own origin. Outside agents use the MCP tools above instead.
 
 ### `GET /api/places?q=<text>` — place search by name (data lane's `search_places`)
 
@@ -111,6 +111,25 @@ The page calls these two routes on its own origin. Outside agents use the MCP to
 - At most 5 results: places whose name equals the typed text first, then the largest population first (the upstream service is asked for 10 and orders by place type, which can put the largest place past the fifth). `admin1`, `country` and `country_code` can be `null`. Text fields are cut to 100 characters and are untrusted text: show them as text, never as HTML.
 - No match: `"results": []` with status 200. Every 200 answer carries `source`.
 - `q` is trimmed and single-spaced; fewer than 2 or more than 80 characters is a 400. A missing `q` is a 422. An upstream failure is a 502. The data rate limit applies (429 with `Retry-After`). Never a 500.
+
+### `GET /api/gauges` — where tide gauges are, for the map (data lane's station lists)
+
+```json
+{
+  "gauges": [
+    {"name": "The Battery", "lat": 40.7006, "lon": -74.0142, "source": "coops"},
+    {"name": "NEW YORK (THE BATTERY)", "lat": 40.7, "lon": -74.0133, "source": "psmsl"}
+  ],
+  "sources": [
+    {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"},
+    {"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/"}
+  ]
+}
+```
+
+- No parameters. CO-OPS gauges first, then PSMSL, each in its list's own order; about 2,000 in all. A gauge in both lists appears twice. Latitude and longitude are rounded to 4 decimals. Names are as the lists give them (PSMSL names are in capitals).
+- It says where gauges are. It does not say whether a gauge has enough years of readings for a trend: `detect_trend` and `/api/trend` decide which gauge answers.
+- One list unavailable: status 200 with the other list alone, only its entry in `sources`, and a short cache time. Both unavailable: 502. The data rate limit applies (429 with `Retry-After`).
 
 ### `POST /api/ask` — a question for the agent
 
