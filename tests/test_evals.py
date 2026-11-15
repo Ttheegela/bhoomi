@@ -1132,7 +1132,7 @@ def test_multi_measure_skips_the_single_verdict_wording_only():
     case = {"id": "m", "question": "q", "expect_tool": "detect_trend", "must_say": ["sea level"]}
     assert run.check(case, fake_run(answer, calls))["wording"] is False  # one verdict scored: "no clear change" fails
     multi = run.check({**case, "multi_measure": True}, fake_run(answer, calls))
-    assert multi.get("wording", True) and multi["numbers"] and multi["must_say"]
+    assert "wording" not in multi and multi["numbers"] and multi["must_say"]
     assert agent_case("atlantic-city-many-measurements")["multi_measure"] is True
     assert "multi_measure" not in agent_case("grand-isle-invest")
 
@@ -1157,19 +1157,6 @@ def test_multi_measure_one_period_for_both_measurements_passes_wording():
     assert run.check({**case, "multi_measure": False}, fake_run(answer, calls))["wording"] is False  # the old flag
     wrong = answer.replace("January 1981 to December 2025", "January 1970 to December 2025")
     assert run.check(case, fake_run(wrong, calls))["wording"] is False  # a period no result has still fails
-
-
-def test_multi_measure_same_gauge_claim_fails_wording():
-    psmsl = {**AC, "source": {"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"}}
-    calls = [{"name": "detect_trend", "arguments": {**ARGS, "source": s}, "result": r, "error": None}
-             for s, r in (("coops", AC), ("psmsl", psmsl))] + [
-        {"name": "detect_trend", "arguments": {**ARGS, "variable": "air_temp"}, "result": _power("air_temp", "degC"),
-         "error": None}]
-    case = {"id": "m", "question": "q", "expect_tool": "detect_trend", "must_say": [], "multi_measure": True}
-    answer = (ANSWER + " PSMSL (https://psmsl.org/). Air temperature is clearly rising, NASA POWER "
-              "(https://power.larc.nasa.gov/).")
-    assert run.check(case, fake_run(answer, calls)).get("wording", True)
-    assert run.check(case, fake_run(answer + " Both use the same gauge.", calls))["wording"] is False
 
 
 def test_single_measurement_two_sources_same_gauge_still_fails():

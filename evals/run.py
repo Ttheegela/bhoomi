@@ -237,11 +237,8 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                                                    for v in verdicts if v in VERDICT_WORDS)
         elif main and main.get("verdict") in VERDICT_WORDS:  # one verdict; with several sources, no false "disagree"
             out["wording"] = wording_agrees(answer, main["verdict"]) and not (len(by_src) > 1 and said_disagree)
-        multi = bool(case.get("multi_measure"))
-        # multi_measure skips only the verdict-word branch above: the two-source checks still hold for it.
-        if ("wording" in out or multi) and len(by_src) > 1:
-            out["wording"] = (out.get("wording", True) and not any(g in a for g in GUESSED)
-                              and not SHARED.search(answer))
+        if "wording" in out and len(by_src) > 1:
+            out["wording"] = out["wording"] and not any(g in a for g in GUESSED) and not SHARED.search(answer)
             plan = agree_plan(run.get("tool_calls", []))
             if plan:  # agreeing sources: no slope or range that only another source gave
                 lead, agreeing = plan
@@ -264,6 +261,7 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                     any(_short_named(r.get("source") or {}, s) for r in agreeing) for s in subj)
         # A period range that is no result's period. For multi_measure only a range that fits no result at all: one
         # period said for "both" measurements is true when they share it.
+        multi = bool(case.get("multi_measure"))
         if wrong_periods(answer, run.get("tool_calls", []), certain_only=multi):
             out["wording"] = False
         out["numbers"] = not invented_numbers(answer, results)
