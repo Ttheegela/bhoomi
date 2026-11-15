@@ -1,18 +1,22 @@
 """NOAA CO-OPS monthly mean sea level, no key."""
 import json
+import time
 from datetime import date
 from functools import lru_cache
 from math import asin, cos, isfinite, radians, sin, sqrt
 
 import httpx
 
-from .upstream import NAME, fit, text
+from .upstream import LIMIT, NAME, fit, rule, text, why_not
 
 BASE = "https://api.tidesandcurrents.noaa.gov"
 SOURCE = {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"}
 MAX_KM = 100
 NAME_NEAREST_KM = 1000  # beyond this the nearest gauge is not worth naming
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)  # the station-list fetch: at most 5 + 10 + 30 = 45 s
+MAX_TRIES = 6  # gauges whose monthly means are fetched at most
+DEADLINE_S = 40  # no new request after this; one request can still take up to 30 s
+RULE = rule(MAX_KM)
 
 
 def haversine_km(lat1, lon1, lat2, lon2) -> float:
@@ -96,3 +100,50 @@ def fetch(station_id: str) -> dict:
         return r.json()
     r.raise_for_status()
     return r.json()
+
+
+class NoUsableGauge(ValueError):
+    """Gauges lie within MAX_KM but none of those tried qualifies. `n` is how many were tried when more were left untried, else None."""
+    def __init__(self, message: str, n: int | None):
+        super().__init__(message)
+        self.n = n
+
+
+@lru_cache(maxsize=256)  # ponytail: no expiry; the record stays until the instance restarts (monthly data)
+def _record(station_id: str) -> tuple[tuple[str, ...], tuple[float | None, ...], str | None]:
+    """One gauge's monthly record and, if it fails the shared rule, why. A provider failure raises, so it is not cached."""
+    try:
+        reply = fetch(station_id)
+    except (ValueError, RecursionError) as e:  # fetch raises these only while reading the JSON: the provider's failure, not "no data"
+        raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.") from e
+    try:
+        times, values = parse(reply)
+    except ValueError:  # this gauge has no usable monthly values; httpx errors are not caught here
+        return (), (), "no monthly values"
+    return tuple(times), tuple(values), why_not(times, values)
+
+
+def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str]]:
+    """Nearest gauge within MAX_KM that meets the shared minimum-record rule -> (times, values, place, notes)."""
+    gauges = stations()
+    deadline = time.monotonic() + DEADLINE_S
+    near = sorted(((haversine_km(lat, lon, float(s["lat"]), float(s["lng"])), s["id"], s) for s in gauges), key=lambda t: t[:2])
+    close = [(km, s) for km, _, s in near if km <= MAX_KM]
+    if not close:
+        nearest(lat, lon, gauges)  # raises the "no gauge within 100 km" error
+    tried = close[:MAX_TRIES]
+    skipped = []
+    for km, s in tried:
+        if time.monotonic() >= deadline:
+            raise httpx.TimeoutException("NOAA CO-OPS is slow right now. Try again in a minute.")
+        times, values, why = _record(s["id"])
+        if why is None:
+            notes = [f"Tide gauge {s['name']} ({s['id']}), {km:.0f} km from the point you asked about.",
+                     "Sea level relative to the land at the gauge, so land sinking or rising is included.", RULE]
+            return list(times), list(values), {"name": s["name"], "lat": float(s["lat"]), "lon": float(s["lng"])}, notes
+        skipped.append(f"{s['name']}, {km:.0f} km away: {why}")
+    more = len(close) > len(tried)  # do not claim "no usable gauge" about gauges that were never looked at
+    head = (f"None of the {len(tried)} nearest NOAA tide gauges within {MAX_KM} km of this place has a long enough record"
+            if more else f"There is no usable NOAA tide gauge within {MAX_KM} km of this place")
+    raise NoUsableGauge(text(f"{head}, so sea level can't be measured here. Gauges found but not used: {'; '.join(skipped)}.", LIMIT),
+                        len(tried) if more else None)

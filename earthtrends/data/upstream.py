@@ -2,6 +2,7 @@
 Models read these messages, so a provider must not be able to put a long block of text in front of them."""
 import re
 import unicodedata
+from datetime import date
 
 LIMIT = 200  # the most a caller sees in one error sentence, our own words included
 NAME = 80  # the most of a provider's station or gauge name
@@ -34,3 +35,26 @@ def readable(name: str) -> str:
         start = c in " (/-."
     head = re.sub(r"\b(?:Ii|Iii|Iv|Vi|Vii|Viii|Ix)\b", lambda m: m.group().upper(), "".join(out))
     return head + (f", {code}" if code else "")
+
+
+# The rule every tide gauge must meet, shared by PSMSL and CO-OPS.
+MIN_YEARS = 30  # valid monthly values needed to support a trend test
+MAX_STALE_YEARS = 5  # last valid month at most this long before the end of last year
+
+
+def rule(max_km: int) -> str:
+    return (f"The gauge used is the nearest one within {max_km} km with at least {MIN_YEARS} years of valid monthly values "
+            f"and a last valid month no more than {MAX_STALE_YEARS} years before the end of last year.")
+
+
+def why_not(times: list[str], values: list[float | None]) -> str | None:
+    """None if the record can support a trend test, else a plain reason."""
+    valid = [t for t, v in zip(times, values) if v is not None]
+    if not valid:
+        return "its file has no valid values"
+    if len(valid) < MIN_YEARS * 12:
+        n = f"{len(valid)} months" if len(valid) < 24 else f"{len(valid) // 12} years"
+        return f"it has only {n} of valid monthly values ({valid[0]} to {valid[-1]})"
+    if valid[-1] < f"{date.today().year - 1 - MAX_STALE_YEARS}-12":
+        return f"its record ends in {valid[-1]}"
+    return None
