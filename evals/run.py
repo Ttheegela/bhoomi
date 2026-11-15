@@ -237,7 +237,9 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                                                    for v in verdicts if v in VERDICT_WORDS)
         elif main and main.get("verdict") in VERDICT_WORDS:  # one verdict; with several sources, no false "disagree"
             out["wording"] = wording_agrees(answer, main["verdict"]) and not (len(by_src) > 1 and said_disagree)
-        if "wording" in out and len(by_src) > 1:
+        multi = bool(case.get("multi_measure"))
+        # The two-sources checks (SHARED, GUESSED, agreeing sentences) assume one measurement: not for multi_measure.
+        if "wording" in out and len(by_src) > 1 and not multi:
             out["wording"] = out["wording"] and not any(g in a for g in GUESSED) and not SHARED.search(answer)
             plan = agree_plan(run.get("tool_calls", []))
             if plan:  # agreeing sources: no slope or range that only another source gave
@@ -259,7 +261,9 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                 subj = [s[:s.index("agree")] if "agree" in s[:s.index("over its own record")] else s for s in own]
                 out["wording"] = out["wording"] and all(
                     any(_short_named(r.get("source") or {}, s) for r in agreeing) for s in subj)
-        if wrong_periods(answer, run.get("tool_calls", [])):  # a period range that is no result's period
+        # A period range that is no result's period. For multi_measure only a range that fits no result at all: one
+        # period said for "both" measurements is true when they share it.
+        if wrong_periods(answer, run.get("tool_calls", []), certain_only=multi):
             out["wording"] = False
         out["numbers"] = not invented_numbers(answer, results)
         if by_src:

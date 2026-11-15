@@ -196,3 +196,31 @@ def test_no_results_still_gives_up(fake, monkeypatch):
     fake.script = [step(calls=[call(str(i), variable="sea_level", lat=1, lon=2)]) for i in range(10)]
     assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP
 
+
+# ---- "These are examples, not a ranking." put in by code ----
+
+TOKYO = {"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 35.65, "lon": 139.77}}
+MANILA = {"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 14.58, "lon": 120.97}}
+
+
+def test_examples_sentence_added_once_after_first_paragraph():
+    text = "I can't rank a whole region, so these are three examples.\n\nTokyo: rising.\n\nManila: rising."
+    out = loop.add_examples(text, [TOKYO, MANILA])
+    assert out.count(loop.EXAMPLES) == 1
+    assert out.startswith("I can't rank a whole region, so these are three examples. These are examples, not a "
+                          "ranking.\n\nTokyo")
+
+
+def test_examples_sentence_not_added_for_one_place_or_twice():
+    one = [TOKYO, {**TOKYO, "arguments": {**TOKYO["arguments"], "lat": 35.66, "source": "psmsl"}}]  # same city
+    assert loop.add_examples("Tokyo: rising.", one) == "Tokyo: rising."
+    have = "Tokyo: rising. These are examples, not a ranking. Manila: rising."
+    assert loop.add_examples(have, [TOKYO, MANILA]) == have
+
+
+def test_loop_adds_examples_sentence(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    fake.script = [step(calls=[call("a", **TOKYO["arguments"]), call("b", **MANILA["arguments"])]),
+                   step("Tokyo and Manila: rising.")]
+    assert loop.ask("Which Asian cities?", model="fake:m")["answer"].count(loop.EXAMPLES) == 1
+

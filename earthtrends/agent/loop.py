@@ -500,10 +500,10 @@ def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
     return out
 
 
-def wrong_periods(text: str, calls: list[dict]) -> list[re.Match]:
-    """The period ranges in `text` that are wrong (see _check). No result with a period: nothing to check. The eval
-    scorer imports this."""
-    return [m for m, _ in _check(text, calls)]
+def wrong_periods(text: str, calls: list[dict], certain_only: bool = False) -> list[re.Match]:
+    """The period ranges in `text` that are wrong (see _check); with certain_only, only those that fit no result's
+    period at all. No result with a period: nothing to check. The eval scorer imports this."""
+    return [m for m, certain in _check(text, calls) if certain or not certain_only]
 
 
 def _in_words(p: dict, sep: str = "to") -> str:
@@ -574,6 +574,28 @@ def best(kept: list[str], calls: list[dict]) -> str | None:
     flags = [len(_check(t, calls)) for t in fixed]  # left after fixing: the doubtful ones
     n = [words(t) for t in fixed]
     return fixed[min(range(len(fixed)), key=lambda i: (0, flags[i], -i) if n[i] <= limit else (1, flags[i], n[i]))]
+
+
+EXAMPLES = "These are examples, not a ranking."
+PLACE_KM = 50  # lookups this far apart are different places
+
+
+def add_examples(text: str, calls: list[dict]) -> str:
+    """EXAMPLES once, at the end of the first paragraph, when this turn's lookups cover two or more places and the
+    text lacks it (the prompt asks for it; code makes sure). One place: unchanged."""
+    pts = []
+    for c in calls:
+        a = c.get("arguments") or {}
+        try:
+            p = (float(a["lat"]), float(a["lon"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if c.get("name") == "detect_trend" and all(coops.haversine_km(*p, *q) > PLACE_KM for q in pts):
+            pts.append(p)
+    if len(pts) < 2 or EXAMPLES.lower() in text.lower():
+        return text
+    head, sep, rest = text.partition("\n\n")
+    return f"{head.rstrip()} {EXAMPLES}{sep}{rest}"
 
 
 FOUND_HEAD = "Here is what I found."
@@ -755,6 +777,7 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                                                  else NO_NUMBERS if numbered else GAVE_UP)
         if answer not in (GAVE_UP, NO_NUMBERS):
             answer = guidance.fill(answer, ok_calls(calls))  # the tool's own guidance, word for word
+            answer = add_examples(answer, calls)
         # After every check, so it is outside the word limit; on every path, so the marker never reaches the user.
         answer = resources.fill(answer, [c["result"] for c in ok_calls(calls)])
     finally:
