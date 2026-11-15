@@ -6,7 +6,7 @@
   if (!slot || !window.TD) return;
   var STYLES = { light: 'https://tiles.openfreemap.org/styles/positron', detailed: 'https://tiles.openfreemap.org/styles/liberty' };
   var map = null, lib = null, loaded = false, failed = false, retried = false, slowTimer = 0;
-  var markers = Object.create(null), fitKey = null, baseKey = 'light', userMoved = false, rzFrame = 0;
+  var markers = Object.create(null), fitKey = null, fitSel = null, baseKey = 'light', userMoved = false, rzFrame = 0;
   var gauges = null, gaugeSrcs = [], gTries = 0, gLoading = false, wantDots = false, hideTimer = 0;
   var legend = null, tip = null, tipFor = null;
   var hoverOK = matchMedia('(hover: hover)').matches;
@@ -112,20 +112,41 @@
     });
   }
 
-  // fit to all pins; not on a mere selection change (the key is the set of pins)
+  function km(a, b) { // great-circle distance in km
+    var r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 12742 * Math.asin(Math.min(1, Math.sqrt(x)));
+  }
+
+  // the view: the selected pin and every pin within 1,000 km of it (zoom 6 at most; zoom 5 when it has no neighbour); with no selection, all pins.
+  // Runs on window entry, when the set of pins changes, and when the selection changes (then only if the visitor has not moved the map
+  // themselves, or the newly selected pin is outside the view).
   function fit(force) {
     if (!map || inSettings() || !frame.offsetWidth) return;
     var pins = ((TD.pins && TD.pins()) || []).filter(function (p) { return p && typeof p.lat === 'number' && typeof p.lon === 'number'; });
     var key = win() + ':' + pins.map(function (p) { return p.key; }).sort().join('|');
-    if (!force && key === fitKey) return;
+    var sel = pins.filter(function (p) { return p.selected; })[0] || null, selKey = sel ? sel.key : '';
+    var setChanged = key !== fitKey, selChanged = selKey !== fitSel;
+    if (!force && !setChanged && !selChanged) return;
     fitKey = key;
-    userMoved = false;
+    fitSel = selKey;
     if (!pins.length) return;
-    var b = new lib.LngLatBounds([pins[0].lon, pins[0].lat], [pins[0].lon, pins[0].lat]);
-    pins.forEach(function (p) { b.extend([p.lon, p.lat]); });
-    var pad = frame.offsetWidth < 420 ? 30 : { top: 40, bottom: 40, left: 40, right: 190 }; // room on the right for the selected tag
-    map.fitBounds(b, { padding: pad, maxZoom: 9, duration: reduced() ? 0 : 600 });
+    if (!force && !setChanged && sel && userMoved && map.getBounds().contains([sel.lon, sel.lat])) return;
+    userMoved = false;
+    var dur = reduced() ? 0 : 600;
+    if (!sel) {
+      var all = new lib.LngLatBounds([pins[0].lon, pins[0].lat], [pins[0].lon, pins[0].lat]);
+      pins.forEach(function (p) { all.extend([p.lon, p.lat]); });
+      map.fitBounds(all, { padding: padFor(), maxZoom: 9, duration: dur });
+      return;
+    }
+    var near = pins.filter(function (p) { return p !== sel && km(sel, p) <= 1000; });
+    if (!near.length) { map.flyTo({ center: [sel.lon, sel.lat], zoom: 5, duration: dur, essential: true }); return; }
+    var b = new lib.LngLatBounds([sel.lon, sel.lat], [sel.lon, sel.lat]);
+    near.forEach(function (p) { b.extend([p.lon, p.lat]); });
+    map.fitBounds(b, { padding: padFor(), maxZoom: 6, duration: dur });
   }
+  function padFor() { return frame.offsetWidth < 420 ? 30 : { top: 40, bottom: 40, left: 40, right: 190 }; } // room on the right for the selected tag
 
   // base map, labels and stations from the preferences of the window on screen
   function applyPrefs() {
@@ -149,7 +170,7 @@
 
   function start() {
     if (map) { map.remove(); map = null; tip = null; tipFor = null; markers = Object.create(null); }
-    failed = false; loaded = false; fitKey = null;
+    failed = false; loaded = false; fitKey = null; fitSel = null;
     frame.classList.remove('map-failed');
     wait.hidden = false;
     wait.textContent = 'Loading the map…';
