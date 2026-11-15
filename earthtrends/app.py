@@ -154,7 +154,7 @@ def gauges(request: Request, response: Response) -> dict:
         sources.append(src.SOURCE)
     if not sources:
         raise err
-    response.headers["Cache-Control"] = CACHE
+    response.headers["Cache-Control"] = CACHE if err is None else "public, max-age=60, s-maxage=300"  # retry a missing list soon
     return {"gauges": out, "sources": sources}
 
 

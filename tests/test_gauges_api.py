@@ -45,12 +45,47 @@ def test_both_lists(monkeypatch):
 @pytest.mark.parametrize("exc", [httpx.ConnectTimeout("slow"), httpx.DecodingError("bad"),
                                  json.JSONDecodeError("x", "<html>", 0)])
 def test_one_list_down(monkeypatch, exc):
+    short = "public, max-age=60, s-maxage=300"
     lists(monkeypatch, c=exc)
-    body = client.get("/api/gauges").json()
+    r = client.get("/api/gauges")
+    body = r.json()
     assert [g["source"] for g in body["gauges"]] == ["psmsl"] and body["sources"] == [psmsl.SOURCE]
+    assert r.status_code == 200 and r.headers["cache-control"] == short
     lists(monkeypatch, p=exc)
-    body = client.get("/api/gauges").json()
+    r = client.get("/api/gauges")
+    body = r.json()
     assert [g["source"] for g in body["gauges"]] == ["coops"] and body["sources"] == [coops.SOURCE]
+    assert r.status_code == 200 and r.headers["cache-control"] == short
+
+
+# A reply json.loads cannot take: a number over Python's 4,300-digit limit (plain ValueError), nesting too deep (RecursionError).
+HOSTILE = [b'{"stations": [{"lat": ' + b"1" * 5000 + b"}]}", b"[" * 200_000]
+
+
+def coops_reply(monkeypatch, content):
+    monkeypatch.setattr(coops.httpx, "get", lambda *a, **k: httpx.Response(200, content=content, request=httpx.Request("GET", "http://x")))
+    coops.stations.cache_clear()
+
+
+@pytest.mark.parametrize("content", HOSTILE)
+def test_coops_unparsable_list_is_decoding_error(monkeypatch, content):
+    coops_reply(monkeypatch, content)
+    try:
+        with pytest.raises(httpx.DecodingError, match="station list was not in the documented format"):
+            coops.stations()
+    finally:
+        coops.stations.cache_clear()
+
+
+@pytest.mark.parametrize("content", HOSTILE)
+def test_coops_unparsable_list_still_gives_psmsl(monkeypatch, content):
+    coops_reply(monkeypatch, content)
+    monkeypatch.setattr(psmsl, "stations", lambda: PSMSL)
+    try:
+        r = client.get("/api/gauges")
+    finally:
+        coops.stations.cache_clear()
+    assert r.status_code == 200 and r.json()["sources"] == [psmsl.SOURCE] and len(r.json()["gauges"]) == 1
 
 
 def test_both_down_is_502(monkeypatch):
