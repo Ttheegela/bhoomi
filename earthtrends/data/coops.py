@@ -1,4 +1,5 @@
 """NOAA CO-OPS monthly mean sea level, no key."""
+import json
 from datetime import date
 from functools import lru_cache
 from math import asin, cos, isfinite, radians, sin, sqrt
@@ -23,7 +24,12 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
 def stations() -> list[dict]:
     r = httpx.get(f"{BASE}/mdapi/prod/webapi/stations.json", params={"type": "waterlevels"}, timeout=TIMEOUT)
     r.raise_for_status()
-    reply = r.json()
+    try:
+        reply = r.json()
+    except json.JSONDecodeError:  # not JSON (a maintenance page): already an outage to every caller, kept as it was
+        raise
+    except (ValueError, RecursionError) as e:  # a number past Python's integer-digit limit, or nesting too deep
+        raise httpx.DecodingError("NOAA CO-OPS' station list was not in the documented format.") from e
     rows = reply.get("stations") if isinstance(reply, dict) else None
     out = []
     for s in rows if isinstance(rows, list) else []:

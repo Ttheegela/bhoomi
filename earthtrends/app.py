@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 
 from earthtrends.agent import loop, ratelimit, tools
 from earthtrends.agent.providers import NotConfigured, UpstreamError
-from earthtrends.data import search_places
+from earthtrends.data import coops, psmsl, search_places
 from earthtrends.mcp_server import SOURCE_DOWN, mcp
 
 # Remote MCP endpoint (streamable HTTP) for agents that connect over the network.
@@ -136,6 +136,26 @@ def places(request: Request, response: Response, q: str) -> dict:
     out = search_places(q)
     response.headers["Cache-Control"] = CACHE
     return out
+
+
+@app.get("/api/gauges")
+def gauges(request: Request, response: Response) -> dict:
+    """Where sea level is measured, for the map. Says nothing about whether a gauge's record supports a trend."""
+    limit_data(request)
+    out, sources, err = [], [], None
+    for src, lon_key in ((coops, "lng"), (psmsl, "lon")):
+        try:
+            rows = src.stations()
+        except (httpx.HTTPError, json.JSONDecodeError) as e:  # what source_down handles; one list down still answers
+            err = e
+            continue
+        out += [{"name": s["name"], "lat": round(float(s["lat"]), 4), "lon": round(float(s[lon_key]), 4),
+                 "source": src.SOURCE["id"]} for s in rows]
+        sources.append(src.SOURCE)
+    if not sources:
+        raise err
+    response.headers["Cache-Control"] = CACHE if err is None else "public, max-age=60, s-maxage=300"  # retry a missing list soon
+    return {"gauges": out, "sources": sources}
 
 
 class AskBody(BaseModel):
