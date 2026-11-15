@@ -223,7 +223,7 @@
     if (m.today >= m.xMin && m.today <= m.xMax) {
       var tx = m.px(m.today);
       s.appendChild(svg('line', { x1: tx.toFixed(1), x2: tx.toFixed(1), y1: Y0, y2: Y1, class: 'cmp-today' }));
-      s.appendChild(svg('text', { x: (tx - 6).toFixed(1), y: 296, class: 'cmp-ax', 'text-anchor': 'end' }, 'today'));
+      s.appendChild(svg('text', { x: tx.toFixed(1), y: 14, class: 'cmp-ax', 'text-anchor': 'middle' }, 'today'));
     }
 
     var clip = svg('g', { 'clip-path': 'url(#cmp-clip)' }), lp = null;
@@ -238,7 +238,7 @@
     // others first, selected last so it sits on top
     m.lines.slice().sort(function (a, b) { return (a.selected ? 1 : 0) - (b.selected ? 1 : 0); }).forEach(function (l) {
       var d = segments(l.pts, m.px, m.py);
-      if (d) clip.appendChild(svg('path', { d: d, class: 'cmp-line s' + slotCls(l) }));
+      if (d) { var pth = svg('path', { d: d, class: 'cmp-line s' + slotCls(l) }); pth.appendChild(svg('title', {}, l.pin.label)); clip.appendChild(pth); }
     });
     if (wedge) {
       clip.appendChild(svg('path', {
@@ -248,42 +248,26 @@
     }
     s.appendChild(clip);
 
-    // direct labels: line ends plus the wedge label, stacked so none overlap
-    var items = [];
+    // legend (HTML) in pin order, then the chart in a box that scrolls sideways on narrow screens
+    var leg = h('div', 'cmp-legend');
     m.lines.forEach(function (l) {
-      var e = l.pts[l.pts.length - 1], x, y;
-      if (l === selLine && wedge) { x = X1 + 6; y = m.py((wedge.lo + wedge.hi) / 2) + 4; }
-      else { x = m.px(e.year) + 6; y = m.py(e.v) + 4; }
-      items.push({
-        x: x, y: y, text: shortName(l.pin.label), full: l.pin.label, ax: m.px(e.year), ay: m.py(e.v),
-        cls: 'cmp-dl t' + slotCls(l) + (l.selected ? ' b' : '')
-      });
+      var b = h('button', 'cmp-key' + (l.selected ? ' on' : ''));
+      b.type = 'button'; b.setAttribute('aria-pressed', l.selected ? 'true' : 'false');
+      b.appendChild(h('i', 'cmp-sw s' + slotCls(l)));
+      b.appendChild(document.createTextNode(l.pin.label));
+      b.addEventListener('click', function () { P.select(l.pin.key); });
+      leg.appendChild(b);
     });
-    var placed = stack(items, 15, Y0 + 8, Y1 - 4);
-    if (wedge && wedge.label) {
-      // 60 % of the way to the look-ahead year, 6 px above the wedge's upper edge; up past any line-end label, else below the lower edge
-      var wx = m.px(lp.year) + 0.6 * (m.px(wedge.year) - m.px(lp.year)), w = wedge.label.length * 6.6;
-      var edge = function (v) { return m.py(lp.v) + 0.6 * (m.py(v) - m.py(lp.v)); };
-      var hit = function (y) {
-        return placed.some(function (it) {
-          var iw = it.text.length * 7;
-          return wx - w / 2 < it.x + iw && it.x < wx + w / 2 && y - 12 < it.ly + 4 && it.ly - 12 < y + 3;
-        });
-      };
-      var wy = edge(wedge.hi) - 6;
-      while (hit(wy) && wy - 4 - 12 >= Y0) wy -= 4;
-      if (hit(wy) || wy - 12 < Y0) wy = edge(wedge.lo) + 18;
-      s.appendChild(svg('text', { x: wx.toFixed(1), y: wy.toFixed(1), class: 'cmp-pl', 'text-anchor': 'middle' }, wedge.label));
+    if (wedge) {
+      var wk = h('span', 'cmp-key wk');
+      wk.appendChild(h('i', 'cmp-sw wedge'));
+      wk.appendChild(document.createTextNode(wedge.label || 'If the past trend continues'));
+      leg.appendChild(wk);
     }
-    placed.forEach(function (it) {
-      if (it.ax != null && Math.abs(it.ly - it.y) > 6) {
-        s.appendChild(svg('line', { x1: it.ax.toFixed(1), y1: it.ay.toFixed(1), x2: (it.x - 2).toFixed(1), y2: (it.ly - 4).toFixed(1), class: 'cmp-lead' }));
-      }
-      var t = svg('text', { x: it.x.toFixed(1), y: it.ly.toFixed(1), class: it.cls }, it.text);
-      if (it.full) t.appendChild(svg('title', {}, it.full));
-      s.appendChild(t);
-    });
-    g.appendChild(s);
+    g.appendChild(leg);
+    var sc = h('div', 'cmp-plot');
+    sc.appendChild(s);
+    g.appendChild(sc);
     leftOut(g, m.left);
     slot.replaceChildren(g);
   }
