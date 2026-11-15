@@ -193,6 +193,61 @@ def test_no_tool_case():
     assert run.check(NONE_CASE, fake_run("Which Springfield?", tried))["tool"] is False
 
 
+def test_max_km_widens_the_place_check():
+    far = [{"name": "detect_trend", "arguments": {**ARGS, "lat": 39.36 + 150 / 111.2}, "result": AC, "error": None}]
+    farther = [{**far[0], "arguments": {**ARGS, "lat": 39.36 + 250 / 111.2}}]  # 1 degree of latitude is ~111.2 km
+    assert run.check(CASE, fake_run(calls=far))["place"] is False  # 150 km: outside the default 50
+    assert run.check({**CASE, "max_km": 200}, fake_run(calls=far))["place"] is True
+    assert run.check({**CASE, "max_km": 200}, fake_run(calls=farther))["place"] is False
+
+
+GAUGE_CASE = {"id": "delhi-sea-level-inland", "question": "Is sea level rising in Delhi?", "expect_tool": "none",
+              "allow_empty_lookup": True, "must_say": ["coast"], "must_not_say": ["per decade"]}
+DECLINE = "Delhi is far from the coast, so there is no tide gauge to measure sea level there."
+
+
+def test_allow_empty_lookup():
+    miss = {"name": "detect_trend", "arguments": {**ARGS, "lat": 28.6, "lon": 77.2}, "result": None,
+            "error": "No tide gauge within 100 km"}
+    two_misses = [miss, {**miss, "arguments": {**miss["arguments"], "source": "psmsl"}}]
+    out = run.check(GAUGE_CASE, fake_run(DECLINE, two_misses))
+    assert out["tool"] and out["numbers"] and out["must_say"]
+    no_field = {k: v for k, v in GAUGE_CASE.items() if k != "allow_empty_lookup"}
+    assert run.check(no_field, fake_run(DECLINE, two_misses))["tool"] is False
+    hit = [miss, {"name": "detect_trend", "arguments": ARGS, "result": AC, "error": None}]
+    assert run.check(GAUGE_CASE, fake_run(DECLINE, hit))["tool"] is False
+    assert run.check(GAUGE_CASE, fake_run(DECLINE + " The nearest is 1000 km away.", two_misses))["numbers"] is False
+
+
+def _toml(tmp_path, extra, expect_tool="detect_trend"):
+    p = tmp_path / "cases.toml"
+    p.write_text(f'[[case]]\nid = "x-case"\nquestion = "q"\nexpect_tool = "{expect_tool}"\n{extra}\n')
+    return p
+
+
+@pytest.mark.parametrize("extra", ["max_km = 0", "max_km = -5", "max_km = true", 'max_km = "200"',
+                                   "max_km = inf", "max_km = nan"])
+def test_bad_max_km_is_rejected_at_load(tmp_path, extra):
+    with pytest.raises(SystemExit, match="x-case.*max_km"):
+        run.load_cases(_toml(tmp_path, extra))
+
+
+def test_bad_allow_empty_lookup_is_rejected_at_load(tmp_path):
+    with pytest.raises(SystemExit, match="x-case.*allow_empty_lookup"):
+        run.load_cases(_toml(tmp_path, "allow_empty_lookup = true"))  # expect_tool is not "none"
+    with pytest.raises(SystemExit, match="x-case.*allow_empty_lookup"):
+        run.load_cases(_toml(tmp_path, 'allow_empty_lookup = "yes"', "none"))
+    assert run.load_cases(_toml(tmp_path, "allow_empty_lookup = true", "none"))[0]["allow_empty_lookup"] is True
+    assert run.load_cases(_toml(tmp_path, "max_km = 12.5"))[0]["max_km"] == 12.5
+
+
+def test_real_cases_carry_the_new_fields():
+    by_id = {c["id"]: c for c in run.load_cases()}
+    assert by_id["northwest-india-groundwater"]["max_km"] == 200
+    assert by_id["central-valley-groundwater"]["max_km"] == 200
+    assert by_id["delhi-sea-level-inland"]["allow_empty_lookup"] is True
+
+
 def test_alias_and_not_runnable():
     catalog = [{"id": "precip", "sources": ["power"]}, {"id": "sea_level", "sources": ["coops"]}]
     rain = {**CASE, "expect_variable": "precipitation", "expect_source": None}
