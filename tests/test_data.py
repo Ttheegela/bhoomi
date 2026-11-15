@@ -1094,3 +1094,26 @@ def test_station_names_are_readable_in_series_and_sentences(offline2, psmsl_offl
 def test_readable_never_lengthens_a_name():
     assert len(upstream.readable(upstream.text("X" + "İ" * 200, upstream.NAME))) <= upstream.NAME
     assert len(upstream.readable("İSTANBUL")) == len("İSTANBUL") and upstream.readable("İSTANBUL").startswith("İ")
+
+
+# A monthly reply json.loads cannot take: a number past Python's 4,300-digit limit (plain ValueError), nesting too deep
+# (RecursionError). Each in a normal 200 reply and in a 400 with an error body: the two places fetch reads JSON.
+COOPS_HOSTILE = [(200, b'{"data": [{"MSL": ' + b"1" * 5000 + b"}]}"), (200, b"[" * 200_000),
+                 (400, b'{"error": ' + b"1" * 5000 + b"}"), (400, b'{"error": ' + b"[" * 200_000)]
+
+
+def _coops_monthly_reply(monkeypatch, status, content):
+    monkeypatch.setattr(coops.httpx, "get", lambda *a, **k: httpx.Response(status, content=content, request=httpx.Request("GET", "http://x")))
+
+
+@pytest.mark.parametrize("status,content", COOPS_HOSTILE)
+def test_coops_unparsable_monthly_data_is_decoding_error(monkeypatch, status, content):
+    _coops_monthly_reply(monkeypatch, status, content)
+    with pytest.raises(httpx.DecodingError, match="monthly data was not in the documented format"):
+        coops.fetch("8534720")
+
+
+def test_coops_monthly_maintenance_page_stays_json_error(monkeypatch):
+    _coops_monthly_reply(monkeypatch, 200, b"<html>maintenance</html>")
+    with pytest.raises(json.JSONDecodeError):  # the app and the loop already treat it as an outage (a 502)
+        coops.fetch("8534720")

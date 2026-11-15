@@ -92,7 +92,11 @@ def fetch(station_id: str) -> dict:
         },
         timeout=30,
     )
-    if r.status_code == 400 and "error" in r.text:  # parse() turns the error body into a ValueError
+    if r.status_code != 400 or "error" not in r.text:  # a 400 with an error body: parse() turns it into a ValueError
+        r.raise_for_status()
+    try:
         return r.json()
-    r.raise_for_status()
-    return r.json()
+    except json.JSONDecodeError:  # not JSON (a maintenance page): already an outage to every caller, kept as it was
+        raise
+    except (ValueError, RecursionError) as e:  # a number past Python's integer-digit limit, or nesting too deep
+        raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.") from e
