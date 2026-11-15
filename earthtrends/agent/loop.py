@@ -143,8 +143,9 @@ def tried_sources(call: dict) -> list[dict]:
     if call.get("name") != "detect_trend" or not entry:
         return []
     src = args.get("source")
-    ids = [src] if src else entry["sources"][:2 if entry["id"] == "sea_level" else 1]
-    return [{"name": SOURCES[i]["name"], "url": SOURCES[i]["url"]} for i in ids if i in entry["sources"]]
+    # Only a source left out (None) gets the sea-level fallback, as in the data layer; "" is its default alone.
+    ids = entry["sources"][:2 if entry["id"] == "sea_level" else 1] if src is None else [src or entry["sources"][0]]
+    return [{"name": SOURCES[i]["name"], "url": SOURCES[i]["url"]} for i in ids if i in entry["sources"] and i in SOURCES]
 
 
 # ---- sources that agree: the code writes their sentence, the model never sees their numbers ----

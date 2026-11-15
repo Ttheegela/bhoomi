@@ -2005,6 +2005,8 @@ INLAND_DELHI = {"variable": "sea_level", "lat": 28.61, "lon": 77.21}
     ({**INLAND_DELHI, "source": "psmsl"}, [psmsl_src]),
     ({**DELHI, "source": "ghcn"}, [ghcn_src]),
     (INLAND_DELHI, [coops_src, psmsl_src]),  # sea level, no source: the default and its automatic fallback
+    ({**INLAND_DELHI, "source": None}, [coops_src, psmsl_src]),  # None is left out too
+    ({**INLAND_DELHI, "source": ""}, [coops_src]),  # "" is not left out: the data layer uses the default only
     (DELHI, [loop.power]),  # no source: the variable's default
 ])
 def test_failed_call_carries_the_sources_it_tried(arguments, mods):
@@ -2022,6 +2024,14 @@ def test_failed_call_carries_the_sources_it_tried(arguments, mods):
 ])
 def test_failed_call_without_a_known_source_carries_none(call):
     assert "sources" not in loop.for_model([call])[0]
+
+
+def test_catalog_source_without_a_module_is_skipped(monkeypatch):
+    real = tools.list_variables
+    monkeypatch.setattr(tools, "list_variables", lambda: [
+        {**v, "sources": ["newsrc", *v["sources"]]} if v["id"] == "sea_level" else v for v in real()])
+    assert loop.for_model([failed_call(INLAND_DELHI)])[0]["sources"] == tried(coops_src)  # no KeyError
+    assert "sources" not in loop.for_model([failed_call({**INLAND_DELHI, "source": "newsrc"})])[0]
 
 
 def test_source_names_never_count_as_stated_numbers():
