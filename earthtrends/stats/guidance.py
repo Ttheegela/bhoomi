@@ -126,7 +126,8 @@ def _future_link(place) -> dict:
     return {"label": "Future sea level (NASA projection tool)", "url": NASA_TOOL}
 
 
-def _outlook(ci_low: Decimal, ci_high: Decimal, factor: Decimal, unit: str, last_year: int, rain: bool) -> list[dict]:
+def _outlook(ci_low: Decimal, ci_high: Decimal, factor: Decimal, unit: str, last_year: int, rain: bool,
+             falling: bool) -> list[dict]:
     out = []
     for year in OUTLOOK:
         if year <= last_year:
@@ -135,10 +136,12 @@ def _outlook(ci_low: Decimal, ci_high: Decimal, factor: Decimal, unit: str, last
         lo, hi = ci_low * factor * k, ci_high * factor * k
         places = "1" if max(abs(lo), abs(hi)) >= 10 else "0.1"
         lo, hi = _q(lo, places) + 0, _q(hi, places) + 0  # + 0 turns -0 into 0
+        if not lo and not hi:  # "about 0 ... by 2035" says nothing
+            continue
         if rain:  # "64 to 239 mm more rain a year": unsigned, the word carries the direction
             a, b = sorted((abs(lo), abs(hi)))
             span = f"about {a:f}" if a == b else f"{a:f} to {b:f}"
-            text = f"{span} mm {'less' if hi < 0 else 'more'} rain a year by {year}"
+            text = f"{span} mm {'less' if falling else 'more'} rain a year by {year}"
         else:
             span = f"about {signed(lo)}" if lo == hi else f"{signed(lo)} to {signed(hi)}"
             text = f"{span} {unit} by {year}"
@@ -212,5 +215,5 @@ def guidance_for(result: dict, mean: float | None = None) -> dict:
     risk, why, ratio, key = _risk(var, verdict, slope, mean)
     g.update(risk=risk, risk_label=LABEL[risk], why=why, ratio=ratio, recommendation=RECOMMEND[var][key])
     if years[0] >= OUTLOOK_YEARS:
-        g["outlook"] = _outlook(lo, hi, factor, unit, years[1], var == "precip")
+        g["outlook"] = _outlook(lo, hi, factor, unit, years[1], var == "precip", verdict == "falling")
     return g

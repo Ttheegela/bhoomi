@@ -217,3 +217,17 @@ def test_compute_trend_never_fails_because_of_guidance(place, slope):
                        "values": [slope * i / 10 for i in range(len(times))], "source": {"id": "psmsl"}, "notes": []})
     assert list(r["guidance"]) == KEYS
     json.dumps(r["guidance"], allow_nan=False)
+
+
+def test_outlook_direction_from_verdict_and_zero_years_skipped():
+    # only just clear: the upper end rounds to 0, but the trend is falling, so the word is "less"
+    g = guidance_for(res("precip", "falling", -0.02, lo=-0.05, hi=-0.0005, end="2026-12"), 3.0)
+    assert [o["text"] for o in g["outlook"]][:2] == ["0 to 16 mm less rain a year by 2035",
+                                                      "0 to 44 mm less rain a year by 2050"]
+    assert all("more" not in o["text"] for o in g["outlook"])
+    # every year rounds to 0 at both ends: no outlook at all
+    assert guidance_for(res("air_temp", "rising", 0.001, lo=0.0005, hi=0.002, end="2026-12"))["outlook"] == []
+    assert guidance_for(res("precip", "rising", 0.00001, lo=0.000005, hi=0.00002, end="2026-12"), 3.0)["outlook"] == []
+    # only the near years round to 0: they are skipped, later ones stay
+    g = guidance_for(res("air_temp", "rising", 0.012, lo=0.01, hi=0.015, end="2026-12"))
+    assert [o["year"] for o in g["outlook"]] == [2075]
