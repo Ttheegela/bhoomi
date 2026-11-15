@@ -192,7 +192,7 @@ function captionText(t, name, place) {
   return `${name} at ${place}, ${t.period.start} to ${t.period.end}. The trend line ${y} ${range}. Verdict: ${v}.`;
 }
 
-function rawLine(source, withTrend) { return `Raw values: ${source ? source.name : 'unknown'}.` + (withTrend ? " Trend and range: our calculation, the Mann-Kendall test with Sen's slope on monthly values with seasons removed." : ''); }
+function rawLine(source, withTrend) { return `Raw values: ${shownName(source)}.` + (withTrend ? " Trend and range: our calculation, the Mann-Kendall test with Sen's slope on monthly values with seasons removed." : ''); }
 function chartHead(t, name, place) { return `${name} at ${place}, ${t.period.start.slice(0, 4)} to ${t.period.end.slice(0, 4)}`; }
 
 function layoutFor(w) {
@@ -248,17 +248,19 @@ function selectTab(tabs, panels, i) {
 const isHttps = (src) => !!src && typeof src.url === 'string' && src.url.startsWith('https://');
 // One block-level 48 px line: grey "<label>:" then "<name> ↗" as a link (https URLs only), plain text without the arrow otherwise.
 // The text sits in one inner span so a long name wraps across the full line, not beside the label.
+// Display only: a trailing ", RLR monthly means" is jargon; the link is unchanged.
+const shownName = (src) => (src && typeof src.name === 'string' ? src.name.replace(/, RLR monthly means$/, '') : 'unknown');
 function srcBlock(node, label, source) {
   clear(node);
-  const name = source ? source.name : 'unknown';
+  const name = shownName(source);
   const inner = (arrow) => el('span', {}, el('span', { class: 'src-label' }, label + ':'), ` ${name}` + (arrow ? '\u00a0↗' : ''));
   if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, inner(true)));
   else node.append(el('span', { class: 'srclink' }, inner(false)));
 }
 // Link with the name only (footer list).
 function srcLink(node, source, arrow) {
-  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, source.name + (arrow ? '\u00a0↗' : '')));
-  else node.append(source ? source.name : 'unknown');
+  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, shownName(source) + (arrow ? '\u00a0↗' : '')));
+  else node.append(shownName(source));
 }
 
 /* ---------- API ---------- */
@@ -498,7 +500,8 @@ let flight = 0;
 let curWin = DEFAULT_WINDOW; // a variable id, or 'settings'
 
 function varById(id) { return state.variables.find((v) => v.id === id); }
-function nameOf(id) { const v = varById(id); return stripParens(v ? v.name : String(id).replace(/_/g, ' ')); }
+// The visitor's name for a measurement ("Rain", not "Precipitation"), in every string the page builds.
+function nameOf(id) { const w = WIN_BY_ID[id]; if (w) return w.name; const v = varById(id); return stripParens(v ? v.name : String(id).replace(/_/g, ' ')); }
 function winOf(id) { return WIN_BY_ID[id] || null; }
 
 // The name used in a sentence: a station or gauge name from the data; else the visitor's word for the place
@@ -521,11 +524,11 @@ function loadStore() {
       r.pins.forEach((p) => {
         const label = p && cleanPlace(p.label), lat = p && Number(p.lat), lon = p && Number(p.lon);
         if (!label || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return;
-        if (pins.length < MAX_PINS && !pins.some((q) => pinKeyOf(q.lat, q.lon) === pinKeyOf(lat, lon))) pins.push({ label, lat, lon, link: p.link === true });
+        if (pins.length < MAX_PINS && !pins.some((q) => pinKeyOf(q.lat, q.lon) === pinKeyOf(lat, lon))) pins.push({ label, lat, lon, link: p.link === true, preset: p.preset === true || (p.preset === undefined && DEFAULT_PINS[w.id].some((d) => pinKeyOf(d.lat, d.lon) === pinKeyOf(lat, lon))) });
       });
     }
     let selected = r && typeof r.selected === 'string' ? r.selected : null;
-    if (!pins.length && !(r && Array.isArray(r.pins))) { pins = DEFAULT_PINS[w.id].map((p) => Object.assign({}, p)); selected = null; }
+    if (!pins.length && !(r && Array.isArray(r.pins))) { pins = DEFAULT_PINS[w.id].map((p) => Object.assign({ preset: true }, p)); selected = null; } // the defaults are examples
     assignSlots(pins);
     if (!pins.some((p) => pinKeyOf(p.lat, p.lon) === selected)) selected = pins.length ? pinKeyOf(pins[0].lat, pins[0].lon) : null;
     store[w.id] = { pins, selected };
@@ -543,7 +546,7 @@ function assignSlots(pins) {
 }
 function saveStore() {
   const out = {};
-  WINDOWS.forEach((w) => { const e = store[w.id]; out[w.id] = { pins: e.pins.map((p) => ({ label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, link: p.link || undefined })), selected: e.selected }; });
+  WINDOWS.forEach((w) => { const e = store[w.id]; out[w.id] = { pins: e.pins.map((p) => ({ label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, link: p.link || undefined, preset: p.preset || undefined })), selected: e.selected }; });
   try { localStorage.setItem(PIN_KEY, JSON.stringify(out)); } catch (e) { /* storage may be off */ }
 }
 
@@ -625,7 +628,7 @@ function renderSrcNote() {
   const cur = v && Array.isArray(v.sources) ? (sourceFor(curWin) || v.sources[0]) : null;
   const show = !!sid && !!cur && v.sources.length > 1 && sid !== cur;
   n.hidden = !show;
-  n.textContent = show ? `This place is measured by ${pin.trend.source.name}.` : '';
+  n.textContent = show ? `This place is measured by ${shownName(pin.trend.source)}.` : '';
 }
 
 function changed() {
@@ -680,7 +683,7 @@ const riskClass = (g) => (g && ['high', 'moderate', 'low', 'unknown'].includes(g
 // The line under a pinned place's name.
 function pinLine(p) {
   if (p.status === 'loading') return 'Checking…';
-  if (p.status === 'error') return p.error || "We couldn't check this place.";
+  if (p.status === 'error') return 'No record here';
   const t = p.trend, rate = fmt.rate(t);
   if (rate) return `${rate} ${perOf(t)}`.trim();
   if (t.guidance) return 'No clear change';
@@ -722,7 +725,10 @@ function renderControls() {
 function renderSidebar() {
   const ul = $('pins');
   clear(ul);
-  pinList(curWin).forEach((p) => {
+  const all = pinList(curWin);
+  if (all.length < MAX_PINS) lockRm = false;
+  ul.className = lockRm ? 'pins show-rm' : 'pins';
+  all.forEach((p) => {
     const g = p.trend && p.trend.guidance;
     const btn = el('button', { type: 'button', class: 'pin' + (p.selected ? ' on' : ''), 'aria-pressed': String(p.selected) },
       el('i', { class: p.selected ? 'dot sel' : `dot s${p.slot}`, 'aria-hidden': 'true' }),
@@ -750,7 +756,11 @@ function renderRec() {
   }
   const h2 = (txt) => el('h2', { tabindex: '-1', id: 'rec-h' }, txt);
   if (pin.status === 'loading') { box.append(h2(pin.label), el('p', { class: 'say' }, `Checking the records for ${pin.label}…`)); return; }
-  if (pin.status === 'error') { box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."), el('p', { class: 'say' }, 'Try another place.')); return; }
+  if (pin.status === 'error') {
+    box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."), el('p', { class: 'say' }, 'Try another place.'));
+    if (curWin === 'sea_level') box.append(el('p', { class: 'say' }, el('a', { href: 'https://sealevel.nasa.gov/ipcc-ar6-sea-level-projection-tool', target: '_blank', rel: 'noopener' }, 'Future sea level (NASA projection tool)\u00a0↗')));
+    return;
+  }
 
   state.params = { lat: pin.lat, lon: pin.lon, variable: curWin }; // the sentence helpers read the place being shown
   state.place = { label: pin.label, link: pin.link };
@@ -758,7 +768,7 @@ function renderRec() {
   const risk = riskClass(g), years = fmt.years(t), pl = t.place && t.place.name;
   const station = pl && t.source && ['coops', 'ghcn', 'psmsl'].includes(t.source.id) ? pl : '';
   const srcLine = el('div', { class: 'src' });
-  if (isHttps(t.source)) srcLine.append(el('a', { href: t.source.url, class: 'srclink', target: '_blank', rel: 'noopener' }, `${t.source.name} ↗`)); else srcLine.append(t.source ? t.source.name : 'unknown source');
+  if (isHttps(t.source)) srcLine.append(el('a', { href: t.source.url, class: 'srclink', target: '_blank', rel: 'noopener' }, `${shownName(t.source)} ↗`)); else srcLine.append(t.source ? shownName(t.source) : 'unknown source');
   srcLine.append(` · ${years}`);
   if (station) srcLine.append(` · measured at ${station}`);
   box.append(el('div', { class: 'where' }, el('div', {}, h2(pin.label), srcLine), g && g.risk_label ? el('span', { class: `risk ${risk}` }, g.risk_label) : ''));
@@ -973,18 +983,31 @@ function route() {
 
 /* ---------- adding, selecting, removing ---------- */
 
+let lockRm = false; // the list is full of the visitor's own places: show every Remove control until there is room
 function addPin(win, spec) {
   const e = store[win];
   const lat = Number(Number(spec.lat).toFixed(4)), lon = Number(Number(spec.lon).toFixed(4));
   const key = pinKeyOf(lat, lon);
-  if (e.pins.some((p) => pinKeyOf(p.lat, p.lon) === key)) { e.selected = key; saveStore(); if (win === curWin) { ensureLoaded(win); changed(); } return { ok: true }; }
-  if (e.pins.length >= MAX_PINS) return { ok: false, reason: 'full' };
-  const pin = { label: cleanPlace(spec.label) || coordText(lat, lon), lat, lon, link: spec.link === true };
+  // a place within 0.25 degrees of a pinned one is that pin: select it, keep its label, say nothing
+  const near = e.pins.find((p) => Math.abs(p.lat - lat) <= 0.25 && Math.abs(p.lon - lon) <= 0.25);
+  if (near) { e.selected = pinKeyOf(near.lat, near.lon); saveStore(); if (win === curWin) { ensureLoaded(win); changed(); } return { ok: true }; }
+  const label = cleanPlace(spec.label) || coordText(lat, lon);
+  let replaced = null;
+  if (e.pins.length >= MAX_PINS) {
+    // the list is full: an example place makes room (the last one that is not selected); only then is the visitor asked to
+    for (let i = e.pins.length - 1; i >= 0; i--) if (e.pins[i].preset && pinKeyOf(e.pins[i].lat, e.pins[i].lon) !== e.selected) { replaced = e.pins.splice(i, 1)[0]; break; }
+    if (!replaced) {
+      lockRm = true;
+      if (win === curWin) { changed(); TD.announce(`Your list is full. Remove a place with × to add ${label}.`); }
+      return { ok: false, reason: 'full' };
+    }
+  }
+  const pin = { label, lat, lon, link: spec.link === true };
   e.pins.push(pin);
   assignSlots(e.pins);
   e.selected = key;
   saveStore();
-  if (win === curWin) { ensureLoaded(win); changed(); TD.announce(`Pinned ${pin.label}.`); }
+  if (win === curWin) { ensureLoaded(win); changed(); TD.announce(replaced ? `Replaced ${replaced.label} with ${pin.label} to keep six places.` : `Pinned ${pin.label}.`); }
   return { ok: true };
 }
 
@@ -1081,7 +1104,8 @@ function pickPlace(r) {
   clearTimeout(search.timer); search.seq++;
   closeList(); showCredit(null);
   TD.addPlace({ lat: r.lat, lon: r.lon, label: pinLabel(r) }).then((res) => {
-    if (res.ok) { $('place').value = ''; setPlaceStatus(''); const h = $('rec').querySelector('h2'); if (h) h.focus({ preventScroll: true }); } else setPlaceStatus('You can pin up to 6 places. Remove one first.');
+    if (!res.ok && res.reason === 'full') setPlaceStatus(`Your list is full. Remove a place with × to add ${pinLabel(r)}.`);
+    else if (res.ok) { $('place').value = ''; setPlaceStatus(''); const h = $('rec').querySelector('h2'); if (h) h.focus({ preventScroll: true }); } else setPlaceStatus('You can pin up to 6 places. Remove one first.');
   });
 }
 $('place').addEventListener('input', queued);

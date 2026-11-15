@@ -115,7 +115,7 @@ span.srclink { color: var(--ink-2); }
 .pn small { display: block; color: var(--ink-2); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Remove takes no layout width: it sits at the row's top right, shown on hover or focus (always on touch screens) */
 .rm { position: absolute; top: 2px; right: 2px; width: 28px; height: 28px; border: 0; background: var(--surface); color: var(--ink-2); font-size: 18px; line-height: 1; cursor: pointer; border-radius: 8px; opacity: 0; }
-.pinrow:hover .rm, .pinrow:focus-within .rm, .rm:focus-visible { opacity: 1; }
+.pinrow:hover .rm, .pinrow:focus-within .rm, .rm:focus-visible, .pins.show-rm .rm { opacity: 1; }
 .rm:hover { color: var(--ink); background: var(--bg); }
 @media (hover: none) { .rm { opacity: 1; width: 36px; height: 36px; } .pin { padding-right: 44px; } }
 
