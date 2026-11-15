@@ -943,5 +943,8 @@ def test_explain_range_case_catches_a_copied_number():
     assert copied["numbers"] is False and copied["tool"] is True
     plain = run.check(case, fake_run(answer="A 95% range is where the true slope most likely lies.", calls=[]))
     assert plain == {"answered": True, "tool": True, "numbers": True}
+    # "95% range" is a fixed phrase; the same idea restated is a number from outside (why the prompt forbids it)
+    reworded = "About 95 out of 100 times, a range built this way would contain the real value."
+    assert run.check(case, fake_run(answer=reworded, calls=[]))["numbers"] is False
     looked = run.check(case, fake_run(answer="A 95% range is where the true slope most likely lies."))
     assert looked["tool"] is False  # a data tool call fails, even one that returned data
