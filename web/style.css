@@ -354,3 +354,7 @@ pre::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; bord
   #ask-ui .examples { display: grid; grid-template-columns: 1fr 1fr; }
   #ask-ui .examples .btn, #ask-ui .msg .examples .btn { width: 100%; }
 }
+
+/* 404 page only (web/404.html): space under the header row */
+.nf-h { margin-top: var(--gap); }
+.nf-link { margin-top: var(--s3); }

@@ -242,6 +242,7 @@ def test_wrong_address_is_a_friendly_page_but_api_stays_json():
     r = client.get("/nope")
     assert r.status_code == 404 and r.headers["content-type"].startswith("text/html")
     assert "We can't find that page." in r.text and "Built with AI assistance" in r.text
-    r = client.get("/api/nope")
-    assert r.status_code == 404 and r.json() == {"detail": "Not Found"}
+    for u in ("/api", "/api/", "/api/nope"):
+        r = client.get(u)
+        assert r.status_code == 404 and r.json() == {"detail": "Not Found"}, u
     assert client.get("/favicon.svg").headers["content-type"].startswith("image/svg+xml")

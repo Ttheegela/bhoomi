@@ -1049,3 +1049,10 @@ def test_grace_glacier_regions_give_the_error_and_land_still_answers():
     # too-few-cells error (not the glacier one), as it should be
     with pytest.raises(ValueError, match="too little land"):
         data.get_series("water_storage", 61.22, -149.9)
+
+
+def test_ghcn_station_sentence_at_the_edge_of_range():
+    st = {"id": "X", "name": "EDGE", "lat": 0.0, "lon": 0.0, "types": {}}
+    m = str(ghcn._no_station("precip", (50.3, st)))  # prints "50 km": must not follow "within 50 km"
+    assert m.startswith("The nearest weather station, EDGE (50 km away), does not have")
+    assert str(ghcn._no_station("precip", (50.6, st))).startswith("No weather station within 50 km has")

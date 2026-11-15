@@ -174,7 +174,7 @@ class Web(StaticFiles):
     """StaticFiles with html=True answers a missing path with web/404.html (status 404). /api/ keeps its JSON 404."""
 
     async def get_response(self, path: str, scope):
-        if path.startswith("api/"):
+        if path == "api" or path.startswith("api/"):
             raise HTTPException(404)
         return await super().get_response(path, scope)
 

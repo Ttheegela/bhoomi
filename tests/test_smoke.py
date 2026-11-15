@@ -41,3 +41,17 @@ def test_health_ask_flag_without_calling_out(mcp_client, monkeypatch):
     assert r.json() == {"status": "ok", "ask": True} and "test-not-a-key" not in r.text
     monkeypatch.delenv("OPENROUTER_API_KEY")
     assert mcp_client.get("/api/health").json() == {"status": "ok", "ask": False}
+
+
+def test_mcp_version_falls_back_when_not_installed(monkeypatch):
+    import importlib
+    import sys
+
+    def missing(_):
+        raise importlib.metadata.PackageNotFoundError
+    monkeypatch.setattr(importlib.metadata, "version", missing)
+    original = sys.modules.pop("earthtrends.mcp_server")
+    try:
+        assert importlib.import_module("earthtrends.mcp_server").VERSION == "unknown"
+    finally:
+        sys.modules["earthtrends.mcp_server"] = original  # the app keeps using the original module
