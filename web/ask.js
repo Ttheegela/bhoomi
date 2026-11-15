@@ -77,11 +77,11 @@ function describeAnswer(body) {
     good.forEach((c) => { const s = c.result.source; if (s && !seen.has(s.id || s.name)) { seen.add(s.id || s.name); sources.push(s); } });
     const spots = new Set(good.map((c) => { const t = chartTarget(c), q = c.result.place || {}; return t ? `${t.lat.toFixed(2)},${t.lon.toFixed(2)}` : String(q.name); }));
     const place = p.name ? p.name : `the spot at ${Number(p.lat).toFixed(2)}, ${Number(p.lon).toFixed(2)}`;
-    const ct = chartTarget(good[0]), la = ct ? ct.lat : Number(p.lat), lo = ct ? ct.lon : Number(p.lon);
-    const where = /^Average of/.test(p.name) ? `around ${la.toFixed(2)}, ${lo.toFixed(2)} (${p.name[0].toLowerCase() + p.name.slice(1)})` : `at ${place}`;
+    const ct = chartTarget(good[0]);
+    const where = ct && /^Average of/.test(p.name) ? `around ${ct.lat.toFixed(2)}, ${ct.lon.toFixed(2)} (${p.name[0].toLowerCase() + p.name.slice(1)})` : `at ${place}`;
     return Object.assign(out, {
       variant: 'data', count: spots.size, sources, chart: chartTarget(good[0]),
-      variable: r.variable, place, where, y0: String(per.start || '').slice(0, 4), y1: String(per.end || '').slice(0, 4),
+      variable: r.variable, where, y0: String(per.start || '').slice(0, 4), y1: String(per.end || '').slice(0, 4),
     });
   }
   if (trends.length) {
