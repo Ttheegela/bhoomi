@@ -1,3 +1,5 @@
+import importlib.metadata
+
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 PING = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "ping", "arguments": {}}}
 
@@ -10,6 +12,10 @@ def test_health_and_mcp(mcp_client, monkeypatch):
     r = c.post("/mcp/", headers=H, json=PING)
     assert r.status_code == 200, r.text
     assert "pong" in r.text
+
+    init = {"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}}
+    assert c.post("/mcp/", headers=H, json=init).json()["result"]["serverInfo"]["version"] == importlib.metadata.version("trend-detective")
 
     r = c.post("/mcp/", headers={**H, "Host": "evil.example"}, json=PING)
     assert r.status_code == 421  # DNS-rebinding protection rejects unknown hosts
@@ -35,3 +41,21 @@ def test_health_ask_flag_without_calling_out(mcp_client, monkeypatch):
     assert r.json() == {"status": "ok", "ask": True} and "test-not-a-key" not in r.text
     monkeypatch.delenv("OPENROUTER_API_KEY")
     assert mcp_client.get("/api/health").json() == {"status": "ok", "ask": False}
+
+
+def test_mcp_version_falls_back_when_not_installed(monkeypatch):
+    import importlib
+    import sys
+
+    def missing(_):
+        raise importlib.metadata.PackageNotFoundError
+    monkeypatch.setattr(importlib.metadata, "version", missing)
+    original = sys.modules.pop("earthtrends.mcp_server")
+    try:
+        assert importlib.import_module("earthtrends.mcp_server").VERSION == "unknown"
+    finally:
+        sys.modules["earthtrends.mcp_server"] = original  # the app keeps using the original module
+        import earthtrends
+        earthtrends.mcp_server = original  # plain assignment: monkeypatch would put the copy back at teardown
+    from earthtrends import mcp_server
+    assert mcp_server is original

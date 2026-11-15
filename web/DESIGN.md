@@ -139,7 +139,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - First load shows New York sea level instead of Atlantic City (follows from "instead of atlantic city").
 - Tab bar on desktop: left-aligned.
 - Grey labels stay at 14 px. This overrides the 'about 12 px' label rule from the Konam checklist.
-- Use in your AI: framed as 'use Trend Detective in your own AI agent'; example agents (Claude, ChatGPT, GitHub Copilot) named in one line only when their docs confirm remote MCP support; detailed tabs only for apps with verified steps; one 'Any other AI agent' tab; no ChatGPT tab.
+- Use in your AI: framed as 'use Trend Detective in your own AI agent'; example agents (Claude, GitHub Copilot) named in one line only when their docs confirm remote MCP support; detailed tabs only for apps with verified steps; one 'Any other AI agent' tab; no ChatGPT tab.
 - MCP page: both, tabs per AI app with steps, then a config block for developers.
 - Visual choices (his words, 2026-11-14: "go with the leans": 1B 2C 3C 4B 5C, picked from screenshots):
   1. Tabs versus chips (1B): the three main tabs are plain text on a thin line; the selected tab is bold with a 3 px underline and no fill. Example-place chips keep their filled pressed state. The app picker on "Use in your AI" follows the same tab style (his addition).
@@ -152,6 +152,8 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Single-page flow: place chips, then measurement, then verdict and chart.
 - Hand-written SVG chart and no JS libraries or web fonts.
 - Two stacked chart panels (raw, then seasons removed with trend and band).
+- Tab icon `web/favicon.svg`: a rising line, then a dot, white on a black rounded square (plain presentation attributes, no embedded style, so a strict Content-Security-Policy cannot block it; reads on light and dark tabs); no text, no NASA imagery. Link previews use title and description only (no og:image).
+- Wrong address: `web/404.html` ("We can't find that page.", a link to the start page, the AI label), served with status 404 for any path outside /api/ and /mcp.
 - Trend line drawn solid, about 3.5 px, over a faint 1 px monthly line, with yearly averages as dots (from Sairam's PR #28).
 - Shaded band as a 22% ink fill with dotted edges.
 - Verdict shown as a word plus a shape (▲ ▼ ≈), in an inverted headline bar.

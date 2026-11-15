@@ -1,4 +1,5 @@
 import contextlib
+import importlib.metadata
 import json
 
 import httpx
@@ -7,7 +8,12 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from earthtrends.agent import tools
 
-mcp = MCPServer("trend-detective")
+try:
+    VERSION = importlib.metadata.version("trend-detective")
+except importlib.metadata.PackageNotFoundError:  # run from source, not installed: never fail start-up over a label
+    VERSION = "unknown"
+
+mcp = MCPServer("trend-detective", version=VERSION)
 
 SOURCE_DOWN = "The data source did not answer. Please try again."
 
