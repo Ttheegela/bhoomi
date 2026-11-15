@@ -1157,9 +1157,67 @@ def test_range_must_be_a_candidates_period(text, flagged):
     assert [m.group() for m in loop.wrong_periods(text, AB)] == flagged
 
 
-def test_named_source_wrong_range_gets_that_sources_period():
-    text = "PSMSL gives 29.62 mm per decade from 1900 to 2026."
-    assert loop.fix_periods(text, AB) == "PSMSL gives 29.62 mm per decade from January 1856 to December 2025."
+def test_another_sources_period_is_retried_not_rewritten(fake, monkeypatch):
+    text = "PSMSL gives 29.62 mm per decade from 1900 to 2026."  # CO-OPS's period on PSMSL's sentence: doubtful
+    assert [(m.group(), certain) for m, certain in loop._check(text, AB)] == [("1900 to 2026", False)]
+    assert loop.fix_periods(text, AB) == text
+    ny = ny_sources(monkeypatch, psmsl={**NY_PSMSL, "verdict": "no_clear_change"})
+    first = f"The sources disagree. {text} {NY_SOURCES}"
+    fake.script = [step(tool_calls=ny), step(first), step(first), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == first and len(fake.script) == 1  # one retry, then as written
+
+
+# Round 2: code must never rewrite a correct range (the review's three inputs).
+LON_P = {"power": {"start": "1981-01", "end": "2025-12"}, "ghcn": {"start": "1981-01", "end": "2024-11"}}
+
+
+def real_sources(periods, place="Delhi"):
+    from earthtrends.data import ghcn as ghcn_src, power as power_src
+    real = {"power": power_src.SOURCE, "ghcn": ghcn_src.SOURCE,
+            "era5": {"id": "era5", "name": SRC["era5"][0], "url": SRC["era5"][1]}}
+    return [done({**DELHI, "source": k}, {**TREND, "variable": "air_temp_max", "period": p, "source": real[k],
+                                          "place": {"name": place}}) for k, p in periods.items()]
+
+
+@pytest.mark.parametrize("text,periods", [
+    ("In London, the station HAMPSTEAD warms by 0.4 from January 1981 to November 2024, and NASA POWER by 0.3 from "
+     "January 1981 to December 2025.", LON_P),
+    ("Each source covers its own period: POWER January 1981 to December 2025 and the station January 1981 to July "
+     "2025.", DELHI_P),
+    ("Each source covers its own period: NASA POWER January 1981 to December 2025 and NOAA GHCN January 1981 to July "
+     "2025.", DELHI_P),
+])
+def test_two_ranges_that_fit_some_result_are_left_alone(text, periods):
+    calls = real_sources(periods)
+    assert loop.wrong_periods(text, calls) == [] and loop.fix_periods(text, calls) == text
+
+
+def test_another_places_period_is_doubtful_not_rewritten():  # qa62/resp_cmp.json
+    text = ("The PSMSL tide gauge records also show rising sea level. New York (The Battery) gives 29.62 mm per decade "
+            "for January 1856 to December 2025. Permanent Service for Mean Sea Level (PSMSL) agrees, over its own "
+            "record, January 1899 to December 2025.")
+    assert [(m.group(), c) for m, c in loop._check(text, TWO_PLACES)] == [("January 1899 to December 2025", False)]
+    assert loop.fix_periods(text, TWO_PLACES) == text
+
+
+def test_certain_errors_are_still_rewritten():
+    viz = [done(ARGS, VIZ)]
+    assert [(m.group(), c) for m, c in loop._check(WRONG, viz)] == [("September 1981 to December 2025", True)]
+    assert loop.fix_periods(WRONG, viz) == RIGHT
+
+
+@pytest.mark.parametrize("text,flagged", [
+    ("Both cover about 1900 to 2026.", True),
+    ("All three sources show it from January 1981 to December 2025.", True),
+    ("Both the slope and the range are positive from January 1981 to December 2025.", False),
+    ("From January 1981 to December 2025, each monthly value is the hottest day.", False),
+])
+def test_plural_rule_needs_a_cover_word(text, flagged):
+    periods = {**DELHI_P, "power": {"start": "1900-01", "end": "2026-10"}} if "1900" in text else DELHI_P
+    calls = [done({**DELHI, "source": s}, {**TREND, "period": p, "source": {"id": s, "name": SRC[s][0]}})
+             for s, p in periods.items()]
+    assert bool(loop.wrong_periods(text, calls)) == flagged
+    assert loop.fix_periods(text, calls) == text  # never rewritten: none is certainly wrong
 
 
 def test_both_with_one_shared_period_passes():
@@ -1182,9 +1240,11 @@ def test_both_sentence_retry_then_fewer_flags_wins(fake, monkeypatch):
     assert "January 1856 to December 2025" in fake.started[1]  # the retry note lists each source's period
     long_good = good + " " + words(170)  # over 180 words, every period right
     fake.script = [step(tool_calls=ny), step(long_good), step(bad), step("never")]
-    assert loop.ask("q", model="fake:m")["answer"] == long_good  # fewer flags beats the shorter, still wrong retry
-    fake.script = [step(tool_calls=ny), step(bad), step(long_good), step("never")]
-    assert loop.ask("q", model="fake:m")["answer"] == long_good
+    assert loop.ask("q", model="fake:m")["answer"] == bad  # within the limit beats a doubtful flag
+    fake.script = [step(tool_calls=ny), step(bad), step(bad + " Again."), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == bad + " Again."  # equal flags: the later attempt
+    fake.script = [step(tool_calls=ny), step(long_good), step(long_good + " x"), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == long_good  # both over: the shorter
 
 
 def test_requested_window_passes_and_other_ranges_still_fail():
@@ -1222,6 +1282,13 @@ def test_long_retry_runs_with_low_reasoning_and_no_tools(fake):
     assert fake.low == [False, False, True] and fake.started[2] == []
 
 
+def test_uncut_restart_with_tools_keeps_reasoning(fake):
+    fake.script = [step(words(130)), step(tool_calls=[call()]), step("Rising."), step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == "Rising." and fake.low == [False, False, False]
+    assert fake.starts[1][2] == loop.TOOLS  # restarted from the plain question, tools offered
+
+
 def test_long_retry_cut_off_empty_returns_the_first(fake):
     fake.script = [step(tool_calls=[call()]), step(words(133)), EMPTY_CUT, step("never")]
     r = loop.ask("q", model="fake:m")
@@ -1234,7 +1301,8 @@ def test_long_retry_cut_off_empty_returns_the_first(fake):
     ("95% range -0.00 to 0.09", "95% range 0.00 to 0.09"), ("range −0.00 to 0.09", "range 0.00 to 0.09"),
     ("range -0.000 to 1", "range 0.000 to 1"), ("ends at -0.00.", "ends at 0.00."),
     ("range -0.004 to 0.09", "range -0.004 to 0.09"), ("range -0.05 to 0.09", "range -0.05 to 0.09"),
-    ("range -0.50 to -10.00", "range -0.50 to -10.00"), ("CO-0.00 stays", "CO-0.00 stays"),
+    ("range -0.50 to -10.00", "range -0.50 to -10.00"), ("CO-0.00 stays", "CO-0.00 stays"), ("-0,5", "-0,5"),
+    ("from -0.00, then", "from 0.00, then"),
 ])
 def test_negative_zero_loses_its_sign(text, want):
     assert loop.compose(text, []) == want

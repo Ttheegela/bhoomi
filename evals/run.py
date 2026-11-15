@@ -140,9 +140,16 @@ def invented_numbers(answer: str, results: list) -> list[str]:
     return bad
 
 
+WHOLE_WORDS = {"rises", "falls", "losing"}  # short words that sit inside others ("closing", "rainfalls")
+
+
+def _said(w: str, a: str) -> bool:
+    return bool(re.search(rf"\b{w}\b", a)) if w in WHOLE_WORDS else w in a
+
+
 def wording_agrees(answer: str, verdict: str) -> bool:
     a = answer.lower().replace("\u2019", "'")
-    if not any(w in a for w in VERDICT_WORDS[verdict]):
+    if not any(_said(w, a) for w in VERDICT_WORDS[verdict]):
         return False
     return verdict == "no_clear_change" or not any(w in a for w in NO_CHANGE_CLAIMS)
 
@@ -187,7 +194,7 @@ def check(case: dict, run: dict) -> dict[str, bool]:
             out["verdict"] = bool(main) and main.get("verdict") == case["expect_verdict"]
         said_disagree = bool(DISAGREE.search(a.replace("’", "'")))
         if len(verdicts) > 1:  # the sources disagree: the answer must say so, and drop none of the verdicts
-            out["wording"] = said_disagree and all(any(w in a.replace("’", "'") for w in VERDICT_WORDS[v])
+            out["wording"] = said_disagree and all(any(_said(w, a.replace("’", "'")) for w in VERDICT_WORDS[v])
                                                    for v in verdicts if v in VERDICT_WORDS)
         elif main and main.get("verdict") in VERDICT_WORDS:  # one verdict; with several sources, no false "disagree"
             out["wording"] = wording_agrees(answer, main["verdict"]) and not (len(by_src) > 1 and said_disagree)

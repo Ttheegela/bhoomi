@@ -92,6 +92,12 @@ def test_verdict_words_from_the_prompt(text, verdict):
     assert run.wording_agrees(text, verdict)
 
 
+@pytest.mark.parametrize("text,verdict", [("The gauge is closing.", "falling"), ("Rainfalls were heavy.", "falling"),
+                                          ("Sunrises came early.", "rising")])
+def test_short_verdict_words_need_whole_words(text, verdict):
+    assert not run.wording_agrees(text, verdict)
+
+
 def test_wrong_period_fails_wording():
     assert run.check(CASE, fake_run())["wording"] is True  # "from 1911 to 2026" is the result's period
     out = run.check(CASE, fake_run(ANSWER.replace("from 1911 to 2026", "from October 1911 to October 2026")))

@@ -119,7 +119,7 @@ AGREE_NOTE = ("Same verdict as the default source, so its own numbers are left o
               f"Write {MARKER} where the agreeing sources belong.")
 RESTORED_NOTE = ("These sources no longer all agree, so here are the full results of those sent earlier without "
                  "their numbers.")
-NEG_ZERO = re.compile(r"(?<![\w.])[-\u2212](0(?:\.0+)?)(?!\.?\d)")  # the whole number is zero; -0.004 stays
+NEG_ZERO = re.compile(r"(?<![\w.])[-\u2212](0(?:\.0+)?)(?![.,]?\d)")  # the whole number is zero; -0.004 stays
 DEG_C = re.compile(r"(?<![A-Za-z])degC(?![A-Za-z])")  # the unit on its own, not inside another word
 _YM = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])")
 
@@ -288,7 +288,8 @@ PERIOD_RANGE = re.compile(
     r"(?![\w\-–—]|[.,]\d)(?!\s*(?:°|%|(?:mm|cm|degc)\b))", re.I)
 _NOT_A_PERIOD = re.compile(r"\b(?:range|pages?)\s*$", re.I)  # "95% range 1950 to 1990", "page 1999 to 2001"
 # One range said for several sources at once.
-PLURAL = re.compile(r"\b(?:both|each|all three|all four|all of them|all (?:the )?sources)\b", re.I)
+PLURAL = re.compile(r"\b(?:both|each|all three|all four|all of them|all (?:the )?sources)(?:\W+\w+){0,2}?\W+"
+                    r"(?:cover(?:s|ed|ing)?|spans?|spanned|runs?|ran|uses?|used|sources|records|gauges)\b", re.I)
 _MONTHS = {m[:3].lower(): i for i, m in enumerate(calendar.month_name) if m}
 
 
@@ -361,31 +362,44 @@ def _candidates(text: str, pos: int, ok: list[dict]) -> tuple[list[dict], bool]:
 
 
 def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
-    """(range, fixable by code) for each wrong period range in `text`. A range passes if it is the period of one of
-    its candidates, the window the user asked for (a call's start and end, by year), or written in a result's own
-    caveat ("its 2004 to 2009 average": the tool's words, not a period). A range given for several sources at once
-    ("both cover ...") whose candidates have different periods is wrong, and code can't repair it."""
+    """(range, certain) for each wrong period range in `text`. A range passes if it is the window the user asked for
+    (a call's start and end, by year) or written in a result's own caveat ("its 2004 to 2009 average": the tool's
+    words). CERTAIN, code may rewrite it: it fits no result's period at all. DOUBTFUL, retry only, never rewritten:
+    the only range of its sentence fits some result's period but none of its candidates', or is said for several
+    sources at once ("both cover ...") whose candidates have different periods. In a sentence with two or more
+    ranges, each range is fine when it fits any result's period."""
     ok = [c for c in ok_calls(calls) if _period(c["result"])]
     if not ok:
         return []
     caveats = [c.lower() for x in ok for c in x["result"].get("caveats") or [] if isinstance(c, str)]
     asked = [(str(a["start"])[:4], str(a["end"])[:4]) for a in (c.get("arguments") or {} for c in calls)
              if isinstance(a, dict) and a.get("start") and a.get("end")]
+    ranges = [m for m in PERIOD_RANGE.finditer(text)
+              if (m["sep"].lower() == "and") == bool(m["btw"]) and not _NOT_A_PERIOD.search(text, 0, m.start())]
+    sents = [(u.start(), u.end()) for u in _UNIT.finditer(text)]
+
+    def fit(m, cs):
+        return any(_fits(m["m1"], m["y1"], c["result"]["period"]["start"])
+                   and _fits(m["m2"], m["y2"], c["result"]["period"]["end"]) for c in cs)
+
     out = []
-    for m in PERIOD_RANGE.finditer(text):
-        if (m["sep"].lower() == "and") != bool(m["btw"]) or _NOT_A_PERIOD.search(text, 0, m.start()):
-            continue
+    for m in ranges:
         if (m["y1"], m["y2"]) in asked:
             continue
         ends = [" ".join(text[m.start(f"m{i}") if m[f"m{i}"] else m.start(f"y{i}"):m.end(f"y{i}")].lower().split())
                 for i in (1, 2)]
         if any(all(re.search(rf"\b{re.escape(e)}\b", c) for e in ends) for c in caveats):
             continue
+        if not fit(m, ok):
+            out.append((m, True))
+            continue
+        s, e = next(((a, b) for a, b in sents if a <= m.start() < b), (m.start(), m.end()))
+        if sum(s <= r.start() < e for r in ranges) != 1:
+            continue
         cands, _ = _candidates(text, m.start(), ok)
         periods = {(c["result"]["period"]["start"], c["result"]["period"]["end"]) for c in cands}
-        plural = len(periods) > 1 and bool(PLURAL.search(_chunks(text, m.start())[0]))
-        if plural or not any(_fits(m["m1"], m["y1"], a) and _fits(m["m2"], m["y2"], b) for a, b in periods):
-            out.append((m, not plural))
+        if not fit(m, cands) or (len(periods) > 1 and PLURAL.search(text, s, e)):
+            out.append((m, False))
     return out
 
 
@@ -425,11 +439,11 @@ def _right_period(text: str, m: re.Match, calls: list[dict]) -> dict:
 
 
 def fix_periods(text: str, calls: list[dict]) -> str:
-    """Each wrong range replaced by the tool's period in words; text with no wrong range is returned unchanged.
-    ponytail: a range said for several sources at once ("both cover 1900 to 2026") is left as written: one period
-    can't be right for all of them. It gets the shared retry; if it survives, it goes out as the model wrote it."""
-    for m, fixable in reversed(_check(text, calls)):
-        if fixable:
+    """Each certainly wrong range replaced by the tool's period in words; text with no such range is unchanged.
+    ponytail: a doubtful range (another source's or place's period, or one period said for "both") is left as
+    written: code can't know the right one. It gets the shared retry; if it survives, it goes out as written."""
+    for m, certain in reversed(_check(text, calls)):
+        if certain:
             s, e = _span(m)
             sep = "and" if m["sep"].lower() == "and" else "to"
             text = text[:s] + _in_words(_right_period(text, m, calls), sep) + text[e:]
@@ -455,14 +469,14 @@ def periods_note(calls: list[dict]) -> str:
 
 def best(kept: list[str], calls: list[dict]) -> str | None:
     """What to return when every complete attempt failed a check: each with its wrong periods replaced by code, then
-    the fewest period flags left first; among those, the last one within the word limit, else the shortest (the
-    first of equals). Cut-off text is never in `kept`."""
+    within the word limit first, then the fewest period flags left, then the later attempt; over the limit, the
+    fewest flags, then the shortest (the first of equals). Cut-off text is never in `kept`."""
     if not kept:
         return None
     fixed, limit = [fix_periods(t, calls) for t in kept], word_limit(calls)
-    flags = [len(_check(t, calls)) for t in fixed]  # left after fixing: a one-range-for-several-sources sentence
+    flags = [len(_check(t, calls)) for t in fixed]  # left after fixing: the doubtful ones
     n = [len(t.split()) for t in fixed]
-    return fixed[min(range(len(fixed)), key=lambda i: (flags[i], 0, -i) if n[i] <= limit else (flags[i], 1, n[i]))]
+    return fixed[min(range(len(fixed)), key=lambda i: (0, flags[i], -i) if n[i] <= limit else (1, flags[i], n[i]))]
 
 
 def ask(question: str, model: str | None = None) -> dict:
@@ -513,8 +527,10 @@ def ask(question: str, model: str | None = None) -> dict:
                 # complete answer is in hand. A cut-off step is retried until the call limit or the budget ends it.
                 if i == MAX_CALLS - 1 or (kept if cut else checked):
                     break
-                # Reasoning may spend the cap (a cut-off step), or the retry's cap: answer without it from now on.
-                provider.low_reasoning = True
+                # Reasoning may spend the cap (a cut-off step), or the no-tools retry's cap: answer without it from
+                # now on. Not for an uncut answer restarted with tools: tool choice keeps its reasoning.
+                if cut or calls:
+                    provider.low_reasoning = True
                 if not cut:
                     checked = True  # one retry for both checks together
                 # The seam has no "add a user message", so restart with the results inline.
