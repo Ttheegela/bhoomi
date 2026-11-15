@@ -104,7 +104,7 @@
   }
 
   /* ---------- Use in your AI ---------- */
-  const ADDR = location.origin + '/mcp';
+  const ADDR = location.origin + '/mcp/';
   const addrInput = (id) => {
     const i = h('input', { id, class: 'st-addr', type: 'text', readonly: '', value: ADDR });
     i.addEventListener('focus', () => i.select());
