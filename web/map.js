@@ -108,7 +108,14 @@
     var w = frame.offsetWidth;
     Object.keys(markers).forEach(function (k) {
       var m = markers[k];
-      if (m.tag) m.tag.classList.toggle('left', map.project(m.mk.getLngLat()).x > w * 0.55);
+      if (!m.tag) return;
+      // measure the tag at its widest (220 px, wrapping beyond that), then take the side of the marker with room; if neither side has
+      // enough, take the roomier side and narrow the tag to fit. 22 = half the marker + the gap + a 4 px margin at the map's edge.
+      m.tag.style.maxWidth = '220px'; // CSSOM: a computed width, not a design value
+      var x = map.project(m.mk.getLngLat()).x, tw = m.tag.offsetWidth, rr = w - x - 22, lr = x - 22;
+      var left = tw <= rr ? false : tw <= lr ? true : lr > rr;
+      m.tag.classList.toggle('left', left);
+      m.tag.style.maxWidth = Math.max(80, Math.min(220, left ? lr : rr)) + 'px';
     });
   }
 
@@ -141,7 +148,7 @@
       return;
     }
     var near = pins.filter(function (p) { return p !== sel && km(sel, p) <= 1000; });
-    if (!near.length) { map.flyTo({ center: [sel.lon, sel.lat], zoom: 5, duration: dur, essential: true }); return; }
+    if (!near.length) { map.flyTo({ center: [sel.lon, sel.lat], zoom: 5, padding: padFor(), duration: dur, essential: true }); return; }
     var b = new lib.LngLatBounds([sel.lon, sel.lat], [sel.lon, sel.lat]);
     // shift a neighbour across the antimeridian (by 360) so the box stays tight around the selected pin
     near.forEach(function (p) { b.extend([p.lon - 360 * Math.round((p.lon - sel.lon) / 360), p.lat]); });
