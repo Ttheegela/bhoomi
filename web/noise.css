@@ -1,15 +1,15 @@
-/* Module 05: "Real or noise?" Classes prefixed noise-. Tokens only.
-   Rules start with .card.quiet.noise-card so they beat the frame's .card.quiet p / h2 rules. */
-.card.quiet.noise-card { padding: 0 var(--s4) var(--s4); }
-.card.quiet.noise-card p, .card.quiet.noise-card h2 { margin: 0; padding: 0; }
-.card.quiet.noise-card .noise-h { font-size: 20px; padding: var(--s4) 0 0; }
-.card.quiet.noise-card .noise-lead { margin: var(--s2) 0 var(--s3); }
-.card.quiet.noise-card .noise-sentence { font-size: 18px; font-weight: 600; margin: var(--s2) 0 0; }
+/* Module 05: "Real or noise?" Classes prefixed noise-. Tokens only. No card box: it sits inside the collapsed "How we calculated this" section (or alone on an older frame).
+   Rules start with #noise-slot so they beat the frame's p / h3 rules. */
+#noise-slot .noise-card { padding: 0; border: 0; }
+#noise-slot .noise-card p, #noise-slot .noise-card h3 { margin: 0; padding: 0; }
+#noise-slot .noise-card .noise-h { font-family: var(--font-head); font-size: 16px; line-height: 24px; font-weight: 700; margin: 0 0 var(--s2); }
+#noise-slot .noise-card .noise-lead { margin: 0 0 var(--s4); }
+#noise-slot .noise-card .noise-sentence { font-size: 18px; font-weight: 600; margin: 0 0 var(--s2); }
 .noise-go { width: auto; }
-.card.quiet.noise-card .noise-list { list-style: none; margin: var(--s3) 0 0; padding: 0; }
-.noise-row { padding: var(--s3) 0; border-top: 1px solid var(--hairline); }
-.noise-row.noise-wait { background: var(--surface); border: 1px solid var(--line); padding: var(--s3); margin-top: var(--s2); }
-.noise-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--s3); }
+#noise-slot .noise-card .noise-list { list-style: none; margin: var(--s4) 0 0; padding: 0; }
+.noise-row { padding: var(--s4) 0; border-top: 1px solid var(--hairline); }
+.noise-row.noise-wait { background: var(--surface); border: 1px solid var(--line); padding: var(--s4); margin-top: var(--s2); }
+.noise-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--s4); }
 .noise-label, .noise-verdict { font-weight: 700; }
 .noise-bar { display: block; width: 100%; height: 36px; margin: var(--s1) 0; }
 .noise-zero { stroke: var(--chart-faint); stroke-width: 1; stroke-dasharray: 3 3; }
@@ -18,10 +18,10 @@
 .noise-row[data-v="falling"] .noise-range { fill: var(--dn-bg); }
 .noise-row[data-v="none"] .noise-range { fill: var(--nc-bg); }
 .noise-dot { fill: var(--ink); stroke: var(--bg); stroke-width: 2; }
-.card.quiet.noise-card .noise-num { font-size: 14px; color: var(--ink-2); }
+#noise-slot .noise-card .noise-num { font-size: 14px; color: var(--ink-2); }
 .noise-show { min-height: 48px; }
-.noise-legend { margin-top: var(--s3); }
-.card.quiet.noise-card .noise-tag { font-weight: 700; }
+.noise-legend { margin-top: var(--s4); }
+#noise-slot .noise-card .noise-tag { font-weight: 700; }
 @media (min-width: 600px) {
   .noise-row { display: grid; grid-template-columns: minmax(200px, 2fr) 3fr; column-gap: var(--s4); align-items: center; }
   .noise-top { flex-direction: column; justify-content: flex-start; }

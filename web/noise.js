@@ -133,6 +133,7 @@
       }
       list.appendChild(li);
     });
+    if (view) view.drawn = !!withBars;
     if (withBars) {
       var mn = 0, mx = 0;
       bars.forEach(function (b) { mn = Math.min(mn, b[1].ci_low); mx = Math.max(mx, b[1].ci_high); });
@@ -213,7 +214,7 @@
       wins = windowsFor(endY - Number(kept[''].period.start.slice(0, 4)));
       if (!wins.length) return;
     }
-    var card = h('div', 'card quiet noise-card');
+    var card = h('div', 'noise-card');
     var sentence = h('p', 'noise-sentence');
     sentence.id = 'noise-sentence';
     sentence.hidden = true;
@@ -237,7 +238,7 @@
       line.appendChild(a);
       legend.appendChild(line);
     }
-    card.appendChild(h('h2', 'noise-h', 'Real or noise?'));
+    card.appendChild(h('h3', 'noise-h', 'Real or noise?'));
     card.appendChild(sentence);
     card.appendChild(h('p', 'noise-lead', 'A short stretch of data can mislead: normal ups and downs weigh more. Try shorter stretches of this record and see whether the answer holds.'));
     card.appendChild(go);
@@ -257,6 +258,10 @@
     if (s.end) p.end = s.end;
     return p;
   }
+
+  // inside a closed <details> every width is 0: draw the bars again when the section opens
+  var det = slot.closest('details');
+  if (det) det.addEventListener('toggle', function () { if (det.open && view && view.drawn) renderRows(true); });
 
   document.addEventListener('td:load-start', function () { gen++; hide(); });
   document.addEventListener('td:load-end', function (e) {

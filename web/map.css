@@ -1,21 +1,19 @@
-/* Module 01: the map. Classes prefixed map-. The library's own sheet comes first. Spec: web/design/01-map.md */
+/* Module 01: the map (credit lives in the map's compact attribution control, bottom right). Classes prefixed map-. The library's own sheet comes first. Spec: web/design/01-map.md */
 @import url("vendor/maplibre-gl/maplibre-gl.css");
 .map-frame { position: relative; height: var(--map-h); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .map-canvas { position: absolute; inset: 0; }
-.map-wait { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s3); text-align: center; margin: 0; padding: var(--s4); color: var(--ink-2); font-size: 16px; max-width: none; pointer-events: none; }
+.map-wait { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s4); text-align: center; margin: 0; padding: var(--s4); color: var(--ink-2); font-size: 16px; max-width: none; pointer-events: none; }
 .map-wait[hidden] { display: none; }
 .map-failed .map-wait { background: var(--surface); pointer-events: auto; }
 .map-failed .maplibregl-ctrl-top-right { display: none; }
 .map-retry { min-height: 48px; }
-.map-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.map-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); }
 .map-status { margin: var(--s2) 0; min-height: 24px; display: flex; align-items: center; flex: 1 1 auto; }
 .map-undo { min-width: 48px; min-height: 48px; }
-.map-credit { display: flex; flex-wrap: wrap; align-items: center; gap: 0 16px; margin: 0; font-size: 14px; color: var(--ink-2); }
-.map-credit a { display: inline-flex; align-items: center; min-height: 48px; color: var(--ink); }
 .map-pin { width: 20px; height: 20px; border-radius: 50%; background: var(--ink); border: 3px solid var(--bg); box-shadow: 0 0 0 2px var(--ink); }
 /* a quiet map: one grey, no hue (colour is for the data only); dark mode inverts the same grey map */
 .map-canvas .maplibregl-canvas { filter: grayscale(1); }
-.map-canvas .maplibregl-ctrl-group { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; box-shadow: none; }
+.map-canvas .maplibregl-ctrl-group { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: none; }
 .map-canvas .maplibregl-ctrl-group button { width: 48px; height: 48px; }
 .map-canvas .maplibregl-ctrl-group button + button { border-top: 1px solid var(--line); }
 .map-canvas .maplibregl-ctrl button:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; box-shadow: none; }
@@ -29,8 +27,15 @@
 }
 /* tide gauge dots (web/design/07-gauges.md): the dots themselves are map paint; this is the legend, credits and hover label */
 .map-legend { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--s2); font-size: 14px; color: var(--ink-2); max-width: none; }
-.map-legend[hidden], .map-gauge-credit[hidden] { display: none; }
+.map-legend[hidden] { display: none; }
 .map-legend svg { flex: 0 0 auto; fill: var(--ink); stroke: var(--bg); stroke-width: 1; }
-.map-gauge-credit { overflow-wrap: anywhere; display: inline-flex; align-items: center; min-height: 48px; color: var(--ink); }
 .map-tip .maplibregl-popup-tip { display: none; }
-.map-tip .maplibregl-popup-content { max-width: 28ch; padding: 4px 8px; font: 14px/1.4 Inter, system-ui, sans-serif; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; box-shadow: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.map-tip .maplibregl-popup-content { max-width: 28ch; padding: 4px 8px; font: 14px/1.4 Inter, system-ui, sans-serif; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+/* compact attribution, inside the map, bottom right: an info button (48 px hit area) that opens the credit words */
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact { box-sizing: border-box; min-height: 48px; margin: var(--s2); padding: 0 48px 0 0; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 24px; box-shadow: none; font: 14px/20px Inter, system-ui, sans-serif; }
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show { padding: var(--s2) 48px var(--s2) var(--s2); border-radius: 8px; max-height: calc(var(--map-h) - 128px); overflow-y: auto; }
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-inner { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--s2); }
+.map-canvas .maplibregl-ctrl-attrib a { display: inline-flex; align-items: center; min-height: 48px; color: var(--ink); text-decoration: underline; }
+.map-canvas .maplibregl-ctrl-attrib-button { position: absolute; top: 0; right: 0; width: 48px; height: 48px; background-size: 24px 24px; background-position: center; background-repeat: no-repeat; border-radius: 24px; }
+.map-canvas .maplibregl-ctrl-attrib-button:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; box-shadow: none; }
+@media (prefers-color-scheme: dark) { .map-canvas .maplibregl-ctrl-attrib-button { filter: invert(1); } }

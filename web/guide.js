@@ -7,21 +7,33 @@
   var KEY = 'td.guide.v1';
   var NOTE = 'This changes only the examples and the wording, not the data.';
   var ROLES = [
-    { chip: "I'm a homeowner", label: 'Lower Manhattan, New York', lat: 40.71, lon: -74.01, variable: 'sea_level',
+    { id: 'homeowner', chip: "I'm a homeowner", label: 'Lower Manhattan, New York', lat: 40.71, lon: -74.01, variable: 'sea_level',
       words: 'sea level', q: 'Is the sea rising where I live?', note: 'Tide gauges measure the sea against the land.' },
-    { chip: "I'm a farmer", label: 'Punjab, India (near Ludhiana)', lat: 30.90, lon: 75.85, variable: 'water_storage',
+    { id: 'farmer', chip: "I'm a farmer", label: 'Punjab, India (near Ludhiana)', lat: 30.90, lon: 75.85, variable: 'water_storage',
       words: 'land water storage', q: 'Is the water stored in the land under my fields going down?',
       note: 'Satellites measure all water stored in the land, not the level in one well.',
       alt: { text: 'Look at the hottest days instead', variable: 'air_temp_max' } },
-    { chip: "I'm a student", label: 'Chennai, Tamil Nadu, India', lat: 13.08, lon: 80.27, variable: 'precip',
+    { id: 'student', chip: "I'm a student", label: 'Chennai, Tamil Nadu, India', lat: 13.08, lon: 80.27, variable: 'precip',
       words: 'rainfall', q: 'Is it raining more or less than it used to?', note: '' },
-    { chip: "I'm a local planner", label: 'Mumbai, Maharashtra, India', lat: 19.08, lon: 72.88, variable: 'sea_level',
+    { id: 'planner', chip: "I'm a local planner", label: 'Mumbai, Maharashtra, India', lat: 19.08, lon: 72.88, variable: 'sea_level',
       words: 'sea level', q: 'How fast is the sea rising along our coast?', note: '' }
   ];
   var roles = [];
 
-  function remember() { try { localStorage.setItem(KEY, 'done'); } catch (e) {} }
-  function remembered() { try { return localStorage.getItem(KEY) === 'done'; } catch (e) { return false; } }
+  // stored as {done:true, role}; the old value 'done' still reads as done with no role
+  function stored() {
+    try {
+      var v = localStorage.getItem(KEY);
+      if (v === 'done') return { done: true, role: null };
+      var o = JSON.parse(v);
+      return o && o.done ? { done: true, role: typeof o.role === 'string' ? o.role : null } : null;
+    } catch (e) { return null; }
+  }
+  function remember(role) {
+    var old = stored();
+    try { localStorage.setItem(KEY, JSON.stringify({ done: true, role: role || (old && old.role) || null })); } catch (e) {}
+    if (role || (old && old.role)) reopen.textContent = 'Change role';
+  }
 
   function el(tag, cls, text, parent) {
     var n = document.createElement(tag);
@@ -90,7 +102,7 @@
       b.addEventListener('click', fn);
     }
     function go(variable) {
-      remember();
+      remember(r.id);
       close(false);
       TD.loadPlace({ lat: r.lat, lon: r.lon, label: r.label, variable: variable, origin: 'guide' });
     }
@@ -107,13 +119,15 @@
     if (roles.length < 2) return;
     reopen.hidden = false;
     reopen.addEventListener('click', function () { step1(true); });
-    // a share link that opens a place hides the guide for this visit, without remembering
+    // any place pick (search, map, example, share link) hides the guide for this visit, without remembering
     document.addEventListener('td:place-pick', function (e) {
-      if (e.detail && e.detail.origin === 'share-link') close(false);
+      if (e.detail && !slot.hidden) close(false);
     });
     var p;
     try { p = new URLSearchParams(location.hash.replace(/^#/, '')); } catch (e) { p = new URLSearchParams(''); }
+    var old = stored();
+    if (old && old.role) reopen.textContent = 'Change role';
     var explore = !p.get('tab') || p.get('tab') === 'explore';
-    if (!remembered() && !p.has('variable') && explore) step1(false);
+    if (!old && !p.has('variable') && explore) step1(false);
   });
 })();
