@@ -136,7 +136,7 @@
       steps2: ['Start Claude Code and type `/mcp`. Trend Detective should show as connected.', 'Optional: add `--scope user` to the command to use it in every project.'],
       note: 'The command `claude mcp list` also shows it.',
       links: [['Claude Code setup docs', 'https://code.claude.com/docs/en/mcp']], checked: true },
-    { id: 'cursor', name: 'Cursor',
+    { id: 'cursor', name: 'Cursor', sub: 'Config file',
       steps: ['Create or open `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).', 'Paste the entry from "Prefer a settings file?" below, using `url` and no `type`.', 'Open Customize and check that Trend Detective is listed and on.'],
       note: 'We could not confirm the menu names for adding a server in the Cursor app, so we show the config file instead.',
       links: [['Cursor setup docs', 'https://cursor.com/docs/context/mcp']], checked: true },
@@ -144,7 +144,7 @@
       steps: ['Open the Command Palette and run "MCP: Add Server".', 'Choose "HTTP (HTTP or Server-Sent Events)" and paste the server address.', 'Name it "trend-detective", then choose Global (or the workspace if you prefer).', 'Accept the trust prompt after reading it, then ask GitHub Copilot a question and look for Trend Detective\'s tools.'],
       note: 'Or put the VS Code block from "Prefer a settings file?" in `.vscode/mcp.json`. VS Code uses `servers`, not `mcpServers`.',
       links: [['VS Code MCP servers docs', 'https://code.visualstudio.com/docs/copilot/customization/mcp-servers'], ['VS Code MCP configuration reference', 'https://code.visualstudio.com/docs/agents/reference/mcp-configuration']], checked: true },
-    { id: 'other', name: 'Any other AI agent',
+    { id: 'other', name: 'Any other AI agent', sub: 'Any MCP client',
       steps: ['Open your AI agent\'s settings for MCP servers or connectors.', 'Add a new server.', 'Paste this address. No key and no sign-in are needed.'],
       note: 'If it asks for a type, choose "HTTP" or "streamable HTTP".',
       links: [['About MCP', 'https://modelcontextprotocol.io']] },
@@ -246,15 +246,11 @@
     const main = h('div', { class: 'st-sections' });
     const links = {};
     const mark = (cur) => { for (const id in links) { if (id === cur) links[id].setAttribute('aria-current', 'true'); else links[id].removeAttribute('aria-current'); } };
-    const io = window.IntersectionObserver && new IntersectionObserver((es) => {
-      es.forEach((e) => { if (e.isIntersecting) mark(e.target.id.slice(3)); });
-    }, { rootMargin: '-80px 0px -60% 0px' });
     secs.forEach(([id, title, lead, body]) => {
       const sec = h('section', { class: 'card st-sec', id: 'st-' + id, 'aria-labelledby': 'st-h-' + id }, h('h2', { id: 'st-h-' + id }, title));
       if (lead) sec.append(h('p', { class: 'st-lead' }, lead));
       sec.append(body());
       main.append(sec);
-      if (io) io.observe(sec);
       const a = h('button', { type: 'button', class: 'st-navlink' }, title);
       a.addEventListener('click', () => {
         sec.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
@@ -263,10 +259,23 @@
       links[id] = a;
       nav.append(a);
     });
+    // Current = the last section whose top is at or above 120 px from the viewport top; the last one at the page bottom.
+    const secEls = Array.from(main.children);
+    const track = () => {
+      if (!secEls[0].offsetParent) return; // Settings window hidden
+      let cur = secEls[0];
+      secEls.forEach((s) => { if (s.getBoundingClientRect().top <= 120) cur = s; });
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) cur = secEls[secEls.length - 1];
+      mark(cur.id.slice(3));
+    };
+    window.addEventListener('scroll', track, { passive: true });
+    window.addEventListener('resize', track);
+    document.addEventListener('td:route', track);
     mark('appearance');
     slot.replaceChildren(h('div', { class: 'st-layout' }, nav, main));
     const refresh = () => sync.forEach((f) => f());
     refresh();
+    track();
     document.addEventListener('td:prefs', refresh);
   }
 
