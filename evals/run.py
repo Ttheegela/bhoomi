@@ -38,7 +38,8 @@ RUBRIC = ("You grade how easy an answer is for a school student (age 12 to 15) t
 MAX_KM = 50  # a case's max_km overrides it
 DATA_TOOLS = ("detect_trend", "get_series")
 PAUSE_S = 1.0  # between model runs, so a provider's own rate limit is not hit
-UNKNOWN_COST = 0.01  # per model response with no reported cost, so it cannot run free against a budget
+UNKNOWN_COST = 0.02  # per model response with no reported cost, so it cannot run free against a budget (doubled
+# with the 4,000-token output cap, #79)
 CHECKS = ["tool", "variable", "place", "source", "verdict", "wording", "numbers", "source_named", "must_say", "answered"]
 COLUMNS = {"tool": "right tool", "variable": "right variable", "place": "right place", "source": "right source",
            "verdict": "verdict", "wording": "verdict wording", "numbers": "no invented numbers",
@@ -58,6 +59,13 @@ NO_CHANGE_CLAIMS = ("no clear change", "rule out no change", "no change is plaus
 # With several sources: a guessed reason for a difference, or a claim about how they relate (no caveat says either).
 GUESSED = ("likely because", "probably because", "likely due to", "probably due to", "differ somewhat",
            "same gauge", "same station", "both used the gauge", "both use the gauge", "share a gauge", "shares a gauge")
+# The general form, "Both use the tide gauge at The Battery": both/the two, a sharing verb, then right away "the",
+# "the same", "one", "a single" or a proper name, and a gauge or station. Left out on purpose: other shared things
+# (data, record) and words in between ("Both use grid cells ... not a single station" says what each one is).
+SHARED = re.compile(r"\b(?:both|the two)(?:\s+(?:sources|records|datasets|data sets))?\s+"
+                    r"(?:use[sd]?|using|share[sd]?|rel(?:y|ies) on|comes? from|draws? on|are from)\s+"
+                    r"(?:(?:the\s+same|the|one|a\s+single)\s+(?-i:(?:[A-Z][\w'-]*\s+)*)|(?-i:(?:[A-Z][\w'-]*\s+)+))"
+                    r"(?:tide\s+)?(?:gauge|station)\b(?!s?\s+each\b)", re.I)  # "one gauge each": its own
 # The prompt's fixed phrases with an outside number; they are removed before numbers are checked.
 ALLOWED = re.compile(r"\b0\.05 line|less than 0\.01|\b95\s*(?:%|percent)", re.I)
 # Fixed p-value phrases allowed only when a result's p-value is really under that line.
@@ -216,7 +224,7 @@ def check(case: dict, run: dict) -> dict[str, bool]:
         elif main and main.get("verdict") in VERDICT_WORDS:  # one verdict; with several sources, no false "disagree"
             out["wording"] = wording_agrees(answer, main["verdict"]) and not (len(by_src) > 1 and said_disagree)
         if "wording" in out and len(by_src) > 1:
-            out["wording"] = out["wording"] and not any(g in a for g in GUESSED)
+            out["wording"] = out["wording"] and not any(g in a for g in GUESSED) and not SHARED.search(answer)
             plan = agree_plan(run.get("tool_calls", []))
             if plan:  # agreeing sources: no slope or range that only another source gave
                 lead, agreeing = plan
@@ -313,7 +321,7 @@ def run_case(case: dict, spec: str) -> dict:
 
 
 def guard_cost(run: dict) -> float:
-    """Cost toward the budget: failed attempts, plus the run's own cost. Unknown cost: $0.01 for each of the
+    """Cost toward the budget: failed attempts, plus the run's own cost. Unknown cost: UNKNOWN_COST for each of the
     MAX_CALLS responses the loop may make (its length retry included)."""
     if run.get("error"):
         return run.get("failed_cost", 0.0)
