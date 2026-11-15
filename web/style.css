@@ -51,7 +51,6 @@ a { color: var(--ink); text-underline-offset: 2px; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 :focus:not(:focus-visible) { outline: none; }
 h2[tabindex="-1"]:focus, #answer:focus { outline: none; }
-h2[tabindex="-1"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
 .skip { position: absolute; left: var(--s2); top: -64px; background: var(--bg); color: var(--ink);
   border: 2px solid var(--ink); padding: var(--s2) var(--s4); border-radius: 6px; z-index: 10; }
@@ -160,10 +159,10 @@ dd { margin: 0; }
 
 footer { border-top: 1px solid var(--line); padding: var(--s5) 0; }
 footer p:nth-child(2) { margin: var(--s4) 0 0; color: var(--ink-2); }
-footer ul { list-style: none; padding: 0; margin: var(--s2) 0 0; font-size: 14px; line-height: 20px; }
-footer li { display: flex; align-items: center; min-height: 48px; margin: 0; padding: 0; }
+footer ul { list-style: none; padding: 0; margin: var(--s2) 0 0; font-size: 14px; line-height: 20px; display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(48px, auto); gap: 0 var(--s5); }
+footer li { display: flex; align-items: center; min-height: 0; margin: 0; padding: 0; }
 footer li a, footer li .srclink { display: inline; min-height: 0; color: var(--ink); } /* plain inline text: a phrase never breaks around a block */
-@media (min-width: 600px) { footer ul { columns: 2; column-gap: var(--s5); } footer li { break-inside: avoid; } }
+@media (min-width: 600px) { footer ul { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 
@@ -282,6 +281,7 @@ pre::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; bord
 .addr { width: 100%; min-height: 48px; resize: none; overflow-wrap: anywhere; }
 .pick.one .field-var { grid-column: 1 / -1; }
 .pick { row-gap: 0; }
+@media (min-width: 900px), (max-width: 359px) { .pick { row-gap: var(--s4); } #pick-help { margin-top: 0; } }
 .help:empty { display: none; }
 @media (max-width: 599px) {
   header { padding-top: var(--s2); }
@@ -425,6 +425,7 @@ html[data-guide="open"] #examples { display: none; }
 .answer-place { margin: 0 0 var(--s2); max-width: none; font-size: 16px; line-height: 24px; font-weight: 700; overflow-wrap: anywhere; }
 .share-slot { display: flex; flex-wrap: wrap; gap: var(--s2); justify-content: flex-start; margin: 0; padding: 0; }
 .share-slot:empty { display: none; }
+#share-slot p { margin: 0; }
 #change-place { display: flex; min-height: 48px; }
 @media (min-width: 900px) { #change-place { display: none; } }
 
@@ -455,13 +456,16 @@ html[data-guide="open"] #examples { display: none; }
 /* the chart, directly under the card */
 .chart-head { font-family: var(--font-head); font-size: 16px; line-height: 24px; font-weight: 700; margin: 0; max-width: none; }
 #chart-box { margin-top: var(--s4); }
-#chart-source { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--s2); min-height: 48px; }
+#chart-source { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--s2); }
+#chart-source:empty { display: none; }
+#chart-source .source { line-height: 20px; }
 .readout { min-height: 40px; margin: var(--s2) 0 0; line-height: 20px; }
 #chart-key { margin: var(--s2) 0 0; line-height: 20px; }
 
 /* "How we calculated this": closed by default, no card box, same left edge as everything else */
 #how { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 #how > summary { min-height: 48px; font-size: 16px; line-height: 24px; font-weight: 700; }
+#how > summary::-webkit-details-marker, #table-details > summary::-webkit-details-marker { display: none; }
 #how > summary::before { content: '\25B8'; width: 24px; flex: none; color: var(--ink-2); font-weight: 400; }
 #how[open] > summary::before { content: '\25BE'; }
 .how-body { padding: var(--s4) 0 var(--s5); }

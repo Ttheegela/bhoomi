@@ -197,7 +197,7 @@ function captionText(t, name, place) {
 }
 
 function rawLine(source, withTrend) { return `Raw values: ${source ? source.name : 'unknown'}.` + (withTrend ? " Trend and range: our calculation, the Mann-Kendall test with Sen's slope on monthly values with seasons removed." : ''); }
-function chartHead(t, name, place) { return `${name} at ${place}: ${fmtVal(t.slope_per_decade, t.units)} per decade, ${t.period.start.slice(0, 4)} to ${t.period.end.slice(0, 4)}`; }
+function chartHead(t, name, place) { return `${name} at ${place}, ${t.period.start.slice(0, 4)} to ${t.period.end.slice(0, 4)}`; }
 
 function layoutFor(w) {
   if (w <= 599) return { vw: 340, hA: 126, hB: 206 };
@@ -491,21 +491,25 @@ function fire(name, detail) {
   if (name === 'td:load-end') loadWaiters.splice(0).forEach((done) => done(detail));
 }
 
+// Clear the answer area. Modules saw a request start or an answer: tell them it is over. The id is the request being
+// closed when one was running, else the new id (the one this attempt took).
+function dropAnswer(err) {
+  const was = state.status === 'loading', shown = !!state.series;
+  const endId = was ? state.req : state.req + 1;
+  state.req++; // drop any answer still on its way
+  setBusy(false);
+  ['chart-wrap', 'how', 'answer-card', 'problem', 'answer-bar'].forEach((id) => { $(id).hidden = true; });
+  state.series = null; state.trend = null;
+  if (was || shown) {
+    state.status = 'error'; state.err = err;
+    fire('td:load-end', { id: endId, ok: false, params: state.params, place: state.params ? placeNow() : null, series: null, trend: null, error: Object.assign({}, err), origin: state.origin });
+  }
+}
+
 function submit(user) {
   const p = readParams();
   if (!p) {
-    // Modules saw a request start or an answer: tell them it is over. The id is the request being closed when one
-    // was running, else the new id (the one this attempt took).
-    const was = state.status === 'loading', shown = !!state.series;
-    const endId = was ? state.req : state.req + 1;
-    state.req++; // drop any answer still on its way
-    setBusy(false);
-    ['chart-wrap', 'how', 'answer-card', 'problem', 'answer-bar'].forEach((id) => { $(id).hidden = true; });
-    state.series = null; state.trend = null;
-    if (was || shown) {
-      state.status = 'error'; state.err = { status: 422, heading: 'Check the latitude and longitude.' };
-      fire('td:load-end', { id: endId, ok: false, params: state.params, place: state.params ? placeNow() : null, series: null, trend: null, error: state.err, origin: state.origin });
-    }
+    dropAnswer({ status: 422, heading: 'Check the latitude and longitude.' });
     return;
   }
   state.params = p;
@@ -549,7 +553,8 @@ async function run(params, user, keep) {
   const first = !keep;
   if (first) { ['chart-wrap', 'how', 'answer-card', 'answer-bar', 'old-link'].forEach((i) => { $(i).hidden = true; }); state.series = null; state.trend = null; }
   $('problem').hidden = true;
-  $('empty').hidden = true; // the start card is gone for good once a request has begun
+  $('empty').hidden = true; // the start card is gone until an out-of-date link brings it back
+  $('answer').hidden = false;
   state.status = 'loading'; state.err = null;
   setBusy(true, first);
   fire('td:load-start', { id, params, place: placeNow(), origin: state.origin });
@@ -772,9 +777,8 @@ function renderVerdict(t, series) {
 }
 
 // "How we calculated this": closed on every new answer. Parts 1 to 9 in the order of the page (index.html).
-function renderHow(t, series) {
+function renderHow(t) {
   const c = verdictCopy(t, nameOf(t.variable), placeOf(t));
-  $('how').open = false;
   $('verdict-p1').textContent = c.p1;
   $('verdict-lean').textContent = c.lean || '';
   $('verdict-lean').hidden = !c.lean;
@@ -930,9 +934,10 @@ function renderChart(s, t) {
 
   $('chart-head').textContent = t ? chartHead(t, name, place) : `${name} at ${place}`;
   $('chart-caption').textContent = t ? captionText(t, name, place) : `${name} at ${place}.`;
+  // With a trend the answer card names the source once; here only what we calculated. Without one there is no card, so the link stays.
   const cs = $('chart-source');
-  srcBlock(cs, 'Raw data', t ? t.source : s.source);
-  if (t) cs.append(el('span', { class: 'source' }, 'Trend and range: our calculation.'));
+  clear(cs);
+  if (t) cs.append(el('span', { class: 'source' }, 'Trend and range: our calculation.')); else srcBlock(cs, 'Raw data', s.source);
   $('chart-key').textContent = t ? 'Thick line: the trend. Shaded band: the range of trends the data support. Dashed line: no change.' : 'Dashed line: no change.';
   $('chart-raw').textContent = rawLine(t ? t.source : s.source, !!t);
 
@@ -1041,8 +1046,10 @@ function sameExplore(a, b) {
 }
 // A link that cannot be run (unknown measurement, bad number): say so in the empty card and run nothing.
 function outOfDate() {
+  dropAnswer({ status: 400, heading: 'That link is out of date.' });
+  $('answer').hidden = true; // back to the empty start, so the message is seen and announced
+  $('empty').hidden = false;
   $('old-link').hidden = false;
-  if (!state.params) $('empty').hidden = false;
 }
 function onLocation() {
   const h = parseHash(location.hash);
