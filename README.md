@@ -1,6 +1,6 @@
 # Bhoomi
 
-Bhoomi answers one question about a place: is this really changing here? People say the summers are hotter or the sea is higher than it used to be. A line drawn through noisy data always slopes one way or the other, so a chart alone can't tell a real change from a bad year. Bhoomi pulls the record for the place from public data (NASA, NOAA and other open providers), removes the seasons, runs a significance test, and answers "rising", "falling" or "no clear change". Every answer gives the size of the change, a 95% range and the data source. It is a web page, an AI agent and an MCP server for students and the public. It was built at the NASA Space Apps Challenge 2026 (challenge: *Be An Earth System Trend Detective!*), where it was called Trend Detective. The repository, the Python package and the commands keep the old name (`earthtrends`, `trend-detective-mcp`).
+Bhoomi answers one question about a place: is this really changing here? People say the summers are hotter or the sea is higher than it used to be. A line drawn through noisy data always slopes one way or the other, so a chart alone can't tell a real change from a bad year. Bhoomi pulls the record for the place from public data (NASA, NOAA and other open providers), removes the seasons, runs a significance test, and answers "rising", "falling" or "no clear change". Every answer gives the size of the change, a 95% range and the data source. It is a web page, an AI agent and an MCP server for students and the public. It was built at the NASA Space Apps Challenge 2026 (challenge: *Be An Earth System Trend Detective!*).
 
 ## Try it
 
@@ -12,7 +12,7 @@ The page has three tabs:
 - **Ask.** Type a question in your own words, for example "Is sea level rising in Atlantic City?". An AI agent works out the place and the measurement, calls the same tools, and answers in plain words. This tab is rate limited, because every question costs money: 30 questions a minute and 150 an hour per client, and 200 an hour in total. The data routes and the MCP endpoint are limited to 120 requests a minute and 1,200 an hour per client.
 - **Use in your AI.** Steps to connect your own AI app to the MCP server below.
 
-MCP endpoint (streamable HTTP, no key, no sign-in): `https://bhoomi.earth/mcp/`. Keep the trailing slash. The old address, `https://trend-detective-six.vercel.app/mcp/`, keeps working.
+MCP endpoint (streamable HTTP, no key, no sign-in): `https://bhoomi.earth/mcp/`. Keep the trailing slash.
 
 ```bash
 claude mcp add --transport http bhoomi https://bhoomi.earth/mcp/
@@ -86,10 +86,10 @@ No key is needed for the Explore tab, the data routes (`/api/variables`, `/api/s
 
 Only the Ask tab needs one. `POST /api/ask` calls a paid AI model through OpenRouter and needs `OPENROUTER_API_KEY`. Without it the route answers 503 and the Ask tab says that asking is not available.
 
-`.env.example` lists the environment variables, names only. Never put a value in the repository. `bash ops/dev-secrets.sh` stores your own keys outside the repository, in `~/.config/trend-detective/dev.env`. Then run:
+`.env.example` lists the environment variables, names only. Never put a value in the repository. `bash ops/dev-secrets.sh` stores your own keys outside the repository, in `~/.config/bhoomi/dev.env`. Then run:
 
 ```bash
-uv run --env-file ~/.config/trend-detective/dev.env uvicorn earthtrends.app:app --reload
+uv run --env-file ~/.config/bhoomi/dev.env uvicorn earthtrends.app:app --reload
 ```
 
 The `LANGFUSE_*` keys turn on tracing and are optional. `ANTHROPIC_API_KEY` is only for local evaluation runs.
@@ -97,9 +97,9 @@ The `LANGFUSE_*` keys turn on tracing and are optional. `ANTHROPIC_API_KEY` is o
 Other commands:
 
 ```bash
-uv run trend-detective-mcp     # the MCP server over stdio, for a local AI app
+uv run bhoomi-mcp              # the MCP server over stdio, for a local AI app
 uv sync --group evals          # then, to run the evaluation (this spends money on model calls):
-uv run --env-file ~/.config/trend-detective/dev.env python -m evals.run --models openrouter:anthropic/claude-haiku-5.5
+uv run --env-file ~/.config/bhoomi/dev.env python -m evals.run --models openrouter:anthropic/claude-haiku-5.5
 ```
 
 ## Data sources and credits

@@ -1,5 +1,5 @@
 [project]
-name = "trend-detective"
+name = "bhoomi"
 version = "0.1.0"
 description = "AI agent and MCP server that answers 'is this really changing here?' from NASA and NOAA Earth data. NASA Space Apps 2026."
 readme = "README.md"
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-trend-detective-mcp = "earthtrends.mcp_server:main"
+bhoomi-mcp = "earthtrends.mcp_server:main"
 
 [build-system]
 requires = ["hatchling"]

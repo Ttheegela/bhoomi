@@ -1,7 +1,7 @@
 """Run every golden case in evals/cases.toml once per model and write a comparison table.
 
     uv sync --group evals          # needed for anthropic: models and the plain-language judge
-    uv run --env-file ~/.config/trend-detective/dev.env python -m evals.run \\
+    uv run --env-file ~/.config/bhoomi/dev.env python -m evals.run \\
         --models openrouter:anthropic/claude-haiku-5.5,anthropic:claude-haiku-5-5
 
 All checks are code; only the plain-language score uses a model (a fixed judge), and it never decides pass or fail.
