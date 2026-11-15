@@ -126,8 +126,6 @@ function dotRadius(xs, rmax) {
 function unitLabel(u) { return u === 'degC' ? '°C' : u; }
 // Source name for a picker: short name, then the long label, then the raw id.
 function sourceShort(id) { return SOURCE_SHORT[id] || SOURCE_LABELS[id] || id; }
-// The sideways-scroll hint wording: touch screens swipe, others scroll.
-function scrollHintText(coarse) { return (coarse ? 'Swipe' : 'Scroll') + ' sideways to see the whole line.'; }
 function lcName(n) { return /^[A-Z]{2,}/.test(n) ? n : n.charAt(0).toLowerCase() + n.slice(1); }
 
 function fixed(x, d) {
@@ -225,25 +223,6 @@ function svg(tag, attrs, text) {
   return n;
 }
 function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-
-// Standard tabs pattern (automatic activation): arrows wrap, Home/End jump, one tab stop.
-function wireTablist(tabs, activate) {
-  tabs.forEach((t, i) => {
-    t.addEventListener('click', () => activate(i, false));
-    t.addEventListener('keydown', (e) => {
-      const n = tabs.length;
-      const j = e.key === 'ArrowRight' ? (i + 1) % n : e.key === 'ArrowLeft' ? (i + n - 1) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
-      if (j < 0) return;
-      e.preventDefault();
-      tabs[j].focus();
-      activate(j, true);
-    });
-  });
-}
-function selectTab(tabs, panels, i) {
-  tabs.forEach((t, k) => { t.setAttribute('aria-selected', String(k === i)); t.tabIndex = k === i ? 0 : -1; });
-  panels.forEach((p, k) => { p.hidden = k !== i; });
-}
 
 const isHttps = (src) => !!src && typeof src.url === 'string' && src.url.startsWith('https://');
 // One block-level 48 px line: grey "<label>:" then "<name> ↗" as a link (https URLs only), plain text without the arrow otherwise.
@@ -524,7 +503,7 @@ function loadStore() {
       r.pins.forEach((p) => {
         const label = p && cleanPlace(p.label), lat = p && Number(p.lat), lon = p && Number(p.lon);
         if (!label || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return;
-        if (pins.length < MAX_PINS && !pins.some((q) => pinKeyOf(q.lat, q.lon) === pinKeyOf(lat, lon))) pins.push({ label, lat, lon, link: p.link === true, preset: p.preset === true || (p.preset === undefined && DEFAULT_PINS[w.id].some((d) => pinKeyOf(d.lat, d.lon) === pinKeyOf(lat, lon))) });
+        if (pins.length < MAX_PINS && !pins.some((q) => pinKeyOf(q.lat, q.lon) === pinKeyOf(lat, lon))) pins.push({ label, lat, lon, link: p.link === true, slot: p.slot, preset: typeof p.preset === 'boolean' ? p.preset : DEFAULT_PINS[w.id].some((d) => pinKeyOf(d.lat, d.lon) === pinKeyOf(lat, lon)) });
       });
     }
     let selected = r && typeof r.selected === 'string' ? r.selected : null;
@@ -546,7 +525,7 @@ function assignSlots(pins) {
 }
 function saveStore() {
   const out = {};
-  WINDOWS.forEach((w) => { const e = store[w.id]; out[w.id] = { pins: e.pins.map((p) => ({ label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, link: p.link || undefined, preset: p.preset || undefined })), selected: e.selected }; });
+  WINDOWS.forEach((w) => { const e = store[w.id]; out[w.id] = { pins: e.pins.map((p) => ({ label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, link: p.link || undefined, preset: !!p.preset })), selected: e.selected }; });
   try { localStorage.setItem(PIN_KEY, JSON.stringify(out)); } catch (e) { /* storage may be off */ }
 }
 
@@ -567,6 +546,12 @@ function plainError(r) {
   return r.body && typeof r.body.detail === 'string' && r.body.detail ? r.body.detail : "We can't answer that for this place.";
 }
 
+// A failed answer is not kept: it is asked again when its window is shown and when the visitor selects the pin.
+function dropErrors(win, key) {
+  const e = store[win];
+  if (!e) return;
+  e.pins.forEach((p) => { const k = resKey(win, p); if (results[k] && results[k].status === 'error' && (!key || pinKeyOf(p.lat, p.lon) === key)) delete results[k]; });
+}
 function enqueue(win, p) {
   const k = resKey(win, p);
   if (results[k]) return;
@@ -580,6 +565,16 @@ function pump() {
     flight++;
     Promise.all([api('/api/series', job.params), api('/api/trend', job.params)]).then(([sr, tr]) => {
       const res = results[job.k];
+      if (!res) { flight--; pump(); return; }
+      // too many requests: try once more by itself after Retry-After seconds (5 if missing, 30 at most); "Checking…" meanwhile
+      const slow = sr.status === 429 ? sr : tr.status === 429 ? tr : null;
+      if (slow && !job.retried) {
+        const wait = Math.min(30, Math.max(1, parseInt(slow.retryAfter, 10) || 5));
+        job.retried = true; flight--;
+        setTimeout(() => { if (results[job.k] === res) { queue.push(job); pump(); } }, wait * 1000);
+        pump();
+        return;
+      }
       const s = sr.ok ? sr.body : null;
       const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
       if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); }
@@ -635,7 +630,6 @@ function changed() {
   renderSrcNote();
   renderSidebar();
   renderRec();
-  syncCompat();
   const pins = pinList(curWin);
   const sel = pins.find((p) => p.selected);
   document.dispatchEvent(new CustomEvent('td:pins', { detail: { window: curWin, pins, selected: sel ? sel.key : null } }));
@@ -654,7 +648,7 @@ function convert(v, unit) {
   }
   return { v, unit: u };
 }
-const signed = (x) => (x > 0 ? '+' : '') + fixed(x, 1);
+const signed = (x) => fmtNum(x, true);
 const imperial = () => window.TDPrefs.get().units === 'imperial';
 const fmt = {
   rate(t) {
@@ -672,7 +666,6 @@ const fmt = {
     const a = signed(lo.v), b = signed(hi.v);
     return a === b ? `about ${a} ${lo.unit}` : `${a} to ${b} ${lo.unit}`;
   },
-  value(n, unit) { const c = convert(Number(n), unit); return `${fixed(c.v, 1)} ${c.unit}`; },
   years(t) { return t && t.period ? `${t.period.start.slice(0, 4)}–${t.period.end.slice(0, 4)}` : ''; },
   unit(t) { const g = t && t.guidance; return convert(0, (g && g.display && g.display.unit) || (t && t.units) || '').unit; },
 };
@@ -885,7 +878,6 @@ function compatState() {
   return { place: { lat: pin.lat, lon: pin.lon, label: pin.label }, variable: curWin, source: sourceFor(curWin) || null, start: null, end: null,
     status: pin.status === 'ok' ? 'loaded' : pin.status === 'error' ? 'error' : 'loading', series: pin.series, trend: pin.trend, error: pin.error ? { status: 0, heading: pin.error } : null };
 }
-function syncCompat() { /* nothing to keep in step: TD.state reads the selected pin when asked */ }
 
 /* ---------- the window: head, title, footer, route ---------- */
 
@@ -942,6 +934,7 @@ function showWindow(id) {
     $('place').value = '';
     renderControls();
     renderFoot();
+    dropErrors(id);
     ensureLoaded(id);
     changed();
   }
@@ -989,7 +982,7 @@ function addPin(win, spec) {
   const lat = Number(Number(spec.lat).toFixed(4)), lon = Number(Number(spec.lon).toFixed(4));
   const key = pinKeyOf(lat, lon);
   // a place within 0.25 degrees of a pinned one is that pin: select it, keep its label, say nothing
-  const near = e.pins.find((p) => Math.abs(p.lat - lat) <= 0.25 && Math.abs(p.lon - lon) <= 0.25);
+  const near = e.pins.find((p) => Math.abs(p.lat - lat) <= 0.25 && Math.abs(((p.lon - lon + 540) % 360) - 180) <= 0.25);
   if (near) { e.selected = pinKeyOf(near.lat, near.lon); saveStore(); if (win === curWin) { ensureLoaded(win); changed(); } return { ok: true }; }
   const label = cleanPlace(spec.label) || coordText(lat, lon);
   let replaced = null;
@@ -1158,6 +1151,8 @@ window.TD = {
     if (!e || !e.pins.some((p) => pinKeyOf(p.lat, p.lon) === key)) return;
     e.selected = key;
     saveStore();
+    dropErrors(curWin, key);
+    ensureLoaded(curWin);
     changed();
     if (!opts || opts.focus !== false) { const h = $('rec').querySelector('h2'); if (h) h.focus({ preventScroll: true }); }
   },
@@ -1180,25 +1175,6 @@ window.TD = {
     TD.announce(`Removed ${gone.label}.`);
   },
   fmt,
-  // What the assistant may be told about the page: bounded, on-screen strings only.
-  context() {
-    if (curWin === 'settings') return { window: 'settings', look_ahead: window.TDPrefs.get().lookAhead, units: window.TDPrefs.get().units };
-    const prefs = window.TDPrefs.get(), cut = (s, n) => String(s == null ? '' : s).slice(0, n);
-    const pins = pinList(curWin), sel = pins.find((p) => p.selected);
-    return {
-      window: curWin, look_ahead: prefs.lookAhead, units: prefs.units, selected: sel ? cut(sel.label, 60) : null,
-      places: pins.slice(0, MAX_PINS).map((p) => {
-        const t = p.trend, g = t && t.guidance, o = { label: cut(p.label, 60), lat: p.lat, lon: p.lon };
-        if (p.status !== 'ok') return o;
-        o.source = cut(t.source && t.source.name, 200);
-        o.period = fmt.years(t);
-        o.verdict = t.verdict;
-        o.rate = cut(g && fmt.rate(t) ? `${fmt.rate(t)} ${perOf(t)}`.trim() : (t.meaning && t.meaning.comparison) || '', 200);
-        if (g) { o.risk = cut(g.risk_label, 200); o.recommendation = cut(g.recommendation, 200); o.outlook = cut(fmt.outlook(t, prefs.lookAhead), 200); }
-        return o;
-      }),
-    };
-  },
   announce(text) {
     const l = $('td-live');
     l.textContent = '';
@@ -1246,7 +1222,7 @@ async function init() {
 
 $('how-close').addEventListener('click', () => $('how-dialog').close());
 $('how-dialog').addEventListener('click', (e) => { if (e.target === $('how-dialog')) $('how-dialog').close(); }); // a click on the backdrop
-$('how-dialog').addEventListener('close', () => { document.dispatchEvent(new CustomEvent('td:load-start', { detail: { id: 0, params: null, place: null, origin: 'window' } })); });
+$('how-dialog').addEventListener('close', () => { const b = $('how-open'); if (b) b.focus(); document.dispatchEvent(new CustomEvent('td:load-start', { detail: { id: 0, params: null, place: null, origin: 'window' } })); });
 let lastBand = layoutFor(window.innerWidth).vw;
 window.addEventListener('resize', () => {
   const b = layoutFor(window.innerWidth).vw;
