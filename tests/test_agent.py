@@ -1404,6 +1404,11 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "this shape replaces the plain first sentence, the comparison and the how-sure sentence",
     "if no source returned a result, give the no-data answer, say you cannot advise, and still end with the marker",
     "past data at single places",
+    "A question is broad only when it asks which places or where across a large area and names no single place or "
+    "region to check",
+    "or one named region (\"Punjab and Haryana\", \"California's Central Valley\") is not broad: pick one point inside it",
+    "with one detect_trend call per source as rule 2a says",
+    "Broad questions (which places or where across a large area, with no single place or region named)",
     "Never pick a winner and never average them",
     "only from the results' caveats",
     "Never give a difference between sources",
@@ -1475,7 +1480,8 @@ def test_prompt_rules(phrase):
                                     "is never the one that \"agrees\"", 'not "below 0.001"',
                                     "a decade is ten years", "every ten years", "explaining what a decade is more than once",
                                     "the p-value phrase second", "millimetres every ten years", "comparison of slopes",
-                                    "verdict, numbers and p-value"])
+                                    "verdict, numbers and p-value", 'A question about a region or "which places"',
+                                    'Broad questions (a region or "which places"'])
 def test_prompt_rules_removed(phrase):
     assert phrase not in prompts.SYSTEM
 
