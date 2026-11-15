@@ -69,7 +69,7 @@ One variable can come from several sources. Tools take an optional `source`; res
 - `meaning` (added 2026-11-14, always the last field): the result in plain words, computed in code from the fields above (`earthtrends/stats/meaning.py`), so the page, the agent and outside clients show the same words and no one redoes the arithmetic.
   - `headline`: one sentence by variable and verdict.
   - `confidence`: `"Very clear"` (rising or falling with p < 0.001) | `"Clear"` (any other rising or falling verdict) | `"Not clear"` (no clear change).
-  - `comparison`: the rate in familiar units, rounded to about one significant figure; `""` when there is no clear change, when the units are not the catalog's for that variable, or when the slope's sign would contradict the verdict.
+  - `comparison`: the rate per 10 years in familiar units, rounded to 1 significant figure (2 when the first digit is 1), half away from zero; sea level of 10 mm or more is shown in cm, rainfall as mm a year. It is `""` when there is no clear change, the variable is unknown, the units are not the catalog's for that variable, the slope is 0 or not a finite number, or the slope's sign would contradict the verdict.
   - `limit`: one sentence on what past data cannot tell.
   - All four are strings and are always present. Show them as text; add no number of your own to them.
 
@@ -91,9 +91,9 @@ One variable can come from several sources. Tools take an optional `source`; res
 
 - `source` left out: use the variable's default source; for `sea_level`, if the default source has no tide gauge within 100 km of the point, the next source in the variable's list is used. A point with no gauge in any source gives a clear 4xx. A source the variable doesn't have, an unknown variable, a bad lat/lon, or a point with no data gives a clear 4xx error, never a 500.
 
-The UI calls the same functions through FastAPI routes under `/api/`, so the UI and outside agents see identical results.
+The UI calls the same three functions through `/api/variables`, `/api/series` and `/api/trend`, so the UI and outside agents see identical results.
 
-## Web routes that are not MCP tools — agent lane exposes, UI lane consumes
+## Web routes that are not MCP tools — served by `earthtrends/app.py`, UI lane consumes
 
 The page calls these two routes on its own origin. Outside agents use the MCP tools above instead.
 
@@ -109,7 +109,7 @@ The page calls these two routes on its own origin. Outside agents use the MCP to
 ```
 
 - At most 5 results, in the upstream order. `admin1`, `country` and `country_code` can be `null`. Text fields are cut to 100 characters and are untrusted text: show them as text, never as HTML.
-- No match: `"results": []` with status 200. Every answer carries `source`.
+- No match: `"results": []` with status 200. Every 200 answer carries `source`.
 - `q` is trimmed and single-spaced; fewer than 2 or more than 80 characters is a 400. A missing `q` is a 422. An upstream failure is a 502. The data rate limit applies (429 with `Retry-After`). Never a 500.
 
 ### `POST /api/ask` — a question for the agent
@@ -126,7 +126,7 @@ Request:
 }
 ```
 
-- `question`: 1 to 500 characters.
-- `history` (optional): earlier turns of the same chat, oldest first. At most 6 messages and 4,000 characters in total; whole pairs in order (`user`, then `assistant`); each `content` a non-empty string; no other keys. Anything outside these limits is a 400 with a plain message; nothing is trimmed. Leaving it out, or `[]`, means a question on its own.
-- Earlier turns are text only. They are used to understand the question (which place, which measurement); every number in the answer comes from this turn's tool results.
+- `question`: a string of 1 to 500 characters after trimming; outside that is a 400; missing is a 422.
+- `history` (optional): earlier turns of the same chat, oldest first. At most 6 messages and 4,000 characters in total; whole pairs in order (`user`, then `assistant`); each `content` a non-empty string; no other keys. Anything outside these limits is a 400 with a plain message; nothing is trimmed. Leaving it out, `null`, or `[]` means a question on its own.
+- Earlier turns are text only. They are used to understand the question (which place, measurement, period or source); every number in the answer comes from this turn's tool results.
 - Any other top-level field is refused (422).
