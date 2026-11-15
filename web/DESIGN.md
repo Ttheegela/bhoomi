@@ -1,6 +1,6 @@
 # Trend page design (issue #6)
 
-The Explore tab is being rebuilt for a general audience. Its frame (structure, search box, the `window.TD` interface, link format, layout) is specified in `web/design/00-frame.md`; the other parts are in `web/design/` too. Where that folder and this file differ on Explore, `web/design/` wins; the rest of this file still holds.
+The Explore tab is being rebuilt for a general audience. Its frame (structure, search box, the `window.TD` interface, link format, layout) is specified in `web/design/00-frame.md`; the other parts are in `web/design/` too. `web/design/08-layout.md` (the layout pass: one grid, the answer card, "How we calculated this") wins over the layout parts of the others. Where that folder and this file differ on Explore, `web/design/` wins; the rest of this file still holds.
 
 Build: `web/index.html`, `web/style.css`, `web/app.js`. No build step, no libraries, no CDN, self-hosted web fonts only (Space Grotesk, Inter). Chart is hand-written SVG. Same-origin calls to `/api/...`. No NASA logos or branding; dataset names are plain text.
 

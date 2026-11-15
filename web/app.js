@@ -130,13 +130,6 @@ function dotRadius(xs, rmax) {
 function unitLabel(u) { return u === 'degC' ? '°C' : u; }
 // Source name for a picker: short name, then the long label, then the raw id.
 function sourceShort(id) { return SOURCE_SHORT[id] || SOURCE_LABELS[id] || id; }
-// Where the "No change" label goes: the end of the dashed line the trend line is clear of.
-// yl, yr = trend line's screen y at the left and right ends; zy = the dashed line's screen y (larger y = lower).
-function noChangeLabel(yl, yr, zy) {
-  if (yl > zy) return { end: 'left', below: false };   // trend is under the line on the left: clear above it
-  if (yr > zy) return { end: 'right', below: false };  // under it on the right
-  return { end: 'left', below: true };                 // above it at both ends: clear below it
-}
 // The sideways-scroll hint wording: touch screens swipe, others scroll.
 function scrollHintText(coarse) { return (coarse ? 'Swipe' : 'Scroll') + ' sideways to see the whole line.'; }
 function lcName(n) { return /^[A-Z]{2,}/.test(n) ? n : n.charAt(0).toLowerCase() + n.slice(1); }
@@ -235,6 +228,12 @@ const yr = (v) => (/^(18[5-9]\d|19\d\d|20\d\d|2100)(-(0[1-9]|1[0-2]))?$/.test(v 
 // Both given and start not before end: drop both.
 function window2(a, b) { a = yr(a); b = yr(b); return a && b && monthIndex(a) >= monthIndex(b) ? [null, null] : [a, b]; }
 
+// Names that older or hand-typed links may carry, mapped to the catalogue's ids. None of these was ever a catalogue id
+// (the five ids have not changed since the catalogue was written); they are friendly aliases only. Any other unknown
+// id is an out-of-date link.
+const VARIABLE_ALIASES = { precipitation: 'precip', rain: 'precip', temperature: 'air_temp', air_temperature: 'air_temp',
+  max_temperature: 'air_temp_max', hottest_day: 'air_temp_max', groundwater: 'water_storage', land_water: 'water_storage' };
+
 // Hash -> { tab, app, explore }. Missing or unknown tab = explore; unknown app = claude.
 // explore is set only for a complete, in-range variable/lat/lon (share links); else null.
 function parseHash(raw) {
@@ -247,7 +246,7 @@ function parseHash(raw) {
     exploreBad: !ok && (h.has('variable') || h.has('lat') || h.has('lon')), // looks like a place link but is not usable
     tab: t === 'ask' || t === 'connect' ? t : 'explore',
     app: APPS.includes(a) ? a : 'claude',
-    explore: ok ? (([start, end]) => ({ variable: h.get('variable'), lat, lon, source: h.get('source') || null, place: cleanPlace(h.get('place')), start, end }))(window2(h.get('start'), h.get('end'))) : null,
+    explore: ok ? (([start, end]) => ({ variable: VARIABLE_ALIASES[h.get('variable')] || h.get('variable'), lat, lon, source: h.get('source') || null, place: cleanPlace(h.get('place')), start, end }))(window2(h.get('start'), h.get('end'))) : null,
   };
 }
 // { tab, app, explore } -> hash text without '#'. Explore keeps its old key-less form.
@@ -501,7 +500,7 @@ function submit(user) {
     const endId = was ? state.req : state.req + 1;
     state.req++; // drop any answer still on its way
     setBusy(false);
-    ['chart-wrap', 'more', 'verdict-card', 'problem', 'answer-bar'].forEach((id) => { $(id).hidden = true; });
+    ['chart-wrap', 'how', 'answer-card', 'problem', 'answer-bar'].forEach((id) => { $(id).hidden = true; });
     state.series = null; state.trend = null;
     if (was || shown) {
       state.status = 'error'; state.err = { status: 422, heading: 'Check the latitude and longitude.' };
@@ -548,7 +547,7 @@ async function run(params, user, keep) {
   state.params = params;
   if (glyphKey(params) !== glyphs.key) { clearGlyphs(); glyphs.key = glyphKey(params); } // arrows belong to the latest request's measurement and source
   const first = !keep;
-  if (first) { ['chart-wrap', 'more', 'verdict-card', 'answer-bar'].forEach((i) => { $(i).hidden = true; }); state.series = null; state.trend = null; }
+  if (first) { ['chart-wrap', 'how', 'answer-card', 'answer-bar', 'old-link'].forEach((i) => { $(i).hidden = true; }); state.series = null; state.trend = null; }
   $('problem').hidden = true;
   $('empty').hidden = true; // the start card is gone for good once a request has begun
   state.status = 'loading'; state.err = null;
@@ -581,11 +580,11 @@ function show(sr, tr, params, user, id) {
   const problem = (p, status) => { err = { status, heading: p.heading }; return showProblem(p); };
   $('chart-wrap').hidden = true;
   $('year-stripes').hidden = true; // shown again only when renderVerdict draws them for this answer
-  $('more').hidden = true;
-  $('verdict-card').hidden = true;
+  $('how').hidden = true;
+  $('answer-card').hidden = true;
   $('problem').hidden = true;
   $('spark').hidden = true; // like the stripes: shown again only when renderVerdict draws it for this answer
-  delete $('verdict-card').dataset.verdict; delete $('chart-wrap').dataset.verdict;
+  ['answer-card', 'chart-wrap', 'how'].forEach((i) => { delete $(i).dataset.verdict; });
   state.series = null; state.trend = null;
 
   if (!sr.ok) {
@@ -603,12 +602,13 @@ function show(sr, tr, params, user, id) {
       showResultSource(state.trend || s);
       $('chart-wrap').hidden = false;
       renderChart(s, state.trend);
-      document.querySelectorAll('#chart-fig .t-only').forEach((li) => { li.hidden = !state.trend; });
+      document.querySelectorAll('.t-only').forEach((li) => { li.hidden = !state.trend; });
       renderTable(s, !!state.trend);
+      $('how').hidden = false; $('how').open = false; // closed on every new answer; without a trend only the chart help and the table show
       if (state.trend) {
         heading = renderVerdict(state.trend, s);
         if (!params.start && !params.end) noteGlyph(state.trend, params); // a chip opens the full record, so a windowed answer is not its arrow
-        renderMore(state.trend);
+        renderHow(state.trend);
       } else {
         heading = problem(problemFor(tr, params), tr.status);
       }
@@ -625,9 +625,7 @@ function show(sr, tr, params, user, id) {
   }
   fire('td:load-end', { id, ok, params, place: placeNow(), series: state.series, trend: state.trend, error: err, origin: state.origin });
   if (state.scrollId === id) setTimeout(() => { if (id === state.req && !visitorScrolled) scrollToAnswer(); }, 60);
-  // A module may have filled #meaning-slot while handling td:load-end: it gets the focus, else the verdict heading.
-  const mh = $('meaning-heading');
-  if (user && heading) (ok && mh && !$('meaning-slot').hidden ? mh : heading).focus({ preventScroll: true });
+  if (user && heading) heading.focus({ preventScroll: true }); // the answer's headline (#meaning-heading), or the problem heading
 }
 
 function problemFor(r, params) {
@@ -726,31 +724,35 @@ function renderSpark(t, series, word) {
 
 function fact(label, node) { return el('div', {}, el('dt', {}, label), el('dd', {}, node)); }
 
+// The four plain-words strings the server sends (trend.meaning); null when they are missing or malformed.
+const CONFIDENCE = ['Very clear', 'Clear', 'Not clear'];
+function meaningOf(t) {
+  const m = t && t.meaning;
+  if (!m || typeof m !== 'object' || typeof m.headline !== 'string' || typeof m.confidence !== 'string' || typeof m.comparison !== 'string' || typeof m.limit !== 'string') return null;
+  return m.headline && m.limit && CONFIDENCE.includes(m.confidence) ? m : null;
+}
+
+// The answer card: label, headline, verdict band, big line, how sure (and the sparkline), what past data can't tell, one source.
+// Everything exact (rate, range, p-value, facts) goes in the "How we calculated this" section (#how), see renderHow.
 function renderVerdict(t, series) {
   const c = verdictCopy(t, nameOf(t.variable), placeOf(t));
-  const h = $('verdict-heading');
-  clear(h);
-  h.append(shapeSvg(c.shape), c.head);
+  const m = meaningOf(t);
+  const y0 = t.period.start.slice(0, 4), y1 = t.period.end.slice(0, 4);
+  const h = $('meaning-heading');
+  h.textContent = m ? m.headline : c.p1;
+  const band = $('verdict-heading');
+  clear(band);
+  band.append(shapeSvg(c.shape), c.head);
   const vk = t.verdict === 'rising' ? 'rising' : t.verdict === 'falling' ? 'falling' : 'none';
-  $('verdict-card').dataset.verdict = vk;
-  $('chart-wrap').dataset.verdict = vk; // the legend, chart lines and year stripes read it
-  const big = $('verdict-big');
-  clear(big);
-  const bn = fmtVal(t.slope_per_decade, t.units), sp = bn.search(/\s/); // number at 48 px, its unit smaller beside it
-  big.append(el('span', { class: 'big-n' }, sp > 0 ? bn.slice(0, sp) : bn));
-  if (sp > 0) big.append(el('span', { class: 'big-m' }, ' ' + bn.slice(sp + 1)));
-  big.append(' ', el('span', { class: 'big-u' }, 'per decade'));
-  // The picture and the stripes are extra: if one fails, hide it and keep the answer. The scene is handed
-  // the same strings the card prints (slope and range) and never formats a number itself.
-  try {
-    window.renderScene($('scene'), t, {
-      place: placeOf(t), name: nameOf(t.variable),
-      slope: fmtVal(t.slope_per_decade, t.units),
-      range: `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)}`,
-    });
-  } catch (e) {
-    $('scene').hidden = true;
+  ['answer-card', 'chart-wrap', 'how'].forEach((i) => { $(i).dataset.verdict = vk; }); // the band, chart lines and year stripes read it
+  $('verdict-big').textContent = m ? (m.comparison || `No clear change from ${y0} to ${y1}.`) : `${fmtVal(t.slope_per_decade, t.units)} per decade, ${y0} to ${y1}.`;
+  $('ac-conf').hidden = !m;
+  $('ac-limit').hidden = !m;
+  if (m) {
+    $('ac-conf-word').textContent = m.confidence;
+    $('ac-limit-text').textContent = m.limit;
   }
+  // The stripes and the sparkline are extra: if one fails, hide it and keep the answer.
   try {
     const ms = series.times.map(monthIndex);
     window.renderStripes($('stripes-art'), yearlyAverages(ms, deseasonalize(series.times, series.values)), t.period);
@@ -758,51 +760,51 @@ function renderVerdict(t, series) {
   } catch (e) {
     $('year-stripes').hidden = true;
   }
-  try { renderSpark(t, series, c.head); } catch (e) { $('spark').hidden = true; }
+  if (m) { try { renderSpark(t, series, c.head); } catch (e) { $('spark').hidden = true; } }
+  srcBlock($('verdict-source'), 'Raw data', t.source);
+  $('answer-card').hidden = false;
+  return h;
+}
+
+// "How we calculated this": closed on every new answer. Parts 1 to 9 in the order of the page (index.html).
+function renderHow(t, series) {
+  const c = verdictCopy(t, nameOf(t.variable), placeOf(t));
+  $('how').open = false;
+  $('verdict-p1').textContent = c.p1;
   $('verdict-lean').textContent = c.lean || '';
   $('verdict-lean').hidden = !c.lean;
-  $('verdict-p1').textContent = c.p1;
   $('verdict-p2').textContent = c.p2;
-  $('verdict-method').open = false;
   $('verdict-evidence').textContent = `p-value: ${fmtP(t.p_value)}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change.`;
-  srcBlock($('verdict-source'), 'Raw data', t.source);
-  $('verdict-calc').textContent = 'Trend, range and verdict: our calculation.';
 
-  const facts = $('facts'), mfacts = $('method-facts');
+  const facts = $('facts');
   clear(facts);
-  clear(mfacts);
   [
-    [facts, 'Period', `${t.period.start} to ${t.period.end}`],
-    [facts, 'Months of data', String(t.n)],
-    [facts, 'Range of trends the data support', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
-    [mfacts, 'p-value', fmtP(t.p_value)],
-    [mfacts, 'Seasons removed', t.deseasonalized ? 'Yes' : 'No'],
-    [mfacts, 'Adjusted for neighbouring months', t.autocorrelation_adjusted ? 'Yes' : 'No'],
-    [facts, 'Source', 'src'],
-    [mfacts, 'Method', t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
-  ].forEach(([dl, l, v]) => {
-    if (v !== 'src') { dl.append(fact(l, v)); return; }
+    ['Period', `${t.period.start} to ${t.period.end}`],
+    ['Months of data', String(t.n)],
+    ['Range of trends the data support', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
+    ['p-value', fmtP(t.p_value)],
+    ['Seasons removed', t.deseasonalized ? 'Yes' : 'No'],
+    ['Adjusted for neighbouring months', t.autocorrelation_adjusted ? 'Yes' : 'No'],
+    ['Source', 'src'],
+    ['Method', t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
+  ].forEach(([l, v]) => {
+    if (v !== 'src') { facts.append(fact(l, v)); return; }
     const dd = el('dd', {});
     srcLink(dd, t.source, true);
-    dl.append(el('div', {}, el('dt', {}, l), dd));
+    facts.append(el('div', {}, el('dt', {}, l), dd));
   });
 
   const list = $('notes-list');
   clear(list);
   const notes = [];
-  (t.caveats || []).concat(series.notes || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
+  (t.caveats || []).concat((state.series && state.series.notes) || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
   if (!notes.length) notes.push('No extra caveats from the source.');
   notes.forEach((n) => list.append(el('li', {}, n)));
 
-  $('verdict-card').hidden = false;
-  return h;
-}
-
-function renderMore(t) {
   $('howto-ac').textContent = t.autocorrelation_adjusted
     ? 'We adjusted for months that resemble their neighbours; without that the result would look surer than it is.'
     : 'We did not adjust for months that resemble their neighbours, so treat the result as less certain.';
-  $('more').hidden = false;
+  $('how').hidden = false;
 }
 
 function renderTable(s, withTrend) {
@@ -878,8 +880,6 @@ function renderChart(s, t) {
   });
   root.append(svg('text', { x: ml + pw / 2, y: B.bot + Math.round(fs * 2.9) + 4, 'text-anchor': 'middle', class: 'c-text' }, 'Year'));
   root.append(svg('line', { x1: ml, x2: vw - mr, y1: B.yS(0), y2: B.yS(0), class: 'c-zero' }));
-  const noText = svg('text', { class: 'c-text c-halo' }, 'No change'); // placed once the trend line is known
-  root.append(noText);
 
   const path = (P, arr) => {
     let d = '', pen = false;
@@ -913,17 +913,11 @@ function renderChart(s, t) {
     root.append(clip, g);
   }
 
-  const nc = trendLine ? noChangeLabel(trendLine.y1, trendLine.y2, B.yS(0)) : { end: 'right', below: false };
-  noText.setAttribute('x', nc.end === 'left' ? ml + 4 : vw - mr - 2);
-  noText.setAttribute('text-anchor', nc.end === 'left' ? 'start' : 'end');
-  noText.setAttribute('y', nc.below ? B.yS(0) + fs + 3 : Math.max(B.top + 0.9 * fs, B.yS(0) - 5)); // above the line, but never above the panel's top
-
   // Yearly averages (dots) sit over the faint monthly line; the solid trend line goes on top. Drawing only: never printed.
   const dots = yearlyAverages(ms, des);
   const r = dotRadius(dots.map((d) => xS(d.x)), Math.max(2.5, fs * 0.22));
   dots.forEach((d) => root.append(svg('circle', { cx: xS(d.x).toFixed(1), cy: B.yS(d.mean).toFixed(1), r: r.toFixed(2), class: 's-year', 'aria-hidden': 'true' })));
   if (trendLine) root.append(svg('line', Object.assign({ class: 's-trend', 'clip-path': 'url(#c-clip)' }, trendLine)));
-  root.append(noText); // drawn after the lines, band, dots and trend so nothing paints over it (its halo hides what is under it); only the hover rule follows
 
   const rule = svg('line', { y1: A.top, y2: B.bot, class: 'c-rule', visibility: 'hidden' });
   root.append(rule);
@@ -931,7 +925,10 @@ function renderChart(s, t) {
 
   $('chart-head').textContent = t ? chartHead(t, name, place) : `${name} at ${place}`;
   $('chart-caption').textContent = t ? captionText(t, name, place) : `${name} at ${place}.`;
-  srcBlock($('chart-source'), 'Raw data', t ? t.source : s.source);
+  const cs = $('chart-source');
+  srcBlock(cs, 'Raw data', t ? t.source : s.source);
+  if (t) cs.append(el('span', { class: 'source' }, 'Trend and range: our calculation.'));
+  $('chart-key').textContent = t ? 'Thick line: the trend. Shaded band: the range of trends the data support. Dashed line: no change.' : 'Dashed line: no change.';
   $('chart-raw').textContent = rawLine(t ? t.source : s.source, !!t);
 
   // readout
@@ -983,15 +980,17 @@ function fillFooter(vars) {
   Object.entries(SOURCES).forEach(([id, src]) => {
     if (used && !used.has(id)) return;
     if (!used && id === 'grace') return; // known only through the catalog
-    const li = el('li', {});
+    const li = el('li', {}), sp = el('span', {}); // one span, so the row's text flows as one line of text
     if (src.credit) {
-      // one list item, one flowing line of text: link, ", dataset, ", link
-      li.append(el('a', { href: src.url, class: 'srclink' }, src.credit), `, ${src.dataset}, `, el('a', { href: src.licence.url, class: 'srclink' }, src.licence.name));
-    } else srcLink(li, src);
+      // link, ", dataset, ", link
+      sp.append(el('a', { href: src.url, class: 'srclink' }, src.credit), `, ${src.dataset}, `, el('a', { href: src.licence.url, class: 'srclink' }, src.licence.name));
+    } else srcLink(sp, src);
+    li.append(sp);
     items.push(li);
   });
-  const pl = el('li', {}, 'Place names: ');
-  srcLink(pl, PLACE_SOURCE, true);
+  const pl = el('li', {}), psp = el('span', {}, 'Place names: ');
+  srcLink(psp, PLACE_SOURCE, true);
+  pl.append(psp);
   items.push(pl);
   ul.prepend(...items);
 }
@@ -1035,6 +1034,11 @@ function sameExplore(a, b) {
     && Number(a.lon).toFixed(2) === Number(b.lon).toFixed(2) && (a.source || null) === (b.source || null)
     && (a.start || null) === (b.start || null) && (a.end || null) === (b.end || null);
 }
+// A link that cannot be run (unknown measurement, bad number): say so in the empty card and run nothing.
+function outOfDate() {
+  $('old-link').hidden = false;
+  if (!state.params) $('empty').hidden = false;
+}
 function onLocation() {
   const h = parseHash(location.hash);
   if (typeof setApp === 'function' && h.app !== tabState.app) setApp(h.app);
@@ -1043,7 +1047,7 @@ function onLocation() {
     // An unusable link (unknown measurement, bad number) falls back to the empty start: the hash is cleared and
     // nothing runs. A repeat call (popstate, then hashchange) finds state.params already set, so it starts no second request.
     const fixed = h.explore && fixExplore(h.explore, state.variables);
-    if (!fixed) { if (tabState.tab === 'explore') history.replaceState(null, '', location.pathname + location.search); return; }
+    if (!fixed) { if (tabState.tab === 'explore') { history.replaceState(null, '', location.pathname + location.search); outOfDate(); } return; }
     if (!sameExplore(fixed, state.params)) applyExplore(fixed, false, 'share-link');
   }
 }
@@ -1105,7 +1109,7 @@ async function init() {
   syncVariableUI();
   const h = parseHash(location.hash);
   const fixed = h.explore && fixExplore(h.explore, state.variables);
-  if (!fixed && (h.explore || h.exploreBad) && h.tab === 'explore') history.replaceState(null, '', location.pathname + location.search);
+  if (!fixed && (h.explore || h.exploreBad) && h.tab === 'explore') { history.replaceState(null, '', location.pathname + location.search); outOfDate(); }
   tdReady(state.variables);
   const first = fixed || (FIRST_LOAD && fixExplore(FIRST_LOAD, state.variables));
   if (first) applyExplore(first, false, 'share-link');
@@ -1315,6 +1319,10 @@ $('locate').addEventListener('click', locate);
   if (state.place && state.place.label === GEO_LABEL) state.place = null; // edited coordinates are no longer "your location"
   markChips();
 }));
+// "How we calculated this" is printed open
+let howWasOpen = false;
+window.addEventListener('beforeprint', () => { howWasOpen = $('how').open; $('how').open = true; });
+window.addEventListener('afterprint', () => { $('how').open = howWasOpen; });
 $('coords-toggle').addEventListener('click', () => setCoords($('coords').hidden));
 $('change-place').addEventListener('click', (e) => { e.preventDefault(); $('h-explore').scrollIntoView({ block: 'start' }); $('place').focus({ preventScroll: true }); });
 // Re-draw when the chart's box width changes by 8 px or more. One observer for the page's life, so none pile up;
