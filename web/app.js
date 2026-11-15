@@ -1,5 +1,5 @@
 'use strict';
-/* Trend Detective page shell (web/design/09-rework.md). Same-origin /api/ calls only. Printed numbers come from the API;
+/* Bhoomi page shell (web/design/09-rework.md). Same-origin /api/ calls only. Printed numbers come from the API;
    the browser's own arithmetic is for drawing and for converting units (see the "pure helpers" block). */
 
 const PLACE_SOURCE = { name: 'Open-Meteo Geocoding API (GeoNames)', url: 'https://open-meteo.com/en/docs/geocoding-api' };

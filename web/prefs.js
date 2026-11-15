@@ -1,5 +1,5 @@
 'use strict';
-/* Trend Detective preferences (window.TDPrefs). Loaded in <head>, blocking, so the theme is set before first paint.
+/* Bhoomi preferences (window.TDPrefs). Loaded in <head>, blocking, so the theme is set before first paint.
    Stored in localStorage "td.prefs.v1" (a failure to read or write is ignored). Light is the default. */
 (function () {
   var KEY = 'td.prefs.v1';
