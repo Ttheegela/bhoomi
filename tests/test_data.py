@@ -1077,7 +1077,9 @@ def test_readable_names():
     for raw_name, want in [("NEW DELHI SAFDARJUN, IN", "New Delhi Safdarjun, IN"), ("NEW YORK (THE BATTERY)", "New York (The Battery)"),
                            ("MUMBAI / BOMBAY (APOLLO BANDAR)", "Mumbai / Bombay (Apollo Bandar)"), ("ST. JOHN'S", "St. John's"),
                            ("ABERDEEN I", "Aberdeen I"), ("The Battery", "The Battery"), ("", ""), ("1234 -/ 56", "1234 -/ 56"),
-                           ("SÃO TOMÉ", "São Tomé"), ("WINSTON-SALEM", "Winston-Salem")]:
+                           ("SÃO TOMÉ", "São Tomé"), ("WINSTON-SALEM", "Winston-Salem"),
+                           ("ABERDEEN II", "Aberdeen II"), ("NEWCASTLE III", "Newcastle III"), ("GALVESTON II, PIER 21, TX", "Galveston II, Pier 21, TX"),
+                           ("BARENTSBURG II (SPITSBERGEN)", "Barentsburg II (Spitsbergen)"), ("VIGO", "Vigo"), ("XIAMEN", "Xiamen"), ("IVIGTUT", "Ivigtut")]:
         assert r(raw_name) == want
     cut = upstream.text("A" * 200, upstream.NAME)
     assert r(cut) == "A" + "a" * (upstream.NAME - 2) + "…" and len(r(cut)) == upstream.NAME
