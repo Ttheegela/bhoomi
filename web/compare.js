@@ -259,8 +259,23 @@
         cls: 'cmp-dl t' + slotCls(l) + (l.selected ? ' b' : '')
       });
     });
-    if (wedge && wedge.label) items.push({ x: m.px(lp.year) + 16, y: m.py(lp.v) - 3, text: wedge.label, cls: 'cmp-pl' });
-    stack(items, 15, Y0 + 8, Y1 - 4).forEach(function (it) {
+    var placed = stack(items, 15, Y0 + 8, Y1 - 4);
+    if (wedge && wedge.label) {
+      // 60 % of the way to the look-ahead year, 6 px above the wedge's upper edge; up past any line-end label, else below the lower edge
+      var wx = m.px(lp.year) + 0.6 * (m.px(wedge.year) - m.px(lp.year)), w = wedge.label.length * 6.6;
+      var edge = function (v) { return m.py(lp.v) + 0.6 * (m.py(v) - m.py(lp.v)); };
+      var hit = function (y) {
+        return placed.some(function (it) {
+          var iw = it.text.length * 7;
+          return wx - w / 2 < it.x + iw && it.x < wx + w / 2 && y - 12 < it.ly + 4 && it.ly - 12 < y + 3;
+        });
+      };
+      var wy = edge(wedge.hi) - 6;
+      while (hit(wy) && wy - 4 - 12 >= Y0) wy -= 4;
+      if (hit(wy) || wy - 12 < Y0) wy = edge(wedge.lo) + 18;
+      s.appendChild(svg('text', { x: wx.toFixed(1), y: wy.toFixed(1), class: 'cmp-pl', 'text-anchor': 'middle' }, wedge.label));
+    }
+    placed.forEach(function (it) {
       if (it.ax != null && Math.abs(it.ly - it.y) > 6) {
         s.appendChild(svg('line', { x1: it.ax.toFixed(1), y1: it.ay.toFixed(1), x2: (it.x - 2).toFixed(1), y2: (it.ly - 4).toFixed(1), class: 'cmp-lead' }));
       }
@@ -290,8 +305,9 @@
       box.appendChild(rp);
     }
     var wrap = h('div', 'cmp-scroll'), tbl = h('table', 'cmp-tbl'), thead = h('thead'), hr = h('tr');
-    ['Place', 'Measured at', 'Record', 'Change per 10 years', 'vs world average', 'Risk', 'By ' + o.lookAhead + ' if the trend continues']
-      .forEach(function (c) { var th = h('th', null, c); th.scope = 'col'; hr.appendChild(th); });
+    var hasRatio = (pins || []).some(function (p) { return p.trend && p.trend.guidance && typeof p.trend.guidance.ratio === 'number'; });
+    ['Place', 'Measured at', 'Record', 'Change per 10 years', hasRatio && 'vs world average', 'Risk', 'By ' + o.lookAhead + ' if the trend continues']
+      .filter(Boolean).forEach(function (c) { var th = h('th', null, c); th.scope = 'col'; hr.appendChild(th); });
     thead.appendChild(hr); tbl.appendChild(thead);
     var tb = h('tbody');
     (pins || []).forEach(function (p) {
@@ -306,13 +322,13 @@
       c0.appendChild(dot); c0.appendChild(document.createTextNode(p.label)); tr.appendChild(c0);
       if (p.status !== 'ok' || !t) {
         var cs = h('td', 'cmp-msg', p.status === 'error' ? (p.error || 'Could not load this place.') : 'Checking…');
-        cs.colSpan = 6; tr.appendChild(cs); tb.appendChild(tr); return;
+        cs.colSpan = hasRatio ? 6 : 5; tr.appendChild(cs); tb.appendChild(tr); return;
       }
       var name = t.place && t.place.name ? String(t.place.name).trim() : '', lab = String(p.label).trim().toLowerCase();
       tr.appendChild(dash(h('td'), /[^\d\s.,;°+\-−NSEWnsew]/.test(name) ? name : (t.source && t.source.name)));
       tr.appendChild(dash(h('td', 'n'), f.years && f.years(t)));
       tr.appendChild(h('td', 'n', (f.rate && f.rate(t)) || 'No clear change'));
-      tr.appendChild(dash(h('td', 'n'), g && typeof g.ratio === 'number' ? g.ratio.toFixed(1) + '×' : ''));
+      if (hasRatio) tr.appendChild(dash(h('td', 'n'), g && typeof g.ratio === 'number' ? g.ratio.toFixed(1) + '×' : ''));
       var cr = h('td');
       if (g && g.risk_label) cr.appendChild(h('span', 'risk ' + (/^(high|moderate|low|unknown)$/.test(g.risk) ? g.risk : 'unknown'), g.risk_label));
       else cr.textContent = '—';
@@ -322,7 +338,7 @@
     });
     if (!(pins || []).length) {
       var er = h('tr'), ec = h('td', 'cmp-msg', 'No places yet. Search for a place or click the map.');
-      ec.colSpan = 7; er.appendChild(ec); tb.appendChild(er);
+      ec.colSpan = hasRatio ? 7 : 6; er.appendChild(ec); tb.appendChild(er);
     }
     tbl.appendChild(tb); wrap.appendChild(tbl); box.appendChild(wrap);
     slot.replaceChildren(box);
