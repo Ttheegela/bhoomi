@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 import httpx
 
 from earthtrends.agent import providers, tracing
-from earthtrends.agent.loop import GAVE_UP, MAX_CALLS, ask
+from earthtrends.agent.loop import GAVE_UP, MAX_CALLS, agree_plan, agree_sentence, ask
 from earthtrends.data import list_variables
 from earthtrends.data.coops import haversine_km
 
@@ -184,18 +184,22 @@ def check(case: dict, run: dict) -> dict[str, bool]:
             out["wording"] = wording_agrees(answer, main["verdict"]) and not (len(by_src) > 1 and said_disagree)
         if "wording" in out and len(by_src) > 1:
             out["wording"] = out["wording"] and not any(g in a for g in GUESSED)
-            if len(verdicts) == 1:  # agreeing sources: no slope or range that only another source gave
+            plan = agree_plan(run.get("tool_calls", []))
+            if plan:  # agreeing sources: no slope or range that only another source gave
+                lead, agreeing = plan
                 others = [{k: r.get(k) for k in ("verdict", "slope_per_decade", "ci_low", "ci_high")}
-                          for r in by_src.values() if r is not main]
-                base = [main] + [r.get("caveats") for r in by_src.values()]  # every caveat may be passed on
+                          for r in agreeing]
+                base = [lead] + [r.get("caveats") for r in by_src.values()]  # every caveat may be passed on
                 leaked = set(invented_numbers(answer, base)) - set(invented_numbers(answer, base + others))
                 out["wording"] = out["wording"] and not leaked
+                # the loop writes one sentence per agreeing source: each must be there (a model copy may double it)
+                out["wording"] = out["wording"] and all(agree_sentence(r, lead) in answer for r in agreeing)
                 # "over its own record" belongs to an agreeing source, so its sentence must name one
                 # and the subject (the text before "agree") must name one: not "<default> agrees ... using PSMSL"
                 own = [s for s in re.split(r"(?<=[.!?])\s+", a) if "over its own record" in s]
                 subj = [s[:s.index("agree")] if "agree" in s[:s.index("over its own record")] else s for s in own]
                 out["wording"] = out["wording"] and all(
-                    any(_short_named(r.get("source") or {}, s) for r in by_src.values() if r is not main) for s in subj)
+                    any(_short_named(r.get("source") or {}, s) for r in agreeing) for s in subj)
         out["numbers"] = not invented_numbers(answer, results)
         if by_src:
             out["source_named"] = all(_named(r.get("source") or {}, a) for r in by_src.values())

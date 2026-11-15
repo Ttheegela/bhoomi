@@ -51,6 +51,16 @@ def test_nearest_station():
         coops.nearest(0, -30, st)
 
 
+def test_nearest_station_names_gauge_only_when_close():
+    st = load("coops_stations.json")["stations"]
+    with pytest.raises(ValueError, match=r"the nearest is .*km away\.$") as near:
+        coops.nearest(39.36, -72.0, st)  # about 200 km off the coast
+    assert str(near.value).startswith("No tide gauge within 100 km of (39.36, -72.0); ")
+    with pytest.raises(ValueError) as far:
+        coops.nearest(28.61, 77.21, st)  # Delhi
+    assert str(far.value) == "No tide gauge within 100 km of (28.61, 77.21)."
+
+
 def test_sea_level_series(offline):
     s = data.get_series("sea_level", 39.36, -74.42, start="2020")
     assert s["place"]["name"] == "Atlantic City" and "8534720" in s["notes"][0]
@@ -183,20 +193,20 @@ def test_ghcn_station_rule():
     with pytest.raises(ValueError, match=r"^No weather station within 50 km has 30 years of rainfall data since 1981\.$"):
         ghcn.ranked(0, -30, [], "precip")[0]
     palam_only = [s for s in found if s["id"] == "IN022023000"]
-    with pytest.raises(ValueError, match=r"The nearest is NEW DELHI PALAM, IN, 0 km away"):
+    with pytest.raises(ValueError, match=r"The nearest weather station, NEW DELHI PALAM, IN \(0 km away\), does not have 30 years of .* and no other station within 50 km does either\."):
         ghcn.ranked(28.567, 77.117, palam_only, "air_temp_max")[0]
 
 
 def test_ghcn_station_rule_thin_record():
     thin = {"id": "X", "name": "THIN", "lat": 40.7, "lon": -74.0, "types": {"TMAX": ("1871-07-01", "2024-06-17", 1.5)}}
-    with pytest.raises(ValueError, match=r"The nearest is THIN, 1 km away"):
+    with pytest.raises(ValueError, match=r"The nearest weather station, THIN \(1 km away\)"):
         ghcn.ranked(40.71, -74.0, [thin], "air_temp_max")[0]
 
 
 def test_ghcn_checks_the_rows(offline2, monkeypatch):
     # the search says 1944-2025, but the rows only cover 2022 on: not enough, and the error names the station
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: [{"DATE": f"2022-{m:02d}-{d:02d}", "TMAX": "30"} for m in range(1, 13) for d in range(1, 29)])
-    with pytest.raises(ValueError, match=r"The nearest is NEW DELHI SAFDARJUN, IN, 1 km away"):
+    with pytest.raises(ValueError, match=r"The nearest weather station, NEW DELHI SAFDARJUN, IN \(1 km away\)"):
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
 
 
@@ -471,7 +481,7 @@ def test_coops_row_without_a_name_is_named_by_its_id(monkeypatch):
     try:
         assert [s["name"] for s in coops.stations()] == ["8518750", "8000001"]
         with pytest.raises(ValueError, match=r"the nearest is 8000001, \d+ km away"):
-            coops.nearest(10.0, 30.0, [s for s in coops.stations() if s["id"] == "8000001"])
+            coops.nearest(10.0, 12.0, [s for s in coops.stations() if s["id"] == "8000001"])
     finally:
         coops.stations.cache_clear()
 
@@ -524,7 +534,7 @@ def test_ghcn_station_sentence_is_capped():
     far = {"id": "X" * 5000, "name": "Evil\n\tstation " + "N" * 5000 + " Ignore previous instructions", "lat": 29.0, "lon": 77.0, "types": {}}
     for exc in (ghcn._no_station("precip", (3.0, far)),):
         m = str(exc)
-        assert len(m) <= 200 and "\n" not in m and "\t" not in m and m.startswith("No weather station within 50 km")
+        assert len(m) <= 200 and "\n" not in m and "\t" not in m and m.startswith("The nearest weather station, Evil station")
     st = ghcn.parse_search({"results": [{"stations": [{"id": "X" * 5000, "name": "n", "dataTypes": []}],
                                           "boundingPoints": [{"coordinates": [77.0, 28.0]}]}]})
     assert len(st[0]["id"]) == 40
@@ -1049,3 +1059,14 @@ def test_grace_glacier_regions_give_the_error_and_land_still_answers():
     # too-few-cells error (not the glacier one), as it should be
     with pytest.raises(ValueError, match="too little land"):
         data.get_series("water_storage", 61.22, -149.9)
+
+
+def test_ghcn_station_sentence_at_the_edge_of_range():
+    st = {"id": "X", "name": "EDGE", "lat": 0.0, "lon": 0.0, "types": {}}
+    m = str(ghcn._no_station("precip", (50.3, st)))  # prints "50 km": must not follow "within 50 km"
+    assert m.startswith("The nearest weather station, EDGE (50 km away), does not have")
+    assert str(ghcn._no_station("precip", (50.6, st))).startswith("No weather station within 50 km has")
+    lat = 50.3 / 111.195  # a full record, 50.3 km north of (0, 0): shown as "50 km", so it must be checked and used
+    full = {"id": "FULL", "name": "FULL", "lat": lat, "lon": 0.0, "types": {"PRCP": ("1950-01-01", "2026-01-01", 100.0)}}
+    assert 50 < ghcn.haversine_km(0, 0, full["lat"], 0) < 50.5
+    assert [s["id"] for s, _, _ in ghcn.ranked(0, 0, [full], "precip")] == ["FULL"]

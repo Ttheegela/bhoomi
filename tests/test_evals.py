@@ -4,7 +4,7 @@ import json
 import pytest
 
 from earthtrends.agent import providers, tracing
-from earthtrends.agent.loop import GAVE_UP
+from earthtrends.agent.loop import GAVE_UP, agree_sentence, compose
 from evals import run
 
 REAL_JUDGE = run.judge  # the autouse fixture fakes run.judge
@@ -446,7 +446,7 @@ def test_verdict_without_expect_source_uses_default_source():
 def test_agreeing_sources_use_single_verdict_wording():
     era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
     answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 "
-              "to December 2025. ERA5 reanalysis via Open-Meteo archive and NOAA NCEI GHCN-Daily agree. Sources: "
+              "to December 2025. ERA5 reanalysis via Open-Meteo archive agrees. NOAA NCEI GHCN-Daily agrees. Sources: "
               "NASA POWER (MERRA-2), https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
     case = {**DELHI_CASE, "must_say": []}
     assert all(run.check(case, fake_run(answer, multi([POWER, era5, ghcn]))).values())
@@ -470,7 +470,8 @@ def test_differently_is_not_disagree():
 def test_false_disagree_when_sources_agree_fails():
     era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
     answer = ("The sources disagree. Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to "
-              "-0.09). Sources: https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
+              "-0.09). ERA5 reanalysis via Open-Meteo archive agrees. NOAA NCEI GHCN-Daily agrees. Sources: "
+              "https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
     case = {**DELHI_CASE, "must_say": []}
     assert run.check(case, fake_run(answer, multi([POWER, era5, ghcn])))["wording"] is False
     assert run.check(case, fake_run(answer.replace("The sources disagree. ", ""), multi([POWER, era5, ghcn])))["wording"]
@@ -595,7 +596,7 @@ def test_agree_answer_may_repeat_caveat_numbers():
     era5 = {**ERA5, "verdict": "falling"}
     ghcn = {**GHCN, "verdict": "falling", "caveats": ["Weather station X (id), 6 km from the point you asked about."]}
     answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 "
-              "to December 2025. ERA5 reanalysis via Open-Meteo archive and NOAA NCEI GHCN-Daily agree; the "
+              "to December 2025. ERA5 reanalysis via Open-Meteo archive agrees. NOAA NCEI GHCN-Daily agrees. The "
               "station is 6 km from the point you asked about. Sources: NASA POWER (MERRA-2), "
               "https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
     assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([POWER, era5, ghcn])))["wording"]
@@ -620,8 +621,10 @@ def test_own_record_sentence_must_name_an_agreeing_source():
     wrong = NY_OK.replace("PSMSL agrees, over its own record", "NOAA CO-OPS tide gauges agrees, over its own record")
     assert wrong != NY_OK
     assert run.check(NY_CASE, fake_run(wrong, multi([CO_OPS, PSMSL])))["wording"] is False
-    full = NY_OK.replace("PSMSL agrees", "Permanent Service for Mean Sea Level (PSMSL) agrees")
-    assert run.check(NY_CASE, fake_run(full, multi([CO_OPS, PSMSL])))["wording"]
+    # the code's sentence is there, but so is a misattributed one: still fails
+    both = NY_OK.replace(" Sources:", " NOAA CO-OPS tide gauges agrees, over its own record, January 1856 to "
+                                      "December 2025. Sources:")
+    assert run.check(NY_CASE, fake_run(both, multi([CO_OPS, PSMSL])))["wording"] is False
 
 
 # ---- the real source names (earthtrends/data) ----
@@ -640,36 +643,114 @@ def real_ny(sentence):
     return run.check(NY_CASE, fake_run(NY_HEAD + sentence + NY_TAIL, multi([REAL_COOPS, REAL_PSMSL])))["wording"]
 
 
+CODE_SENT = "Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, January 1856 to December 2025."
+
+
+def test_code_sentence_is_the_helpers():
+    assert agree_sentence(REAL_PSMSL, REAL_COOPS) == CODE_SENT
+    assert agree_sentence({**REAL_PSMSL, "period": REAL_COOPS["period"]}, REAL_COOPS) == (
+        "Permanent Service for Mean Sea Level (PSMSL) agrees.")
+
+
 @pytest.mark.parametrize("sentence", [
-    "PSMSL agrees, over its own record, January 1856 to December 2025.",
-    "Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, January 1856 to December 2025.",
-    "Permanent Service for Mean Sea Level (PSMSL) (https://psmsl.org/) agrees, over its own record, January 1856 to "
-    "December 2025.",
-    "The Permanent Service for Mean Sea Level agrees, over its own record, January 1856 to December 2025.",
-    "PSMSL agrees with NOAA CO-OPS, over its own record, January 1856 to December 2025.",
-    "PSMSL agrees, over its own record, January 1856 to December 2025. Its gauge is 1 km from the point you asked about.",
+    CODE_SENT,
+    CODE_SENT + " Its gauge is 1 km from the point you asked about.",
+    "[AGREEING SOURCES]",  # what the loop makes of the marker
+    "",  # the model wrote nothing about PSMSL: the loop puts the sentence in
 ])
-def test_own_record_with_real_source_names_passes(sentence):
-    assert real_ny(sentence)
+def test_code_written_answer_passes(sentence):
+    calls = multi([REAL_COOPS, REAL_PSMSL])
+    answer = compose(NY_HEAD + sentence + NY_TAIL, calls)
+    # a model-written copy stays, and the code's sentence is added too
+    assert answer.count(CODE_SENT) == (2 if CODE_SENT in sentence else 1)
+    assert run.check(NY_CASE, fake_run(answer, calls))["wording"]
 
 
 @pytest.mark.parametrize("sentence", [
+    # the model's own wording, without the code's sentence (the old rule): now fails
+    "PSMSL agrees, over its own record, January 1856 to December 2025.",
+    "The Permanent Service for Mean Sea Level agrees, over its own record, January 1856 to December 2025.",
+    "",
     "NOAA CO-OPS tide gauges agrees, over its own record, January 1856 to December 2025.",
     "NOAA CO-OPS tide gauges agrees with this, using the Permanent Service for Mean Sea Level (PSMSL) data, over its "
     "own record, January 1856 to December 2025.",  # ny8: PSMSL named, but not as the one that agrees
     "PSMSL agrees, over its own record, January 1856 to December 2025. Both used the gauge about 1 km from the point.",
+    # the two real wrong sentences, even next to the code's sentence
+    CODE_SENT + " NOAA CO-OPS tide gauges agrees with this, using the Permanent Service for Mean Sea Level (PSMSL) "
+    "data, over its own record, January 1856 to December 2025.",
+    CODE_SENT + " The PSMSL record agrees, over its own record, January 1856 to December 2025. Its slope is 29.62 mm "
+    "per decade (95% range 28.76 to 30.47).",
+    CODE_SENT + " Both used the gauge about 1 km from the point.",
 ])
 def test_own_record_misattributed_or_shared_gauge_fails(sentence):
     assert not real_ny(sentence)
 
 
-@pytest.mark.parametrize("start,period", [("1899-01", "January 1899 to December 2025"),
-                                          ("1911-09", "September 1911 to December 2025")])
-def test_own_record_live_periods_pass(start, period):
+POWER_LINK = "Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/."
+
+
+def test_default_source_link_added_when_all_agree():
+    rising = [{**r, "verdict": "rising"} for r in (POWER, ERA5, GHCN)]
+    calls = multi(rising)
+    raw = ("London is getting warmer, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 to December 2025. "
+           "[AGREEING SOURCES] Sources: NASA POWER, ERA5 (https://open-meteo.com/) and NOAA NCEI GHCN-Daily "
+           "(https://www.ncei.noaa.gov/).")
+    assert not run.check({**DELHI_CASE, "must_say": []}, fake_run(raw, calls))["source_named"]
+    answer = compose(raw, calls)
+    assert answer.count("power.larc.nasa.gov") == 1 and answer.endswith(POWER_LINK)
+    assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, calls))["source_named"]
+
+
+def test_disagree_answer_gets_only_its_missing_link():
+    calls = multi([POWER, ERA5, GHCN])
+    no_ghcn = DISAGREE.replace(", https://www.ncei.noaa.gov/", "")
+    assert compose(no_ghcn, calls) == no_ghcn + " Source: NOAA NCEI GHCN-Daily, https://www.ncei.noaa.gov/."
+    assert compose(DISAGREE, calls) == DISAGREE  # every link present: byte for byte
+
+
+@pytest.mark.parametrize("calls", [[], [{"name": "detect_trend", "arguments": D_ARGS, "result": None,
+                                         "error": "No tide gauge within 100 km of this point."}]])
+def test_no_result_no_link_added(calls):
+    for text in ("Which Springfield do you mean?", "There is no tide gauge near Delhi."):
+        assert compose(text, calls) == text
+
+
+@pytest.mark.parametrize("written", ["http://power.larc.nasa.gov", "www.power.larc.nasa.gov",
+                                     "(power.larc.nasa.gov)", "[https://www.power.larc.nasa.gov/]"])
+def test_link_written_another_way_counts(written):
+    text = DISAGREE.replace("https://power.larc.nasa.gov/", written)
+    assert compose(text, multi([POWER, ERA5, GHCN])) == text
+
+
+def test_one_source_asked_twice_gets_one_link():
+    calls = multi([POWER]) + [{**multi([POWER])[0], "arguments": {**D_ARGS, "lat": 19.08, "source": "power"}}]
+    assert compose("Rising.", calls) == "Rising. " + POWER_LINK
+
+
+def test_composed_answer_with_missing_link_names_every_source():
+    calls = multi([REAL_COOPS, REAL_PSMSL])
+    text = NY_HEAD + "[AGREEING SOURCES] Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/."
+    assert not run.check(NY_CASE, fake_run(text.replace("[AGREEING SOURCES] ", CODE_SENT + " "), calls))["source_named"]
+    answer = compose(text, calls)
+    assert answer.count("https://psmsl.org/") == 1 and answer.count(CODE_SENT) == 1
+    out = run.check(NY_CASE, fake_run(answer, calls))
+    assert out["source_named"] and out["wording"]
+
+
+@pytest.mark.parametrize("caveat,ok", [("PSMSL's gauge is also The Battery, 1 km away.", True),  # its own caveat
+                                       ("The PSMSL gauge is also 1 km away.", True),
+                                       ("The PSMSL gauge is 1 km away.", True),
+                                       ("Both use the same gauge.", False),
+                                       ("They share a gauge at The Battery.", False)])
+def test_caveat_wording_passes_shared_gauge_claim_fails(caveat, ok):
+    assert real_ny(CODE_SENT + " " + caveat) is ok
+
+
+@pytest.mark.parametrize("start", ["1899-01", "1911-09"])
+def test_own_record_live_periods_pass(start):
     psmsl = {**REAL_PSMSL, "period": {"start": start, "end": "2025-12"}}
-    for subject in ("PSMSL", "The PSMSL tide gauge", "The Permanent Service for Mean Sea Level"):
-        answer = NY_HEAD + f"{subject} agrees, over its own record, {period}." + NY_TAIL
-        assert run.check(NY_CASE, fake_run(answer, multi([REAL_COOPS, psmsl])))["wording"]
+    answer = NY_HEAD + agree_sentence(psmsl, REAL_COOPS) + NY_TAIL
+    assert run.check(NY_CASE, fake_run(answer, multi([REAL_COOPS, psmsl])))["wording"]
 
 
 def test_ny1_answer_fails_wording():

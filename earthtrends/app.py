@@ -167,6 +167,18 @@ def ask(body: AskBody, request: Request) -> dict:
         raise HTTPException(502, "The assistant could not be reached. Please try again.") from None
 
 
+WEB = Path(__file__).resolve().parent.parent / "web"
+
+
+class Web(StaticFiles):
+    """StaticFiles with html=True answers a missing path with web/404.html (status 404). /api/ keeps its JSON 404."""
+
+    async def get_response(self, path: str, scope):
+        if path == "api" or path.startswith("api/"):
+            raise HTTPException(404)
+        return await super().get_response(path, scope)
+
+
 def mount_web(app: FastAPI, web: Path) -> None:
     """Serve the static UI at / if the frontend lane has built it. Must run after every other route."""
     if web.is_dir():
@@ -176,7 +188,7 @@ def mount_web(app: FastAPI, web: Path) -> None:
             q = request.url.query
             return RedirectResponse("/mcp/" + (f"?{q}" if q else ""), status_code=307)
 
-        app.mount("/", StaticFiles(directory=web, html=True), name="web")
+        app.mount("/", Web(directory=web, html=True), name="web")
 
 
-mount_web(app, Path(__file__).resolve().parent.parent / "web")
+mount_web(app, WEB)

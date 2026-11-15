@@ -104,7 +104,12 @@ def _years(span: tuple[str, str, float]) -> float:
 
 def _no_station(variable: str, nearest: tuple[float, dict] | None) -> ValueError:
     """One wording for every measurement, using the catalog's plain name. `nearest` is (km, station)."""
-    msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {PLAIN_NAME.get(variable, variable.replace("_", " "))} data since 1981."
+    what = PLAIN_NAME.get(variable, variable.replace("_", " "))
+    if nearest and round(nearest[0]) <= MAX_KM:  # a station is in range but too short: say that, so it does not read as a contradiction
+        msg = (f"The nearest weather station, {text(nearest[1]['name'], NAME)} ({nearest[0]:.0f} km away), does not have "
+               f"{MIN_YEARS} years of {what} data since 1981, and no other station within {MAX_KM} km does either.")
+        return ValueError(text(msg, LIMIT))
+    msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {what} data since 1981."
     if nearest:
         msg += f" The nearest is {text(nearest[1]['name'], NAME)}, {nearest[0]:.0f} km away."
     return ValueError(text(msg, LIMIT))
@@ -115,7 +120,7 @@ def ranked(lat: float, lon: float, candidates: list[dict], variable: str) -> lis
     seen = sorted(((haversine_km(lat, lon, s["lat"], s["lon"]), s) for s in candidates), key=lambda t: t[0])
     out = []
     for km, s in seen:
-        if km > MAX_KM:
+        if round(km) > MAX_KM:  # the same rounding the message prints, so a station shown as "50 km" was checked
             break
         for group in NEED[variable]:
             if all(t in s["types"] and _years(s["types"][t]) >= MIN_YEARS for t in group):

@@ -355,6 +355,14 @@ pre::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; bord
   #ask-ui .examples .btn, #ask-ui .msg .examples .btn { width: 100%; }
 }
 
+/* 404 page only (web/404.html): space under the header row */
+.nf-h { margin-top: var(--gap); }
+.nf-link { margin-top: var(--s3); }
+
+/* Ask tab waiting line: stage text with the seconds counter beside it */
+.ask-wait .msg-text { display: inline; }
+.ask-secs { margin-left: var(--s3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 /* ---------- Trend scene (web/scene.js): a picture of the verdict. Ink tokens only. ---------- */
 .scene-mount { margin: var(--s3) 0 var(--s4); }
 .scene { margin: 0; padding: var(--s3); background: var(--bg); border: 1px solid var(--hairline); border-radius: 8px; }
