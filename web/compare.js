@@ -29,12 +29,14 @@
 
   // Centred 5-year average, needs 3 of the 5 years. -> [{year, v}] ascending (gaps = missing years)
   function smooth(ym) {
-    var pts = [];
-    Object.keys(ym).map(Number).sort(function (a, b) { return a - b; }).forEach(function (y) {
+    var ys = Object.keys(ym).map(Number), pts = [];
+    if (!ys.length) return pts;
+    var a = Math.min.apply(null, ys), b = Math.max.apply(null, ys);
+    for (var y = a; y <= b; y++) {
       var s = 0, n = 0;
       for (var k = y - 2; k <= y + 2; k++) if (ym[k] !== undefined) { s += ym[k]; n++; }
-      if (n >= 3) pts.push({ year: y, v: s / n });
-    });
+      if (n >= 3) pts.push({ year: y, v: s / n, filled: ym[y] === undefined });
+    }
     return pts;
   }
 
@@ -95,7 +97,7 @@
       var f = typeof d.factor === 'number' ? d.factor : 1, du = d.unit || (p.series && p.series.units) || '';
       var line = {
         pin: p, slot: p.slot || 0, selected: !!p.selected, unit: du,
-        pts: pts.map(function (q) { return { year: q.year, v: convert((q.v - base.value) * f, du, units) }; })
+        pts: pts.map(function (q) { return { year: q.year, filled: q.filled, v: convert((q.v - base.value) * f, du, units) }; })
       };
       if (base.fallback) out.fallback.push(p.label);
       var last = line.pts[line.pts.length - 1], oe = null;
@@ -116,10 +118,15 @@
       if (l.wedge) { minV = Math.min(minV, l.wedge.lo); maxV = Math.max(maxV, l.wedge.hi); }
     });
     var lastYear = Math.max.apply(null, lines.map(function (l) { return l.pts[l.pts.length - 1].year; }));
-    out.xMin = minY; out.xMax = Math.max(la, lastYear + 1);
+    var anyOutlook = (pins || []).some(function (p) {
+      var og = p.status === 'ok' && p.trend && p.trend.guidance && p.trend.guidance.outlook;
+      return og && og.some(function (e) { return e && e.year === la; });
+    });
+    out.xMin = minY; out.xMax = anyOutlook ? Math.max(la, lastYear + 1) : lastYear + 1;
     out.y = niceTicks(minV, maxV);
     out.xTicks = [];
-    for (var t = Math.ceil(out.xMin / 25) * 25; t <= out.xMax; t += 25) out.xTicks.push(t);
+    var step = out.xMax - out.xMin <= 30 ? 5 : out.xMax - out.xMin <= 80 ? 10 : 25;
+    for (var t = Math.ceil(out.xMin / step) * step; t <= out.xMax; t += step) out.xTicks.push(t);
     out.unit = lines[0].unit;
     var span = out.xMax - out.xMin || 1, ys = out.y.hi - out.y.lo || 1;
     out.px = function (yr) { return X0 + (yr - out.xMin) / span * (X1 - X0); };
@@ -187,6 +194,17 @@
     var unitLabel = (P && P.fmt && P.fmt.unit && selLine && P.fmt.unit(selLine.pin.trend)) || m.unit || 'the unit shown';
     var cap = 'Five-year average, in ' + unitLabel + ', compared with each place’s 2000–2009 level.';
     m.fallback.forEach(function (n) { cap += ' ' + n + ': compared with its first 10 years instead (no records for 2000–2009).'; });
+    if (selLine) {
+      var runs = [], cur = null;
+      selLine.pts.forEach(function (q) {
+        if (!q.filled) { cur = null; return; }
+        if (cur && q.year === cur[1] + 1) cur[1] = q.year; else { cur = [q.year, q.year]; runs.push(cur); }
+      });
+      if (runs.length) {
+        var txt = runs.length > 2 ? 'some years' : runs.map(function (r) { return r[0] === r[1] ? String(r[0]) : r[0] + '–' + r[1]; }).join(' and ');
+        cap += ' ' + selLine.pin.label + ': ' + txt + ' had too few readings, so the line there averages the years around them.';
+      }
+    }
     if (wedge) cap += ' The shaded wedge shows where ' + selLine.pin.label + ' would be if its past trend simply continued.';
     g.appendChild(h('p', 'cmp-cap', cap));
 
@@ -206,7 +224,7 @@
     if (m.today >= m.xMin && m.today <= m.xMax) {
       var tx = m.px(m.today);
       s.appendChild(svg('line', { x1: tx.toFixed(1), x2: tx.toFixed(1), y1: Y0, y2: Y1, class: 'cmp-today' }));
-      s.appendChild(svg('text', { x: tx.toFixed(1), y: 14, class: 'cmp-ax', 'text-anchor': 'middle' }, 'today'));
+      s.appendChild(svg('text', { x: Math.min(tx, X1).toFixed(1), y: 14, class: 'cmp-ax', 'text-anchor': tx > X1 - 30 ? 'end' : 'middle' }, 'today'));
     }
 
     var clip = svg('g', { 'clip-path': 'url(#cmp-clip)' }), lp = null;
