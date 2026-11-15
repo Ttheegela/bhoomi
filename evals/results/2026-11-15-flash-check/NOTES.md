@@ -28,10 +28,9 @@ The result files carry the runner's own date in their names and title (2026-11-1
 - No case passes for Haiku and fails for Flash, and neither model got a variable, a source or a verdict wrong.
 - Flash's slowest answers: `phoenix-air-temp` 46.2 s, `london-air-temp` 31.8 s, `mumbai-sea-level-psmsl` 24.4 s,
   `chennai-rain` 21.9 s. Haiku's slowest: `mumbai-sea-level-psmsl` 19.9 s.
-- The seconds are too high for both models, by an estimated 3 to 5 s: on the test machine the tracing export is blocked
-  and each answer waits for it (the estimate comes from the timing runs described in
-  `../2026-11-14-shortlist-gemini/NOTES.md`; nothing in this folder measures it). Compare the two rows with each other,
-  not with the live site.
+- The seconds are too high for both models, by a few seconds: on the test machine the tracing export is blocked and
+  each answer waits for it (see `../2026-11-14-shortlist-gemini/NOTES.md`; nothing in this folder measures it). Compare
+  the two rows with each other, not with the live site.
 - One run per model on 15 cases: enough to see a large difference in time and cost, too few to rank two models on
   correctness.
 
@@ -61,10 +60,11 @@ In these ten questions, Flash did what Haiku did not do in its own live answers 
    Explore card shows +0.13, and the Haiku answers seen wrote 0.13. So the answer and the card differ by one digit on
    the main demo question.
 3. Mumbai, both times: the answer opens with the source that had no data and gives the verdict second.
-4. Time and cost. In the 15 cases Flash's mean time was about 1.5 times Haiku's (17.6 s against 12.0 s), mostly from a
-   few slow answers (Phoenix 46 s, London 32 s); on several cases Flash was the faster of the two. Live, Delhi's
-   hottest days took 21.6 and 27.0 s against Haiku's 12 to 13 s, and New York took about the same as Haiku. The cost
-   per question was about 5 times Haiku's.
+
+Time and cost: in the 15 cases Flash's mean time was about 1.5 times Haiku's (17.6 s against 12.0 s), mostly from a few
+slow answers (Phoenix 46 s, London 32 s); on several cases Flash was the faster of the two. Live, Delhi's hottest days
+took 21.6 and 27.0 s against Haiku's 12 to 13 s, and New York took about the same as Haiku. The cost per question was
+about 5 times Haiku's.
 
 What Flash did as well: the same pass count, and no wrong variable, source or verdict.
 
