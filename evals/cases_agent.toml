@@ -1,6 +1,8 @@
 # Eval cases owned by the agent lane (evals/cases.toml belongs to the story lane). Same fields as cases.toml, plus:
 #   history          optional earlier chat turns, [{role, content}, ...]: whole user/assistant pairs, at most 6
 #                    messages and 4,000 characters in total (the same limits as POST /api/ask).
+#   min_places       optional: the detect_trend calls must cover at least this many places more than 100 km apart.
+#   allow_stats      optional, true or false: the answer may use statistics words (p-value, slope, ...); default false.
 # Loaded after cases.toml by `uv run python -m evals.run`; ids must be unique across both files.
 
 # A follow-up that names only a new place: the agent must keep the earlier measurement (sea level) and run a new
@@ -43,3 +45,24 @@ Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, Januar
 
 Data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and the Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Sea level is measured relative to the land at the gauge, so land rising or sinking is included.""" },
 ]
+
+# A decision question at a US coast: the data as usual, what past data cannot tell (meaning.limit: "cannot tell"),
+# no advice, and the official links the code puts at the [OFFICIAL RESOURCES] marker for a CO-OPS result.
+[[case]]
+id = "manhattan-build-house"
+question = "I want to build a house in Lower Manhattan. What are the risks?"
+expect_tool = "detect_trend"
+expect_variable = "sea_level"
+expect_place = [40.70, -74.01]      # The Battery
+must_say = ["coast.noaa.gov/slr", "msc.fema.gov", "cannot tell"]
+must_not_say = ["p-value", "0.05", "decade is ten years", "slope", "you should", "I recommend", "[OFFICIAL"]
+
+# A broad question with no single place: no ranking, but up to three cities the agent picks, checked in one step.
+[[case]]
+id = "asia-sea-level-broad"
+question = "Which developed places in Asia are at risk from sea-level rise? Where is investing risky?"
+expect_tool = "detect_trend"
+expect_variable = "sea_level"
+min_places = 2
+must_say = ["not a ranking"]
+must_not_say = ["p-value", "0.05", "you should", "I recommend", "[OFFICIAL"]

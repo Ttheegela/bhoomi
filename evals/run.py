@@ -21,8 +21,10 @@ from urllib.parse import urlparse
 
 import httpx
 
-from earthtrends.agent import providers, tracing
-from earthtrends.agent.loop import GAVE_UP, MAX_CALLS, agree_plan, agree_sentence, ask, history_error, wrong_periods
+from earthtrends.agent import providers, resources, tracing
+from earthtrends.agent.loop import (GAVE_UP, MAX_CALLS, NUM, agree_plan, agree_sentence, ask, hidden_calls,
+                                    history_error, wrong_periods)
+from earthtrends.agent.loop import stated_numbers as _numbers  # one implementation, shared with the loop's check
 from earthtrends.data import list_variables
 from earthtrends.data.coops import haversine_km
 
@@ -41,15 +43,20 @@ DATA_TOOLS = ("detect_trend", "get_series")
 PAUSE_S = 1.0  # between model runs, so a provider's own rate limit is not hit
 UNKNOWN_COST = 0.02  # per model response with no reported cost, so it cannot run free against a budget (doubled
 # with the 4,000-token output cap, #79)
-CHECKS = ["tool", "variable", "place", "source", "verdict", "wording", "numbers", "source_named", "must_say", "answered"]
+CHECKS = ["tool", "variable", "place", "source", "verdict", "wording", "numbers", "source_named", "must_say",
+          "min_places", "plain", "links", "answered"]
 COLUMNS = {"tool": "right tool", "variable": "right variable", "place": "right place", "source": "right source",
            "verdict": "verdict", "wording": "verdict wording", "numbers": "no invented numbers",
-           "source_named": "source named", "must_say": "must-say"}
+           "source_named": "source named", "must_say": "must-say", "min_places": "enough places",
+           "plain": "plain words", "links": "known links"}
+PLACES_KM = 100  # min_places: calls this far apart are different places
+STATS_WORDS = ("p-value", "0.05 line", "slope", "decade is ten years")  # not in an ordinary answer (allow_stats)
+URL = re.compile(r"https?://[^\s)\]>\"',]+", re.I)
 VERDICT_WORDS = {
     "rising": ("rising", "going up", "increasing", "risen", "upward", "warming", "getting hotter", "getting warmer",
-               "rises"),
+               "rises", "wetter"),
     "falling": ("falling", "going down", "decreasing", "dropping", "declining", "downward", "cooling", "falls",
-                "losing"),
+                "losing", "cooler", "less hot", "drier"),
     "no_clear_change": ("no clear change", "no change is plausible", "rule out no change", "not show a clear change",
                         "n't show a clear change", "no clear", "not clear", "can't tell", "cannot tell"),
 }
@@ -67,14 +74,9 @@ SHARED = re.compile(r"\b(?:both|the two)(?:\s+(?:sources|records|datasets|data s
                     r"(?:use[sd]?|using|share[sd]?|rel(?:y|ies) on|comes? from|draws? on|are from)\s+"
                     r"(?:(?:the\s+same|the|one|a\s+single)\s+(?-i:(?:[A-Z][\w'-]*\s+)*)|(?-i:(?:[A-Z][\w'-]*\s+)+))"
                     r"(?:tide\s+)?(?:gauge|station)\b(?!s?\s+each\b)", re.I)  # "one gauge each": its own
-# The prompt's fixed phrases with an outside number; they are removed before numbers are checked.
-ALLOWED = re.compile(r"\b0\.05 line|less than 0\.01|\b95\s*(?:%|percent)", re.I)
 # Fixed p-value phrases allowed only when a result's p-value is really under that line.
 UNDER_001 = re.compile(r"\b(?:below|less than) 0\.001(?!\d)", re.I)
 UNDER_01 = re.compile(r"\bbelow 0\.01(?!\d)", re.I)
-NUM = re.compile(r"(?<![\w.])([-\u2212]?)(\d+(?:\.\d+)?)")  # a minus only when it isn't a hyphen after a word
-UNIT = re.compile(r"\s*(?:%|°|degrees?\b|deg\b|mm\b|cm\b|m\b|km\b|inch|feet\b|ft\b|days?\b|weeks?\b|months?\b"
-                  r"|years?\b|decades?\b|times\b|percent\b)", re.I)
 
 
 # ---------- cases ----------
@@ -99,6 +101,11 @@ def load_cases(*paths: Path) -> list[dict]:
         if "allow_empty_lookup" in c and not isinstance(c["allow_empty_lookup"], bool):
             raise SystemExit(f"Case {c.get('id')!r}: allow_empty_lookup must be true or false, "
                              f"got {c['allow_empty_lookup']!r}")
+        mp = c.get("min_places")
+        if "min_places" in c and (isinstance(mp, bool) or not isinstance(mp, int) or mp < 1):
+            raise SystemExit(f"Case {c.get('id')!r}: min_places must be a whole number of at least 1, got {mp!r}")
+        if "allow_stats" in c and not isinstance(c["allow_stats"], bool):
+            raise SystemExit(f"Case {c.get('id')!r}: allow_stats must be true or false, got {c['allow_stats']!r}")
         if "allow_empty_lookup" in c and c.get("expect_tool") != "none":
             raise SystemExit(f"Case {c.get('id')!r}: allow_empty_lookup only goes with expect_tool = \"none\"")
     return cases
@@ -117,23 +124,9 @@ def not_runnable(case: dict, catalog: list[dict]) -> str | None:
 
 # ---------- checks (all code, no model) ----------
 
-def _numbers(text: str) -> list[tuple[str, str]]:
-    """(sign, digits) for each number an answer states. Left out: list numbering, the prompt's fixed phrases, and
-    whole numbers under 10 with no unit after them (words like "2 sources")."""
-    text = re.sub(r"(?m)^\s*\d+[.)]\s", " ", text)
-    text = ALLOWED.sub(" ", text)
-    text = re.sub(r"(?<=\d),(?=\d{3}\b)", "", text)
-    out = []
-    for m in NUM.finditer(text):
-        sign, s = m.groups()
-        if "." not in s and int(s) < 10 and not UNIT.match(text, m.end()):
-            continue
-        out.append(("-" if sign else "", s))
-    return out
-
-
 def _pool(x, out: list[float]) -> list[float]:
-    """Every number in the tool results: numeric fields as they are, plus numbers written inside text fields.
+    """Every number in the tool results: numeric fields as they are, plus numbers written inside text fields (the
+    "meaning" strings included: check() leaves them out of the results the model got without numbers).
     A rising or falling slope also goes in without its sign: the prompt drops it after a direction word ("falls by
     0.40"). A no-clear-change slope keeps its sign, since no word carries it."""
     if isinstance(x, bool):
@@ -144,8 +137,6 @@ def _pool(x, out: list[float]) -> list[float]:
         out += [float(s) * (-1 if sign else 1) for sign, s in NUM.findall(x)]
     elif isinstance(x, dict):
         for k, v in x.items():
-            if k == "meaning":  # the page's plain-words strings: the model is not sent them
-                continue
             _pool(v, out)
             if (k == "slope_per_decade" and isinstance(v, (int, float)) and not isinstance(v, bool)
                     and x.get("verdict") in ("rising", "falling")):
@@ -173,7 +164,8 @@ def invented_numbers(answer: str, results: list) -> list[str]:
     return bad
 
 
-WHOLE_WORDS = {"rises", "falls", "losing"}  # short words that sit inside others ("closing", "rainfalls")
+WHOLE_WORDS = {"rises", "falls", "losing", "wetter", "cooler", "drier", "less hot"}  # short words that sit inside
+# others ("closing", "rainfalls", "less hotels")
 
 
 def _said(w: str, a: str) -> bool:
@@ -196,7 +188,9 @@ def check(case: dict, run: dict) -> dict[str, bool]:
     calls (one per source), tool/variable/place must hold for every call."""
     answer = run.get("answer") or ""
     calls = [c for c in run.get("tool_calls", []) if c["name"] == "detect_trend"]
-    results = [c["result"] for c in run.get("tool_calls", []) if c.get("error") is None and c.get("result") is not None]
+    hid = hidden_calls(run.get("tool_calls", []))  # the loop's own rule: these reached the model without "meaning"
+    results = [{k: v for k, v in c["result"].items() if k != "meaning"} if i in hid else c["result"]
+               for i, c in enumerate(run.get("tool_calls", [])) if c.get("error") is None and c.get("result") is not None]
     by_src = {_src(c["result"]): c["result"] for c in calls if c.get("error") is None and c.get("result")}
     defaults = {v["id"]: v["sources"][0] for v in list_variables()}
     # A call's source: what its result says it used, else what it asked for (the variable's default if left out).
@@ -243,7 +237,11 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                 others = [{k: r.get(k) for k in ("verdict", "slope_per_decade", "ci_low", "ci_high")}
                           for r in agreeing]
                 base = [lead] + [r.get("caveats") for r in by_src.values()]  # every caveat may be passed on
-                leaked = set(invented_numbers(answer, base)) - set(invented_numbers(answer, base + others))
+                # their numbers belong in the code's own sentences only: anywhere else they leaked
+                rest = answer
+                for r in agreeing:
+                    rest = rest.replace(agree_sentence(r, lead), " ")
+                leaked = set(invented_numbers(rest, base)) - set(invented_numbers(rest, base + others))
                 out["wording"] = out["wording"] and not leaked
                 # the loop writes one sentence per agreeing source: each must be there (a model copy may double it)
                 out["wording"] = out["wording"] and all(agree_sentence(r, lead) in answer for r in agreeing)
@@ -258,6 +256,13 @@ def check(case: dict, run: dict) -> dict[str, bool]:
         out["numbers"] = not invented_numbers(answer, results)
         if by_src:
             out["source_named"] = all(_named(r.get("source") or {}, a) for r in by_src.values())
+            if not case.get("allow_stats"):
+                out["plain"] = not any(w in a for w in STATS_WORDS)
+        if case.get("min_places"):
+            out["min_places"] = _places(calls) >= case["min_places"]
+    known = {_url(r["source"]["url"]) for r in results
+             if isinstance(r, dict) and isinstance(r.get("source"), dict) and r["source"].get("url")}
+    out["links"] = all(_url(u) in known | {_url(u) for u in resources.URLS} for u in URL.findall(answer))
     if case.get("must_say") or case.get("must_not_say"):
         out["must_say"] = (all(w.lower() in a for w in case.get("must_say", []))
                            and not any(w.lower() in a for w in case.get("must_not_say", [])))
@@ -275,6 +280,21 @@ def _short_named(src: dict, a: str) -> bool:
     name = (src.get("name") or "").lower()
     forms = {src.get("id") or "", re.split(r"[,(]", name)[0].strip(), *re.findall(r"\(([^)]+)\)", name)}
     return _named(src, a) or any(re.search(rf"\b{re.escape(f)}\b", a) for f in forms if f)
+
+
+def _url(u: str) -> str:
+    """An address as compared: no scheme, no "www.", no trailing full stop or slash, lower case."""
+    return re.sub(r"^https?://(www\.)?", "", u.rstrip(".;:!?").rstrip("/").lower())
+
+
+def _places(calls: list[dict]) -> int:
+    """How many places the calls cover: each new point counts if it is over PLACES_KM from every counted one."""
+    seen = []
+    for c in calls:
+        a = c.get("arguments") or {}
+        if all(_km(a, p) > PLACES_KM for p in seen) and _km(a, [0.0, 0.0]) != float("inf"):
+            seen.append([float(a["lat"]), float(a["lon"])])
+    return len(seen)
 
 
 def _km(args: dict, place: list) -> float:

@@ -252,7 +252,11 @@ def tool_msg(*sources):
         for s in sources]}
 
 
-def test_model_never_sees_meaning_but_page_does(openrouter):
+def tool_contents(body):
+    return {m["tool_call_id"]: json.loads(m["content"]) for m in body["messages"] if m["role"] == "tool"}
+
+
+def test_model_sees_meaning_of_full_results_only(openrouter):
     sent, replies = openrouter
     replies += [
         reply(tool_msg("power", "era5")),  # agree: era5 goes to the model without its numbers
@@ -262,19 +266,29 @@ def test_model_never_sees_meaning_but_page_does(openrouter):
     ]
     r = TestClient(app).post("/api/ask", json={"question": "Is Delhi's hottest day getting hotter?"})
     assert r.status_code == 200 and not replies
-    body = json.dumps(sent)
-    assert "earlier_results_in_full" in body and "slope_per_decade" in body  # the restore and retry paths ran
-    assert '"meaning"' not in body and '\\"meaning\\"' not in body
+    normal = tool_contents(sent[1])
+    assert normal["power"]["meaning"] == MEANING  # the default source: in full, with its meaning
+    assert "meaning" not in normal["era5"] and "slope_per_decade" not in normal["era5"]  # hidden: neither
+    restore = tool_contents(sent[2])["ghcn"]
+    assert restore["meaning"] == MEANING
+    assert [x["meaning"] for x in restore["earlier_results_in_full"]["results"]] == [MEANING]  # era5, restored
+    question = [m["content"] for m in sent[3]["messages"] if m["role"] == "user"][-1]
+    inline = json.loads(question[question.index("[{"):])  # the retry: every result inline, none hidden now
+    assert [c["result"]["meaning"] for c in inline] == [MEANING] * 3
     calls = r.json()["tool_calls"]
     assert [c["result"]["source"]["id"] for c in calls] == ["power", "era5", "ghcn"]
-    assert all(c["result"]["meaning"] == MEANING for c in calls)
+    assert all(c["result"]["meaning"] == MEANING for c in calls)  # the caller's copy always keeps it
 
 
-def test_for_model_drops_meaning_only():
+def test_for_model_keeps_meaning_of_full_results():
     full = {"variable": "sea_level", "verdict": "rising", "source": {"id": "coops"}, "meaning": MEANING}
     calls = [{"name": "detect_trend", "arguments": {"lat": 1.0, "lon": 2.0}, "result": full, "error": None},
              {"name": "list_variables", "arguments": {}, "result": [{"id": "sea_level"}], "error": None}]
     out = loop.for_model(calls)
-    assert out[0]["result"] == {k: v for k, v in full.items() if k != "meaning"}
-    assert out[1]["result"] == [{"id": "sea_level"}]
-    assert calls[0]["result"]["meaning"] == MEANING  # the caller's copy keeps it
+    assert out[0]["result"] == full and out[1]["result"] == [{"id": "sea_level"}]
+    other = {**full, "source": {"id": "psmsl"}}
+    two = [{**calls[0], "arguments": {"lat": 1.0, "lon": 2.0, "source": s}, "result": x}
+           for s, x in (("coops", full), ("psmsl", other))]
+    lead, hidden = (c["result"] for c in loop.for_model(two))
+    assert lead == full and "meaning" not in hidden  # the agreeing non-default source: no meaning
+    assert two[1]["result"]["meaning"] == MEANING  # the caller's copy keeps it
