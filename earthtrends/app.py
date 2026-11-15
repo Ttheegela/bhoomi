@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 from earthtrends.agent import loop, ratelimit, tools
 from earthtrends.agent.providers import NotConfigured, UpstreamError
+from earthtrends.data import search_places
 from earthtrends.mcp_server import SOURCE_DOWN, mcp
 
 # Remote MCP endpoint (streamable HTTP) for agents that connect over the network.
@@ -124,6 +125,14 @@ def trend(request: Request, response: Response, variable: str, lat: float, lon: 
           start: str | None = None, end: str | None = None, source: str | None = None) -> dict:
     limit_data(request)
     out = tools.detect_trend(variable, lat, lon, start, end, source)
+    response.headers["Cache-Control"] = CACHE
+    return out
+
+
+@app.get("/api/places")
+def places(request: Request, response: Response, q: str) -> dict:
+    limit_data(request)
+    out = search_places(q)
     response.headers["Cache-Control"] = CACHE
     return out
 
