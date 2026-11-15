@@ -1275,11 +1275,22 @@ def test_between_and_form(text, flagged, fixed):
 
 # ---- the check retry turns reasoning down, like the cut-off retry ----
 
-def test_long_retry_runs_with_low_reasoning_and_no_tools(fake):
+def test_check_retry_runs_with_no_tools_and_normal_reasoning(fake, monkeypatch):
     fake.script = [step(tool_calls=[call()]), step(words(133)), step(words(110)), step("never")]
     r = loop.ask("q", model="fake:m")
     assert r["answer"] == words(110) and len(fake.script) == 1
-    assert fake.low == [False, False, True] and fake.started[2] == []
+    assert fake.low == [False, False, False] and fake.started[2] == []
+    with_period(monkeypatch)  # the wrong-period retry too
+    fake.low = []
+    fake.script = [step(tool_calls=[call()]), step(WRONG), step(RIGHT), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == RIGHT and fake.low == [False, False, False]
+    assert fake.started[2] == []
+
+
+def test_check_retry_cut_off_with_text_returns_the_first(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(133)), CUT, step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == words(133) and len(fake.script) == 1
 
 
 def test_uncut_restart_with_tools_keeps_reasoning(fake):

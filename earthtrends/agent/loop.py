@@ -527,12 +527,10 @@ def ask(question: str, model: str | None = None) -> dict:
                 # complete answer is in hand. A cut-off step is retried until the call limit or the budget ends it.
                 if i == MAX_CALLS - 1 or (kept if cut else checked):
                     break
-                # Reasoning may spend the cap (a cut-off step), or the no-tools retry's cap: answer without it from
-                # now on. Not for an uncut answer restarted with tools: tool choice keeps its reasoning.
-                if cut or calls:
+                if cut:  # reasoning may have spent the cap: answer without it from now on
                     provider.low_reasoning = True
-                if not cut:
-                    checked = True  # one retry for both checks together
+                else:
+                    checked = True  # one retry for both checks together, with normal reasoning (the owner's choice)
                 # The seam has no "add a user message", so restart with the results inline.
                 if not calls:  # nothing fetched yet: start again from the plain question, tools offered
                     provider.start(system, question, TOOLS)
