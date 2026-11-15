@@ -85,14 +85,7 @@ def test_sources_at_one_place_with_different_risk_are_both_shown():
     assert same == EXPECT  # agreeing sources: one entry, the catalog default's
 
 
-# ---- the number guard and the scorer accept guidance numbers ----
-
-def test_stated_numbers_accepts_guidance_numbers():
-    text = "It is rising about 2.4 times faster. If the past trend continues: +18 to +21 cm by 2050."
-    assert loop.stated_numbers(text)  # without the strings: numbers from nowhere
-    assert loop.stated_numbers(text, (GUIDE["why"], GUIDE["outlook"][1]["text"])) == []
-    assert loop.stated_numbers("+19 cm by 2050", (GUIDE["outlook"][1]["text"],)) == [("", "19")]
-
+# ---- the scorer accepts guidance numbers ----
 
 def test_scorer_accepts_inserted_guidance_numbers_and_link():
     case = {"id": "gi", "question": "q", "expect_tool": "detect_trend", "must_say": ["High risk", "advise against"]}
@@ -163,10 +156,37 @@ def test_results_but_no_answer_is_never_the_give_up(fake, monkeypatch):
     assert a != loop.GAVE_UP and a.startswith(loop.FOUND_HEAD)
     assert "Sea level at Atlantic City: It has clearly been rising. Rate 83.00 mm per decade (95% range 80.00 to 86.00)" in a
     assert "Air temperature at Atlantic City" in a and "83.00 °C" in a
-    assert a.splitlines()[-1] == "I could not look up: land water storage."
+    assert a.splitlines()[-1] == "I could not look up: land water storage at Atlantic City."
     case = {"id": "x", "question": "q", "expect_tool": "detect_trend", "must_say": ["sea level", "temperature"]}
     checks = run.check(case, r)
     assert checks["answered"] and checks["numbers"] and checks["must_say"] and checks["wording"], checks
+
+
+AC_ARGS = {"variable": "sea_level", "lat": 39.36, "lon": -74.42}
+AC_TEMP = {**GI, "variable": "air_temp", "units": "degC", "place": {"name": "Atlantic City"}, "guidance": None,
+           "source": loop.SOURCES["power"]}
+
+
+def failed(args):
+    return {"name": "detect_trend", "arguments": args, "result": None, "error": "No tide gauge near here."}
+
+
+def test_found_answer_names_each_missing_place_and_measurement():
+    calls = [ok(GI, GI_ARGS), failed(AC_ARGS), ok(AC_TEMP, {**AC_ARGS, "variable": "air_temp"}),
+             failed({**AC_ARGS, "lat": 10.0, "lon": 10.0}),  # no result anywhere at this point: no name
+             failed({**AC_ARGS, "variable": "sea level 2"})]  # not a catalog id: never echoed
+    a = loop.found_answer(calls)
+    assert a.splitlines()[-1] == "I could not look up: sea level at Atlantic City, sea level at another place."
+    assert "sea level 2" not in a and "Sea level at Grand Isle" in a
+
+
+def test_found_answer_without_headline_says_the_verdict():
+    flat = {**GI, "verdict": "no_clear_change", "meaning": {}, "slope_per_decade": 1.0, "ci_low": -2.0}
+    a = loop.found_answer([ok(flat, GI_ARGS)])
+    assert "Sea level at Grand Isle: No clear change. Rate 1.00 mm per decade (95% range -2.00 to 86.00)" in a
+    up = loop.found_answer([ok({**GI, "meaning": None}, GI_ARGS)])
+    assert "Sea level at Grand Isle: Clearly rising. Rate" in up
+    assert "I could not look up" not in up
 
 
 def test_no_results_still_gives_up(fake, monkeypatch):

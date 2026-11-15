@@ -22,7 +22,7 @@ temperature they named), unless that same number is in a tool result.
 detect_trend once with that source only: ERA5 is era5, a weather station is ghcn, NASA or NASA POWER is power. \
 Otherwise, if the variable has more than one source in the catalog, call detect_trend once for EACH of its \
 sources, with the same place and period and the source set, all in the same step (several tool calls at once). \
-If the variable has only one source, call it once and leave source out. (Broad questions are the exception: see below.)
+If the variable has only one source, call it once and leave source out. (The exceptions, which leave source out: broad questions and comparisons of places, see below, and questions about three or more measurements, rule 2b.)
 3. Never state a number that is not in a tool result. Do not use your own knowledge for any number. \
 The only exceptions are the fixed phrases these instructions give: "95% range", and, only in an answer about the \
 statistics, "the usual 0.05 line", "less than 0.01", "below 0.001" or "less than 0.001" (only for a p-value under \

@@ -350,11 +350,9 @@ UNIT = re.compile(r"\s*(?:%|°|degrees?\b|deg\b|mm\b|cm\b|m\b|km\b|inch|feet\b|f
 UNDER_001 = re.compile(r"\b(?:below|less than) 0\.001(?!\d)", re.I)
 
 
-def stated_numbers(text: str, allowed: tuple[str, ...] = ()) -> list[tuple[str, str]]:
+def stated_numbers(text: str) -> list[tuple[str, str]]:
     """(sign, digits) for each number an answer states. Left out: the official-resources addresses, list numbering,
-    the prompt's fixed phrases, whole numbers under 10 with no unit after them (words like "2 sources"), and the
-    numbers written in the `allowed` strings (the tool's guidance, which code inserts word for word)."""
-    ok = {("-" if sg else "", float(d)) for a in allowed for sg, d in NUM.findall(a)}
+    the prompt's fixed phrases, and whole numbers under 10 with no unit after them (words like "2 sources")."""
     for u in resources.URLS:  # "data_tools/17" is no number; any other address's digits still count
         text = text.replace(u, " ")
     text = re.sub(r"(?m)^\s*\d+[.)]\s", " ", text)
@@ -363,7 +361,7 @@ def stated_numbers(text: str, allowed: tuple[str, ...] = ()) -> list[tuple[str, 
     out = []
     for m in NUM.finditer(text):
         sign, s = m.groups()
-        if ("." not in s and int(s) < 10 and not UNIT.match(text, m.end())) or ("-" if sign else "", float(s)) in ok:
+        if "." not in s and int(s) < 10 and not UNIT.match(text, m.end()):
             continue
         out.append(("-" if sign else "", s))
     return out
@@ -579,6 +577,7 @@ def best(kept: list[str], calls: list[dict]) -> str | None:
 
 
 FOUND_HEAD = "Here is what I found."
+VERDICT_WORDS = {"rising": "clearly rising", "falling": "clearly falling", "no_clear_change": "no clear change"}
 NOT_FOUND = "I could not look up: {}."
 
 
@@ -599,17 +598,24 @@ def found_answer(calls: list[dict]) -> str:
         head = ((r.get("meaning") or {}).get("headline") or "").strip()
         src = r.get("source") or {}
         line = f"{names.get(r.get('variable'), r.get('variable'))}{f' at {where}' if where else ''}: "
-        line += f"{head} " if head else ""
+        line += f"{head or VERDICT_WORDS.get(r.get('verdict'), 'no verdict').capitalize() + '.'} "
         if all(isinstance(r.get(k), (int, float)) for k in ("slope_per_decade", "ci_low", "ci_high")):
             units = DEG_C.sub("°C", str(r.get("units") or ""))
             line += (f"Rate {fmt(r['slope_per_decade'])} {units} per decade (95% range {fmt(r['ci_low'])} to "
                      f"{fmt(r['ci_high'])})" + (f", {_in_words(r['period'])}" if _period(r) else "") + ". ")
         line += f"Source: {(src.get('name') or '?').split(',')[0].strip()}" + (f", {src['url']}." if src.get("url") else ".")
         lines.append(line)
-    got, missing = {r.get("variable") for r in best_of.values()}, []
+    # Missing: a catalog measurement asked for at a point where no source returned it. The point is named by a
+    # result there; ponytail: a point with no result at all has no name (calls carry only lat/lon), so it is "another
+    # place". A geocoder lookup would name it.
+    named = {w: (r.get("place") or {}).get("name") for (w, _), r in best_of.items()}
+    missing = []
     for c in calls:
         v = (c.get("arguments") or {}).get("variable") if c.get("name") == "detect_trend" else None
-        if v and v not in got and (n := str(names.get(v, v)).lower()) not in missing:
+        if v not in names or (_where(c), v) in best_of:
+            continue
+        n = f"{names[v].lower()} at {named.get(_where(c)) or 'another place'}"
+        if n not in missing:
             missing.append(n)
     if missing:
         lines.append(NOT_FOUND.format(", ".join(missing)))
