@@ -12,3 +12,4 @@
 .guide-skip { margin-top: var(--s2); }
 .guide-actions { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; margin-top: var(--s4); }
 @media (min-width: 600px) { .card.quiet.guide-card { padding: var(--s5); } .guide-chips { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 399px) { .guide-chips .guide-chip { font-size: 14px; line-height: 20px; padding: 0 var(--s2); min-height: 48px; } }
