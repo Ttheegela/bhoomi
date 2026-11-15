@@ -12,9 +12,9 @@ Directly under the header (title row, AI label), above everything else. Not stic
 ```
 - Tab: 16 px, plain text on a thin `--line` bottom line, no fill, no box, no gap; selected tab weight 700 with a 3 px `--ink` underline (the underline carries the state, not weight alone).
 - Header lead line "Is it really changing here? Pick a place and a measurement." moves into the Explore panel (top). Header keeps h1 and AI label only.
-- Panels: three `<div role="tabpanel" id="panel-explore|panel-ask|panel-connect">` in the same order as tabs. Hidden panels use `hidden`, never removed (the Ask thread and Explore result survive tab switches). Each panel starts with an h2: Explore "Is it really changing here?" (existing lead), Ask "Ask a question", Use in your AI "Use Trend Detective in your own AI agent".
+- Panels: three `<div role="tabpanel" id="panel-explore|panel-ask|panel-connect">` in the same order as tabs. Hidden panels use `hidden`, never removed (the Ask thread and Explore result survive tab switches). Each panel starts with an h2: Explore "Is it really changing here?" (existing lead), Ask "Ask a question", Use in your AI "Use Bhoomi in your own AI agent".
 - Skip link text "Skip to the content"; its href points at the active panel's h2 (JS updates it).
-- Document title: "Trend Detective" / "Trend Detective: Ask" / "Trend Detective: Use in your AI".
+- Document title: "Bhoomi" / "Bhoomi: Ask" / "Bhoomi: Use in your AI".
 
 ## 1.2 Behaviour (standard tabs pattern, automatic activation)
 `role="tablist"` `aria-label="Sections"`; tabs `role="tab"`, `id="tab-…"`, `aria-selected`, `aria-controls`, roving `tabindex` (selected 0, others -1). Left/Right wrap, Home/End jump; moving focus activates. Tab from the tablist enters the panel (panels `tabindex="0"` only if they hold no focusable child; here they do, so no tabindex). Screen readers hear "Explore, tab, 1 of 3, selected".
@@ -106,7 +106,7 @@ Textarea has a visible label and `aria-describedby` (helper, privacy, counter, i
 
 ## 3.1 Layout (column max 720 px)
 ```
-h2 Use Trend Detective in your own AI agent
+h2 Use Bhoomi in your own AI agent
 lead
 Server address: read-only field + Copy
 Pick your AI app: tabs (below 600: 2 columns; >=600: one row. The settings-file picker below has 3 columns, the first wider so "Claude Code" stays on one line)
@@ -118,8 +118,8 @@ What it can and can't do
 These app tabs are a second tablist inside the panel (`aria-label="AI apps"`), same pattern as 1.2, 48 px, selected inverted. Order: Claude, Claude Code, Cursor, VS Code, Any other AI agent. Without JS all five panels show stacked.
 
 ## 3.2 Words on screen
-- Lead: "Connect an AI app to Trend Detective and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named."
-- Address field label: "Trend Detective server address". Value `https://trend-detective-six.vercel.app/mcp/` in an `<input readonly>`, `ui-monospace, Menlo, Consolas, monospace` 14 px, selects all on focus. Note: "This address is for AI apps. It is not a web page. It needs no key and no sign-in." The field appears once at the top and again in each app panel (same label).
+- Lead: "Connect an AI app to Bhoomi and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named."
+- Address field label: "Bhoomi server address". Value `https://bhoomi.earth/mcp/` in an `<input readonly>`, `ui-monospace, Menlo, Consolas, monospace` 14 px, selects all on focus. Note: "This address is for AI apps. It is not a web page. It needs no key and no sign-in." The field appears once at the top and again in each app panel (same label).
 - Copy button: text "Copy"; `aria-label` "Copy server address" (config: "Copy config"). Success: "Copied" for 2 s (fixed width); failure: "Copy failed" plus "Select the text and copy it yourself." and the text is selected. One `role="status"` says "Copied the server address." or "Copied the config." Button 48 x 48 minimum, beside the field.
 - What it can and can't do (h2 "What it can and can't do"): "It can read public climate data from the sources named next to each result. It can't see your files, your chats or anything else on your device, and it can't change anything. It only reads."
 
@@ -129,14 +129,14 @@ All six use the same address. Write each step as one short sentence.
 **Claude** (claude.ai and Claude desktop). Docs: https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp
 1. Open Customize, then Connectors.
 2. Click "+ Add", then "Add custom connector".
-3. Enter the name "Trend Detective" and paste the server address, then click "Continue".
+3. Enter the name "Bhoomi" and paste the server address, then click "Continue".
 4. Under Authentication choose "No sign in", then click "Add".
-5. In a chat, click "+" at the lower left, then "Connectors", and switch Trend Detective on.
+5. In a chat, click "+" at the lower left, then "Connectors", and switch Bhoomi on.
 Note under the steps: "Free plans can add one custom connector. On Team and Enterprise plans an owner has to add it." Wording of step 4 follows the doc's three choices ("Sign in now", "Sign in when needed", "No sign in").
 
 **Claude Code** (terminal). Docs: https://code.claude.com/docs/en/mcp
-1. In your terminal run the command in the box: `claude mcp add --transport http trend-detective https://trend-detective-six.vercel.app/mcp/`
-2. Start Claude Code and type `/mcp`. Trend Detective should show as connected.
+1. In your terminal run the command in the box: `claude mcp add --transport http bhoomi https://bhoomi.earth/mcp/`
+2. Start Claude Code and type `/mcp`. Bhoomi should show as connected.
 3. Optional: add `--scope user` to the command to use it in every project.
 The command has its own Copy button ("Copy command"). `claude mcp list` also shows it.
 
@@ -144,19 +144,19 @@ The command has its own Copy button ("Copy command"). `claude mcp list` also sho
 The docs say to manage servers from the Customize page and to put custom servers in an `mcp.json` file; they give no menu path for entering a URL. So:
 1. Create or open `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).
 2. Paste the entry from "Prefer a settings file?" below, using `url` and no `type` (Cursor's remote example has no `type`).
-3. Open Customize and check that Trend Detective is listed and on.
+3. Open Customize and check that Bhoomi is listed and on.
 Menu names for adding a server in the app were not confirmed; do not invent them.
 
 **VS Code** (with GitHub Copilot). Docs: https://code.visualstudio.com/docs/copilot/customization/mcp-servers and https://code.visualstudio.com/docs/agents/reference/mcp-configuration
 1. Open the Command Palette and run "MCP: Add Server".
 2. Choose "HTTP (HTTP or Server-Sent Events)" and paste the server address.
-3. Name it "trend-detective", then choose Global (or the workspace if you prefer).
-4. Accept the trust prompt after reading it, then ask GitHub Copilot a question and look for Trend Detective's tools.
+3. Name it "bhoomi", then choose Global (or the workspace if you prefer).
+4. Accept the trust prompt after reading it, then ask GitHub Copilot a question and look for Bhoomi's tools.
 Or put the VS Code block from "Prefer a settings file?" in `.vscode/mcp.json`. VS Code uses `servers`, not `mcpServers`.
 
 **Any other AI agent** (replaces "Other"). Steps: "Open your AI agent's settings for MCP servers or connectors." / "Add a new server." / "Paste this address. No key and no sign-in are needed." With the server address and its Copy button, the hint "If it asks for a type, choose \"HTTP\" or \"streamable HTTP\"." and the link "About MCP ↗" to https://modelcontextprotocol.io.
 
-**Framing (Tarun, 2026-11-14).** The panel heading is "Use Trend Detective in your own AI agent" (the tab keeps its label "Use in your AI"). One grey line under the intro: "Works with AI agents such as Claude and GitHub Copilot." A product is named only when its own official documentation confirms it can connect to a remote MCP server by URL. Checked 14 November 2026:
+**Framing (Tarun, 2026-11-14).** The panel heading is "Use Bhoomi in your own AI agent" (the tab keeps its label "Use in your AI"). One grey line under the intro: "Works with AI agents such as Claude and GitHub Copilot." A product is named only when its own official documentation confirms it can connect to a remote MCP server by URL. Checked 14 November 2026:
 - Claude: https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp (custom connector by URL).
 - ChatGPT: https://developers.openai.com/api/docs/guides/developer-mode ("Connect your Model Context Protocol (MCP) server to ChatGPT as a plugin"; steps ask for a Server URL; on the web; workspace permissions apply). No plan is named, so the line does not name one. ChatGPT was checked but is not named on the page, because the page has no steps for it.
 - GitHub Copilot: https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/extend-copilot-chat-with-mcp (remote servers defined with a URL in Visual Studio, JetBrains IDEs, Xcode and Eclipse) and https://code.visualstudio.com/docs/copilot/customization/mcp-servers (VS Code).
@@ -167,15 +167,15 @@ Detailed tabs with numbered steps stay only for apps whose steps were verified: 
 Intro: "Many apps read a config file. Field names differ between apps, so match yours." Three `<pre><code>` blocks in a small tab set "Claude Code" / "Cursor" / "VS Code" (same tab pattern, 48 px), each with "Copy config"; block `--surface`, 1 px `--line`, 14 px mono, scrolls sideways inside itself only.
 Claude Code, project `.mcp.json` (docs show `"type": "http"`; Claude Code needs it, otherwise it treats a url-only entry as a stdio server):
 ```
-{ "mcpServers": { "trend-detective": { "type": "http", "url": "https://trend-detective-six.vercel.app/mcp/" } } }
+{ "mcpServers": { "bhoomi": { "type": "http", "url": "https://bhoomi.earth/mcp/" } } }
 ```
 Cursor `mcp.json` (no `type`):
 ```
-{ "mcpServers": { "trend-detective": { "url": "https://trend-detective-six.vercel.app/mcp/" } } }
+{ "mcpServers": { "bhoomi": { "url": "https://bhoomi.earth/mcp/" } } }
 ```
 VS Code `.vscode/mcp.json`:
 ```
-{ "servers": { "trend-detective": { "type": "http", "url": "https://trend-detective-six.vercel.app/mcp/" } } }
+{ "servers": { "bhoomi": { "type": "http", "url": "https://bhoomi.earth/mcp/" } } }
 ```
 Format them on several lines in the page; the above is shown on one line only to save space.
 

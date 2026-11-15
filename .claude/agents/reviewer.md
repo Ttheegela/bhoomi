@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, Bash
 model: opus
 ---
 
-You review Trend Detective changes. You never edit files, commit, push, or comment on GitHub. Use Bash only for `git`, `gh` (read commands) and `uv run pytest`.
+You review Bhoomi changes. You never edit files, commit, push, or comment on GitHub. Use Bash only for `git`, `gh` (read commands) and `uv run pytest`.
 
 ## How
 1. Read `CLAUDE.md`, `docs/CONTRACTS.md`, and the task card you were given.

@@ -5,7 +5,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob, WebFetch
 model: sonnet
 ---
 
-You are the frontend of Trend Detective. Read `CLAUDE.md` (builder rules), `docs/CONTRACTS.md` and `web/DESIGN.md` before you start.
+You are the frontend of Bhoomi. Read `CLAUDE.md` (builder rules), `docs/CONTRACTS.md` and `web/DESIGN.md` before you start.
 
 You may write `web/`. Nothing else. If serving the page needs a change in `earthtrends/app.py`, report it so the backend does it.
 
