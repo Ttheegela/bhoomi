@@ -912,9 +912,10 @@ def agent_case(cid):
 
 def test_agent_case_file_loads_after_cases_toml():
     ids = [c["id"] for c in run.load_cases()]
-    assert ids[-4:] == ["followup-jakarta-sea-level", "followup-explain-range", "manhattan-build-house",
-                        "asia-sea-level-broad"]
-    assert len(ids) == len(run.load_cases(run.CASES)) + 4
+    n = len(run.load_cases(run.CASES))
+    assert ids[n:n + 4] == ["followup-jakarta-sea-level", "followup-explain-range", "manhattan-build-house",
+                            "asia-sea-level-broad"]
+    assert len(ids) == n + 15 and ids[-1] == "atlantic-city-many-measurements"
     jak = agent_case("followup-jakarta-sea-level")
     assert [m["role"] for m in jak["history"]] == ["user", "assistant"] and "expect_verdict" not in jak
     assert agent_case("followup-explain-range")["history"] == jak["history"]
@@ -982,7 +983,7 @@ def test_new_cases_load():
 
 
 @pytest.mark.parametrize("extra", ["min_places = 0", "min_places = true", 'min_places = "2"', "min_places = 1.5",
-                                   'allow_stats = "yes"'])
+                                   'allow_stats = "yes"', 'multi_measure = "yes"'])
 def test_bad_new_fields_are_refused(tmp_path, extra):
     with pytest.raises(SystemExit, match="x-case"):
         run.load_cases(_toml(tmp_path, extra))
@@ -1118,3 +1119,19 @@ def test_new_cases_ban_the_0_05_line_not_the_digits():  # G
     for cid in ("manhattan-build-house", "asia-sea-level-broad"):
         banned = agent_case(cid)["must_not_say"]
         assert "0.05 line" in banned and "0.05" not in banned
+
+
+def test_multi_measure_skips_the_single_verdict_wording_only():
+    rain = {**AC, "variable": "precip", "units": "mm/day", "verdict": "no_clear_change", "slope_per_decade": 0.01,
+            "ci_low": -0.02, "ci_high": 0.04,
+            "source": {"id": "power", "name": "NASA POWER", "url": "https://power.larc.nasa.gov/"}}
+    calls = [{"name": "detect_trend", "arguments": ARGS, "result": AC, "error": None},
+             {"name": "detect_trend", "arguments": {**ARGS, "variable": "precip"}, "result": rain, "error": None}]
+    answer = ("Sea level is clearly rising. Rain shows no clear change. Sources: NOAA CO-OPS tide gauges "
+              "(https://tidesandcurrents.noaa.gov/) and NASA POWER (https://power.larc.nasa.gov/).")
+    case = {"id": "m", "question": "q", "expect_tool": "detect_trend", "must_say": ["sea level"]}
+    assert run.check(case, fake_run(answer, calls))["wording"] is False  # one verdict scored: "no clear change" fails
+    multi = run.check({**case, "multi_measure": True}, fake_run(answer, calls))
+    assert "wording" not in multi and multi["numbers"] and multi["must_say"]
+    assert agent_case("atlantic-city-many-measurements")["multi_measure"] is True
+    assert "multi_measure" not in agent_case("grand-isle-invest")

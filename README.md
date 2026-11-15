@@ -9,7 +9,7 @@ Live site: https://trend-detective-six.vercel.app
 The page has three tabs:
 
 - **Explore.** Pick an example place or type coordinates, then pick a measurement and a data source. You get a chart, the trend and the verdict. This tab does not use an AI model.
-- **Ask.** Type a question in your own words, for example "Is sea level rising in Atlantic City?". An AI agent works out the place and the measurement, calls the same tools, and answers in plain words. This tab is rate limited, because every question costs money: 10 questions a minute and 100 an hour per client, and 200 an hour in total. The data routes and the MCP endpoint are limited to 120 requests a minute and 1,200 an hour per client.
+- **Ask.** Type a question in your own words, for example "Is sea level rising in Atlantic City?". An AI agent works out the place and the measurement, calls the same tools, and answers in plain words. This tab is rate limited, because every question costs money: 30 questions a minute and 150 an hour per client, and 200 an hour in total. The data routes and the MCP endpoint are limited to 120 requests a minute and 1,200 an hour per client.
 - **Use in your AI.** Steps to connect your own AI app to the MCP server below.
 
 MCP endpoint (streamable HTTP, no key, no sign-in): `https://trend-detective-six.vercel.app/mcp/`. Keep the trailing slash.
