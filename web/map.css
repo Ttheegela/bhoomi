@@ -11,7 +11,7 @@
 .map-failed .maplibregl-ctrl-top-right { display: none; }
 .map-retry { min-height: 48px; }
 /* markers: one button per pinned place; fill by risk (the risk is also in the accessible name and the tag) */
-.maplibregl-marker.map-mk { position: absolute; top: 0; left: 0; box-sizing: border-box; width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--ink); background: var(--mk-low); cursor: pointer; }
+.map-mk { position: absolute; top: 0; left: 0; box-sizing: border-box; width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--ink); background: var(--mk-low); cursor: pointer; }
 .map-mk::before { content: ""; position: absolute; inset: -17px; }
 .map-mk.high { background: var(--risk-high); }
 .map-mk.moderate { background: var(--mk-mod); }
@@ -30,7 +30,7 @@
 :root[data-theme="dark"] .map-frame:not(.map-detailed) .maplibregl-canvas { filter: grayscale(1) invert(1) brightness(.9); }
 :root[data-theme="dark"] .map-canvas .maplibregl-ctrl-icon { filter: invert(1); }
 @media (forced-colors: active) {
-  .maplibregl-marker.map-mk { border: 2px solid Canvas; background: CanvasText; }
+  .map-mk, .map-mk.high, .map-mk.moderate, .map-mk.low { border: 2px solid Canvas; background: CanvasText; }
 }
 /* tide gauge dots: the dots themselves are map paint; this is the legend (under the map) and the hover label */
 .map-legend { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0 0; padding: 0; font-size: 14px; line-height: 20px; color: var(--ink-2); max-width: none; }
