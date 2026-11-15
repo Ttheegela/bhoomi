@@ -17,14 +17,15 @@ MIN_YEARS, OUTLOOK_YEARS, OUTLOOK = 20, 30, (2035, 2050, 2075)
 SEA_REF = Decimal("3.4")  # mm a year
 TEMP_REF = Decimal("0.20")  # °C per decade
 REFERENCE = {
-    "sea_level": {"text": "World average: about 3.4 mm a year (satellites, 1993–2023).",
-                  "source": {"name": "NASA Sea Level Change: Global Mean Sea Level",
-                             "url": "https://sealevel.nasa.gov/vital-signs/global-mean-sea-level/"}},
+    "sea_level": {"text": "World average: about 3.4 mm a year (NASA, satellites since 1993).",
+                  "source": {"name": "NASA Sea Level Change Portal: Is the rate of sea-level rise increasing?",
+                             "url": "https://sealevel.nasa.gov/faq/8/is-the-rate-of-sea-level-rise-increasing/"}},
     "air_temp": {"text": "World average for land and ocean together: about 0.20 °C every 10 years since 1975.",
                  "source": {"name": "NOAA Climate.gov: Climate Change: Global Temperature",
                             "url": "https://www.climate.gov/news-features/understanding-climate/"
                                    "climate-change-global-temperature"}},
-    "precip": {"text": "Compared with this place's own usual rainfall.", "source": None},
+    "precip": {"text": "Our rule: a change of 10% of this place's usual rainfall every 10 years or more is high; "
+                       "5 to 10% is moderate.", "source": None},
     "water_storage": {"text": "Our rule: a fall of 1 cm of water a year or more is high; 0.5 to 1 cm is moderate.",
                       "source": None},
 }
@@ -45,14 +46,12 @@ RECOMMEND = {
                "on any coast."},
     "air_temp": {
         "high": "Plan for hotter years here. For a home, a farm or outdoor work, budget for cooling, shade and water.",
-        "moderate": "Expect it to keep getting warmer at about the world's pace. Build cooling and shade into "
-                    "long-term plans here.",
+        "moderate": "It has been getting warmer here. Build cooling and shade into long-term plans.",
         "low": "Past records give no special reason to change plans here because of heat."},
     "air_temp_max": {
         "high": "The hottest days here are getting hotter fast. For outdoor work, older relatives or crops, plan for "
                 "stronger heat than today's.",
-        "moderate": "The hottest days here are getting hotter at about the world's pace. Plan for somewhat stronger "
-                    "heat than today's.",
+        "moderate": "The hottest days here have been getting hotter. Plan for somewhat stronger heat than today's.",
         "low": "Past records give no special reason to plan for hotter extremes here."},
     "precip": {
         "high_wetter": "Rain here has been increasing strongly. Before you build or plant, check drainage and the "
@@ -62,7 +61,9 @@ RECOMMEND = {
         "moderate_wetter": "Rain here has been increasing. Check drainage and flood history before you build or plant.",
         "moderate_drier": "Rain here has been decreasing. Plan for less water than today if you farm or depend on "
                           "rainfall.",
-        "low": "Past records show rain here holding steady enough that it gives no special reason to change plans."},
+        "low": "Past records show rain here holding steady enough that it gives no special reason to change plans.",
+        "low_clear": "Rain here has changed, but only by a small share of its usual amount. Past records give no "
+                     "special reason to change plans."},
     "water_storage": {
         "high": "Water stored in this region is falling fast. For farming or a new well, we'd advise against relying "
                 "on groundwater here without a secure supply.",
@@ -115,7 +116,8 @@ def _years(period) -> tuple[float, int] | None:
 
 
 def _future_link(place) -> dict:
-    lat, lon = (place or {}).get("lat"), (place or {}).get("lon")
+    place = place if isinstance(place, dict) else {}
+    lat, lon = place.get("lat"), place.get("lon")
     if (_dec(lat) is not None and _dec(lon) is not None
             and any(a <= lat <= b and c <= lon <= d for a, b, c, d in US_BOXES)):
         x = lon * 20037508.34 / 180
@@ -124,7 +126,7 @@ def _future_link(place) -> dict:
     return {"label": "Future sea level (NASA projection tool)", "url": NASA_TOOL}
 
 
-def _outlook(ci_low: Decimal, ci_high: Decimal, factor: Decimal, unit: str, last_year: int) -> list[dict]:
+def _outlook(ci_low: Decimal, ci_high: Decimal, factor: Decimal, unit: str, last_year: int, rain: bool) -> list[dict]:
     out = []
     for year in OUTLOOK:
         if year <= last_year:
@@ -133,9 +135,14 @@ def _outlook(ci_low: Decimal, ci_high: Decimal, factor: Decimal, unit: str, last
         lo, hi = ci_low * factor * k, ci_high * factor * k
         places = "1" if max(abs(lo), abs(hi)) >= 10 else "0.1"
         lo, hi = _q(lo, places) + 0, _q(hi, places) + 0  # + 0 turns -0 into 0
-        span = f"about {signed(lo)}" if lo == hi else f"{signed(lo)} to {signed(hi)}"
-        out.append({"year": year, "low": float(lo), "high": float(hi), "unit": unit,
-                    "text": f"{span} {unit} by {year}"})
+        if rain:  # "64 to 239 mm more rain a year": unsigned, the word carries the direction
+            a, b = sorted((abs(lo), abs(hi)))
+            span = f"about {a:f}" if a == b else f"{a:f} to {b:f}"
+            text = f"{span} mm {'less' if hi < 0 else 'more'} rain a year by {year}"
+        else:
+            span = f"about {signed(lo)}" if lo == hi else f"{signed(lo)} to {signed(hi)}"
+            text = f"{span} {unit} by {year}"
+        out.append({"year": year, "low": float(lo), "high": float(hi), "unit": unit, "text": text})
     return out
 
 
@@ -149,7 +156,7 @@ def _risk(var: str, verdict: str, slope: Decimal, mean: Decimal) -> tuple[str, s
         ratio = _q(per / (SEA_REF if var == "sea_level" else TEMP_REF), "0.1")  # judged as shown, like the verdict
         risk = "high" if ratio >= Decimal("1.5") else "moderate" if ratio >= Decimal("0.75") else "low"
         if ratio > Decimal("1.1"):
-            why = f"{FASTER[var]} about {ratio} times faster than the world average."
+            why = f"{FASTER[var]} about {ratio:f} times faster than the world average."
         elif ratio >= Decimal("0.9"):
             why = f"{FASTER[var]} about as fast as the world average."
         else:
@@ -160,13 +167,13 @@ def _risk(var: str, verdict: str, slope: Decimal, mean: Decimal) -> tuple[str, s
             return "low", HARMLESS[var], None, "low"
         fall = sig2(abs(slope) / 10)  # cm a year
         risk = "high" if fall >= 1 else "moderate" if fall >= Decimal("0.5") else "low"
-        return risk, f"Water stored in this region is falling by about {fall} cm a year.", None, risk
+        return risk, f"Water stored in this region is falling by about {fall:f} cm a year.", None, risk
     # precip: both directions count, as a share of this place's own average rainfall (mean > 0, checked by caller)
     share = sig2(abs(slope) / mean * 100)
     risk = "high" if share >= 10 else "moderate" if share >= 5 else "low"
     way = "increasing" if up else "decreasing"
-    why = f"Rain here has been {way} by about {share}% of its usual amount every 10 years."
-    return risk, why, None, risk if risk == "low" else f"{risk}_{'wetter' if up else 'drier'}"
+    why = f"Rain here has been {way} by about {share:f}% of its usual amount every 10 years."
+    return risk, why, None, "low_clear" if risk == "low" else f"{risk}_{'wetter' if up else 'drier'}"
 
 
 def guidance_for(result: dict, mean: float | None = None) -> dict:
@@ -205,5 +212,5 @@ def guidance_for(result: dict, mean: float | None = None) -> dict:
     risk, why, ratio, key = _risk(var, verdict, slope, mean)
     g.update(risk=risk, risk_label=LABEL[risk], why=why, ratio=ratio, recommendation=RECOMMEND[var][key])
     if years[0] >= OUTLOOK_YEARS:
-        g["outlook"] = _outlook(lo, hi, factor, unit, years[1])
+        g["outlook"] = _outlook(lo, hi, factor, unit, years[1], var == "precip")
     return g

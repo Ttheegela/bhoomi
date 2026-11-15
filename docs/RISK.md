@@ -44,17 +44,15 @@ The checks run in this order:
 
 | Used for | Figure | Period | Source | Checked |
 |---|---|---|---|---|
-| sea_level | 3.4 mm a year, world average from satellites | 1993–2023 | NASA Sea Level Change, Global Mean Sea Level, https://sealevel.nasa.gov/vital-signs/global-mean-sea-level/ | 2026-11-15 (see note) |
+| sea_level | 0.13 inches (3.4 mm) a year, world average from satellites | 1993 to present | NASA Sea Level Change Portal, FAQ "Is the rate of sea-level rise increasing?", https://sealevel.nasa.gov/faq/8/is-the-rate-of-sea-level-rise-increasing/ | 2026-11-15 |
 | air_temp, air_temp_max | 0.20 °C (0.36 °F) per decade, combined land and ocean | since 1975 | NOAA Climate.gov, "Climate Change: Global Temperature", https://www.climate.gov/news-features/understanding-climate/climate-change-global-temperature | 2026-11-15 |
-
-Note on sea level: when this was checked on 2026-11-15, the NASA page did not state 3.4 mm a year as a single figure. It said the rate has gone from 0.20 cm a year in 1993 to 0.44 cm a year now, and that the rise since 1993 is 115.3 mm (chart caption: 1993 to 2024). The old climate.nasa.gov vital-signs page now redirects to a page that returns 404. We use the owner-approved 3.4 mm a year until a NASA page that states it is found. If the figure changes, change `SEA_REF` and the reference text together.
 
 Note on temperature: the Climate.gov page (published 2025-05-29, archived 2025-06-25) gives 0.20 °C per decade in two places. The body text says "combined land and ocean temperature … per decade since 1975". The highlights box says "since 1982". We use the body text, because it is the one that names land and ocean together.
 
 Reference texts as shown:
-- sea_level: "World average: about 3.4 mm a year (satellites, 1993–2023)."
+- sea_level: "World average: about 3.4 mm a year (NASA, satellites since 1993)."
 - air_temp, air_temp_max: "World average for land and ocean together: about 0.20 °C every 10 years since 1975."
-- precip: "Compared with this place's own usual rainfall."
+- precip: "Our rule: a change of 10% of this place's usual rainfall every 10 years or more is high; 5 to 10% is moderate."
 - water_storage: "Our rule: a fall of 1 cm of water a year or more is high; 0.5 to 1 cm is moderate."
 
 ## Why (one sentence, plain words)
@@ -68,15 +66,15 @@ Reference texts as shown:
 | Variable | High | Moderate | Low |
 |---|---|---|---|
 | sea_level | For a long-term home or investment near the shore here, we'd advise against it unless the site sits well above flood level. | For a long-term home or investment near the shore here, check how high the site sits above flood level before you commit. | Past records give no special reason to avoid the shore here. Check the site's flood level as you would on any coast. |
-| air_temp | Plan for hotter years here. For a home, a farm or outdoor work, budget for cooling, shade and water. | Expect it to keep getting warmer at about the world's pace. Build cooling and shade into long-term plans here. | Past records give no special reason to change plans here because of heat. |
-| air_temp_max | The hottest days here are getting hotter fast. For outdoor work, older relatives or crops, plan for stronger heat than today's. | The hottest days here are getting hotter at about the world's pace. Plan for somewhat stronger heat than today's. | Past records give no special reason to plan for hotter extremes here. |
-| precip, wetter | Rain here has been increasing strongly. Before you build or plant, check drainage and the flood history of the site. | Rain here has been increasing. Check drainage and flood history before you build or plant. | Past records show rain here holding steady enough that it gives no special reason to change plans. |
+| air_temp | Plan for hotter years here. For a home, a farm or outdoor work, budget for cooling, shade and water. | It has been getting warmer here. Build cooling and shade into long-term plans. | Past records give no special reason to change plans here because of heat. |
+| air_temp_max | The hottest days here are getting hotter fast. For outdoor work, older relatives or crops, plan for stronger heat than today's. | The hottest days here have been getting hotter. Plan for somewhat stronger heat than today's. | Past records give no special reason to plan for hotter extremes here. |
+| precip, wetter | Rain here has been increasing strongly. Before you build or plant, check drainage and the flood history of the site. | Rain here has been increasing. Check drainage and flood history before you build or plant. | No clear change: Past records show rain here holding steady enough that it gives no special reason to change plans. A clear change under 5 %: Rain here has changed, but only by a small share of its usual amount. Past records give no special reason to change plans. |
 | precip, drier | Rain here has been decreasing strongly. For farming or a business that needs water, don't count on today's rainfall. | Rain here has been decreasing. Plan for less water than today if you farm or depend on rainfall. | (same as above) |
 | water_storage | Water stored in this region is falling fast. For farming or a new well, we'd advise against relying on groundwater here without a secure supply. | Water stored in this region is falling. Before investing in a farm or a well, check local water levels and supply. | Past records give no special reason to worry about water supply in this region. |
 
 ## If the past trend continues (`outlook`)
 
-The outlook is given only when the verdict is rising or falling and the record covers at least 30 years. Otherwise it is []. For 2035, 2050 and 2075 (years after the last data year only), each end of the range is (year − last data year) ÷ 10 × `ci_low` (or × `ci_high`), in display units, measured from today. Both ends are whole numbers when the larger end is 10 or more, and otherwise have 1 decimal. The text reads "+18 to +21 cm by 2050". When both ends round to the same number, it reads "about +5 cm by 2050". The word "forecast" is never used.
+The outlook is given only when the verdict is rising or falling and the record covers at least 30 years. Otherwise it is []. For 2035, 2050 and 2075 (years after the last data year only), each end of the range is (year − last data year) ÷ 10 × `ci_low` (or × `ci_high`), in display units, measured from today. Both ends are whole numbers when the larger end is 10 or more, and otherwise have 1 decimal. The text reads "+18 to +21 cm by 2050". When both ends round to the same number, it reads "about +5 cm by 2050". For rainfall the numbers are unsigned and a word carries the direction: "64 to 239 mm more rain a year by 2050", "183 to 365 mm less rain a year by 2050", "about 60 mm more rain a year by 2050" (`low`/`high` keep their signs; `rate.text` stays "+60 mm a year"). The word "forecast" is never used.
 
 Worked example: a trend of 8.3 cm per 10 years (CI 7.6 to 8.9), last data year 2026. 2050 is 2.4 decades on, giving 18.24 to 21.36, shown as "+18 to +21 cm by 2050".
 

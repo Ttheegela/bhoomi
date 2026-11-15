@@ -28,6 +28,7 @@ LEVELS = [
     # sea level: ratio = (mm per decade / 10) / 3.4 mm a year, rounded to 1 decimal, then judged
     ("sea_level", "rising", 81.6, None, "high", "high", 2.4),
     ("sea_level", "rising", 51.0, None, "high", "high", 1.5),  # 1.5: high
+    ("sea_level", "rising", 49.3, None, "high", "high", 1.5),  # 1.45: shown as 1.5, judged as shown
     ("sea_level", "rising", 49.0, None, "moderate", "moderate", 1.4),  # just under 1.5
     ("sea_level", "rising", 34.0, None, "moderate", "moderate", 1.0),
     ("sea_level", "rising", 25.5, None, "moderate", "moderate", 0.8),  # 0.75: moderate
@@ -46,7 +47,7 @@ LEVELS = [
     ("precip", "falling", -0.3, 3.0, "high", "high_drier", None),
     ("precip", "rising", 0.297, 3.0, "moderate", "moderate_wetter", None),  # 9.9 %
     ("precip", "falling", -0.15, 3.0, "moderate", "moderate_drier", None),  # 5 %
-    ("precip", "rising", 0.147, 3.0, "low", "low", None),  # 4.9 %
+    ("precip", "rising", 0.147, 3.0, "low", "low_clear", None),  # 4.9 %, a clear change
     # water storage: a fall of cm a year
     ("water_storage", "falling", -10.0, None, "high", "high", None),  # 1 cm a year
     ("water_storage", "falling", -9.9, None, "moderate", "moderate", None),
@@ -185,3 +186,34 @@ def test_compute_trend_attaches_guidance_last():
     assert list(r)[-2:] == ["meaning", "guidance"]
     assert r["guidance"]["risk"] == "high"  # 0.4 mm/day per decade on a mean near 3.7: about 11 %
     assert r["guidance"]["why"] == "Rain here has been increasing by about 11% of its usual amount every 10 years."
+
+
+def test_large_numbers_have_no_scientific_notation():
+    assert guidance_for(res("precip", "rising", 3.6), 3.0)["why"] == (
+        "Rain here has been increasing by about 120% of its usual amount every 10 years.")
+    assert guidance_for(res("water_storage", "falling", -1500.0))["why"] == (
+        "Water stored in this region is falling by about 150 cm a year.")
+    assert guidance_for(res("sea_level", "rising", 5000.0))["why"] == (
+        "The sea here is rising about 147.1 times faster than the world average.")
+
+
+def test_precip_outlook_words():
+    # 0.1 to 0.2 mm/day per decade (36.525 to 73.05 mm a year), last year 2026: 2050 is 2.4 decades on
+    g = guidance_for(res("precip", "rising", 0.15, lo=0.1, hi=0.2, end="2026-12"), 3.0)
+    assert g["outlook"][1] == {"year": 2050, "low": 88.0, "high": 175.0, "unit": "mm a year",
+                               "text": "88 to 175 mm more rain a year by 2050"}
+    assert g["rate"]["text"] == "+55 mm a year"
+    g = guidance_for(res("precip", "falling", -0.3, lo=-0.4, hi=-0.2, end="2026-12"), 3.0)
+    assert g["outlook"][1]["text"] == "175 to 351 mm less rain a year by 2050"
+    assert (g["outlook"][1]["low"], g["outlook"][1]["high"]) == (-351.0, -175.0)
+    g = guidance_for(res("precip", "rising", 0.07, lo=0.068, hi=0.069, end="2026-12"), 3.0)
+    assert g["outlook"][1]["text"] == "about 60 mm more rain a year by 2050"
+
+
+@pytest.mark.parametrize("place,slope", [("Delhi", 34.0), (None, 34.0), (VIZAG, 1e30), ("Delhi", 1e30)])
+def test_compute_trend_never_fails_because_of_guidance(place, slope):
+    times = [f"{y}-01" for y in range(1990, 2025)]
+    r = compute_trend({"variable": "sea_level", "units": "mm", "freq": "annual", "place": place, "times": times,
+                       "values": [slope * i / 10 for i in range(len(times))], "source": {"id": "psmsl"}, "notes": []})
+    assert list(r["guidance"]) == KEYS
+    json.dumps(r["guidance"], allow_nan=False)

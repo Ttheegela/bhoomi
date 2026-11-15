@@ -111,7 +111,10 @@ def compute_trend(series: dict) -> dict:
         "caveats": caveats,
     }
     result["meaning"] = meaning_for(result)
-    result["guidance"] = guidance_for(result, mean)
+    try:
+        result["guidance"] = guidance_for(result, mean)
+    except Exception:  # guidance must never sink a result: fall back to the "no guidance rule" object
+        result["guidance"] = guidance_for({})
     return result
 
 
