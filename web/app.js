@@ -550,7 +550,7 @@ function plainError(r) {
 function dropErrors(win, key) {
   const e = store[win];
   if (!e) return;
-  e.pins.forEach((p) => { const k = resKey(win, p); if (results[k] && results[k].status === 'error' && (!key || pinKeyOf(p.lat, p.lon) === key)) delete results[k]; });
+  e.pins.forEach((p) => { const k = resKey(win, p); if (results[k] && results[k].status === 'error' && !(key && results[k].none) && (!key || pinKeyOf(p.lat, p.lon) === key)) delete results[k]; });
 }
 function enqueue(win, p) {
   const k = resKey(win, p);
@@ -577,9 +577,9 @@ function pump() {
       }
       const s = sr.ok ? sr.body : null;
       const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
-      if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); }
-      else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; }
-      else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; }
+      if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); res.none = sr.status === 400; } // none: a real "no record here", not asked again on every click
+      else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; res.none = true; }
+      else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; res.none = tr.status === 400; }
       else { res.status = 'ok'; res.series = s; res.trend = tr.body; }
       flight--;
       landed(job.win, job.p, res);
@@ -1169,6 +1169,7 @@ window.TD = {
     const i = e.pins.findIndex((p) => pinKeyOf(p.lat, p.lon) === key);
     if (i < 0) return;
     const [gone] = e.pins.splice(i, 1);
+    delete results[resKey(curWin, gone)]; // a retry timer or a late reply for it is then dropped
     if (e.selected === key) e.selected = e.pins.length ? pinKeyOf(e.pins[0].lat, e.pins[0].lon) : null;
     saveStore();
     changed();
