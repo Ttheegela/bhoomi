@@ -15,8 +15,7 @@ AC = {"variable": "sea_level", "units": "mm", "verdict": "rising", "slope_per_de
       "source": {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"},
       "caveats": ["Tide gauge Atlantic City (8534720), 0 km from the point you asked about."]}
 ANSWER = ("Yes. Sea level in Atlantic City is clearly rising: about 42.5 mm per decade (95% range 41.1 to 44.0), "
-          "from 1911 to 2026. A change this steady would be very unlikely if nothing were really changing, well below "
-          "the usual 0.05 line. "
+          "from 1911 to 2026. A change this steady would be very unlikely if nothing were really changing. "
           "Source: NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/")
 CASE = {"id": "atlantic-city-sea-level", "question": "Is sea level rising in Atlantic City?", "expect_tool": "detect_trend",
         "expect_variable": "sea_level", "expect_place": [39.36, -74.42], "expect_source": "coops",
@@ -119,11 +118,21 @@ def test_small_numbers_with_a_unit_are_checked():
     assert run.invented_numbers("station 8534720", [AC]) == []
 
 
-def test_numbers_only_in_meaning_are_invented():
+def test_meaning_numbers_count_only_for_results_sent_in_full():
     from earthtrends.stats.meaning import meaning_for
     r = {**AC, "meaning": meaning_for(AC)}
-    assert r["meaning"]["comparison"] == "About 4 cm higher every 10 years."  # the model is never sent this
-    assert run.invented_numbers("up 4 cm", [r]) == ["4"]
+    assert r["meaning"]["comparison"] == "About 4 cm higher every 10 years."  # the model now gets this string
+    assert run.invented_numbers("About 4 cm higher every 10 years.", [r]) == []
+    assert run.invented_numbers("up 4 cm", [AC]) == ["4"]
+    # an agreeing non-default source reaches the model without "meaning": its comparison is no pool number
+    lead = {**CO_OPS, "meaning": meaning_for(CO_OPS)}
+    other = {**PSMSL, "slope_per_decade": 52.0, "meaning": meaning_for({**PSMSL, "slope_per_decade": 52.0})}
+    assert other["meaning"]["comparison"] == "About 5 cm higher every 10 years."
+    calls = multi([lead, other])
+    base = NY_HEAD + agree_sentence(other, lead) + NY_TAIL
+    assert run.check(NY_CASE, fake_run(base, calls))["numbers"]
+    assert run.check(NY_CASE, fake_run(base + " About 5 cm higher every 10 years.", calls))["numbers"] is False
+    assert run.check(NY_CASE, fake_run(base + " About 3 cm higher every 10 years.", calls))["numbers"]  # the lead's
 
 
 @pytest.mark.parametrize("minus", ["-", "\u2212"])
@@ -145,7 +154,7 @@ def test_pool_walks_values_not_json_text():
 def test_good_answer_passes_every_check():
     out = run.check(CASE, fake_run())
     assert out == {k: True for k in ("answered", "tool", "variable", "place", "source", "verdict", "wording",
-                                     "numbers", "source_named", "must_say")}
+                                     "numbers", "source_named", "must_say", "plain", "links")}
 
 
 @pytest.mark.parametrize("key,mutate", [
@@ -347,7 +356,7 @@ def test_scores_posted_and_flushed(monkeypatch):
     monkeypatch.setattr(run, "ask", lambda q, model, history=None: fake_run())
     run.evaluate(["openrouter:a/b"], [CASE], {"openrouter": 9, "anthropic": 9})
     assert ("t-1", "eval_numbers", 1) in posted and ("t-1", "eval_plain_language", 4) in posted
-    assert len(posted) == 11 and flushed == [1]
+    assert len(posted) == 13 and flushed == [1]
 
 
 # ---- the files ----
@@ -498,7 +507,7 @@ def multi(results):
 def test_correct_disagree_answer_passes():
     out = run.check(DELHI_CASE, fake_run(DISAGREE, multi([POWER, ERA5, GHCN])))
     assert out == {k: True for k in ("answered", "tool", "variable", "place", "wording", "numbers", "source_named",
-                                     "must_say")}
+                                     "must_say", "plain", "links")}
 
 
 @pytest.mark.parametrize("phrase", ["do not agree", "don't agree", "don’t agree", "differ"])
@@ -553,7 +562,7 @@ def test_verdict_without_expect_source_uses_default_source():
 def test_agreeing_sources_use_single_verdict_wording():
     era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
     answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 "
-              "to December 2025. ERA5 reanalysis via Open-Meteo archive agrees. NOAA NCEI GHCN-Daily agrees. Sources: "
+              f"to December 2025. {agree_sentence(era5, POWER)} {agree_sentence(ghcn, POWER)} Sources: "
               "NASA POWER (MERRA-2), https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
     case = {**DELHI_CASE, "must_say": []}
     assert all(run.check(case, fake_run(answer, multi([POWER, era5, ghcn]))).values())
@@ -577,7 +586,7 @@ def test_differently_is_not_disagree():
 def test_false_disagree_when_sources_agree_fails():
     era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
     answer = ("The sources disagree. Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to "
-              "-0.09). ERA5 reanalysis via Open-Meteo archive agrees. NOAA NCEI GHCN-Daily agrees. Sources: "
+              f"-0.09). {agree_sentence(era5, POWER)} {agree_sentence(ghcn, POWER)} Sources: "
               "https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
     case = {**DELHI_CASE, "must_say": []}
     assert run.check(case, fake_run(answer, multi([POWER, era5, ghcn])))["wording"] is False
@@ -593,7 +602,7 @@ def test_disagree_answer_must_keep_every_verdict():
 def test_same_slope_but_disagree_on_clearness_passes():
     power = {**POWER, "verdict": "no_clear_change", "slope_per_decade": 0.0472, "ci_low": -0.0008, "ci_high": 0.0948}
     era5 = {**ERA5, "verdict": "rising", "slope_per_decade": 0.0459, "ci_low": 0.0004, "ci_high": 0.0913}
-    answer = ("The sources give about the same slope but disagree on whether the change is clear. "
+    answer = ("The sources give about the same rate but disagree on whether the change is clear. "
               "NASA POWER (MERRA-2): no clear change, 0.05 °C per decade (95% range -0.001 to 0.09). "
               "ERA5 reanalysis via Open-Meteo archive: clearly rising, by 0.05 °C per decade (95% range 0.0004 to "
               "0.09). Both run January 1981 to December 2025. Sources: https://power.larc.nasa.gov/, https://open-meteo.com/")
@@ -671,8 +680,9 @@ PSMSL = {**CO_OPS, "slope_per_decade": 29.6154, "ci_low": 28.76, "ci_high": 30.4
          "period": {"start": "1856-01", "end": "2025-12"},
          "source": {"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"},
          "caveats": ["Tide gauge NEW YORK (THE BATTERY) (PSMSL id 12)."]}
+NY_AGREE = "PSMSL agrees: 29.62 mm per decade (95% range 28.76 to 30.47), over its own record"  # the code's sentence
 NY_OK = ("Yes, sea level at The Battery in New York is clearly rising, by 31.79 mm per decade (95% range 30.62 to "
-         "32.96), January 1900 to October 2026. PSMSL agrees, over its own record, January 1856 to December 2025. "
+         f"32.96), January 1900 to October 2026. {NY_AGREE}, January 1856 to December 2025. "
          "Sources: NOAA CO-OPS, https://tidesandcurrents.noaa.gov/, PSMSL, https://psmsl.org/")
 NY_PROD = ("Yes. Sea level at The Battery in New York City rises by 31.79 millimetres per decade (a decade is ten "
            "years), with a 95% range of 30.62 to 32.96. The second source gives the same verdict: clearly rising, "
@@ -691,7 +701,7 @@ def test_production_agree_answer_fails_wording():
 
 
 def test_same_gauge_claim_fails_wording():
-    answer = NY_OK.replace("PSMSL agrees, over its own record, January 1856 to December 2025.",
+    answer = NY_OK.replace(f"{NY_AGREE}, January 1856 to December 2025.",
                            "NOAA CO-OPS tide gauges agree, over its own longer record, January 1856 to December 2025 "
                            "(PSMSL, https://psmsl.org/). Both use the same gauge, about 1 km from the point you asked "
                            "about.")
@@ -703,7 +713,7 @@ def test_agree_answer_may_repeat_caveat_numbers():
     era5 = {**ERA5, "verdict": "falling"}
     ghcn = {**GHCN, "verdict": "falling", "caveats": ["Weather station X (id), 6 km from the point you asked about."]}
     answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 "
-              "to December 2025. ERA5 reanalysis via Open-Meteo archive agrees. NOAA NCEI GHCN-Daily agrees. The "
+              f"to December 2025. {agree_sentence(era5, POWER)} {agree_sentence(ghcn, POWER)} The "
               "station is 6 km from the point you asked about. Sources: NASA POWER (MERRA-2), "
               "https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
     assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([POWER, era5, ghcn])))["wording"]
@@ -718,14 +728,14 @@ def test_atlantic_city_agree_answer_passes():
              "source": {**PSMSL["source"], "name": "Permanent Service for Mean Sea Level (PSMSL)"},
              "caveats": ["Tide gauge ATLANTIC CITY (PSMSL id 180), 1 km from the point you asked about."]}
     answer = ("Sea level at Atlantic City is clearly rising, by 31.79 mm per decade (95% range 30.62 to 32.96), "
-              "January 1900 to October 2026. Permanent Service for Mean Sea Level (PSMSL) agrees, over its own "
-              "record, September 1911 to December 2025. The PSMSL gauge is 1 km away. Sources: NOAA CO-OPS, "
+              f"January 1900 to October 2026. {agree_sentence(psmsl, co_ops)} The PSMSL gauge is 1 km away. "
+              "Sources: NOAA CO-OPS, "
               "https://tidesandcurrents.noaa.gov/, https://psmsl.org/")
     assert run.check(NY_CASE, fake_run(answer, multi([co_ops, psmsl])))["wording"]
 
 
 def test_own_record_sentence_must_name_an_agreeing_source():
-    wrong = NY_OK.replace("PSMSL agrees, over its own record", "NOAA CO-OPS tide gauges agrees, over its own record")
+    wrong = NY_OK.replace(NY_AGREE, "NOAA CO-OPS tide gauges agrees, over its own record")
     assert wrong != NY_OK
     assert run.check(NY_CASE, fake_run(wrong, multi([CO_OPS, PSMSL])))["wording"] is False
     # the code's sentence is there, but so is a misattributed one: still fails
@@ -750,13 +760,14 @@ def real_ny(sentence):
     return run.check(NY_CASE, fake_run(NY_HEAD + sentence + NY_TAIL, multi([REAL_COOPS, REAL_PSMSL])))["wording"]
 
 
-CODE_SENT = "Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, January 1856 to December 2025."
+CODE_SENT = ("Permanent Service for Mean Sea Level (PSMSL) agrees: 29.62 mm per decade (95% range 28.76 to 30.47), "
+             "over its own record, January 1856 to December 2025.")
 
 
 def test_code_sentence_is_the_helpers():
     assert agree_sentence(REAL_PSMSL, REAL_COOPS) == CODE_SENT
     assert agree_sentence({**REAL_PSMSL, "period": REAL_COOPS["period"]}, REAL_COOPS) == (
-        "Permanent Service for Mean Sea Level (PSMSL) agrees.")
+        "Permanent Service for Mean Sea Level (PSMSL) agrees: 29.62 mm per decade (95% range 28.76 to 30.47).")
 
 
 @pytest.mark.parametrize("sentence", [
@@ -901,8 +912,9 @@ def agent_case(cid):
 
 def test_agent_case_file_loads_after_cases_toml():
     ids = [c["id"] for c in run.load_cases()]
-    assert ids[-2:] == ["followup-jakarta-sea-level", "followup-explain-range"]
-    assert len(ids) == len(run.load_cases(run.CASES)) + 2
+    assert ids[-4:] == ["followup-jakarta-sea-level", "followup-explain-range", "manhattan-build-house",
+                        "asia-sea-level-broad"]
+    assert len(ids) == len(run.load_cases(run.CASES)) + 4
     jak = agent_case("followup-jakarta-sea-level")
     assert [m["role"] for m in jak["history"]] == ["user", "assistant"] and "expect_verdict" not in jak
     assert agent_case("followup-explain-range")["history"] == jak["history"]
@@ -936,7 +948,7 @@ def test_jakarta_case_scores_an_errored_call():
     calls = [{"name": "detect_trend", "arguments": {**args, "source": s}, "result": None,
               "error": "No tide gauge within 100 km has a usable record."} for s in ("coops", "psmsl")]
     ok = run.check(jak, fake_run(answer="No tide gauge near Jakarta has a usable sea-level record.", calls=calls))
-    assert ok == {"answered": True, "tool": True, "variable": True, "place": True, "numbers": True}
+    assert ok == {"answered": True, "tool": True, "variable": True, "place": True, "numbers": True, "links": True}
     copied = run.check(jak, fake_run(answer="Jakarta: rising by 29.15 mm per decade.", calls=calls))
     assert copied["numbers"] is False  # a number from the earlier answer is no tool result of this turn
     far = run.check(jak, fake_run(answer="No gauge.", calls=[{**calls[0], "arguments": {**args, "lat": 40.7, "lon": -74.0}}]))
@@ -949,9 +961,137 @@ def test_explain_range_case_catches_a_copied_number():
                                       calls=[]))
     assert copied["numbers"] is False and copied["tool"] is True
     plain = run.check(case, fake_run(answer="A 95% range is where the true slope most likely lies.", calls=[]))
-    assert plain == {"answered": True, "tool": True, "numbers": True}
+    assert plain == {"answered": True, "tool": True, "numbers": True, "links": True}
     # "95% range" is a fixed phrase; the same idea restated is a number from outside (why the prompt forbids it)
     reworded = "About 95 out of 100 times, a range built this way would contain the real value."
     assert run.check(case, fake_run(answer=reworded, calls=[]))["numbers"] is False
     looked = run.check(case, fake_run(answer="A 95% range is where the true slope most likely lies."))
     assert looked["tool"] is False  # a data tool call fails, even one that returned data
+
+
+# ---- plain answers: the new cases, min_places, plain, links, agreeing figures ----
+
+from earthtrends.agent import resources  # noqa: E402
+
+
+def test_new_cases_load():
+    house, asia = agent_case("manhattan-build-house"), agent_case("asia-sea-level-broad")
+    assert house["expect_place"] == [40.70, -74.01] and "coast.noaa.gov/slr" in house["must_say"]
+    assert "[OFFICIAL" in house["must_not_say"] and asia["min_places"] == 2 and asia["must_say"] == ["not a ranking"]
+    assert run.not_runnable(house, run.list_variables()) is None and run.not_runnable(asia, run.list_variables()) is None
+
+
+@pytest.mark.parametrize("extra", ["min_places = 0", "min_places = true", 'min_places = "2"', "min_places = 1.5",
+                                   'allow_stats = "yes"'])
+def test_bad_new_fields_are_refused(tmp_path, extra):
+    with pytest.raises(SystemExit, match="x-case"):
+        run.load_cases(_toml(tmp_path, extra))
+
+
+ASIA = {"id": "asia", "question": "q", "expect_tool": "detect_trend", "expect_variable": "sea_level", "min_places": 2}
+
+
+def at(lat, lon, result=AC, error=None):
+    return {"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": lat, "lon": lon},
+            "result": None if error else result, "error": error}
+
+
+def test_min_places():
+    tokyo, yokohama, mumbai = at(35.65, 139.77), at(35.44, 139.64), at(18.92, 72.83, error="No tide gauge nearby.")
+    assert run.check(ASIA, fake_run(calls=[tokyo, mumbai]))["min_places"]  # an errored call still covers its place
+    assert run.check(ASIA, fake_run(calls=[tokyo, yokohama]))["min_places"] is False  # about 30 km apart: one place
+    assert run.check({**ASIA, "min_places": 3}, fake_run(calls=[tokyo, yokohama, mumbai]))["min_places"] is False
+    assert "min_places" not in run.check(CASE, fake_run())
+
+
+@pytest.mark.parametrize("words", ["p-value", "0.05 line", "slope", "decade is ten years", "Slope"])
+def test_plain_fails_statistics_words(words):
+    answer = ANSWER.replace("Source:", f"The {words} part. Source:")
+    assert run.check(CASE, fake_run(answer))["plain"] is False
+    assert "plain" not in run.check({**CASE, "allow_stats": True}, fake_run(answer))
+    assert "plain" not in run.check(NONE_CASE, fake_run(f"Which one? The {words}.", []))  # no result reported
+
+
+@pytest.mark.parametrize("extra,ok", [
+    (" " + resources.US_COAST, True),
+    (" See http://www.tidesandcurrents.noaa.gov.", True),  # the source's own address, written another way
+    (" See https://tidesandcurrents.noaa.gov/sltrends/.", False),  # a page no result gave
+    (" See https://example.org/flood.", False),
+])
+def test_links(extra, ok):
+    assert run.check(CASE, fake_run(ANSWER + extra))["links"] is ok
+    # no result this turn: the resources table and every catalog source's own address are still known
+    assert run.check(NONE_CASE, fake_run("Which Springfield?" + extra, []))["links"] is ok
+
+
+def test_agreeing_figures_belong_in_the_code_sentence_only():
+    calls = multi([CO_OPS, PSMSL])
+    ok = NY_OK
+    assert run.check(NY_CASE, fake_run(ok, calls))["wording"]
+    leaked = ok.replace(" Sources:", " PSMSL's record rises 29.62 mm per decade. Sources:")
+    assert run.check(NY_CASE, fake_run(leaked, calls))["wording"] is False  # its number outside its sentence
+    missing = ok.replace(f"{NY_AGREE}, January 1856 to December 2025. ", "")
+    assert run.check(NY_CASE, fake_run(missing, calls))["wording"] is False  # the code's sentence must be there
+
+
+@pytest.mark.parametrize("answer,verdict", [("It has clearly been getting wetter here.", "rising"),
+                                            ("It has clearly been getting cooler here.", "falling"),
+                                            ("The hottest days have clearly been getting less hot here.", "falling"),
+                                            ("It has clearly been getting drier here.", "falling")])
+def test_headline_verdict_words(answer, verdict):
+    assert run.wording_agrees(answer, verdict)
+    assert not run.wording_agrees(answer + " The data do not show a clear change.", verdict)  # no-change claim
+    assert not run.wording_agrees("Their coolers are big.", "falling")  # whole words only
+
+
+def test_new_columns_in_the_table():
+    assert list(run.COLUMNS)[-3:] == ["min_places", "plain", "links"]
+    assert run.CHECKS[-4:] == ["min_places", "plain", "links", "answered"]
+
+
+# ---- fix round 1 ----
+
+INLAND = ("There is no tide gauge near Delhi, so there is no sea-level record to check: Delhi is far from the coast. "
+          "Sources checked: NOAA CO-OPS (https://tidesandcurrents.noaa.gov) and PSMSL, the Permanent Service for Mean "
+          "Sea Level (https://psmsl.org).")
+
+
+@pytest.mark.parametrize("answer,ok", [
+    (INLAND, True),  # the live answer that failed: both sources errored, their own addresses are fine
+    (INLAND.replace("https://psmsl.org", "https://psmsl.org.example.com"), False),  # a look-alike host
+    (INLAND.replace("https://tidesandcurrents.noaa.gov", "https://tidesandcurrents-noaa.gov"), False),
+])
+def test_links_accept_catalog_sources_of_failed_calls(answer, ok):  # A
+    case = agent_case("delhi-sea-level-inland")  # the case that failed on the live run
+    failed = [{"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 28.61, "lon": 77.21, "source": s},
+               "result": None, "error": "No tide gauge within 100 km of this point."} for s in ("coops", "psmsl")]
+    assert run.check(case, fake_run(answer, failed))["links"] is ok
+
+
+TOKYO = {**AC, "verdict": "no_clear_change", "slope_per_decade": 1.234, "ci_low": -0.5, "ci_high": 2.9,
+         "place": {"name": "Tokyo", "lat": 35.65, "lon": 139.77},
+         "source": {"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"}, "caveats": []}
+SINGAPORE = {**TOKYO, "verdict": "rising", "slope_per_decade": 20.5, "ci_low": 18.0, "ci_high": 23.0,
+             "place": {"name": "Singapore", "lat": 1.26, "lon": 103.82}}
+BROAD = ("I cannot rank places or judge investments from past data at single places. Tokyo: no clear change, 1.23 mm "
+         "per decade (95% range -0.50 to 2.90), PSMSL. Singapore: clearly rising, 20.50 mm per decade (95% range 18.00 "
+         "to 23.00), PSMSL. These are examples I chose, not a ranking. I can check a place you name. "
+         "Source: https://psmsl.org/")
+
+
+def test_broad_answer_with_two_verdicts_passes_wording():  # B: the verdict-word branches are skipped for several places
+    calls = [at(35.65, 139.77, TOKYO), at(1.26, 103.82, SINGAPORE)]
+    out = run.check({**ASIA, "must_say": ["not a ranking"]}, fake_run(BROAD, calls))
+    assert out.get("wording", True) and all(out.values())
+    assert "wording" in run.check(CASE, fake_run())  # one place: still checked
+
+
+def test_plain_catches_p_value_without_hyphen_and_significant():  # H
+    for words in ("p value", "statistically significant"):
+        assert run.check(CASE, fake_run(ANSWER.replace("Source:", f"It is {words}. Source:")))["plain"] is False
+
+
+def test_new_cases_ban_the_0_05_line_not_the_digits():  # G
+    for cid in ("manhattan-build-house", "asia-sea-level-broad"):
+        banned = agent_case(cid)["must_not_say"]
+        assert "0.05 line" in banned and "0.05" not in banned

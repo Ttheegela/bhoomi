@@ -7,10 +7,11 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
+from decimal import ROUND_HALF_UP, Decimal
 
 import httpx
 
-from earthtrends.agent import prompts, tools
+from earthtrends.agent import prompts, resources, tools
 from earthtrends.agent.providers import MAX_TOKENS, PROVIDERS, NotConfigured, parse_spec
 from earthtrends.agent.tracing import Trace
 
@@ -34,6 +35,10 @@ LONG_ASK = ("Your first answer to this question was over {limit} words. Give the
             "declined request in a few words.")
 PERIOD_ASK = ("Your first answer to this question gave a period that is in no tool result. The period of each source "
               "is: {periods}. Give the same answer again, following every rule, with each period exactly as given here.")
+NUMBER_ASK = ("Your first answer to this question stated a number, but no data lookup returned a result this turn. "
+              "Give the same answer again with no number at all.")
+NO_NUMBERS = ("I can only give numbers that come from a data lookup, and I did not look anything up for that. "
+              "Ask about a place and a measurement and I will check.")
 NO_TOOL = " Do not call a tool: these are the tool results you already got:\n"
 RETRY_LONG = "\n\n" + LONG_ASK + NO_TOOL
 
@@ -177,14 +182,30 @@ def _month(ym: str) -> str:
     return f"{calendar.month_name[int(m)]} {y}"
 
 
+def fmt(x: float) -> str:
+    """A number as the prompt's rule writes it: two decimals (half away from zero); if that prints zero, as many
+    decimals as it takes to show one non-zero digit; "-" in front; never scientific notation."""
+    d = Decimal(repr(float(x)))
+    if not d:
+        return "0.00"
+    places = 2
+    while not d.quantize(Decimal(1).scaleb(-places), ROUND_HALF_UP):
+        places += 1
+    return format(d.quantize(Decimal(1).scaleb(-places), ROUND_HALF_UP), "f")
+
+
 def agree_sentence(result: dict, default: dict) -> str:
-    """The one sentence about an agreeing non-default source. The eval scorer imports it."""
+    """The one sentence about an agreeing non-default source, with its own figures. The eval scorer imports it."""
     name = result["source"]["name"].split(",")[0].strip()
+    rate = result["slope_per_decade"]
+    rate = abs(rate) if result.get("verdict") in ("rising", "falling") else rate  # the shared verdict carries the sign
+    units = DEG_C.sub("\u00b0C", str(result.get("units") or ""))
+    fig = f"{fmt(rate)} {units} per decade (95% range {fmt(result['ci_low'])} to {fmt(result['ci_high'])})"
     p = result.get("period")
     if (not isinstance(p, dict) or p == default.get("period")
             or not all(isinstance(p.get(k), str) and _YM.fullmatch(p[k]) for k in ("start", "end"))):
-        return f"{name} agrees."
-    return f"{name} agrees, over its own record, {_month(p['start'])} to {_month(p['end'])}."
+        return f"{name} agrees: {fig}."
+    return f"{name} agrees: {fig}, over its own record, {_month(p['start'])} to {_month(p['end'])}."
 
 
 def _host(url: str) -> str:
@@ -264,30 +285,64 @@ def compose(text: str, calls: list[dict]) -> str:
     return NEG_ZERO.sub(r"\1", out)  # "-0.00" is a zero: no sign
 
 
-def _hidden(calls: list[dict]) -> set[int]:
+def hidden_calls(calls: list[dict]) -> set[int]:
     """Indexes of the calls whose result the model gets without its numbers: the agreeing non-default sources."""
     others = (agree_plan(calls) or (None, []))[1]
-    return {i for i, c in enumerate(calls) if c["error"] is None and any(c["result"] is r for r in others)}
+    return {i for i, c in enumerate(calls) if c.get("error") is None and any(c["result"] is r for r in others)}
 
 
 def for_model(calls: list[dict]) -> list[dict]:
-    """What the model reads: digit-free error reasons, and each agreeing non-default source without its numbers."""
-    hidden = _hidden(calls)
+    """What the model reads: digit-free error reasons, and each agreeing non-default source without its numbers (nor
+    its "meaning"). Every other result goes in full, "meaning" included."""
+    hidden = hidden_calls(calls)
 
     def brief(r):
         return {"variable": r.get("variable"), "verdict": r.get("verdict"), "source": r.get("source"),
                 "caveats": r.get("caveats", []), "note": AGREE_NOTE}
-    def bare(r):  # the plain-words "meaning" block is for the page only, not yet for the model
-        return {k: v for k, v in r.items() if k != "meaning"} if isinstance(r, dict) else r
     return [{**c, "error": model_reason(c["error"])} if c["error"]
-            else {**c, "result": brief(c["result"])} if i in hidden else {**c, "result": bare(c["result"])}
+            else {**c, "result": brief(c["result"])} if i in hidden else c
             for i, c in enumerate(calls)]
 
 
 def word_limit(calls: list[dict]) -> int:
-    """120 words, or 180 when detect_trend results came back from two or more distinct sources."""
-    srcs = {(c["result"].get("source") or {}).get("id") for c in ok_calls(calls)}
-    return MAX_WORDS_MULTI if len(srcs) >= 2 else MAX_WORDS
+    """120 words, or 180 when detect_trend results came back from two or more distinct sources or places."""
+    ok = ok_calls(calls)
+    srcs = {(c["result"].get("source") or {}).get("id") for c in ok}
+    return MAX_WORDS_MULTI if len(srcs) >= 2 or len({_where(c) for c in ok}) >= 2 else MAX_WORDS
+
+
+def words(text: str) -> int:
+    """What the word limit counts: the official-resources marker and its sentence are outside it."""
+    return len(resources.strip(text).split())
+
+
+# ---- numbers an answer states: the loop's no-data check and the eval scorer share this ----
+
+# The prompt's fixed phrases with an outside number; they are removed before numbers are checked.
+ALLOWED = re.compile(r"\b0\.05 line|less than 0\.01|\b95\s*(?:%|percent)", re.I)
+NUM = re.compile(r"(?<![\w.])([-\u2212]?)(\d+(?:\.\d+)?)")  # a minus only when it isn't a hyphen after a word
+UNIT = re.compile(r"\s*(?:%|°|degrees?\b|deg\b|mm\b|cm\b|m\b|km\b|inch|feet\b|ft\b|days?\b|weeks?\b|months?\b"
+                  r"|years?\b|decades?\b|times\b|percent\b)", re.I)
+
+
+# Fixed p-value phrases. The scorer allows them only when a result's p-value is under the line; the loop's no-lookup
+# check strips them anyway, so explaining an earlier answer's wording ("what does below 0.001 mean?") passes.
+UNDER_001 = re.compile(r"\b(?:below|less than) 0\.001(?!\d)", re.I)
+
+
+def stated_numbers(text: str) -> list[tuple[str, str]]:
+    """(sign, digits) for each number an answer states. Left out: list numbering, the prompt's fixed phrases, and
+    whole numbers under 10 with no unit after them (words like "2 sources")."""
+    text = re.sub(r"(?m)^\s*\d+[.)]\s", " ", text)
+    text = ALLOWED.sub(" ", text)
+    text = re.sub(r"(?<=\d),(?=\d{3}\b)", "", text)
+    out = []
+    for m in NUM.finditer(text):
+        sign, s = m.groups()
+        if "." not in s and int(s) < 10 and not UNIT.match(text, m.end()):
+            continue
+        out.append(("-" if sign else "", s))
+    return out
 
 
 # ---- periods: every range the answer gives must be the period of a returned result ----
@@ -473,7 +528,7 @@ def fix_periods(text: str, calls: list[dict]) -> str:
 def periods_note(calls: list[dict]) -> str:
     """Each source's period, for the retry, with its place when results span several places. Agreeing sources whose
     numbers the model never saw are left out."""
-    hidden, seen = _hidden(calls), []
+    hidden, seen = hidden_calls(calls), []
     ok = [c for c in ok_calls(calls) if _period(c["result"])]
     places = len({_where(c) for c in ok}) > 1
     for i, c in enumerate(calls):
@@ -495,7 +550,7 @@ def best(kept: list[str], calls: list[dict]) -> str | None:
         return None
     fixed, limit = [fix_periods(t, calls) for t in kept], word_limit(calls)
     flags = [len(_check(t, calls)) for t in fixed]  # left after fixing: the doubtful ones
-    n = [len(t.split()) for t in fixed]
+    n = [words(t) for t in fixed]
     return fixed[min(range(len(fixed)), key=lambda i: (0, flags[i], -i) if n[i] <= limit else (1, flags[i], n[i]))]
 
 
@@ -519,6 +574,7 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
     kept: list[str] = []  # complete answers that failed a check (too long, or a wrong period), in order
     no_tools = False  # the current attempt was started without tools
     sent_hidden: set[int] = set()  # calls whose result the model got without its numbers
+    numbered = False  # an answer stated a number with no data result this turn: never returned
     try:
         for i in range(MAX_CALLS):
             if time.monotonic() - t0 >= BUDGET_S:
@@ -536,16 +592,21 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
             if not step["tool_calls"]:
                 # Cut off at the output cap: never show partial text. The token check covers providers without "stop".
                 cut = step.get("stop") == "length" or step["usage"]["completion_tokens"] >= MAX_TOKENS
-                text, limit, long, wrong = step["text"], word_limit(calls), False, False
+                text, limit, long, wrong, nums = step["text"], word_limit(calls), False, False, False
                 if not cut:
                     if not (text or "").strip():
                         break  # empty text (e.g. reasoning spent the cap): falls through to kept or GAVE_UP
                     text = compose(text, calls)  # before the checks: they hold for what the user sees
-                    long, wrong = len(text.split()) > limit, bool(wrong_periods(text, calls))
-                    if not (long or wrong):
+                    long, wrong = words(text) > limit, bool(wrong_periods(text, calls))
+                    # No result to take a number from: any number but the fixed phrases is made up.
+                    nums = not ok_calls(calls) and bool(stated_numbers(UNDER_001.sub(" ", text)))
+                    if not (long or wrong or nums):
                         answer = text
                         break
-                    kept.append(text)  # complete but failing a check: kept, so a check never ends in GAVE_UP
+                    if nums:
+                        numbered = True  # never kept: it ends as NO_NUMBERS unless a retry comes back clean
+                    else:
+                        kept.append(text)  # complete but failing a check: kept, so a check never ends in GAVE_UP
                 # No call left; or a complete answer already had its one check retry; or a cut-off one when a
                 # complete answer is in hand. A cut-off step is retried until the call limit or the budget ends it.
                 if i == MAX_CALLS - 1 or (kept if cut else checked):
@@ -554,18 +615,21 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                     checked = True  # one retry for both checks together
                 # Every retry keeps the model's normal reasoning: it is never reduced (the owner's rule).
                 # The seam has no "add a user message", so restart with the results inline.
-                if not calls:  # nothing fetched yet: start again from the plain question, tools offered
+                if not calls and not nums:  # nothing fetched yet: start again from the plain question, tools offered
                     provider.start(system, question, TOOLS, history=history)
                     continue
                 if cut:
                     again = RETRY.format(target=SHORTER[limit])
                 else:
                     asks = ([LONG_ASK.format(limit=limit, target=SHORTER[limit])] if long else []) + (
-                        [PERIOD_ASK.format(periods=periods_note(calls))] if wrong else [])
-                    again = "\n\n" + " ".join(asks) + NO_TOOL
+                        [PERIOD_ASK.format(periods=periods_note(calls))] if wrong else []) + (
+                        [NUMBER_ASK] if nums else [])
+                    again = "\n\n" + " ".join(asks) + (NO_TOOL if calls else " Do not call a tool.")
                 # No tools: no refetch. No history either: the retry rewrites from this turn's results only, so an
-                # earlier answer's numbers and periods are not in front of it.
-                provider.start(system, question + again + json.dumps(for_model(calls)), [])
+                # earlier answer's numbers and periods are not in front of it. The no-number retry keeps it: there
+                # is no result, and the question may be a follow-up.
+                inline = json.dumps(for_model(calls)) if calls else ""
+                provider.start(system, question + again + inline, [], **({"history": history} if nums else {}))
                 no_tools = True
                 continue
             if i == MAX_CALLS - 1:  # no model call left to read the results, so don't fetch data for nothing
@@ -610,7 +674,7 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
             content = [d["result"] if d["error"] is None else {"error": d["error"]} for d in seen]
             # Sent without numbers in an earlier step but no longer agreeing (e.g. a later source disagrees):
             # the model gets those full results now, with this step's first result.
-            now = _hidden(calls)
+            now = hidden_calls(calls)
             back = [view[j]["result"] for j in sorted(sent_hidden - now)]  # not hidden now: full, as the model sees it
             sent_hidden = now
             if back:
@@ -618,7 +682,9 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                 first = content[k] if isinstance(content[k], dict) else {"result": content[k]}
                 content[k] = {**first, "earlier_results_in_full": {"note": RESTORED_NOTE, "results": back}}
             provider.add_tool_results([{"id": c["id"], "content": x} for c, x in zip(todo, content)])
-        answer = answer or best(kept, calls) or GAVE_UP
+        answer = answer or best(kept, calls) or (NO_NUMBERS if numbered else GAVE_UP)
+        # After every check, so it is outside the word limit; on every path, so the marker never reaches the user.
+        answer = resources.fill(answer, [c["result"] for c in ok_calls(calls)])
     finally:
         trace_id = trace.end(answer)
 
