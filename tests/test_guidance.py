@@ -104,10 +104,9 @@ def test_harmless_direction_is_low(var, verdict, slope, why):
 
 def test_rate_text():
     assert guidance_for(res("sea_level", "rising", 83.0))["rate"] == {
-        "value": 8.3, "unit": "cm", "text": "+8.3 cm", "per": "every 10 years"}
+        "value": 8.3, "unit": "cm", "text": "+8.3 cm", "per": "every 10 years", "note": None}
     assert guidance_for(res("air_temp", "rising", 0.21))["rate"]["text"] == "+0.21 °C"
     assert guidance_for(res("sea_level", "falling", -14.0))["rate"]["text"] == "−1.4 cm"
-    assert guidance_for(res("precip", "rising", 0.1), 3.0)["rate"]["text"] == "+37 mm a year"  # 36.525
 
 
 def test_short_record_is_unknown():
@@ -202,7 +201,7 @@ def test_precip_outlook_words():
     g = guidance_for(res("precip", "rising", 0.15, lo=0.1, hi=0.2, end="2026-12"), 3.0)
     assert g["outlook"][1] == {"year": 2050, "low": 88.0, "high": 175.0, "unit": "mm a year",
                                "text": "88 to 175 mm more rain a year by 2050"}
-    assert g["rate"]["text"] == "+55 mm a year"
+    assert g["rate"]["note"]["text"] == "about 50 mm more a year"  # 54.8 to 1 significant figure, like meaning
     g = guidance_for(res("precip", "falling", -0.3, lo=-0.4, hi=-0.2, end="2026-12"), 3.0)
     assert g["outlook"][1]["text"] == "175 to 351 mm less rain a year by 2050"
     assert (g["outlook"][1]["low"], g["outlook"][1]["high"]) == (-351.0, -175.0)
@@ -231,3 +230,24 @@ def test_outlook_direction_from_verdict_and_zero_years_skipped():
     # only the near years round to 0: they are skipped, later ones stay
     g = guidance_for(res("air_temp", "rising", 0.012, lo=0.01, hi=0.015, end="2026-12"))
     assert [o["year"] for o in g["outlook"]] == [2075]
+
+
+def test_precip_rate_is_the_share_with_mm_in_the_note():
+    from earthtrends.stats.meaning import meaning_for
+    r = res("precip", "rising", 0.164, end="2026-12")  # 59.9 mm a year more every 10 years; 3.4 mm/day usual
+    g = guidance_for(r, 3.4)
+    assert g["rate"] == {"value": 4.8, "unit": "%", "text": "+4.8%", "per": "more rain every 10 years",
+                         "note": {"value": 60.0, "unit": "mm", "text": "about 60 mm more a year"}}
+    assert "4.8%" in g["why"]
+    assert meaning_for(r)["comparison"] == "About 60 mm more rain a year, every 10 years."
+    g = guidance_for(res("precip", "falling", -0.164, end="2026-12"), 3.4)
+    assert g["rate"] == {"value": -4.8, "unit": "%", "text": "−4.8%", "per": "less rain every 10 years",
+                         "note": {"value": -60.0, "unit": "mm", "text": "about 60 mm less a year"}}
+    assert g["display"] == {"unit": "mm a year", "factor": 365.25}
+    assert guidance_for(res("precip", "rising", 0.164))["rate"] is None  # no usable mean: unknown, no rate
+
+
+@pytest.mark.parametrize("var,verdict,slope", [("sea_level", "rising", 34.0), ("air_temp", "rising", 0.3),
+                                               ("air_temp_max", "falling", -0.3), ("water_storage", "falling", -5.0)])
+def test_rate_note_is_null_for_the_others(var, verdict, slope):
+    assert guidance_for(res(var, verdict, slope))["rate"]["note"] is None

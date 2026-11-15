@@ -16,7 +16,9 @@ Every trend result carries a `guidance` object, computed in code by `earthtrends
 | precip | mm/day | mm a year | 365.25 |
 | water_storage | cm | cm | 1 |
 
-`rate` is the slope per 10 years in display units: 2 significant figures, rounded half away from zero, always signed ("+8.3 cm", "+0.21 °C", "−1.4 cm"). It is null when there is no clear change.
+`rate` is the slope per 10 years in display units: 2 significant figures, rounded half away from zero, always signed ("+8.3 cm", "+0.21 °C", "−1.4 cm"). It is null when there is no clear change. `rate.note` is always present and null, except for rainfall.
+
+For rainfall the big number is the share of this place's usual rainfall: the same share, with the same rounding, that the `why` sentence prints. For example, `{"value": 4.8, "unit": "%", "text": "+4.8%", "per": "more rain every 10 years", "note": {"value": 60, "unit": "mm", "text": "about 60 mm more a year"}}`. When rain is falling, it reads "−4.8%" with "less rain every 10 years", and the note is `{"value": -60, ..., "text": "about 60 mm less a year"}`. The note is the slope per 10 years in mm a year, rounded the same way as `meaning.comparison`. Its `value` is signed; its text is unsigned, and a word carries the direction. `display` stays mm a year (factor 365.25) for the chart. A clear rain change with no usable average gets risk `unknown` and `rate` null.
 
 ## Risk levels
 
@@ -74,7 +76,7 @@ Reference texts as shown:
 
 ## If the past trend continues (`outlook`)
 
-The outlook is given only when the verdict is rising or falling and the record covers at least 30 years. Otherwise it is []. For 2035, 2050 and 2075 (years after the last data year only), each end of the range is (year − last data year) ÷ 10 × `ci_low` (or × `ci_high`), in display units, measured from today. Both ends are whole numbers when the larger end is 10 or more, and otherwise have 1 decimal. The text reads "+18 to +21 cm by 2050". When both ends round to the same number, it reads "about +5 cm by 2050". For rainfall the numbers are unsigned and a word carries the direction: "64 to 239 mm more rain a year by 2050", "183 to 365 mm less rain a year by 2050", "about 60 mm more rain a year by 2050" (`low`/`high` keep their signs; `rate.text` stays "+60 mm a year"). The word comes from the verdict (falling → "less", rising → "more"), never from a rounded number. A year whose two ends both round to 0 is left out; if every year is left out, `outlook` is []. The word "forecast" is never used.
+The outlook is given only when the verdict is rising or falling and the record covers at least 30 years. Otherwise it is []. For 2035, 2050 and 2075 (years after the last data year only), each end of the range is (year − last data year) ÷ 10 × `ci_low` (or × `ci_high`), in display units, measured from today. Both ends are whole numbers when the larger end is 10 or more, and otherwise have 1 decimal. The text reads "+18 to +21 cm by 2050". When both ends round to the same number, it reads "about +5 cm by 2050". For rainfall the numbers are unsigned and a word carries the direction: "64 to 239 mm more rain a year by 2050", "183 to 365 mm less rain a year by 2050", "about 60 mm more rain a year by 2050" (`low`/`high` keep their signs). The word comes from the verdict (falling → "less", rising → "more"), never from a rounded number. A year whose two ends both round to 0 is left out; if every year is left out, `outlook` is []. The word "forecast" is never used.
 
 Worked example: a trend of 8.3 cm per 10 years (CI 7.6 to 8.9), last data year 2026. 2050 is 2.4 decades on, giving 18.24 to 21.36, shown as "+18 to +21 cm by 2050".
 

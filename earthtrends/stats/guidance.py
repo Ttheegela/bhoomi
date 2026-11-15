@@ -4,7 +4,7 @@ by the fixed rules in docs/RISK.md. Computed in code so the page and the agent s
 import math
 from decimal import ROUND_HALF_UP, Decimal
 
-from earthtrends.stats.meaning import UNITS
+from earthtrends.stats.meaning import UNITS, about
 
 DISCLAIMER = ("This guidance isn't perfect. It is based only on past records, and the future is not certain. "
               "Not professional financial or legal advice.")
@@ -211,7 +211,16 @@ def guidance_for(result: dict, mean: float | None = None) -> dict:
         return g
 
     rate = sig2(slope * factor) + 0
-    g["rate"] = {"value": float(rate), "unit": unit, "text": f"{signed(rate)} {unit}", "per": "every 10 years"}
+    g["rate"] = {"value": float(rate), "unit": unit, "text": f"{signed(rate)} {unit}", "per": "every 10 years",
+                 "note": None}
+    if var == "precip":  # the big number is the share (as in `why`); the mm a year (as in meaning) goes in the note
+        down = verdict == "falling"
+        share = sig2(abs(slope) / mean * 100) * (-1 if down else 1)
+        mm = Decimal(about(abs(slope * factor)))
+        more = "less" if down else "more"
+        g["rate"] = {"value": float(share), "unit": "%", "text": f"{signed(share)}%",
+                     "per": f"{more} rain every 10 years",
+                     "note": {"value": float(-mm if down else mm), "unit": "mm", "text": f"about {mm:f} mm {more} a year"}}
     risk, why, ratio, key = _risk(var, verdict, slope, mean)
     g.update(risk=risk, risk_label=LABEL[risk], why=why, ratio=ratio, recommendation=RECOMMEND[var][key])
     if years[0] >= OUTLOOK_YEARS:
