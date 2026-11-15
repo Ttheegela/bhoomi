@@ -1,9 +1,12 @@
 'use strict';
 /* Assistant: the ElevenLabs conversational widget (text and voice), bottom-right on every window.
-   This file only mounts it and keeps its dynamic variables current. No question goes through our server. */
+   This file only mounts it and keeps its dynamic variables current.
+   This page sends nothing to /api/ask itself; the assistant's tool calls /api/ask from ElevenLabs' servers. */
 
 const CHAT_AGENT_ID = 'agent_0301m7fm167nfwkrmgrw26cgf7qb'; // public widget id
 const CHAT_EMBED_SRC = 'https://unpkg.com/@elevenlabs/convai-widget-embed@0.18.3/dist/index.js';
+// The URL and this hash change together: recompute the hash whenever the version in the URL changes.
+const CHAT_EMBED_SRI = 'sha384-BpmvKCW/TFrpO8oObmUgZzUCIMHI00QbpGA4/jfXcfTosbgtuEUN1wYT7nNIsV3v';
 
 (function () {
   if (typeof document === 'undefined') return;
@@ -74,6 +77,8 @@ const CHAT_EMBED_SRC = 'https://unpkg.com/@elevenlabs/convai-widget-embed@0.18.3
     widget.setAttribute('dynamic-variables', vars());
     slot.append(widget);
     const s = document.createElement('script');
+    s.integrity = CHAT_EMBED_SRI;
+    s.crossOrigin = 'anonymous';
     s.src = CHAT_EMBED_SRC;
     s.async = true;
     document.body.append(s); // if it fails to load the element stays empty and the page works
