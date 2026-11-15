@@ -217,10 +217,11 @@
     frag.append(h('ul', { class: 'st-facts' },
       ...['No account.',
         'Your pinned places and these settings are kept in this browser; we don\'t store them on our server.',
+        'To check a place, its position goes to our server, which asks the data source named on the page.',
         'Place names you type in the search box go to our server, and from there to Open-Meteo\'s place search.',
         'The map loads its tiles from OpenFreeMap, and the assistant\'s code loads from unpkg.com; each sees your network address, like any website you visit.',
         'The assistant runs on ElevenLabs; if you talk or type to it, your voice and the conversation are processed by ElevenLabs.',
-        'When you use the assistant, the page tells it which window is open and which places you have pinned, so it can answer about what you see.',
+        'When you use the assistant, the page tells it which window is open and which places you have pinned and what the page shows about them, so it can answer about what you see.',
         'To answer, the assistant sends your question to our server, which passes it to our AI model provider. Questions and answers are recorded by a quality-checking service (Langfuse). Don\'t include personal details.',
         'Our server counts requests from each network address for a short time, to stop overuse.'].map((t) => h('li', null, t))));
     const btn = h('button', { type: 'button', class: 'btn' }, 'Forget my places and settings');
