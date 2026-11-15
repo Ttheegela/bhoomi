@@ -137,14 +137,14 @@ must_say = ["coast.noaa.gov/slr", "msc.fema.gov"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL"]
 
 # Planner: heat now and later. Air temperature or the hottest day of the month both fit, so no expect_variable.
-# "Summers" is part of the year, so the answer must say the tool looks at all months together.
+# "Summers" is part of the year, so the answer must say the tool does not look at summer alone ("not only summer").
 [[case]]
 id = "delhi-hotter-when-older"
 question = "Has it been getting hotter in Delhi? Will summers be worse when I'm older?"
 expect_tool = "detect_trend"
 expect_place = [28.61, 77.21]
 max_km = 50
-must_say = ["all months"]
+must_say = ["not only summer"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL"]
 
 [[case]]
@@ -153,7 +153,7 @@ question = "Has it been getting hotter in Princeton, New Jersey? Will summers be
 expect_tool = "detect_trend"
 expect_place = [40.35, -74.66]
 max_km = 50
-must_say = ["all months"]
+must_say = ["not only summer"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL"]
 
 # An investment on a coast where the sea is rising fast: the tool's guidance must say High risk and advise against.
