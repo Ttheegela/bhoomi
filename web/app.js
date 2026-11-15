@@ -692,7 +692,7 @@ function pinLine(p) {
   if (p.status === 'loading') return 'Checking…';
   if (p.status === 'error') return 'No record here';
   const t = p.trend, rate = fmt.rate(t);
-  if (rate) return `${rate} ${perOf(t)}`.trim();
+  if (rate) return t.guidance.rate.unit === '%' ? `${rate} every 10 years` : `${rate} ${perOf(t)}`.trim(); // the sign already gives the direction
   if (t.guidance) return 'No clear change';
   return (t.meaning && t.meaning.comparison) || 'No clear change';
 }
@@ -998,7 +998,7 @@ function addPin(win, spec) {
   const key = pinKeyOf(lat, lon);
   // a place within 0.25 degrees of a pinned one is that pin: select it, keep its label, say nothing
   const near = e.pins.find((p) => Math.abs(p.lat - lat) <= 0.25 && Math.abs(((p.lon - lon + 540) % 360) - 180) <= 0.25);
-  if (near && near.preset && !spec.link && cleanPlace(spec.label)) { near.label = cleanPlace(spec.label); near.preset = false; } // a typed place keeps its name
+  if (near && near.preset && !spec.link && cleanPlace(spec.label) && spec.label !== 'Pinned spot') { near.label = cleanPlace(spec.label); near.preset = false; } // a typed place keeps its name
   if (near) { e.selected = pinKeyOf(near.lat, near.lon); saveStore(); if (win === curWin) { ensureLoaded(win); changed(); } return { ok: true }; }
   const label = cleanPlace(spec.label) || coordText(lat, lon);
   let replaced = null;
