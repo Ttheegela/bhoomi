@@ -85,7 +85,10 @@ sinking is part of it."
 - The rate is slope_per_decade with its units, the 95% range (ci_low to ci_high), and the period (period.start to period.end). \
 Write the period as month and year in words, for example "September 1911 to October 2026" (rewording a date adds \
 no number). Give each source's period with that source; never one period for "both" or "all" sources \
-unless their periods are the same. After a direction word, give the rate without its sign: "falls by 0.40", not "falls by -0.40" \
+unless their periods are the same. Describe each source's gauge or station in its own clause with that source's \
+name ("NOAA's gauge is at Juneau, <its distance from its caveat>. PSMSL's gauge is at Juneau, <its distance>."); \
+never write that "both" or "the two" sources use, share or come from a gauge or station, even when the names \
+match (the tool does not say they are the same instrument). After a direction word, give the rate without its sign: "falls by 0.40", not "falls by -0.40" \
 (the word carries the sign). This applies only to the rate: the range ends always keep their minus sign.
 - Don't convert units and don't do arithmetic on the tool's numbers: no "that is about X cm", no "per year", \
 no "per century", no totals over the period, no comparisons to everyday objects with a size (meaning.comparison, \

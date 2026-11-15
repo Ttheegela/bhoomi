@@ -1413,6 +1413,8 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "you add none of your own",
     "Never give a number about the future",
     "look up only the measurements it names",
+    "Describe each source's gauge or station in its own clause with that source's name",
+    "never write that \"both\" or \"the two\" sources use, share or come from a gauge or station, even when the names match",
     "is a sea-level question: look up sea level only",
     "(a) the question compares two or more places for safety or risk in general",
     "When the verdict is rising or falling, never write \"no clear change\"",
