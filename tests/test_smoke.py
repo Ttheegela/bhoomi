@@ -59,3 +59,15 @@ def test_mcp_version_falls_back_when_not_installed(monkeypatch):
         earthtrends.mcp_server = original  # plain assignment: monkeypatch would put the copy back at teardown
     from earthtrends import mcp_server
     assert mcp_server is original
+
+
+def test_mcp_allowed_hosts_always_include_the_public_addresses():
+    from earthtrends.app import PUBLIC_HOSTS, mcp_allowed_hosts
+
+    for environ in ({}, {"VERCEL_PROJECT_PRODUCTION_URL": "bhoomi.earth"}):
+        hosts = mcp_allowed_hosts(environ)
+        assert {"bhoomi.earth", "www.bhoomi.earth", "trend-detective-six.vercel.app"} <= set(hosts)
+        assert {"127.0.0.1:*", "localhost:*"} <= set(hosts) and "*" not in hosts
+        assert len(hosts) == len(set(hosts))
+    assert mcp_allowed_hosts({"MCP_ALLOWED_HOSTS": "a.example", "VERCEL_URL": "x.vercel.app"}) == [
+        "a.example", "x.vercel.app", *PUBLIC_HOSTS]

@@ -13,7 +13,7 @@ try:
 except importlib.metadata.PackageNotFoundError:  # run from source, not installed: never fail start-up over a label
     VERSION = "unknown"
 
-mcp = MCPServer("trend-detective", version=VERSION)
+mcp = MCPServer("bhoomi", version=VERSION)
 
 SOURCE_DOWN = "The data source did not answer. Please try again."
 
@@ -33,7 +33,7 @@ def _as_tool_error():
 
 @mcp.tool()
 def ping() -> str:
-    """Health check. Returns 'pong' when the Trend Detective MCP server is reachable."""
+    """Health check. Returns 'pong' when the Bhoomi MCP server is reachable."""
     return "pong"
 
 
