@@ -1,5 +1,6 @@
 """The "what this means" strings for a TrendResult, by fixed rules: plain words, computed in code, never typed by hand."""
 
+import math
 from decimal import ROUND_HALF_UP, Decimal
 
 HEADLINE = {  # variable -> (rising, falling, no_clear_change)
@@ -45,7 +46,11 @@ def about(d: Decimal) -> str:
 
 def _comparison(r: dict) -> str:
     var, verdict, slope = r.get("variable"), r.get("verdict"), r.get("slope_per_decade")
-    if verdict not in ("rising", "falling") or var not in UNITS or r.get("units") != UNITS[var] or not slope:
+    if verdict not in ("rising", "falling") or var not in UNITS or r.get("units") != UNITS[var]:
+        return ""
+    if not isinstance(slope, (int, float)) or isinstance(slope, bool) or not math.isfinite(slope) or not slope:
+        return ""
+    if (slope > 0) != (verdict == "rising"):  # a direction word that contradicts the number: say nothing
         return ""
     size, word = abs(Decimal(repr(float(slope)))), WORDS[var][verdict == "falling"]
     if var == "sea_level":
@@ -61,12 +66,15 @@ def _comparison(r: dict) -> str:
 
 def meaning_for(result: dict) -> dict:
     """TrendResult dict -> {headline, confidence, comparison, limit}. Pure: no network, no clock."""
+    if not isinstance(result, dict):
+        result = {}
     var, verdict = result.get("variable"), result.get("verdict")
-    col = {"rising": 0, "falling": 1}.get(verdict, 2)
-    if col == 2:
-        confidence = "Not clear"
-    else:
-        confidence = "Very clear" if result.get("p_value") < 0.001 else "Clear"
+    var = var if isinstance(var, str) else None  # not a string: an unknown id
+    result = {**result, "variable": var}
+    col = {"rising": 0, "falling": 1}.get(verdict, 2) if isinstance(verdict, str) else 2
+    p = result.get("p_value")
+    very = isinstance(p, (int, float)) and not isinstance(p, bool) and p < 0.001
+    confidence = "Not clear" if col == 2 else "Very clear" if very else "Clear"
     return {
         "headline": HEADLINE.get(var, HEADLINE_OTHER)[col],
         "confidence": confidence,

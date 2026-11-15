@@ -130,6 +130,53 @@ def test_comparison_empty(r):
     assert meaning_for(r)["comparison"] == ""
 
 
+@pytest.mark.parametrize("slope,want", [(0.35, "0.4"), (0.045, "0.05"), (-0.35, "0.4")])
+def test_floats_not_exact_in_binary(slope, want):  # the decimal as written, not the binary value
+    word = "warmer" if slope > 0 else "cooler"
+    r = res("air_temp", "rising" if slope > 0 else "falling", slope)
+    assert meaning_for(r)["comparison"] == f"About {want} °C {word} every 10 years."
+
+
+# ---- bad input never raises ----
+
+@pytest.mark.parametrize("p", [None, "0.0001", True, [0.0001]])
+def test_p_value_not_a_number_is_clear(p):
+    assert meaning_for(res(p=p))["confidence"] == "Clear"
+    r = res()
+    del r["p_value"]
+    assert meaning_for(r)["confidence"] == "Clear"
+
+
+@pytest.mark.parametrize("slope", [float("nan"), float("inf"), float("-inf"), True, False, "31.79", None, [1.0]])
+def test_slope_not_a_finite_number_gives_no_comparison(slope):
+    m = meaning_for(res(slope=slope))
+    assert m["comparison"] == "" and m["headline"] == HEADLINES["sea_level"][0]
+
+
+@pytest.mark.parametrize("verdict,slope", [("rising", -31.79), ("falling", 31.79)])
+def test_contradicting_sign_gives_no_comparison(verdict, slope):
+    assert meaning_for(res(verdict=verdict, slope=slope))["comparison"] == ""
+
+
+UNKNOWN = {"headline": HEADLINES["ozone"][2], "confidence": "Not clear", "comparison": "",
+           "limit": "This is what has already been measured. It cannot tell you what will happen next."}
+
+
+@pytest.mark.parametrize("var", [["sea_level"], {"id": "sea_level"}, None, 3])
+def test_variable_not_a_string_is_unknown(var):
+    m = meaning_for({**res(), "variable": var})
+    assert m == {**UNKNOWN, "headline": HEADLINES["ozone"][0], "confidence": "Very clear"}
+
+
+@pytest.mark.parametrize("x", [None, [], "sea_level", 3, [("variable", "sea_level")]])
+def test_not_a_dict(x):
+    assert meaning_for(x) == UNKNOWN
+
+
+def test_verdict_not_a_string():
+    assert meaning_for({**res(), "verdict": ["rising"]})["confidence"] == "Not clear"
+
+
 # ---- the strings are plain words ----
 
 CASES = [res(var, v, s) for var in HEADLINES for v in VERDICTS

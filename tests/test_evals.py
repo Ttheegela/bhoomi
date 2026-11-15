@@ -119,6 +119,13 @@ def test_small_numbers_with_a_unit_are_checked():
     assert run.invented_numbers("station 8534720", [AC]) == []
 
 
+def test_numbers_only_in_meaning_are_invented():
+    from earthtrends.stats.meaning import meaning_for
+    r = {**AC, "meaning": meaning_for(AC)}
+    assert r["meaning"]["comparison"] == "About 4 cm higher every 10 years."  # the model is never sent this
+    assert run.invented_numbers("up 4 cm", [r]) == ["4"]
+
+
 @pytest.mark.parametrize("minus", ["-", "\u2212"])
 def test_signs(minus):
     r = {**AC, "slope_per_decade": -0.21, "ci_low": -0.30, "ci_high": 0.12}
