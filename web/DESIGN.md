@@ -200,13 +200,13 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - The server address field on "Use in your AI" stays on one line.
 
 ## 11. Trend picture and year stripes
-- The picture (`web/scene.js`) shows direction only, never size. Rising and falling both move the level by one small fixed distance from the middle; "no clear change" rests inside a shaded band. The caption says so: "Picture shows direction only, not size."
-- Motion plays once (the level travels, the stripes fade in) and never loops. "Play again" replays it and is hidden when the reader asks for reduced motion.
+- The picture (`web/scene.js`) shows direction only, never size. Rising and falling both move the level by one small fixed distance from the middle; "no clear change" rests inside a shaded band. The caption says so: "Picture shows direction only, not size." (for "no clear change" a second sentence follows about the band).
+- Motion plays once (the level travels, the stripes fade in) and never loops. "Play again" replays it; it is not shown for "no clear change" (nothing travels) or when the reader asks for reduced motion.
 - The picture never formats a number. Slope and range are the strings the answer card prints (`fmtVal`), passed in by `app.js` and used unchanged. Years are the first four characters of `period.start` and `period.end`, never taken from the yearly averages.
 - Ink tokens only until the palette is chosen. The stripe shading lives in one function (`shade` in `scene.js`).
-- Labels are 14 px, regular weight. The picture is drawn 268 units wide and shown at most that wide, so its text is 14 px. Under 480 px the head row stacks (title above, "Play again" on its own line).
+- Labels are 14 px, regular weight. The picture is drawn 268 units wide and shown at most that wide, so its text is 14 px. The head row never stacks: the title (up to two lines) on the left, "Play again" on the right, centred vertically at every width, to keep the block short.
 - No drawing that suggests more than the data say: no skyline, no well (the satellites measure all water stored on land, not groundwater in a well).
 - Where each sits: the picture is in the answer card after the p-value line and before the facts table (`#scene`); the year stripes are under the chart and its legend (`#year-stripes` in `#chart-wrap`).
 - Year stripes: one stripe per year, seasons removed, with the first and last year of the period, a key ("lower year", "higher year"; true in light and dark mode), a caption, the tag "our calculation" and the source link. The stripes are hidden from screen readers; the key and caption are real text.
 - Both mounts are optional: if either fails to draw, it is hidden and the answer card and chart are untouched.
-- Desktop: the left column is sticky; it is capped to the window height and scrolls inside itself, so a tall card can be read to its end.
+- Desktop: the left column is sticky; checked, left as on `main` (a column taller than the window un-sticks at the end of its row). No inner scroll area.

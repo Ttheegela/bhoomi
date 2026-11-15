@@ -63,8 +63,8 @@
   }
 
   // The level label and the arrow, both beside the new level.
-  function nowMark(g, xLabel, xArrow, L, y1txt) {
-    g.append(s('text', { x: xLabel, y: L.y1 + 5, class: 'sc-yr sc-now' }, y1txt));
+  function nowMark(g, xLabel, xArrow, L, y1txt, dy = 5) {
+    g.append(s('text', { x: xLabel, y: L.y1 + dy, class: 'sc-yr sc-now' }, y1txt));
     if (xArrow != null) arrow(g, xArrow, L.y0, L.y1 + (L.y1 < L.y0 ? 4 : -4));
   }
 
@@ -92,7 +92,7 @@
     root.append(m);
     root.append(s('line', { x1: 0, y1: H - 1, x2: W, y2: H - 1, class: 'sc-hair' }));
     ghostLine(root, 4, 166, L.y0, y0txt);
-    nowMark(root, 222, 212, L, y1txt);
+    nowMark(root, 222, 212, L, y1txt, -9); // above the wavy surface, not on it
   }
 
   function heat(root, L, y0txt, y1txt, hottest) {
@@ -270,13 +270,16 @@
     const tag = h('p', { class: 'sc-tag' },
       h('span', { class: 'sc-tag-n' }, text.name), ` · ${y0} → ${y1}`,
       L.clear ? '' : h('span', { class: 'sc-tag-q' }, ' · no clear change'));
-    const replay = h('button', { type: 'button', class: 'btn sc-replay' }, 'Play again');
-    replay.addEventListener('click', () => play(fig));
-    const head = h('div', { class: 'sc-head' }, tag, replay);
+    const head = h('div', { class: 'sc-head' }, tag);
+    if (L.clear) { // nothing travels for "no clear change", so nothing to replay
+      const replay = h('button', { type: 'button', class: 'btn sc-replay' }, 'Play again');
+      replay.addEventListener('click', () => play(fig));
+      head.append(replay);
+    }
 
     fig.append(head, sv);
     fig.append(h('figcaption', { class: 'source' },
-      L.clear ? 'Picture shows direction only, not size. The number is the trend we calculated from the source above.'
+      L.clear ? 'Picture shows direction only, not size.'
         : 'Picture shows direction only, not size. The level rests inside the shaded band: any change here is too small or too noisy to call.'));
     mount.append(fig);
     mount.hidden = false;

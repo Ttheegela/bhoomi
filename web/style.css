@@ -402,12 +402,7 @@ pre::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; bord
    The global prefers-reduced-motion rule in this file turns all of it off (the end state shows at once). */
 .sc-move { transition: transform 1800ms cubic-bezier(.2, .7, .15, 1); }
 .sc-move:not(.go) { transition: none; }
-@media (max-width: 480px) {
-  .sc-head { flex-direction: column; align-items: flex-start; }
-  .scene .sc-replay { align-self: flex-end; }
-}
 @media (prefers-reduced-motion: reduce) { .scene .sc-replay { display: none; } }
-@media (min-width: 900px) { .col-verdict { max-height: calc(100vh - 32px); overflow-y: auto; } } /* sticky column: a tall card still scrolls to its end */
 
 /* Year stripes, under the chart (mount #year-stripes in #chart-wrap) */
 .stripes { margin-top: var(--s4); }
