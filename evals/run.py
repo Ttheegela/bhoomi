@@ -22,11 +22,12 @@ from urllib.parse import urlparse
 import httpx
 
 from earthtrends.agent import providers, tracing
-from earthtrends.agent.loop import GAVE_UP, MAX_CALLS, agree_plan, agree_sentence, ask, wrong_periods
+from earthtrends.agent.loop import GAVE_UP, MAX_CALLS, agree_plan, agree_sentence, ask, history_error, wrong_periods
 from earthtrends.data import list_variables
 from earthtrends.data.coops import haversine_km
 
 CASES = Path(__file__).with_name("cases.toml")
+CASES_AGENT = Path(__file__).with_name("cases_agent.toml")  # the agent lane's cases, loaded after CASES
 RESULTS = Path(__file__).with_name("results")
 ALIASES = {"precipitation": "precip"}  # cases written before the catalog existed
 JUDGE = "anthropic:claude-haiku-5-5"
@@ -78,10 +79,19 @@ UNIT = re.compile(r"\s*(?:%|°|degrees?\b|deg\b|mm\b|cm\b|m\b|km\b|inch|feet\b|f
 
 # ---------- cases ----------
 
-def load_cases(path: Path = CASES) -> list[dict]:
-    with open(path, "rb") as f:
-        cases = tomllib.load(f)["case"]
+def load_cases(*paths: Path) -> list[dict]:
+    """The cases of each file in order (default: CASES, then CASES_AGENT). Ids must be unique across them."""
+    cases = []
+    for path in paths or (CASES, CASES_AGENT):
+        with open(path, "rb") as f:
+            cases += tomllib.load(f)["case"]
+    seen = set()
     for c in cases:
+        if c.get("id") in seen:
+            raise SystemExit(f"Case id {c.get('id')!r} is used twice; ids must be unique across the case files")
+        seen.add(c.get("id"))
+        if "history" in c and (err := history_error(c["history"])):
+            raise SystemExit(f"Case {c.get('id')!r}: {err}")
         km = c.get("max_km")
         if "max_km" in c and (isinstance(km, bool) or not isinstance(km, (int, float))
                                or not math.isfinite(km) or not km > 0):
@@ -308,7 +318,7 @@ def run_case(case: dict, spec: str) -> dict:
     failed = 0.0
     for attempt in range(2):
         try:
-            return {**ask(case["question"], model=spec), "failed_cost": failed}
+            return {**ask(case["question"], model=spec, history=case.get("history")), "failed_cost": failed}
         except providers.UpstreamError as e:
             failed += UNKNOWN_COST * MAX_CALLS
             if attempt:

@@ -37,14 +37,15 @@ def step(text=None, tool_calls=(), cost=0.001, tokens=20, **extra):
 @pytest.fixture
 def fake(monkeypatch):
     class Fake:
-        script, results, started, low, starts = [], [], None, [], []
+        script, results, started, low, starts, histories = [], [], None, [], [], []
 
         def __init__(self, model):
             self.model = model
 
-        def start(self, system, question, tools):
+        def start(self, system, question, tools, history=()):
             Fake.started = (system, question, tools)
             Fake.starts.append(Fake.started)
+            Fake.histories.append(list(history))
 
         def step(self):
             Fake.low.append(getattr(self, "low_reasoning", False))
@@ -1723,3 +1724,53 @@ def test_route_upstream_failure(openrouter, reply):
     r = client.post("/api/ask", json={"question": "hi"})
     assert r.status_code == 502 and r.json() == {"detail": "The assistant could not be reached. Please try again."}
     assert "secret" not in r.text
+
+
+# ---- chat memory: earlier turns as plain text, before the question ----
+
+HIST = [{"role": "user", "content": "Is sea level rising in New York?"},
+        {"role": "assistant", "content": "Sea level in New York is clearly going up, by 29.15 mm per decade."}]
+
+
+def test_history_goes_to_the_first_and_plain_restart_but_not_the_no_tools_retry(fake):
+    fake.script = [EMPTY_CUT, step(tool_calls=[call()]), CUT, step("Rising.")]
+    r = loop.ask("ok what about jakarta?", model="fake:m", history=HIST)
+    assert r["answer"] == "Rising." and fake.starts[1][1:] == ("ok what about jakarta?", loop.TOOLS)
+    assert fake.histories == [HIST, HIST, []]  # first start, plain restart, then the retry from this turn's results
+    assert "29.15" not in fake.starts[2][1]
+
+
+def test_check_retry_gets_no_history(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(130)), step("Rising.")]
+    assert loop.ask("ok what about jakarta?", model="fake:m", history=HIST)["answer"] == "Rising."
+    assert fake.histories == [HIST, []] and fake.starts[1][2] == []
+
+
+def test_no_history_starts_as_before(fake):
+    fake.script = [step("Which Springfield?")]
+    loop.ask("Springfield?", model="fake:m")
+    assert fake.histories == [[]]
+
+
+def test_openrouter_sends_history_before_the_question(openrouter):
+    sent, replies = openrouter
+    replies += [or_response(TOOL_MSG), or_response({"role": "assistant", "content": "Rising."})]
+    loop.ask("ok what about jakarta?", model="openrouter:a/b", history=HIST)
+    for s in sent:
+        m = s["json"]["messages"]
+        assert m[0]["role"] == "system" and m[1:3] == HIST and m[3] == {"role": "user", "content": "ok what about jakarta?"}
+    later = sent[1]["json"]["messages"][4:6]  # this turn's tool call and result (the list is shared, so it grew)
+    assert [x["role"] for x in later] == ["assistant", "tool"] and later[0]["tool_calls"][0]["id"] == "c1"
+    assert all("tool_calls" not in x and x["role"] != "tool" for x in sent[1]["json"]["messages"][:4])
+
+
+def test_history_error_limits():
+    assert loop.history_error([]) is None and loop.history_error(HIST * 3) is None
+    assert "at most 6" in loop.history_error(HIST * 4)
+    assert "at most 6" in loop.history_error({"role": "user"})
+    assert "4,000" in loop.history_error([{"role": "user", "content": "x" * 2000}, {"role": "assistant", "content": "y" * 2001}])
+    for bad in ([{"role": "system", "content": "a"}, HIST[1]], [{**HIST[0], "content": " "}, HIST[1]],
+                [{**HIST[0], "name": "x"}, HIST[1]], [{"role": "user", "content": 5}, HIST[1]], ["hi", HIST[1]]):
+        assert "role" in loop.history_error(bad)
+    for bad in ([HIST[1], HIST[0]], [HIST[0]], [HIST[0], HIST[0]]):
+        assert "whole pairs" in loop.history_error(bad)

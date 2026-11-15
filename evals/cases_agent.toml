@@ -1,0 +1,45 @@
+# Eval cases owned by the agent lane (evals/cases.toml belongs to the story lane). Same fields as cases.toml, plus:
+#   history          optional earlier chat turns, [{role, content}, ...]: whole user/assistant pairs, at most 6
+#                    messages and 4,000 characters in total (the same limits as POST /api/ask).
+# Loaded after cases.toml by `uv run python -m evals.run`; ids must be unique across both files.
+
+# A follow-up that names only a new place: the agent must keep the earlier measurement (sea level) and run a new
+# check near Jakarta. The earlier answer's numbers are written for this case (not tool output); none of them may
+# show up in the new answer (the "no invented numbers" check). No expect_verdict: no independent reference.
+# Scorable when no gauge near Jakarta has a usable record: an errored call still counts for tool, variable and
+# place, and the answer then must state no number at all.
+[[case]]
+id = "followup-jakarta-sea-level"
+question = "ok what about jakarta?"
+expect_tool = "detect_trend"
+expect_variable = "sea_level"
+expect_place = [-6.10, 106.88]      # Tanjung Priok, Jakarta's port
+max_km = 40                         # any point in the city
+must_say = []
+must_not_say = []
+history = [
+  { role = "user", content = "Is sea level rising in New York?" },
+  { role = "assistant", content = """Sea level in New York is clearly going up. At the tide gauge at The Battery, it rises by 29.15 mm per decade (a decade is ten years), with a 95% range of 28.10 to 30.21 mm per decade, from January 1856 to October 2026. The p-value is below 0.001, well below the usual 0.05 line.
+
+Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, January 1856 to December 2025.
+
+Data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and the Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Sea level is measured relative to the land at the gauge, so land rising or sinking is included.""" },
+]
+
+# A follow-up that only asks what a word in the earlier answer means: no data tool, plain words. No code checks this
+# path's answer, so the scorer's "no invented numbers" check is what catches a number copied from the earlier turn
+# (only the fixed phrase "95% range" may appear).
+[[case]]
+id = "followup-explain-range"
+question = "what does 95% range mean?"
+expect_tool = "none"
+must_say = []
+must_not_say = []
+history = [
+  { role = "user", content = "Is sea level rising in New York?" },
+  { role = "assistant", content = """Sea level in New York is clearly going up. At the tide gauge at The Battery, it rises by 29.15 mm per decade (a decade is ten years), with a 95% range of 28.10 to 30.21 mm per decade, from January 1856 to October 2026. The p-value is below 0.001, well below the usual 0.05 line.
+
+Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, January 1856 to December 2025.
+
+Data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and the Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Sea level is measured relative to the land at the gauge, so land rising or sinking is included.""" },
+]
