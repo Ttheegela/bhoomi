@@ -873,7 +873,9 @@ def test_shared_source_claim_fails_wording(claim):
     "Sea level is rising at both places, according to NOAA's tide gauges.",
     "Both use grid cells, about 50 km and 25 km wide, not a single station.",
     "Both p-values are below 0.001, well under the usual 0.05 line.",
-    "Both areas show total land water storage falling clearly from April 2002 to June 2026."])
+    "Both areas show total land water storage falling clearly from April 2002 to June 2026.",
+    "Both use one gauge each, about 1 km apart.", "Both use a single station each.",
+    "The two sources use one station each: Central Park and JFK."])
 def test_sentence_about_both_sources_passes_wording(fine, monkeypatch):
     assert not run.SHARED.search(fine)
     if "1981" in fine or "falling" in fine:  # a Delhi period or a falling verdict fails the New York answer anyway

@@ -65,7 +65,7 @@ GUESSED = ("likely because", "probably because", "likely due to", "probably due 
 SHARED = re.compile(r"\b(?:both|the two)(?:\s+(?:sources|records|datasets|data sets))?\s+"
                     r"(?:use[sd]?|using|share[sd]?|rel(?:y|ies) on|comes? from|draws? on|are from)\s+"
                     r"(?:(?:the\s+same|the|one|a\s+single)\s+(?-i:(?:[A-Z][\w'-]*\s+)*)|(?-i:(?:[A-Z][\w'-]*\s+)+))"
-                    r"(?:tide\s+)?(?:gauge|station)\b", re.I)
+                    r"(?:tide\s+)?(?:gauge|station)\b(?!s?\s+each\b)", re.I)  # "one gauge each": its own
 # The prompt's fixed phrases with an outside number; they are removed before numbers are checked.
 ALLOWED = re.compile(r"\b0\.05 line|less than 0\.01|\b95\s*(?:%|percent)", re.I)
 # Fixed p-value phrases allowed only when a result's p-value is really under that line.
@@ -321,7 +321,7 @@ def run_case(case: dict, spec: str) -> dict:
 
 
 def guard_cost(run: dict) -> float:
-    """Cost toward the budget: failed attempts, plus the run's own cost. Unknown cost: $0.01 for each of the
+    """Cost toward the budget: failed attempts, plus the run's own cost. Unknown cost: UNKNOWN_COST for each of the
     MAX_CALLS responses the loop may make (its length retry included)."""
     if run.get("error"):
         return run.get("failed_cost", 0.0)
