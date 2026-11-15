@@ -203,24 +203,33 @@ TOKYO = {"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 3
 MANILA = {"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 14.58, "lon": 120.97}}
 
 
-def test_examples_sentence_added_once_after_first_paragraph():
-    text = "I can't rank a whole region, so these are three examples.\n\nTokyo: rising.\n\nManila: rising."
+@pytest.mark.parametrize("opener", ["I cannot rank a whole region from past data at single places.",
+                                    "I can't rank a whole region from past data at single places.",
+                                    "I can’t rank a whole region from past data at single places."])
+def test_cannot_rank_answer_gets_the_sentence_once(opener):
+    text = f"{opener}\n\nTokyo: rising.\n\nManila: rising."
     out = loop.add_examples(text, [TOKYO, MANILA])
-    assert out.count(loop.EXAMPLES) == 1
-    assert out.startswith("I can't rank a whole region, so these are three examples. These are examples, not a "
-                          "ranking.\n\nTokyo")
+    assert out.count(loop.EXAMPLES) == 1 and out.startswith(f"{opener} {loop.EXAMPLES}\n\nTokyo")
 
 
-def test_examples_sentence_not_added_for_one_place_or_twice():
+def test_two_places_without_cannot_rank_unchanged():
+    text = "New York and Seattle: both rising. Source: NOAA."
+    assert loop.add_examples(text, [TOKYO, MANILA]) == text
+
+
+def test_not_a_ranking_already_there_is_not_doubled():
+    text = "I can't rank a whole region. These are examples I chose, not a ranking. Tokyo: rising."
+    assert loop.add_examples(text, [TOKYO, MANILA]) == text
+
+
+def test_one_place_unchanged():
     one = [TOKYO, {**TOKYO, "arguments": {**TOKYO["arguments"], "lat": 35.66, "source": "psmsl"}}]  # same city
-    assert loop.add_examples("Tokyo: rising.", one) == "Tokyo: rising."
-    have = "Tokyo: rising. These are examples, not a ranking. Manila: rising."
-    assert loop.add_examples(have, [TOKYO, MANILA]) == have
+    assert loop.add_examples("I can't rank places. Tokyo: rising.", one) == "I can't rank places. Tokyo: rising."
 
 
 def test_loop_adds_examples_sentence(fake, monkeypatch):
     monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
     fake.script = [step(calls=[call("a", **TOKYO["arguments"]), call("b", **MANILA["arguments"])]),
-                   step("Tokyo and Manila: rising.")]
+                   step("I can't rank a whole region from past data at single places.\n\nTokyo and Manila: rising.")]
     assert loop.ask("Which Asian cities?", model="fake:m")["answer"].count(loop.EXAMPLES) == 1
 

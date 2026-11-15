@@ -578,11 +578,15 @@ def best(kept: list[str], calls: list[dict]) -> str | None:
 
 EXAMPLES = "These are examples, not a ranking."
 PLACE_KM = 50  # lookups this far apart are different places
+CANNOT_RANK = re.compile(r"\b(?:cannot|can not|can['’]t)\s+rank\b", re.I)  # the broad-question rule's opener
 
 
 def add_examples(text: str, calls: list[dict]) -> str:
-    """EXAMPLES once, at the end of the first paragraph, when this turn's lookups cover two or more places and the
-    text lacks it (the prompt asks for it; code makes sure). One place: unchanged."""
+    """EXAMPLES once, at the end of the first paragraph, only for a broad answer: this turn's lookups cover two or
+    more places, the text says it cannot rank, and it has no "not a ranking" yet. Places the user named (a
+    comparison) never get it: there the text has no cannot-rank phrase."""
+    if not CANNOT_RANK.search(text) or "not a ranking" in text.lower():
+        return text
     pts = []
     for c in calls:
         a = c.get("arguments") or {}
@@ -592,7 +596,7 @@ def add_examples(text: str, calls: list[dict]) -> str:
             continue
         if c.get("name") == "detect_trend" and all(coops.haversine_km(*p, *q) > PLACE_KM for q in pts):
             pts.append(p)
-    if len(pts) < 2 or EXAMPLES.lower() in text.lower():
+    if len(pts) < 2:
         return text
     head, sep, rest = text.partition("\n\n")
     return f"{head.rstrip()} {EXAMPLES}{sep}{rest}"

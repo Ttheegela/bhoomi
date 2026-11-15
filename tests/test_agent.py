@@ -559,7 +559,7 @@ def test_two_places_through_the_loop_get_full_results(fake, monkeypatch):
     four = [call(arguments={**p, "source": s}, id=f"{s}{p['lat']}") for p in (NY, SEATTLE) for s in ("coops", "psmsl")]
     fake.script = [step(tool_calls=four), step("Both rising.")]
     r = loop.ask("Compare how fast sea level is rising in New York and Seattle.", model="fake:m")
-    assert r["answer"] == f"Both rising. {COOPS_LINK} Source: Permanent Service for Mean Sea Level (PSMSL), https://psmsl.org/. {loop.EXAMPLES}"
+    assert r["answer"] == f"Both rising. {COOPS_LINK} Source: Permanent Service for Mean Sea Level (PSMSL), https://psmsl.org/."
     assert [x["content"] for x in fake.results[0]] == [NY_COOPS, NY_PSMSL, SEA_COOPS, SEA_PSMSL]
 
 
@@ -1416,7 +1416,7 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "Describe each source's gauge or station in its own clause with that source's name",
     "never write \"the same gauge\" or \"the same station\", and never that \"both\" or \"the two\" sources use, share or come from a gauge or station",
     "\"NOAA's gauge is at The Battery. PSMSL's gauge is also at The Battery.\"",
-    "right: \"The rate is -1.53 mm per decade (95% range -4.20 to 1.16).\"; wrong: \"went down by 1.53\", \"fell\", \"rose\".",
+    "right: \"The rate is -0.73 mm per decade (95% range -2.18 to 0.64).\"; wrong: \"went down by 0.73\", \"fell\", \"rose\".",
     "You check public NASA and NOAA records to tell people whether something is really changing at a place.",
     "is a sea-level question: look up sea level only",
     "(a) the question compares two or more places for safety or risk in general",
