@@ -1,5 +1,5 @@
 // Compare: comparison chart card + comparison table card (rework contract, section 5).
-// Pure helpers (yearly, smooth, baseline, convert, niceTicks, stack, buildModel) take plain data;
+// Pure helpers (yearly, smooth, baseline, convert, niceTicks, buildModel) take plain data;
 // everything under "DOM" talks to TD / TDPrefs and draws with textContent only.
 (function () {
   'use strict';
@@ -76,23 +76,6 @@
     var d = step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step) - 1e-9));
     var s = Math.abs(v).toFixed(d);
     return (v < 0 && Number(s) !== 0 ? '-' : '+') + s;
-  }
-
-  // Direct labels: sort by y, push apart to >= gap, keep inside [min, max]. items: [{y}] -> adds .ly
-  function stack(items, gap, min, max) {
-    var a = items.slice().sort(function (p, q) { return p.y - q.y; }), i;
-    a.forEach(function (it) { it.ly = Math.min(Math.max(it.y, min), max); });
-    for (i = 1; i < a.length; i++) a[i].ly = Math.max(a[i].ly, a[i - 1].ly + gap);
-    if (a.length && a[a.length - 1].ly > max) {
-      a[a.length - 1].ly = max;
-      for (i = a.length - 2; i >= 0; i--) a[i].ly = Math.min(a[i].ly, a[i + 1].ly - gap);
-    }
-    return a;
-  }
-
-  function shortName(label) {
-    var s = String(label || '').split(',')[0].trim();
-    return s.length > 18 ? s.slice(0, 17) + '…' : s;
   }
 
   function todayYear(now) {
@@ -296,7 +279,7 @@
     var tb = h('tbody');
     (pins || []).forEach(function (p) {
       var tr = h('tr', p.selected ? 'on' : ''), t = p.trend, g = t && t.guidance;
-      tr.tabIndex = 0; tr.setAttribute('aria-selected', p.selected ? 'true' : 'false');
+      tr.tabIndex = 0; if (p.selected) tr.setAttribute('aria-current', 'true');
       tr.addEventListener('click', function () { P.select(p.key); });
       tr.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); P.select(p.key); }
@@ -345,5 +328,5 @@
   if (window.TD && window.TD.ready) window.TD.ready.then(start);
   else document.addEventListener('td:ready', start, { once: true });
 
-  window.TDCompare = { yearly: yearly, smooth: smooth, baseline: baseline, convert: convert, niceTicks: niceTicks, stack: stack, buildModel: buildModel };
+  window.TDCompare = { yearly: yearly, smooth: smooth, baseline: baseline, convert: convert, niceTicks: niceTicks, buildModel: buildModel };
 })();
