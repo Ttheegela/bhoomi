@@ -1089,3 +1089,8 @@ def test_station_names_are_readable_in_series_and_sentences(offline2, psmsl_offl
     assert data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="1991", source="ghcn")["place"]["name"] == "New Delhi Safdarjun, IN"
     s = data.get_series("sea_level", 18.95, 72.83, source="psmsl")
     assert s["place"]["name"] == "Mumbai / Bombay (Apollo Bandar)" and "Mumbai / Bombay (Apollo Bandar) (PSMSL id 43)" in s["notes"][0]
+
+
+def test_readable_never_lengthens_a_name():
+    assert len(upstream.readable(upstream.text("X" + "İ" * 200, upstream.NAME))) <= upstream.NAME
+    assert len(upstream.readable("İSTANBUL")) == len("İSTANBUL") and upstream.readable("İSTANBUL").startswith("İ")

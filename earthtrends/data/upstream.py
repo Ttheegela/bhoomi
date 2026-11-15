@@ -29,7 +29,8 @@ def readable(name: str) -> str:
     head, code = (m.group(1), m.group(2)) if (m := re.fullmatch(r"(.*), ([^\W\d_]{2})", name)) else (name, "")
     out, start = [], True
     for c in head:
-        out.append(c.upper() if start else c.lower())
+        cased = c.upper() if start else c.lower()
+        out.append(cased if len(cased) == 1 else c)  # "İ" lowercases to two characters: keep it, so the length never grows
         start = c in " (/-."
     head = re.sub(r"\b(?:Ii|Iii|Iv|Vi|Vii|Viii|Ix)\b", lambda m: m.group().upper(), "".join(out))
     return head + (f", {code}" if code else "")
