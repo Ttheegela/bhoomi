@@ -610,12 +610,23 @@ function renderVerdict(t, series) {
   const big = $('verdict-big');
   clear(big);
   big.append(el('span', { class: 'big-n' }, fmtVal(t.slope_per_decade, t.units)), ' ', el('span', { class: 'big-u' }, 'per decade'));
-  // The picture is extra: if it fails, hide it and keep the answer.
+  // The picture and the stripes are extra: if one fails, hide it and keep the answer. The scene is handed
+  // the same strings the card prints (slope and range) and never formats a number itself.
   try {
-    const ms = series.times.map(monthIndex);
-    window.renderScene($('scene'), t, yearlyAverages(ms, deseasonalize(series.times, series.values)), placeOf(t), nameOf(t.variable));
+    window.renderScene($('scene'), t, {
+      place: placeOf(t), name: nameOf(t.variable),
+      slope: fmtVal(t.slope_per_decade, t.units),
+      range: `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)}`,
+    });
   } catch (e) {
     $('scene').hidden = true;
+  }
+  try {
+    const ms = series.times.map(monthIndex);
+    window.renderStripes($('stripes-art'), yearlyAverages(ms, deseasonalize(series.times, series.values)), t.period);
+    srcBlock($('stripes-source'), 'Raw data', t.source);
+  } catch (e) {
+    $('year-stripes').hidden = true;
   }
   $('verdict-lean').textContent = c.lean || '';
   $('verdict-lean').hidden = !c.lean;
