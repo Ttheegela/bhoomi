@@ -143,7 +143,8 @@
     var near = pins.filter(function (p) { return p !== sel && km(sel, p) <= 1000; });
     if (!near.length) { map.flyTo({ center: [sel.lon, sel.lat], zoom: 5, duration: dur, essential: true }); return; }
     var b = new lib.LngLatBounds([sel.lon, sel.lat], [sel.lon, sel.lat]);
-    near.forEach(function (p) { b.extend([p.lon, p.lat]); });
+    // shift a neighbour across the antimeridian (by 360) so the box stays tight around the selected pin
+    near.forEach(function (p) { b.extend([p.lon - 360 * Math.round((p.lon - sel.lon) / 360), p.lat]); });
     map.fitBounds(b, { padding: padFor(), maxZoom: 6, duration: dur });
   }
   function padFor() { return frame.offsetWidth < 420 ? 30 : { top: 40, bottom: 40, left: 40, right: 190 }; } // room on the right for the selected tag
