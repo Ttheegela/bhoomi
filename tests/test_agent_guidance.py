@@ -100,13 +100,13 @@ def test_scorer_accepts_inserted_guidance_numbers_and_link():
 @pytest.fixture
 def fake(monkeypatch):
     class Fake:
-        script, results = [], []
+        script, results, starts = [], [], []
 
         def __init__(self, model):
             pass
 
         def start(self, system, question, tools, history=()):
-            pass
+            Fake.starts.append((question, tools))
 
         def step(self):
             return Fake.script.pop(0)
@@ -326,4 +326,68 @@ def test_normal_answer_is_untouched(fake, monkeypatch):
     text = f"Yes. Sea level at Grand Isle has clearly been rising. Source: NOAA CO-OPS tide gauges, {SRC['url']}."
     fake.script = [step(calls=[call("a", **GI_ARGS)]), step(text)]
     assert loop.ask("Is sea level rising at Grand Isle?", model="fake:m")["answer"] == text
+
+
+# ---- with results, every number must be one of theirs ----
+
+POWER = {"id": "power", "name": "NASA POWER", "url": "https://power.larc.nasa.gov/"}
+FLAT = {"variable": "air_temp_max", "units": "degC", "place": {"name": "Delhi"}, "verdict": "no_clear_change",
+        "slope_per_decade": 0.125, "ci_low": -0.0151, "ci_high": 0.266, "p_value": 0.08,
+        "period": {"start": "1981-01", "end": "2025-12"}, "source": POWER, "caveats": [],
+        "meaning": {"headline": "The hottest days here show no clear change.", "confidence": "Not clear",
+                    "comparison": "", "limit": "It cannot tell the future."}}
+DELHI = {"variable": "air_temp_max", "lat": 28.61, "lon": 77.21}
+WRONG_SIGN = ("No clear change: -0.13 °C per decade (95% range -0.02 to 0.27). "
+              "Source: NASA POWER, https://power.larc.nasa.gov/.")
+RIGHT_SIGN = WRONG_SIGN.replace("-0.13", "0.13")
+
+
+def test_wrong_sign_gets_one_retry_naming_the_number(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    fake.script = [step(calls=[call("a", **DELHI)]), step(WRONG_SIGN), step(RIGHT_SIGN)]
+    r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
+    assert r["answer"] == RIGHT_SIGN and fake.script == []
+    retry, offered = fake.starts[-1]
+    assert loop.INVENTED_ASK.format(numbers="-0.13") in retry and offered == []  # no tools on the retry
+
+
+def test_wrong_twice_gives_the_found_answer(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    fake.script = [step(calls=[call("a", **DELHI)]), step(WRONG_SIGN), step(WRONG_SIGN)]
+    r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and "-0.13" not in r["answer"]
+    assert loop.invented_numbers(r["answer"], loop.model_results(r["tool_calls"])) == []
+
+
+def test_right_numbers_pass_with_no_retry(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    fake.script = [step(calls=[call("a", **DELHI)]), step(RIGHT_SIGN), step("never")]
+    r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
+    assert r["answer"] == RIGHT_SIGN and len(fake.script) == 1
+
+
+def test_direction_word_drops_the_slope_sign_but_not_a_range_end():
+    falling = {**FLAT, "verdict": "falling", "slope_per_decade": -0.2512, "ci_low": -0.41, "ci_high": -0.09}
+    res = loop.model_results([{"name": "detect_trend", "arguments": DELHI, "result": falling, "error": None}])
+    assert loop.invented_numbers("Clearly falling by 0.25 °C per decade (95% range -0.41 to -0.09).", res) == []
+    assert loop.invented_numbers("Clearly falling by 0.25 °C per decade (95% range 0.41 to -0.09).", res) == ["0.41"]
+
+
+def test_a_number_from_the_question_is_allowed(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    text = RIGHT_SIGN + " Past records cannot say what happens by 2050."
+    fake.script = [step(calls=[call("a", **DELHI)]), step(text), step("never")]
+    assert loop.ask("Will Delhi's hottest days be worse by 2050?", model="fake:m")["answer"] == text
+
+
+def test_wrong_number_long_answer_is_not_kept(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    long = WRONG_SIGN + " " + " ".join(["word"] * 130) + "."
+    fake.script = [step(calls=[call("a", **DELHI)]), step(long), step(LEAK)]
+    r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and "-0.13" not in r["answer"]
+
+
+def test_scorer_uses_the_loops_number_check():
+    assert run.invented_numbers is loop.invented_numbers and run._pool is loop._pool
 

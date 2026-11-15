@@ -1011,7 +1011,7 @@ def test_year_only_wrong_range_is_replaced_in_words(fake, monkeypatch):
 
 
 def test_gap_caveat_is_left_alone(fake, monkeypatch):
-    with_period(monkeypatch)
+    with_period(monkeypatch, {**VIZ, "caveats": ["Some months are missing, including mid-2017 to mid-2018."]})
     text = "Rising, 1981 to 2025. Some months are missing, including mid-2017 to mid-2018."
     fake.script = [step(tool_calls=[call()]), step(text), step("never")]
     assert loop.ask("q", model="fake:m")["answer"] == text and len(fake.script) == 1
@@ -1338,7 +1338,7 @@ def test_negative_zero_loses_its_sign(text, want):
     ("The degCelsius and xdegC words stay.", "The degCelsius and xdegC words stay."),
 ])
 def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
-    result = {**TREND, "units": "degC"}
+    result = {**TREND, "units": "degC", "slope_per_decade": 0.25, "ci_low": 0.1}  # the numbers the texts state
     monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: result)
     fake.script = [step(tool_calls=[call()]), step(text), step("never")]
     r = loop.ask("q", model="fake:m")
