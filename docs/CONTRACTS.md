@@ -54,12 +54,24 @@ One variable can come from several sources. Tools take an optional `source`; res
   "autocorrelation_adjusted": true,
   "verdict": "rising",
   "source": {"id": "power", "name": "NASA POWER (MERRA-2)", "url": "https://power.larc.nasa.gov/"},
-  "caveats": ["Grid cell about 50 km wide, not a single station."]
+  "caveats": ["Grid cell about 50 km wide, not a single station."],
+  "meaning": {
+    "headline": "It has clearly been getting warmer here.",
+    "confidence": "Clear",
+    "comparison": "About 0.2 °C warmer every 10 years.",
+    "limit": "This is what has already been measured. It cannot tell you how hot it will get."
+  }
 }
 ```
 
 - `verdict`: `"rising"` | `"falling"` | `"no_clear_change"` (p ≥ 0.05 or CI crosses 0).
 - `slope_per_decade` is in `units` per decade.
+- `meaning` (added 2026-11-14, always the last field): the result in plain words, computed in code from the fields above (`earthtrends/stats/meaning.py`), so the page, the agent and outside clients show the same words and no one redoes the arithmetic.
+  - `headline`: one sentence by variable and verdict.
+  - `confidence`: `"Very clear"` (rising or falling with p < 0.001) | `"Clear"` (any other rising or falling verdict) | `"Not clear"` (no clear change).
+  - `comparison`: the rate per 10 years in familiar units, rounded to 1 significant figure (2 when the first digit is 1), half away from zero; sea level of 10 mm or more is shown in cm, rainfall as mm a year. It is `""` when there is no clear change, the variable is unknown, the units are not the catalog's for that variable, the slope is 0 or not a finite number, or the slope's sign would contradict the verdict.
+  - `limit`: one sentence on what past data cannot tell.
+  - All four are strings and are always present. Show them as text; add no number of your own to them.
 
 ## Variable catalog entry — data lane maintains
 
@@ -79,4 +91,61 @@ One variable can come from several sources. Tools take an optional `source`; res
 
 - `source` left out: use the variable's default source; for `sea_level`, if the default source has no tide gauge within 100 km of the point, the next source in the variable's list is used. A point with no gauge in any source gives a clear 4xx. A source the variable doesn't have, an unknown variable, a bad lat/lon, or a point with no data gives a clear 4xx error, never a 500.
 
-The UI calls the same functions through FastAPI routes under `/api/`, so the UI and outside agents see identical results.
+The UI calls the same three functions through `/api/variables`, `/api/series` and `/api/trend`, so the UI and outside agents see identical results.
+
+## Web routes that are not MCP tools — served by `earthtrends/app.py`, UI lane consumes
+
+The page calls these three routes on its own origin. Outside agents use the MCP tools above instead.
+
+### `GET /api/places?q=<text>` — place search by name (data lane's `search_places`)
+
+```json
+{
+  "results": [
+    {"name": "Princeton", "admin1": "New Jersey", "country": "United States", "country_code": "US", "lat": 40.34872, "lon": -74.65905}
+  ],
+  "source": {"name": "Open-Meteo Geocoding API (GeoNames)", "url": "https://open-meteo.com/en/docs/geocoding-api"}
+}
+```
+
+- At most 5 results: places whose name equals the typed text first, then the largest population first (the upstream service is asked for 10 and orders by place type, which can put the largest place past the fifth). `admin1`, `country` and `country_code` can be `null`. Text fields are cut to 100 characters and are untrusted text: show them as text, never as HTML.
+- No match: `"results": []` with status 200. Every 200 answer carries `source`.
+- `q` is trimmed and single-spaced; fewer than 2 or more than 80 characters is a 400. A missing `q` is a 422. An upstream failure is a 502. The data rate limit applies (429 with `Retry-After`). Never a 500.
+
+### `GET /api/gauges` — where tide gauges are, for the map (data lane's station lists)
+
+```json
+{
+  "gauges": [
+    {"name": "The Battery", "lat": 40.7006, "lon": -74.0142, "source": "coops"},
+    {"name": "NEW YORK (THE BATTERY)", "lat": 40.7, "lon": -74.0133, "source": "psmsl"}
+  ],
+  "sources": [
+    {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"},
+    {"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/"}
+  ]
+}
+```
+
+- No parameters. CO-OPS gauges first, then PSMSL, each in its list's own order; about 2,000 in all. A gauge in both lists appears twice. Latitude and longitude are rounded to 4 decimals. Names are as the lists give them (PSMSL names are in capitals).
+- It says where gauges are. It does not say whether a gauge has enough years of readings for a trend: `detect_trend` and `/api/trend` decide which gauge answers.
+- One list unavailable: status 200 with the other list alone, only its entry in `sources`, and a short cache time. Both unavailable: 502. The data rate limit applies (429 with `Retry-After`).
+
+### `POST /api/ask` — a question for the agent
+
+Request:
+
+```json
+{
+  "question": "ok what about Jakarta?",
+  "history": [
+    {"role": "user", "content": "Is sea level rising in New York?"},
+    {"role": "assistant", "content": "Yes. Sea level is clearly rising at The Battery ..."}
+  ]
+}
+```
+
+- `question`: a string of 1 to 500 characters after trimming; outside that is a 400; missing is a 422.
+- `history` (optional): earlier turns of the same chat, oldest first. At most 6 messages and 4,000 characters in total; whole pairs in order (`user`, then `assistant`); each `content` a non-empty string; no other keys. Anything outside these limits is a 400 with a plain message; nothing is trimmed. Leaving it out, `null`, or `[]` means a question on its own.
+- Earlier turns are text only. They are used to understand the question (which place, measurement, period or source); every number in the answer comes from this turn's tool results.
+- Any other top-level field is refused (422).
