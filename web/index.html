@@ -4,18 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Trend Detective</title>
-<meta name="description" content="Is it really changing here? Pick a place and a measurement.">
+<meta name="description" content="Is this really changing where you live? Search for a place and see what public records say.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="Trend Detective">
-<meta property="og:description" content="Is it really changing here? Pick a place and a measurement.">
+<meta property="og:description" content="Is this really changing where you live? Search for a place and see what public records say.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://trend-detective-six.vercel.app/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Trend Detective">
-<meta name="twitter:description" content="Is it really changing here? Pick a place and a measurement.">
+<meta name="twitter:description" content="Is this really changing where you live? Search for a place and see what public records say.">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="map.css">
+<link rel="stylesheet" href="meaning.css">
+<link rel="stylesheet" href="memory.css">
+<link rel="stylesheet" href="guide.css">
+<link rel="stylesheet" href="noise.css">
 </head>
 <body>
+<p id="td-live" class="sr-only" role="status"></p>
 <a class="skip" id="skip" href="#h-explore">Skip to the content</a>
 
 <header>
@@ -33,17 +39,31 @@
 <div class="wrap">
 
 <div id="panel-explore" class="panel">
-  <h2 id="h-explore" class="lead" tabindex="-1">Is it really changing here?<span class="lead-2"> Pick a place and a measurement.</span></h2>
+  <section id="hero" aria-labelledby="h-explore">
+    <h2 id="h-explore" class="lead" tabindex="-1">Is this really changing where I live?</h2>
+    <p id="hero-lead" class="hero-lead">Search for your town or tap the map. We check public NASA and NOAA records and tell you in plain words.</p>
 
-  <form id="controls" novalidate autocomplete="off">
-    <fieldset class="chips">
-      <legend>Example places</legend>
-      <div id="chips" class="chip-row"></div>
-    </fieldset>
+    <form id="controls" novalidate autocomplete="off">
+      <div id="search" class="search">
+        <div class="search-head">
+          <label for="place" id="place-label">Search for a place</label>
+          <span class="search-links"><button type="button" id="guide-reopen" class="linkbtn" hidden>Quick start</button><button type="button" id="coords-toggle" class="linkbtn" aria-expanded="false" aria-controls="coords"><span class="mark" aria-hidden="true"></span>Use coordinates instead</button></span>
+        </div>
+        <div class="combo">
+          <input id="place" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="place-list" aria-describedby="place-status" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="80" placeholder="Type a city or town">
+          <ul id="place-list" role="listbox" aria-labelledby="place-label" hidden></ul>
+        </div>
+        <p id="place-status" class="help" role="status"></p>
+        <p id="place-credit" class="help" hidden></p>
+      </div>
 
-    <details id="coords">
-      <summary><span class="mark" aria-hidden="true"></span>Type coordinates or use my location</summary>
-      <div class="fields">
+      <fieldset id="examples" class="chips">
+        <legend class="sr-only">Example places</legend>
+        <p class="ex-label" aria-hidden="true">Or try an example</p>
+        <div id="chips" class="chip-row"></div>
+      </fieldset>
+
+      <div id="coords" class="fields coords" hidden>
         <div class="field">
           <label for="lat">Latitude</label>
           <input id="lat" type="text" inputmode="decimal" aria-describedby="lat-err">
@@ -62,22 +82,38 @@
           <button type="submit" id="go" class="btn primary">Show trend</button>
         </div>
       </div>
-    </details>
+    </form>
+  </section>
 
-    <div id="pick" class="fields pick">
-      <div class="field field-var">
-        <label for="variable">Measurement</label>
-        <select id="variable" aria-describedby="variable-help"></select>
-      </div>
-      <div class="field" id="source-field" hidden>
-        <label for="source">Data source</label>
-        <select id="source" aria-describedby="source-help"></select>
-      </div>
-      <p id="pick-help" class="help span2"><span id="variable-help"></span> <span id="source-help"></span></p>
+  <section id="guide-slot" hidden aria-label="Quick start"></section>
+  <section id="map-slot" hidden aria-label="Map"></section>
+
+  <div id="pick" class="fields pick">
+    <div class="field field-var">
+      <label for="variable">Measurement</label>
+      <select id="variable" aria-describedby="variable-help"></select>
     </div>
-  </form>
+    <div class="field" id="source-field" hidden>
+      <label for="source">Data source</label>
+      <select id="source" aria-describedby="source-help"></select>
+    </div>
+    <p id="pick-help" class="help span2"><span id="variable-help"></span> <span id="source-help"></span></p>
+  </div>
 
+  <section id="saved-slot" hidden aria-label="Saved places"></section>
+
+  <div id="answer-wrap">
+  <div id="empty" class="card quiet">
+    <h2 id="empty-h">Pick a place to see the answer</h2>
+    <p>Search for your town, tap the map, or try an example. We show what the public records say, in plain words.</p>
+  </div>
   <section id="answer" tabindex="-1" aria-label="Answer" aria-busy="false">
+    <div id="answer-bar" class="answer-bar" hidden>
+      <p id="answer-place" class="answer-place"></p>
+      <div id="share-slot" class="share-slot"></div>
+      <a id="change-place" class="linkbtn" href="#h-explore">Change the place</a>
+    </div>
+    <section id="meaning-slot" hidden aria-label="What this means for you"></section>
     <div id="loading" role="status">
       <p id="loading-text" class="loading-text"></p>
       <p id="loading-slow"></p>
@@ -164,6 +200,8 @@
       </div>
     </div>
   </section>
+  <section id="noise-slot" hidden aria-label="Real or noise?"></section>
+  </div>
 
   <div id="more" hidden>
     <section id="howto" aria-labelledby="howto-h">
@@ -184,7 +222,7 @@
   <div id="ask-ui" hidden>
     <p id="ask-lead" class="lead-p">Ask about a place in your own words. We look up public data and tell you whether it changed over time. We can't forecast the future.</p>
     <p id="ask-privacy">Your question is sent to an AI model provider so it can be answered. Don't include personal details.</p>
-    <p id="ask-keep" class="small">Your conversation stays in this browser tab. Reloading clears it. Nothing is saved on our server.</p>
+    <p id="ask-keep" class="small">Your conversation stays in this browser tab. Reloading clears it. Questions and answers are recorded by a quality-checking service (Langfuse); nothing else about you is kept.</p>
 
     <div id="ask-off" hidden>
       <p><strong>Asking questions isn't available right now.</strong></p>
@@ -383,12 +421,18 @@
     <p class="ai-label">Built with AI assistance</p>
     <p>Data come from the sources named next to each number. Only public data.</p>
     <ul id="footer-sources"></ul>
+    <section id="privacy-slot" hidden aria-label="Your data and privacy"></section>
   </div>
 </footer>
 
-<script src="scene.js"></script>
-<script src="app.js"></script>
-<script src="connect.js"></script>
-<script src="ask.js"></script>
+<script defer src="scene.js"></script>
+<script defer src="app.js"></script>
+<script defer src="map.js"></script>
+<script defer src="meaning.js"></script>
+<script defer src="memory.js"></script>
+<script defer src="guide.js"></script>
+<script defer src="noise.js"></script>
+<script defer src="connect.js"></script>
+<script defer src="ask.js"></script>
 </body>
 </html>

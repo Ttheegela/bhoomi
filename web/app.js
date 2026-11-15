@@ -2,6 +2,11 @@
 /* Trend Detective page. Same-origin /api/ calls only. Printed numbers come from the API;
    the browser's own arithmetic is for drawing (see the "pure helpers" block). */
 
+// What the page does on a first visit with no link: null = no data request (only /api/variables), the empty start shows.
+// For the old behaviour use { variable: 'sea_level', lat: 40.71, lon: -74.01, place: 'New York' }.
+const FIRST_LOAD = null;
+const GEO_LABEL = 'your location'; // the label of a "Use my location" pick; its link and search box stay empty
+const PLACE_SOURCE = { name: 'Open-Meteo Geocoding API (GeoNames)', url: 'https://open-meteo.com/en/docs/geocoding-api' };
 const MINUS = '−';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -215,14 +220,22 @@ function nearestIndex(ms, m) {
 /* ---------- tabs and the URL hash (pure) ---------- */
 
 const TABS = [
-  { id: 'explore', label: 'Explore', title: 'Trend Detective' },
+  { id: 'explore', label: 'Explore', title: 'Trend Detective' }, // the page title stays the short name; the question is the h2
   { id: 'ask', label: 'Ask', title: 'Trend Detective: Ask' },
   { id: 'connect', label: 'Use in your AI', title: 'Trend Detective: Use in your AI' },
 ];
 const APPS = ['claude', 'claude-code', 'cursor', 'vscode', 'other'];
 
+// A place name from a link or a search is only ever shown with textContent. Control characters and angle brackets
+// are dropped, 60 characters at most.
+function cleanPlace(s) { const t = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f-\u009f<>]/g, '').trim().slice(0, 60); return t || null; }
+// "YYYY" or "YYYY-MM", years 1850 to 2100; anything else is null.
+const yr = (v) => (/^(18[5-9]\d|19\d\d|20\d\d|2100)(-(0[1-9]|1[0-2]))?$/.test(v || '') ? v : null);
+// Both given and start not before end: drop both.
+function window2(a, b) { a = yr(a); b = yr(b); return a && b && monthIndex(a) >= monthIndex(b) ? [null, null] : [a, b]; }
+
 // Hash -> { tab, app, explore }. Missing or unknown tab = explore; unknown app = claude.
-// explore is set only for a complete, in-range variable/lat/lon (old share links); else null.
+// explore is set only for a complete, in-range variable/lat/lon (share links); else null.
 function parseHash(raw) {
   const h = new URLSearchParams(String(raw).replace(/^#/, ''));
   const t = h.get('tab'), a = h.get('app');
@@ -233,7 +246,7 @@ function parseHash(raw) {
     exploreBad: !ok && (h.has('variable') || h.has('lat') || h.has('lon')), // looks like a place link but is not usable
     tab: t === 'ask' || t === 'connect' ? t : 'explore',
     app: APPS.includes(a) ? a : 'claude',
-    explore: ok ? { variable: h.get('variable'), lat, lon, source: h.get('source') || null } : null,
+    explore: ok ? (([start, end]) => ({ variable: h.get('variable'), lat, lon, source: h.get('source') || null, place: cleanPlace(h.get('place')), start, end }))(window2(h.get('start'), h.get('end'))) : null,
   };
 }
 // { tab, app, explore } -> hash text without '#'. Explore keeps its old key-less form.
@@ -242,7 +255,8 @@ function writeHash(st) {
   if (st.tab === 'connect') return 'tab=connect' + (st.app && st.app !== 'claude' ? '&app=' + st.app : '');
   const e = st.explore;
   if (!e) return '';
-  return `variable=${e.variable}&lat=${Number(e.lat).toFixed(2)}&lon=${Number(e.lon).toFixed(2)}` + (e.source ? '&source=' + encodeURIComponent(e.source) : '');
+  return `variable=${e.variable}&lat=${Number(e.lat).toFixed(2)}&lon=${Number(e.lon).toFixed(2)}` + (e.source ? '&source=' + encodeURIComponent(e.source) : '')
+    + (e.start ? '&start=' + e.start : '') + (e.end ? '&end=' + e.end : '') + (cleanPlace(e.place) ? '&place=' + encodeURIComponent(cleanPlace(e.place)) : '');
 }
 
 // A place from a link or an answer, made safe for the catalog: null for an unknown measurement; the source
@@ -251,7 +265,8 @@ function fixExplore(e, vars) {
   const v = vars.find((x) => x.id === e.variable);
   if (!v) return null;
   const ok = !!e.source && Array.isArray(v.sources) && v.sources.includes(e.source) && e.source !== v.sources[0];
-  return { variable: e.variable, lat: e.lat, lon: e.lon, source: ok ? e.source : null };
+  const [start, end] = window2(e.start, e.end);
+  return { variable: e.variable, lat: e.lat, lon: e.lon, source: ok ? e.source : null, place: cleanPlace(e.place), start, end };
 }
 
 // The source the page sends: only one the user chose by hand, offered by the measurement, and not its default.
@@ -320,7 +335,8 @@ function srcLink(node, source, arrow) {
 /* ---------- state ---------- */
 
 const tabState = { tab: 'explore', app: 'claude' };
-const state = { userSource: null, variables: [], req: 0, series: null, trend: null, selIdx: null, fromGeo: false, params: null, slowTimer: 0, chart: null };
+const state = { userSource: null, variables: [], req: 0, series: null, trend: null, selIdx: null, fromGeo: false, params: null, slowTimer: 0, chart: null,
+  place: null, origin: 'coords', win: null, status: 'idle', err: null }; // place = { label, source } | null; win = { start, end } | null
 
 function placeOf(t) {
   const q = state.params || {};
@@ -339,7 +355,7 @@ async function api(path, params) {
     const res = await fetch(path + (q.toString() ? '?' + q : ''), { headers: { Accept: 'application/json' } });
     let body = null;
     try { body = await res.json(); } catch (e) { /* not json */ }
-    return { ok: res.ok, status: res.status, body };
+    return { ok: res.ok, status: res.status, body, retryAfter: res.headers.get('Retry-After') };
   } catch (e) {
     return { ok: false, status: 0, net: true, body: null };
   }
@@ -394,14 +410,11 @@ function noteGlyph(t, params) {
   if (i >= 0) glyphs.map[i] = t.verdict === 'rising' || t.verdict === 'falling' ? t.verdict : 'none';
   paintGlyphs();
 }
-function openCoords() { $('coords').open = true; }
+function setCoords(on) { $('coords').hidden = !on; $('coords-toggle').setAttribute('aria-expanded', String(on)); }
+function openCoords() { setCoords(true); }
 function applyPreset(i) {
   const p = PRESETS[i];
-  state.fromGeo = false;
-  $('lat').value = p.lat; $('lon').value = p.lon;
-  if (varById(p.variable)) $('variable').value = p.variable;
-  syncVariableUI();
-  submit(true);
+  TD.loadPlace({ lat: p.lat, lon: p.lon, label: p.label, variable: p.variable, origin: 'example' });
 }
 // Both selects use short names at every width, open or closed (full names clip in the closed select).
 const VAR_SHORT = { air_temp_max: 'Hottest day', water_storage: 'Water storage' };
@@ -462,7 +475,16 @@ function readParams() {
   const p = { variable: $('variable').value, lat, lon };
   const sent = sourceToSend(v, state.userSource);
   if (sent) p.source = sent;
+  if (state.win) { if (state.win.start) p.start = state.win.start; if (state.win.end) p.end = state.win.end; }
   return p;
+}
+
+function placeNow() { return { lat: state.params.lat, lon: state.params.lon, label: state.place ? state.place.label : '' }; }
+// The page's events (design/00-frame.md section 3). A load-end also answers every TD.loadPlace waiting for it.
+const loadWaiters = [];
+function fire(name, detail) {
+  document.dispatchEvent(new CustomEvent(name, { detail, bubbles: false }));
+  if (name === 'td:load-end') loadWaiters.splice(0).forEach((done) => done(detail));
 }
 
 function submit(user) {
@@ -470,12 +492,18 @@ function submit(user) {
   if (!p) {
     state.req++; // drop any answer still on its way
     setBusy(false);
-    ['chart-wrap', 'more', 'verdict-card', 'problem'].forEach((id) => { $(id).hidden = true; });
+    ['chart-wrap', 'more', 'verdict-card', 'problem', 'answer-bar'].forEach((id) => { $(id).hidden = true; });
     state.series = null; state.trend = null;
+    if (state.status === 'loading') { // a module saw td:load-start: tell it the request is over
+      state.status = 'error'; state.err = { status: 422, heading: 'Check the latitude and longitude.' };
+      fire('td:load-end', { id: state.req, ok: false, params: state.params, place: state.params ? placeNow() : null, series: null, trend: null, error: state.err, origin: state.origin });
+    }
     return;
   }
-  if (!state.fromGeo && tabState.tab === 'explore') history.replaceState(null, '', '#' + writeHash({ tab: 'explore', explore: p }));
+  state.params = p;
+  if (!state.fromGeo && tabState.tab === 'explore') history.replaceState(null, '', '#' + writeHash({ tab: 'explore', explore: Object.assign({ place: state.place && state.place.label }, p) }));
   markChips();
+  fire('td:place-pick', { lat: p.lat, lon: p.lon, label: state.place ? state.place.label : '', variable: p.variable, source: p.source || null, start: p.start || null, end: p.end || null, origin: state.origin });
   run(p, user);
 }
 
@@ -484,10 +512,7 @@ function locate() {
   $('geo-msg').hidden = true;
   if (!navigator.geolocation) return fail();
   navigator.geolocation.getCurrentPosition((pos) => {
-    state.fromGeo = true;
-    $('lat').value = pos.coords.latitude.toFixed(2);
-    $('lon').value = pos.coords.longitude.toFixed(2);
-    submit(true);
+    TD.loadPlace({ lat: pos.coords.latitude, lon: pos.coords.longitude, label: GEO_LABEL, origin: 'geo' });
   }, fail);
 }
 
@@ -514,17 +539,31 @@ async function run(params, user, keep) {
   state.params = params;
   if (glyphKey(params) !== glyphs.key) { clearGlyphs(); glyphs.key = glyphKey(params); } // arrows belong to the latest request's measurement and source
   const first = !keep;
-  if (first) { ['chart-wrap', 'more', 'verdict-card'].forEach((i) => { $(i).hidden = true; }); state.series = null; state.trend = null; }
+  if (first) { ['chart-wrap', 'more', 'verdict-card', 'answer-bar'].forEach((i) => { $(i).hidden = true; }); state.series = null; state.trend = null; }
   $('problem').hidden = true;
+  $('empty').hidden = true; // the start card is gone for good once a request has begun
+  state.status = 'loading'; state.err = null;
   setBusy(true, first);
+  fire('td:load-start', { id, params, place: placeNow(), origin: state.origin });
+  if (user && first) scrollToAnswer();
   const [sr, tr] = await Promise.all([api('/api/series', params), api('/api/trend', params)]);
   if (id !== state.req) return; // stale
   setBusy(false);
-  show(sr, tr, params, user);
+  show(sr, tr, params, user, id);
 }
 
-function show(sr, tr, params, user) {
-  let heading;
+// Phones: bring the answer to the top once, when a request starts. From 900 px only if its top is off screen.
+function scrollToAnswer() {
+  const w = $('answer-wrap');
+  if (window.innerWidth >= 900) { const t = w.getBoundingClientRect().top; if (t >= 0 && t < window.innerHeight) return; }
+  w.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+// "40.71° N, 74.01° W"
+function coordText(lat, lon) { return `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(2)}° ${lon >= 0 ? 'E' : 'W'}`; }
+
+function show(sr, tr, params, user, id) {
+  let heading, err = null;
+  const problem = (p, status) => { err = { status, heading: p.heading }; return showProblem(p); };
   $('chart-wrap').hidden = true;
   $('year-stripes').hidden = true; // shown again only when renderVerdict draws them for this answer
   $('more').hidden = true;
@@ -536,13 +575,13 @@ function show(sr, tr, params, user) {
 
   if (!sr.ok) {
     showSentSource(params);
-    heading = showProblem(problemFor(sr, params));
+    heading = problem(problemFor(sr, params), sr.status);
   } else {
     const s = sr.body;
     const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
     if (!has) {
       showSentSource(params);
-      heading = showProblem({ heading: 'No data for this place.', paras: [`${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement. Try another place or measurement.`] });
+      heading = problem({ heading: 'No data for this place.', paras: [`${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement. Try another place or measurement.`] }, 200);
     } else {
       state.series = s;
       state.trend = tr.ok ? tr.body : null;
@@ -556,11 +595,21 @@ function show(sr, tr, params, user) {
         noteGlyph(state.trend, params);
         renderMore(state.trend);
       } else {
-        heading = showProblem(problemFor(tr, params));
+        heading = problem(problemFor(tr, params), tr.status);
       }
     }
   }
-  if (user && heading) heading.focus();
+  const ok = !!(state.series && state.trend);
+  state.status = ok ? 'loaded' : 'error'; state.err = err;
+  $('answer-bar').hidden = !state.series;
+  if (state.series) {
+    const pl = (state.trend || state.series).place;
+    $('answer-place').textContent = 'Showing: ' + (state.place && state.place.label || pl && cleanPlace(pl.name) || coordText(params.lat, params.lon));
+  }
+  fire('td:load-end', { id, ok, params, place: placeNow(), series: state.series, trend: state.trend, error: err, origin: state.origin });
+  // A module may have filled #meaning-slot while handling td:load-end: it gets the focus, else the verdict heading.
+  const mh = $('meaning-heading');
+  if (user && heading) (ok && mh && !$('meaning-slot').hidden ? mh : heading).focus({ preventScroll: true });
 }
 
 function problemFor(r, params) {
@@ -901,11 +950,13 @@ function renderChart(s, t) {
 
 /* ---------- start ---------- */
 
-// One entry per source the catalog lists (all known sources if there is no catalog yet).
+// One entry per source the catalog lists (all known sources if there is no catalog yet), then the place-name credit.
+// Items added by a module through TD.addCredit (data-credit) are kept.
 function fillFooter(vars) {
   const ul = $('footer-sources');
-  clear(ul); // init() can run again ("Try again")
+  ul.querySelectorAll('li:not([data-credit])').forEach((li) => li.remove()); // init() can run again ("Try again")
   const used = vars ? new Set(vars.flatMap((v) => v.sources || [])) : null;
+  const items = [];
   Object.entries(SOURCES).forEach(([id, src]) => {
     if (used && !used.has(id)) return;
     if (!used && id === 'grace') return; // known only through the catalog
@@ -914,15 +965,19 @@ function fillFooter(vars) {
       // one list item, one flowing line of text: link, ", dataset, ", link
       li.append(el('a', { href: src.url, class: 'srclink' }, src.credit), `, ${src.dataset}, `, el('a', { href: src.licence.url, class: 'srclink' }, src.licence.name));
     } else srcLink(li, src);
-    ul.append(li);
+    items.push(li);
   });
+  const pl = el('li', {}, 'Place names: ');
+  srcLink(pl, PLACE_SOURCE, true);
+  items.push(pl);
+  ul.prepend(...items);
 }
 
 /* ---------- the tab bar ---------- */
 
 let tabEls = [], panelEls = [];
 function hashFor(id) {
-  if (id === 'explore') return state.params && !state.fromGeo ? writeHash({ tab: 'explore', explore: state.params }) : '';
+  if (id === 'explore') return state.params && !state.fromGeo ? writeHash({ tab: 'explore', explore: Object.assign({ place: state.place && state.place.label }, state.params) }) : '';
   return writeHash({ tab: id, app: tabState.app });
 }
 function showTab(id, push) {
@@ -954,31 +1009,38 @@ function buildTabbar() {
 // The hash changed (Back, Forward, or an edited address): show what it says.
 function sameExplore(a, b) {
   return !!a && !!b && a.variable === b.variable && Number(a.lat).toFixed(2) === Number(b.lat).toFixed(2)
-    && Number(a.lon).toFixed(2) === Number(b.lon).toFixed(2) && (a.source || null) === (b.source || null);
+    && Number(a.lon).toFixed(2) === Number(b.lon).toFixed(2) && (a.source || null) === (b.source || null)
+    && (a.start || null) === (b.start || null) && (a.end || null) === (b.end || null);
 }
 function onLocation() {
   const h = parseHash(location.hash);
   if (typeof setApp === 'function' && h.app !== tabState.app) setApp(h.app);
   showTab(h.tab, false);
   if ((h.explore || h.exploreBad) && state.variables.length) {
-    // An unusable link (unknown measurement, bad number) falls back to the default place and the hash is
-    // rewritten, as on a fresh load. A repeat call (popstate, then hashchange) finds a good hash and
-    // state.params already set, so it starts no second request.
+    // An unusable link (unknown measurement, bad number) falls back to the empty start: the hash is cleared and
+    // nothing runs. A repeat call (popstate, then hashchange) finds state.params already set, so it starts no second request.
     const fixed = h.explore && fixExplore(h.explore, state.variables);
-    const e = fixed || fixExplore(PRESETS[0], state.variables);
-    if (!fixed || !sameExplore(e, state.params)) applyExplore(e, false);
-    if (!fixed && tabState.tab !== 'explore') history.replaceState(null, '', '#' + writeHash({ tab: h.tab, app: h.app }));
+    if (!fixed) { if (tabState.tab === 'explore') history.replaceState(null, '', location.pathname + location.search); return; }
+    if (!sameExplore(fixed, state.params)) applyExplore(fixed, false, 'share-link');
   }
 }
 
-// Put a place, measurement and source into the controls and run it.
-function applyExplore(e, user) {
-  state.fromGeo = false;
-  state.userSource = e.source || null;
-  $('lat').value = e.lat; $('lon').value = e.lon;
-  $('variable').value = e.variable;
+// Put a place, measurement and source into the controls and run it. e = { lat, lon, variable?, source?, place?, start?, end? }.
+// A source that is undefined keeps the one the user chose; a measurement that is missing keeps the current one.
+function applyExplore(e, user, origin) {
+  state.origin = origin || 'share-link';
+  state.fromGeo = state.origin === 'geo';
+  if (e.source !== undefined) state.userSource = e.source || null;
+  state.win = e.start || e.end ? { start: e.start || null, end: e.end || null } : null;
+  state.place = e.place ? { label: e.place } : null;
+  $('place').value = e.place && !state.fromGeo ? e.place : '';
+  closeList(); setPlaceStatus(''); showCredit(null);
+  const lat = Number(Number(e.lat).toFixed(2)), lon = Number(Number(e.lon).toFixed(2));
+  $('lat').value = lat; $('lon').value = lon;
+  if (e.variable) $('variable').value = e.variable;
   syncVariableUI();
-  if (!PRESETS.some((p) => Math.abs(p.lat - e.lat) <= 0.005 && Math.abs(p.lon - e.lon) <= 0.005)) openCoords();
+  // a link with only coordinates shows them
+  if (state.origin === 'share-link' && !e.place && !PRESETS.some((p) => Math.abs(p.lat - lat) <= 0.005 && Math.abs(p.lon - lon) <= 0.005)) openCoords();
   markChips();
   submit(user);
 }
@@ -988,7 +1050,15 @@ function showOnChart(e0) {
   if (!e) return;
   history.pushState(null, '', '#' + writeHash({ tab: 'explore', explore: e }));
   showTab('explore', false);
-  applyExplore(e, true);
+  applyExplore(e, true, 'coords');
+}
+
+let readyDone = false, readyRes;
+const readyPromise = new Promise((res) => { readyRes = res; });
+function tdReady(vars) {
+  if (readyDone) return;
+  readyDone = true; readyRes(vars);
+  fire('td:ready', { variables: vars });
 }
 
 async function init() {
@@ -997,28 +1067,225 @@ async function init() {
   if (!r.ok || !Array.isArray(r.body) || !r.body.length) {
     const p = problemFor(r.ok ? { status: 500 } : r, {});
     if (p.buttons) p.buttons = [{ label: 'Try again', fn: init }];
+    $('empty').hidden = true;
     showProblem(p);
+    tdReady([]);
     return;
   }
   state.variables = r.body;
+  $('problem').hidden = true;
+  if (!state.params) $('empty').hidden = false;
   fillFooter(state.variables);
   fillVariables();
-  const h = parseHash(location.hash).explore;
-  applyExplore((h && fixExplore(h, state.variables)) || fixExplore(PRESETS[0], state.variables), false);
+  if (varById('air_temp')) $('variable').value = 'air_temp'; // works everywhere; sea level fails inland
+  syncVariableUI();
+  const h = parseHash(location.hash);
+  const fixed = h.explore && fixExplore(h.explore, state.variables);
+  if (!fixed && (h.explore || h.exploreBad) && h.tab === 'explore') history.replaceState(null, '', location.pathname + location.search);
+  tdReady(state.variables);
+  const first = fixed || (FIRST_LOAD && fixExplore(FIRST_LOAD, state.variables));
+  if (first) applyExplore(first, false, 'share-link');
 }
 
+/* ---------- place search (combobox; design/00-frame.md section 6) ---------- */
+
+// Suggestions while typing: 350 ms after the last key, from 3 characters; Enter searches now from 2. Only the newest
+// reply is used. Replies are kept for the visit (30 texts), so the same text is never asked for twice.
+// Everything in a reply is untrusted text: it only ever goes in through textContent or an attribute value.
+const search = { seq: 0, timer: 0, items: [], active: -1, cache: new Map(), last: null };
+const placeLabel = (r) => [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+const goodPlace = (r) => !!r && typeof r.name === 'string' && r.name !== '' && Number.isFinite(r.lat) && Number.isFinite(r.lon) && Math.abs(r.lat) <= 90 && Math.abs(r.lon) <= 180;
+function setPlaceStatus(text) { $('place-status').textContent = text; }
+function closeList() {
+  const l = $('place-list');
+  l.hidden = true; clear(l);
+  search.items = []; search.active = -1;
+  $('place').setAttribute('aria-expanded', 'false');
+  $('place').removeAttribute('aria-activedescendant');
+}
+function setActive(i) {
+  const opts = $('place-list').children;
+  Array.prototype.forEach.call(opts, (o, k) => o.setAttribute('aria-selected', String(k === i)));
+  search.active = i;
+  if (i >= 0) { $('place').setAttribute('aria-activedescendant', opts[i].id); opts[i].scrollIntoView({ block: 'nearest' }); }
+  else $('place').removeAttribute('aria-activedescendant');
+}
+// "Place search: <name> ↗"; the address is used only when it starts with https://
+function showCredit(src) {
+  const c = $('place-credit');
+  clear(c);
+  if (src === null) { c.hidden = true; return; }
+  const s = src && typeof src.name === 'string' && src.name ? src : PLACE_SOURCE;
+  c.append('Place search: ');
+  if (isHttps(s)) c.append(el('a', { href: s.url, class: 'srclink' }, s.name + ' ↗')); else c.append(s.name);
+  c.hidden = false;
+}
+function showResults(res, q) {
+  search.items = res.results;
+  search.last = { q, res };
+  const l = $('place-list');
+  clear(l);
+  res.results.forEach((r, i) => {
+    const o = el('li', { role: 'option', id: 'place-opt-' + i, 'aria-selected': 'false', class: 'opt' },
+      el('span', { class: 'opt-name' }, r.name), el('span', { class: 'opt-sub' }, [r.admin1, r.country].filter(Boolean).join(', ')));
+    o.setAttribute('aria-label', placeLabel(r));
+    // pressing an option must not take focus from the box (mouse and touch)
+    o.addEventListener('pointerdown', (e) => e.preventDefault());
+    o.addEventListener('mousedown', (e) => e.preventDefault());
+    o.addEventListener('click', () => pickPlace(r));
+    l.append(o);
+  });
+  l.hidden = false;
+  $('place').setAttribute('aria-expanded', 'true');
+  setActive(-1);
+  const n = res.results.length;
+  setPlaceStatus(n === 1 ? '1 place found.' : `${n} places found. Use the up and down arrow keys, then Enter.`);
+  showCredit(res.source);
+}
+async function runSearch(q, enter) {
+  const id = ++search.seq;
+  closeList(); showCredit(null);
+  setPlaceStatus('Looking for places…');
+  let r = search.cache.get(q);
+  if (!r) {
+    r = await api('/api/places', { q });
+    if (id !== search.seq) return; // an older reply: drop it
+    if (r.ok && r.body && Array.isArray(r.body.results)) { search.cache.set(q, r); if (search.cache.size > 30) search.cache.delete(search.cache.keys().next().value); }
+  }
+  if (r.ok && r.body && Array.isArray(r.body.results)) {
+    const results = r.body.results.filter(goodPlace);
+    if (!results.length) { showCredit(r.body.source); setPlaceStatus(`No place found for “${q}”. Check the spelling, or try a bigger town nearby.`); return; }
+    if (enter && results.length === 1) { pickPlace(results[0]); return; }
+    showResults({ results, source: r.body.source }, q);
+    return;
+  }
+  if (r.net) setPlaceStatus("We can't reach the server. Check your connection and try again.");
+  else if (r.status === 429) { const n = parseInt(r.retryAfter, 10); setPlaceStatus(n > 0 ? `Too many searches. Please wait ${n} ${n === 1 ? 'second' : 'seconds'} and try again.` : 'Too many searches. Please wait a minute and try again.'); }
+  else if (r.status === 400 || r.status === 422) setPlaceStatus('Please type between 2 and 80 characters.');
+  else setPlaceStatus("Place search isn't working right now. You can use coordinates instead.");
+}
+function queued() {
+  clearTimeout(search.timer);
+  const q = $('place').value.trim();
+  search.seq++; // anything still on its way is now out of date
+  closeList(); showCredit(null);
+  if (!q) { setPlaceStatus(''); return; }
+  if (q.length < 3) { setPlaceStatus('Type at least 3 letters to see suggestions.'); return; }
+  setPlaceStatus('Looking for places…');
+  search.timer = setTimeout(() => runSearch(q), 350);
+}
+function pickPlace(r) {
+  clearTimeout(search.timer); search.seq++;
+  closeList(); showCredit(null);
+  if (!state.variables.length) { setPlaceStatus("We can't reach the server. Check your connection and try again."); return; }
+  setPlaceStatus('');
+  TD.loadPlace({ lat: r.lat, lon: r.lon, label: placeLabel(r), origin: 'search' });
+}
+$('place').addEventListener('input', queued);
+$('place').addEventListener('keydown', (e) => {
+  const n = search.items.length, open = !$('place-list').hidden;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!open) { // open the last list for this text, or search now
+      const q = $('place').value.trim();
+      if (search.last && search.last.q === q) showResults(search.last.res, q);
+      else if (q.length >= 2) { clearTimeout(search.timer); runSearch(q); }
+      return;
+    }
+    const d = e.key === 'ArrowDown' ? 1 : -1;
+    setActive(search.active < 0 ? (d > 0 ? 0 : n - 1) : (search.active + d + n) % n);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (open && search.active >= 0) pickPlace(search.items[search.active]);
+    else {
+      const q = $('place').value.trim();
+      clearTimeout(search.timer);
+      if (q.length < 2) setPlaceStatus('Type at least 2 letters, then press Enter.'); else runSearch(q, true);
+    }
+  } else if (e.key === 'Escape') {
+    if (open) { e.preventDefault(); closeList(); showCredit(null); setPlaceStatus(''); }
+    else if ($('place').value) { e.preventDefault(); $('place').value = ''; queued(); }
+  } else if (e.key === 'Tab') closeList();
+});
+$('place').addEventListener('blur', () => setTimeout(() => {
+  if ($('place-list').hidden) return;
+  closeList(); showCredit(null);
+  if (/ found\./.test($('place-status').textContent)) setPlaceStatus('');
+}, 120));
+
+/* ---------- TD: the interface the module scripts use (design/00-frame.md section 3) ---------- */
+
+const ORIGINS = Object.freeze(['search', 'map', 'saved', 'recent', 'guide', 'example', 'geo', 'coords', 'share-link', 'undo', 'window']);
+let liveTimer = 0;
+window.TD = {
+  ready: readyPromise,
+  get variables() { return state.variables; },
+  // a copy of the current state; series and trend are the reply objects themselves (read them, do not change them)
+  get state() {
+    const p = state.params;
+    return { place: p ? placeNow() : null, variable: p ? p.variable : ($('variable').value || null), source: p && p.source || null,
+      start: p && p.start || null, end: p && p.end || null, status: state.status, series: state.series, trend: state.trend, error: state.err };
+  },
+  // Validates, fills the controls, writes the link, scrolls and fires place-pick, load-start, load-end. Never rejects.
+  loadPlace(spec) {
+    spec = spec || {};
+    const num = (x) => (x === null || x === undefined || x === '' || typeof x === 'boolean' ? NaN : Number(x));
+    const lat = num(spec.lat), lon = num(spec.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || !state.variables.length
+      || (spec.variable && !varById(spec.variable))) return Promise.resolve({ ok: false });
+    const [start, end] = window2(spec.start, spec.end);
+    const done = new Promise((res) => loadWaiters.push(res));
+    applyExplore({ lat, lon, variable: spec.variable, source: spec.source, place: cleanPlace(spec.label), start, end }, true, ORIGINS.includes(spec.origin) ? spec.origin : 'coords');
+    return done;
+  },
+  fetchTrend(params) { return api('/api/trend', params); },
+  linkFor(s) {
+    s = s || TD.state;
+    const pl = s.place;
+    const h = pl && pl.label !== GEO_LABEL ? writeHash({ tab: 'explore', explore: { variable: s.variable, lat: pl.lat, lon: pl.lon, source: s.source, start: s.start, end: s.end, place: pl.label } }) : '';
+    return location.origin + location.pathname + '#' + h;
+  },
+  announce(text) {
+    const l = $('td-live');
+    l.textContent = '';
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(() => { l.textContent = String(text); }, 30);
+  },
+  cleanPlace,
+  addCredit(id, text, url) {
+    const ul = $('footer-sources');
+    let li = Array.prototype.find.call(ul.children, (x) => x.dataset.credit === id);
+    if (!li) { li = el('li', {}); li.dataset.credit = id; ul.append(li); }
+    clear(li);
+    if (typeof url === 'string' && url.startsWith('https://')) li.append(el('a', { href: url, class: 'srclink' }, text + ' ↗')); else li.append(String(text));
+  },
+  originOf: ORIGINS,
+};
+
+/* ---------- wiring ---------- */
+
 buildChips();
-$('controls').addEventListener('submit', (e) => { e.preventDefault(); if ($('go').getAttribute('aria-disabled') !== 'true') submit(true); });
-$('variable').addEventListener('change', () => { clearGlyphs(); syncVariableUI(); submit(true); });
+$('controls').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if ($('go').getAttribute('aria-disabled') === 'true') return;
+  // typed coordinates are a new pick with no name
+  state.origin = 'coords'; state.fromGeo = false; state.place = null; state.win = null; $('place').value = '';
+  submit(true);
+});
+// measurement and source act on the place already chosen; with no place yet they only change the selection
+const hasPlace = () => $('lat').value.trim() !== '' && $('lon').value.trim() !== '';
+$('variable').addEventListener('change', () => { clearGlyphs(); syncVariableUI(); if (hasPlace()) submit(true); });
 $('source').addEventListener('change', () => {
   const v = varById($('variable').value);
   state.userSource = v && $('source').value !== v.sources[0] ? $('source').value : null;
   clearGlyphs();
   sourceHelp();
-  submit(true);
+  if (hasPlace()) submit(true);
 });
 $('locate').addEventListener('click', locate);
 ['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => { state.fromGeo = false; markChips(); }));
+$('coords-toggle').addEventListener('click', () => setCoords($('coords').hidden));
+$('change-place').addEventListener('click', (e) => { e.preventDefault(); $('h-explore').scrollIntoView({ block: 'start' }); $('place').focus({ preventScroll: true }); });
 let lastBand = layoutFor(window.innerWidth).vw;
 window.addEventListener('resize', () => {
   const b = layoutFor(window.innerWidth).vw;
@@ -1029,5 +1296,5 @@ buildTabbar();
 showTab(parseHash(location.hash).tab, false);
 window.addEventListener('popstate', onLocation);
 window.addEventListener('hashchange', onLocation);
-init();
-
+// every script is deferred, so each module has attached its listeners before this runs
+document.addEventListener('DOMContentLoaded', init);
