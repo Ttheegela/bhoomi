@@ -1,13 +1,9 @@
 'use strict';
-/* Trend Detective page. Same-origin /api/ calls only. Printed numbers come from the API;
-   the browser's own arithmetic is for drawing (see the "pure helpers" block). */
+/* Trend Detective page shell (web/design/09-rework.md). Same-origin /api/ calls only. Printed numbers come from the API;
+   the browser's own arithmetic is for drawing and for converting units (see the "pure helpers" block). */
 
-// What the page does on a first visit with no link: null = no data request (only /api/variables), the empty start shows.
-// A place set here loads with origin 'share-link' (no scroll, no focus, and the first-visit guide stays closed).
-// For the old behaviour use { variable: 'sea_level', lat: 40.71, lon: -74.01, place: 'New York' }.
-const FIRST_LOAD = null;
-const GEO_LABEL = 'your location'; // the label of a "Use my location" pick; its link and search box stay empty
 const PLACE_SOURCE = { name: 'Open-Meteo Geocoding API (GeoNames)', url: 'https://open-meteo.com/en/docs/geocoding-api' };
+
 const MINUS = '−';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -211,73 +207,6 @@ function nearestIndex(ms, m) {
   return Math.abs(ms[lo] - m) <= Math.abs(ms[hi] - m) ? lo : hi;
 }
 
-/* ---------- tabs and the URL hash (pure) ---------- */
-
-const TABS = [
-  { id: 'explore', label: 'Explore', title: 'Trend Detective' }, // the page title stays the short name; the question is the h2
-  { id: 'ask', label: 'Ask', title: 'Trend Detective: Ask' },
-  { id: 'connect', label: 'Use in your AI', title: 'Trend Detective: Use in your AI' },
-];
-const APPS = ['claude', 'claude-code', 'cursor', 'vscode', 'other'];
-
-// A place name from a link or a search is only ever shown with textContent. Control characters and angle brackets
-// are dropped, 60 characters at most.
-function cleanPlace(s) { const t = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f-\u009f<>]/g, '').trim().slice(0, 60); return t || null; }
-// "YYYY" or "YYYY-MM", years 1850 to 2100; anything else is null.
-const yr = (v) => (/^(18[5-9]\d|19\d\d|20\d\d|2100)(-(0[1-9]|1[0-2]))?$/.test(v || '') ? v : null);
-// Both given and start not before end: drop both.
-function window2(a, b) { a = yr(a); b = yr(b); return a && b && monthIndex(a) >= monthIndex(b) ? [null, null] : [a, b]; }
-
-// Names that older or hand-typed links may carry, mapped to the catalogue's ids. None of these was ever a catalogue id
-// (the five ids have not changed since the catalogue was written); they are friendly aliases only. Any other unknown
-// id is an out-of-date link.
-const VARIABLE_ALIASES = { precipitation: 'precip', rain: 'precip', temperature: 'air_temp', air_temperature: 'air_temp',
-  max_temperature: 'air_temp_max', hottest_day: 'air_temp_max', groundwater: 'water_storage', land_water: 'water_storage' };
-
-// Hash -> { tab, app, explore }. Missing or unknown tab = explore; unknown app = claude.
-// explore is set only for a complete, in-range variable/lat/lon (share links); else null.
-function parseHash(raw) {
-  const h = new URLSearchParams(String(raw).replace(/^#/, ''));
-  const t = h.get('tab'), a = h.get('app');
-  const num = (k) => { const r = (h.get(k) || '').trim(); return r === '' ? NaN : Number(r); };
-  const lat = num('lat'), lon = num('lon');
-  const ok = !!h.get('variable') && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
-  return {
-    exploreBad: !ok && (h.has('variable') || h.has('lat') || h.has('lon')), // looks like a place link but is not usable
-    tab: t === 'ask' || t === 'connect' ? t : 'explore',
-    app: APPS.includes(a) ? a : 'claude',
-    explore: ok ? (([start, end]) => ({ variable: VARIABLE_ALIASES[h.get('variable')] || h.get('variable'), lat, lon, source: h.get('source') || null, place: cleanPlace(h.get('place')), start, end }))(window2(h.get('start'), h.get('end'))) : null,
-  };
-}
-// { tab, app, explore } -> hash text without '#'. Explore keeps its old key-less form.
-function writeHash(st) {
-  if (st.tab === 'ask') return 'tab=ask';
-  if (st.tab === 'connect') return 'tab=connect' + (st.app && st.app !== 'claude' ? '&app=' + st.app : '');
-  const e = st.explore;
-  if (!e) return '';
-  return `variable=${e.variable}&lat=${Number(e.lat).toFixed(2)}&lon=${Number(e.lon).toFixed(2)}` + (e.source ? '&source=' + encodeURIComponent(e.source) : '')
-    + (e.start ? '&start=' + e.start : '') + (e.end ? '&end=' + e.end : '') + (cleanPlace(e.place) ? '&place=' + encodeURIComponent(cleanPlace(e.place)) : '');
-}
-
-// A place from a link or an answer, made safe for the catalog: null for an unknown measurement; the source
-// is kept only when the measurement offers it and it is not the default one (the default is never written).
-function fixExplore(e, vars) {
-  const v = vars.find((x) => x.id === e.variable);
-  if (!v) return null;
-  const ok = !!e.source && Array.isArray(v.sources) && v.sources.includes(e.source) && e.source !== v.sources[0];
-  const [start, end] = window2(e.start, e.end);
-  return { variable: e.variable, lat: e.lat, lon: e.lon, source: ok ? e.source : null, place: cleanPlace(e.place), start, end };
-}
-
-// The source the page sends: only one the user chose by hand, offered by the measurement, and not its default.
-function sourceToSend(v, userSource) {
-  return v && Array.isArray(v.sources) && v.sources.length > 1 && userSource && v.sources.includes(userSource) && userSource !== v.sources[0] ? userSource : undefined;
-}
-// The source the control shows after a result: the one the result came from, when the measurement lists it.
-function pickShown(v, resultSourceId) {
-  return v && Array.isArray(v.sources) && v.sources.includes(resultSourceId) ? resultSourceId : null;
-}
-
 /* ---------- DOM helpers ---------- */
 
 const $ = (id) => document.getElementById(id);
@@ -332,24 +261,6 @@ function srcLink(node, source, arrow) {
   else node.append(source ? source.name : 'unknown');
 }
 
-/* ---------- state ---------- */
-
-const tabState = { tab: 'explore', app: 'claude' };
-const state = { userSource: null, variables: [], req: 0, series: null, trend: null, selIdx: null, fromGeo: false, params: null, slowTimer: 0, chart: null,
-  place: null, origin: 'coords', win: null, status: 'idle', err: null }; // place = { label, source } | null; win = { start, end } | null
-
-function placeOf(t) {
-  const q = state.params || {};
-  const lat = q.lat !== undefined ? q.lat : t.place.lat, lon = q.lon !== undefined ? q.lon : t.place.lon;
-  const named = placeFor(lat, lon, t.place && t.place.name, t.source && t.source.id);
-  // Only coordinates from the data (gridded sources) and a place the visitor named: say the visitor's word, not numbers.
-  if (!state.place || state.place.fromLink || named !==`${fixed(Number(lat), 2)}, ${fixed(Number(lon), 2)}`) return named;
-  if (state.place.label === GEO_LABEL) return GEO_LABEL;
-  return cleanPlace(state.place.label.split(',')[0]) || named;
-}
-function varById(id) { return state.variables.find((v) => v.id === id); }
-function nameOf(id) { const v = varById(id); return stripParens(v ? v.name : String(id).replace(/_/g, ' ')); }
-
 /* ---------- API ---------- */
 
 async function api(path, params) {
@@ -363,457 +274,6 @@ async function api(path, params) {
   } catch (e) {
     return { ok: false, status: 0, net: true, body: null };
   }
-}
-
-/* ---------- controls ---------- */
-
-function buildChips() {
-  const box = $('chips');
-  PRESETS.forEach((p, i) => {
-    const b = el('button', { type: 'button', class: 'chip', 'aria-pressed': 'false', 'data-i': String(i) }, p.label);
-    b.addEventListener('click', () => applyPreset(i));
-    b.addEventListener('focus', () => b.scrollIntoView({ inline: 'nearest', block: 'nearest' }));
-    box.append(b);
-  });
-}
-function markChips() {
-  const lat = Number($('lat').value), lon = Number($('lon').value);
-  document.querySelectorAll('#examples .chip').forEach((b) => {
-    const p = PRESETS[+b.dataset.i];
-    const on = p.lat === lat && p.lon === lon && p.variable === $('variable').value;
-    b.setAttribute('aria-pressed', String(on));
-    if (on) { // keep the pressed chip in view inside the sideways row (phones)
-      const row = $('chips'), r = row.getBoundingClientRect(), c = b.getBoundingClientRect();
-      if (c.left < r.left || c.right > r.right) row.scrollLeft += c.left - r.left - (r.width - c.width) / 2;
-    }
-  });
-}
-// Chip glyphs: the direction of an answer loaded in this visit, for the CURRENT measurement and source only.
-// Any change of measurement or source clears them all (a glyph left behind would be a wrong statement).
-const glyphs = { key: '', map: {} };
-const GLYPH_WORD = { rising: 'rising', falling: 'falling', none: 'no clear change' };
-function paintGlyphs() {
-  document.querySelectorAll('#examples .chip').forEach((b) => {
-    const g = glyphs.map[b.dataset.i], old = b.querySelector('.chip-g');
-    if (old) old.remove();
-    const label = PRESETS[+b.dataset.i].label;
-    if (!g) { b.removeAttribute('aria-label'); return; }
-    const w = el('span', { class: 'chip-g', 'aria-hidden': 'true' });
-    w.append(shapeSvg(g === 'rising' ? 'up' : g === 'falling' ? 'down' : 'flat'));
-    b.append(w);
-    b.setAttribute('aria-label', `${label}, ${GLYPH_WORD[g]}`);
-  });
-}
-// One key for a measurement and source, always taken from the request's own params (never from the selects).
-const glyphKey = (params) => params.variable + '|' + (params.source || '');
-function clearGlyphs() { glyphs.key = ''; glyphs.map = {}; paintGlyphs(); }
-function noteGlyph(t, params) {
-  if (!t || !params) return;
-  if (glyphKey(params) !== glyphs.key) { glyphs.key = glyphKey(params); glyphs.map = {}; }
-  const i = PRESETS.findIndex((p) => Math.abs(p.lat - params.lat) <= 0.005 && Math.abs(p.lon - params.lon) <= 0.005);
-  if (i >= 0) glyphs.map[i] = t.verdict === 'rising' || t.verdict === 'falling' ? t.verdict : 'none';
-  paintGlyphs();
-}
-function setCoords(on) { $('coords').hidden = !on; $('coords-toggle').setAttribute('aria-expanded', String(on)); }
-function openCoords() { setCoords(true); }
-function applyPreset(i) {
-  const p = PRESETS[i];
-  TD.loadPlace({ lat: p.lat, lon: p.lon, label: p.label, variable: p.variable, origin: 'example' });
-}
-// Both selects use short names at every width, open or closed (full names clip in the closed select).
-const VAR_SHORT = { air_temp_max: 'Hottest day', water_storage: 'Water storage' };
-function fillVariables() {
-  const sel = $('variable');
-  clear(sel);
-  state.variables.forEach((v) => sel.append(el('option', { value: v.id }, VAR_SHORT[v.id] || stripParens(v.name))));
-}
-function syncVariableUI() {
-  const v = varById($('variable').value);
-  $('variable-help').textContent = v ? `Good for: ${v.good_for}.` : '';
-  const src = $('source');
-  clear(src);
-  const many = !!v && Array.isArray(v.sources) && v.sources.length > 1;
-  if (many) v.sources.forEach((s) => src.append(el('option', { value: s }, sourceShort(s))));
-  // keep the source the user chose when this measurement has it; otherwise the default
-  if (many) src.value = v.sources.includes(state.userSource) ? state.userSource : v.sources[0];
-  $('source-field').hidden = !many;
-  $('pick').classList.toggle('one', !many);
-  sourceHelp();
-}
-// After a result the control shows the source the result came from (a fallback is not the user's choice).
-function showResultSource(res) {
-  const id = pickShown(varById($('variable').value), res && res.source && res.source.id);
-  if (id) { $('source').value = id; sourceHelp(); }
-}
-// After a request that gave no result the control shows the source that was sent, or the default.
-function showSentSource(params) {
-  const v = varById(params.variable);
-  if (!v || $('source-field').hidden) return;
-  $('source').value = params.source && v.sources.includes(params.source) ? params.source : v.sources[0];
-  sourceHelp();
-}
-function sourceHelp() {
-  $('source-help').textContent = $('source-field').hidden ? '' : (SOURCE_HELP[$('source').value] || '');
-}
-
-function readParams() {
-  let ok = true;
-  const one = (id, lim, label) => {
-    const raw = $(id).value.trim(), x = raw === '' ? NaN : Number(raw);
-    const bad = !Number.isFinite(x) || Math.abs(x) > lim;
-    const err = $(id + '-err');
-    err.hidden = !bad;
-    err.textContent = bad ? `${label} must be a number from -${lim} to ${lim}.` : '';
-    $(id).setAttribute('aria-invalid', String(bad));
-    if (bad) ok = false;
-    return x;
-  };
-  const lat = one('lat', 90, 'Latitude'), lon = one('lon', 180, 'Longitude');
-  if (!ok) {
-    openCoords();
-    const first = document.querySelector('[aria-invalid="true"]');
-    if (first) first.focus();
-    return null;
-  }
-  const v = varById($('variable').value);
-  const p = { variable: $('variable').value, lat, lon };
-  const sent = sourceToSend(v, state.userSource);
-  if (sent) p.source = sent;
-  if (state.win) { if (state.win.start) p.start = state.win.start; if (state.win.end) p.end = state.win.end; }
-  return p;
-}
-
-function placeNow() { return { lat: state.params.lat, lon: state.params.lon, label: state.place ? state.place.label : '' }; }
-// The page's events (design/00-frame.md section 3). A load-end also answers every TD.loadPlace waiting for it.
-const loadWaiters = [];
-function fire(name, detail) {
-  document.dispatchEvent(new CustomEvent(name, { detail, bubbles: false }));
-  if (name === 'td:load-end') loadWaiters.splice(0).forEach((done) => done(detail));
-}
-
-// Clear the answer area. Modules saw a request start or an answer: tell them it is over. The id is the request being
-// closed when one was running, else the new id (the one this attempt took).
-function dropAnswer(err) {
-  const was = state.status === 'loading', shown = !!state.series;
-  const endId = was ? state.req : state.req + 1;
-  state.req++; // drop any answer still on its way
-  setBusy(false);
-  ['chart-wrap', 'how', 'answer-card', 'problem', 'answer-bar'].forEach((id) => { $(id).hidden = true; });
-  state.series = null; state.trend = null;
-  if (was || shown) {
-    state.status = 'error'; state.err = err;
-    fire('td:load-end', { id: endId, ok: false, params: state.params, place: state.params ? placeNow() : null, series: null, trend: null, error: Object.assign({}, err), origin: state.origin });
-  }
-}
-
-function submit(user) {
-  const p = readParams();
-  if (!p) {
-    dropAnswer({ status: 422, heading: 'Check the latitude and longitude.' });
-    return;
-  }
-  state.params = p;
-  if (!state.fromGeo && tabState.tab === 'explore') history.replaceState(null, '', '#' + writeHash({ tab: 'explore', explore: Object.assign({ place: state.place && state.place.label }, p) }));
-  markChips();
-  fire('td:place-pick', { lat: p.lat, lon: p.lon, label: state.place ? state.place.label : '', variable: p.variable, source: p.source || null, start: p.start || null, end: p.end || null, origin: state.origin });
-  run(p, user);
-}
-
-function locate() {
-  const fail = () => { const m = $('geo-msg'); m.hidden = false; m.textContent = "We couldn't get your location. Type coordinates or pick an example place."; };
-  $('geo-msg').hidden = true;
-  if (!navigator.geolocation) return fail();
-  navigator.geolocation.getCurrentPosition((pos) => {
-    TD.loadPlace({ lat: pos.coords.latitude, lon: pos.coords.longitude, label: GEO_LABEL, origin: 'geo' });
-  }, fail);
-}
-
-/* ---------- running a request ---------- */
-
-function setBusy(on, first) {
-  $('answer').setAttribute('aria-busy', String(on));
-  const go = $('go');
-  go.setAttribute('aria-disabled', String(on));
-  go.textContent = on ? 'Working…' : 'Show trend';
-  $('loading-text').textContent = on ? 'Looking up the data…' : '';
-  $('grey').hidden = !(on && first);
-  $('loading-slow').textContent = '';
-  clearTimeout(state.slowTimer);
-  if (on) {
-    const id = state.req;
-    state.slowTimer = setTimeout(() => { if (id === state.req) $('loading-slow').textContent = 'Still working. This source can take a few seconds.'; }, 4000);
-  }
-}
-
-// keep = "Try again" on the same request: the old card stays, dimmed. Any new request clears the old answer.
-async function run(params, user, keep) {
-  const id = ++state.req;
-  state.params = params;
-  if (glyphKey(params) !== glyphs.key) { clearGlyphs(); glyphs.key = glyphKey(params); } // arrows belong to the latest request's measurement and source
-  const first = !keep;
-  if (first) { ['chart-wrap', 'how', 'answer-card', 'answer-bar', 'old-link'].forEach((i) => { $(i).hidden = true; }); state.series = null; state.trend = null; }
-  $('problem').hidden = true;
-  $('empty').hidden = true; // the start card is gone until an out-of-date link brings it back
-  $('answer').hidden = false;
-  state.status = 'loading'; state.err = null;
-  setBusy(true, first);
-  fire('td:load-start', { id, params, place: placeNow(), origin: state.origin });
-  state.scrollId = 0;
-  if (user && first) { state.scrollId = id; visitorScrolled = false; scrollToAnswer(); }
-  const [sr, tr] = await Promise.all([api('/api/series', params), api('/api/trend', params)]);
-  if (id !== state.req) return; // stale
-  setBusy(false);
-  show(sr, tr, params, user, id);
-}
-
-// Phones: bring the answer to the top when a request starts, and again just after it ends (the page above it can
-// change in between, for example a guide card closing). From 900 px only if its top is off screen. The jump is
-// instant; the second one is skipped when the visitor scrolled in between.
-let visitorScrolled = false;
-['wheel', 'touchmove'].forEach((ev) => window.addEventListener(ev, () => { visitorScrolled = true; }, { passive: true }));
-window.addEventListener('keydown', (e) => { if (/^(Page(Up|Down)|Home|End|Arrow(Up|Down)| )$/.test(e.key) && e.target === document.body) visitorScrolled = true; });
-function scrollToAnswer() {
-  const w = $('answer-wrap');
-  if (window.innerWidth >= 900) { const t = w.getBoundingClientRect().top; if (t >= 0 && t < window.innerHeight) return; }
-  w.scrollIntoView({ block: 'start', behavior: 'auto' });
-}
-// "40.71° N, 74.01° W"
-function coordText(lat, lon) { return `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(2)}° ${lon >= 0 ? 'E' : 'W'}`; }
-
-function show(sr, tr, params, user, id) {
-  let heading, err = null;
-  const problem = (p, status) => { err = { status, heading: p.heading }; return showProblem(p); };
-  $('chart-wrap').hidden = true;
-  $('year-stripes').hidden = true; // shown again only when renderVerdict draws them for this answer
-  $('how').hidden = true;
-  $('answer-card').hidden = true;
-  $('problem').hidden = true;
-  $('spark').hidden = true; // like the stripes: shown again only when renderVerdict draws it for this answer
-  ['answer-card', 'chart-wrap', 'how'].forEach((i) => { delete $(i).dataset.verdict; });
-  state.series = null; state.trend = null;
-
-  if (!sr.ok) {
-    showSentSource(params);
-    heading = problem(problemFor(sr, params), sr.status);
-  } else {
-    const s = sr.body;
-    const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
-    if (!has) {
-      showSentSource(params);
-      heading = problem({ heading: 'No data for this place.', paras: [`${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement. Try another place or measurement.`] }, 200);
-    } else {
-      state.series = s;
-      state.trend = tr.ok ? tr.body : null;
-      showResultSource(state.trend || s);
-      $('chart-wrap').hidden = false;
-      renderChart(s, state.trend);
-      document.querySelectorAll('.t-only').forEach((li) => { li.hidden = !state.trend; });
-      renderTable(s, !!state.trend);
-      $('how').hidden = false; $('how').open = false; // closed on every new answer; without a trend only the chart help and the table show
-      if (state.trend) {
-        heading = renderVerdict(state.trend, s);
-        if (!params.start && !params.end) noteGlyph(state.trend, params); // a chip opens the full record, so a windowed answer is not its arrow
-        renderHow(state.trend);
-      } else {
-        heading = problem(problemFor(tr, params), tr.status);
-      }
-    }
-  }
-  const ok = !!(state.series && state.trend);
-  state.status = ok ? 'loaded' : 'error'; state.err = err;
-  $('answer-bar').hidden = !state.series;
-  if (state.series) {
-    const pl = (state.trend || state.series).place;
-    const pn = state.place;
-    $('answer-place').textContent = 'Showing: ' + (pn && pn.fromLink ? `${pn.label} (${coordText(params.lat, params.lon)})` // a name from a link is shown with its coordinates
-      : pn && pn.label || pl && cleanPlace(pl.name) || coordText(params.lat, params.lon));
-  }
-  fire('td:load-end', { id, ok, params, place: placeNow(), series: state.series, trend: state.trend, error: err, origin: state.origin });
-  if (state.scrollId === id) setTimeout(() => { if (id === state.req && !visitorScrolled) scrollToAnswer(); }, 60);
-  if (user && heading) heading.focus({ preventScroll: true }); // the answer's headline (#meaning-heading), or the problem heading
-}
-
-function problemFor(r, params) {
-  const again = [{ label: 'Try again', fn: () => run(state.params, true, true) }];
-  if (r.status === 429) { // rate limit: show the API's own sentence
-    const d = r.body && typeof r.body.detail === 'string' && r.body.detail ? r.body.detail : 'Too many requests right now. Please wait a little and try again.';
-    return { heading: 'Too many requests.', paras: [d], buttons: again };
-  }
-  if (r.net || r.status !== 400 && r.status !== 422 && r.status !== 502) {
-    return { heading: "We can't reach the server.", paras: ['Check your connection and try again.'], buttons: again };
-  }
-  if (r.status === 502) {
-    return { heading: "The data source isn't answering.", paras: ["That's on their end, not yours. Try again in a minute."], buttons: again };
-  }
-  if (r.status === 422) {
-    return { heading: "Something in the form isn't right.", paras: ['Check the latitude and longitude and try again.'] };
-  }
-  const detail = r.body && typeof r.body.detail === 'string' ? r.body.detail : 'The request was not accepted.';
-  const out = { heading: "We can't answer that for this place.", paras: [detail] };
-  if (params.variable === 'sea_level') {
-    // The US-coast sentence is only true while CO-OPS is the only tide-gauge source.
-    if (!(varById('sea_level') && varById('sea_level').sources.length > 1)) out.paras.push('Tide gauges sit along US coasts.');
-    // Name the source that was asked for; with none sent and several offered, no source line (it would guess).
-    const sv = varById('sea_level'), single = !sv || sv.sources.length < 2;
-    const named = params.source ? SOURCES[params.source] : (single ? SOURCES[sv ? sv.sources[0] : 'coops'] : null);
-    if (named) out.source = named;
-    out.buttons = [{ label: 'Try New York', fn: () => applyPreset(0) }];
-    if (varById('air_temp')) {
-      out.buttons.push({ label: 'Show air temperature here', fn: () => { $('variable').value = 'air_temp'; syncVariableUI(); submit(true); } });
-    }
-  }
-  const v = varById(params.variable), def = v && v.sources && v.sources[0];
-  if (params.source && def && params.source !== def) {
-    out.buttons = (out.buttons || []).concat([{ label: `Use ${SOURCE_LABELS[def] || def} for this place`, fn: () => { state.userSource = null; syncVariableUI(); submit(true); } }]);
-  }
-  out.paras.push('Try another place or measurement.');
-  return out;
-}
-
-function showProblem(p) {
-  $('problem-heading').textContent = p.heading;
-  const body = $('problem-body');
-  clear(body);
-  p.paras.forEach((t) => body.append(el('p', {}, t)));
-  if (p.source) { const sp = el('div', { class: 'srcline' }); srcBlock(sp, 'Source', p.source); body.append(sp); }
-  const act = $('problem-actions');
-  clear(act);
-  (p.buttons || []).forEach((b) => {
-    const btn = el('button', { type: 'button', class: 'btn' }, b.label);
-    btn.addEventListener('click', b.fn);
-    act.append(btn);
-  });
-  act.hidden = !(p.buttons && p.buttons.length);
-  $('problem').hidden = false;
-  return $('problem-heading');
-}
-
-/* ---------- verdict, numbers, notes ---------- */
-
-function shapeSvg(kind) {
-  const s = svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true', focusable: 'false' });
-  if (kind === 'up') s.append(svg('polygon', { points: '12,3 22,21 2,21' }));
-  else if (kind === 'down') s.append(svg('polygon', { points: '12,21 22,3 2,3' }));
-  else {
-    s.append(svg('path', { d: 'M2 9 Q7 4 12 9 T22 9 V12 Q17 17 12 12 T2 12 Z' }));
-    s.append(svg('path', { d: 'M2 16 Q7 11 12 16 T22 16 V19 Q17 24 12 19 T2 19 Z' }));
-  }
-  return s;
-}
-
-// 96 x 40 sparkline beside the big number: yearly averages (faint), the trend line and its band, from the same
-// series and the same maths as the chart. No axes, no numbers. Decorative picture with a text alternative.
-function renderSpark(t, series, word) {
-  const box = $('spark');
-  clear(box);
-  if (![t.slope_per_decade, t.ci_low, t.ci_high].every(Number.isFinite)) { box.hidden = true; return; }
-  const ms = series.times.map(monthIndex), des = deseasonalize(series.times, series.values);
-  const yrs = yearlyAverages(ms, des);
-  if (yrs.length < 3) { box.hidden = true; return; }
-  const m0 = ms[0], m1 = ms[ms.length - 1], W = 96, H = 40, pad = 4;
-  const ts = ms.map((m) => (m - m0) / 120), tEnd = (m1 - m0) / 120;
-  const tm = median(ts.filter((_, i) => des[i] != null)), yp = trendIntercept(ts, des, t.slope_per_decade) + t.slope_per_decade * tm;
-  const at = (slope, x) => yp + slope * (x - tm);
-  const ends = [at(t.ci_low, 0), at(t.ci_low, tEnd), at(t.ci_high, 0), at(t.ci_high, tEnd)];
-  const vals = yrs.map((y) => y.mean).concat(ends);
-  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi > lo ? hi - lo : 1;
-  const X = (m) => (m1 === m0 ? 0 : (m - m0) / (m1 - m0) * W), Y = (v) => pad + (hi - v) / span * (H - 2 * pad);
-  const f = (n) => n.toFixed(1);
-  const s = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Small picture of the trend, ${word.toLowerCase()}: the line and its range from ${t.period.start.slice(0, 4)} to ${t.period.end.slice(0, 4)}. Shows direction only, no scale.` });
-  s.append(svg('polygon', { points: `0,${f(Y(ends[0]))} ${W},${f(Y(ends[1]))} ${W},${f(Y(ends[3]))} 0,${f(Y(ends[2]))}`, class: 'sp-band' }));
-  s.append(svg('polyline', { points: yrs.map((y) => `${f(X(y.x))},${f(Y(y.mean))}`).join(' '), class: 'sp-years' }));
-  s.append(svg('line', { x1: 0, y1: f(Y(at(t.slope_per_decade, 0))), x2: W, y2: f(Y(at(t.slope_per_decade, tEnd))), class: 'sp-trend' }));
-  box.append(s);
-  box.hidden = false;
-}
-
-function fact(label, node) { return el('div', {}, el('dt', {}, label), el('dd', {}, node)); }
-
-let drawStripes = () => {}; // set by renderVerdict for the current answer
-// The four plain-words strings the server sends (trend.meaning); null when they are missing or malformed.
-const CONFIDENCE = ['Very clear', 'Clear', 'Not clear'];
-function meaningOf(t) {
-  const m = t && t.meaning;
-  if (!m || typeof m !== 'object' || typeof m.headline !== 'string' || typeof m.confidence !== 'string' || typeof m.comparison !== 'string' || typeof m.limit !== 'string') return null;
-  return m.headline && m.limit && CONFIDENCE.includes(m.confidence) ? m : null;
-}
-
-// The answer card: label, headline, verdict band, big line, how sure (and the sparkline), what past data can't tell, one source.
-// Everything exact (rate, range, p-value, facts) goes in the "How we calculated this" section (#how), see renderHow.
-function renderVerdict(t, series) {
-  const c = verdictCopy(t, nameOf(t.variable), placeOf(t));
-  const m = meaningOf(t);
-  const y0 = t.period.start.slice(0, 4), y1 = t.period.end.slice(0, 4);
-  const h = $('meaning-heading');
-  h.textContent = m ? m.headline : c.p1;
-  const band = $('verdict-heading');
-  clear(band);
-  band.append(shapeSvg(c.shape), c.head);
-  const vk = t.verdict === 'rising' ? 'rising' : t.verdict === 'falling' ? 'falling' : 'none';
-  ['answer-card', 'chart-wrap', 'how'].forEach((i) => { $(i).dataset.verdict = vk; }); // the band, chart lines and year stripes read it
-  $('verdict-big').textContent = m ? (m.comparison || `No clear change from ${y0} to ${y1}.`) : `${fmtVal(t.slope_per_decade, t.units)} per decade, ${y0} to ${y1}.`;
-  $('ac-conf').hidden = !m;
-  $('ac-limit').hidden = !m;
-  if (m) {
-    $('ac-conf-word').textContent = m.confidence;
-    $('ac-limit-text').textContent = m.limit;
-  }
-  // The stripes and the sparkline are extra: if one fails, hide it and keep the answer.
-  // Drawn now and again when #how opens (a closed section has no width to draw in); nothing is fetched again.
-  drawStripes = () => {
-    try {
-      const ms = series.times.map(monthIndex);
-      window.renderStripes($('stripes-art'), yearlyAverages(ms, deseasonalize(series.times, series.values)), t.period);
-      srcBlock($('stripes-source'), 'Raw data', t.source);
-    } catch (e) {
-      $('year-stripes').hidden = true;
-    }
-  };
-  drawStripes();
-  if (m) { try { renderSpark(t, series, c.head); } catch (e) { $('spark').hidden = true; } }
-  srcBlock($('verdict-source'), 'Raw data', t.source);
-  $('answer-card').hidden = false;
-  return h;
-}
-
-// "How we calculated this": closed on every new answer. Parts 1 to 9 in the order of the page (index.html).
-function renderHow(t) {
-  const c = verdictCopy(t, nameOf(t.variable), placeOf(t));
-  $('verdict-p1').textContent = c.p1;
-  $('verdict-lean').textContent = c.lean || '';
-  $('verdict-lean').hidden = !c.lean;
-  $('verdict-p2').textContent = c.p2;
-  $('verdict-evidence').textContent = `p-value: ${fmtP(t.p_value)}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change.`;
-
-  const facts = $('facts');
-  clear(facts);
-  [
-    ['Period', `${t.period.start} to ${t.period.end}`],
-    ['Months of data', String(t.n)],
-    ['Range of trends the data support', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
-    ['p-value', fmtP(t.p_value)],
-    ['Seasons removed', t.deseasonalized ? 'Yes' : 'No'],
-    ['Adjusted for neighbouring months', t.autocorrelation_adjusted ? 'Yes' : 'No'],
-    ['Source', 'src'],
-    ['Method', t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
-  ].forEach(([l, v]) => {
-    if (v !== 'src') { facts.append(fact(l, v)); return; }
-    const dd = el('dd', {});
-    srcLink(dd, t.source, true);
-    facts.append(el('div', {}, el('dt', {}, l), dd));
-  });
-
-  const list = $('notes-list');
-  clear(list);
-  const notes = [];
-  (t.caveats || []).concat((state.series && state.series.notes) || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
-  if (!notes.length) notes.push('No extra caveats from the source.');
-  notes.forEach((n) => list.append(el('li', {}, n)));
-
-  $('howto-ac').textContent = t.autocorrelation_adjusted
-    ? 'We adjusted for months that resemble their neighbours; without that the result would look surer than it is.'
-    : 'We did not adjust for months that resemble their neighbours, so treat the result as less certain.';
-  $('how').hidden = false;
 }
 
 function renderTable(s, withTrend) {
@@ -978,162 +438,553 @@ function renderChart(s, t) {
   select(null);
 }
 
-/* ---------- start ---------- */
 
-// One entry per source the catalog lists (all known sources if there is no catalog yet), then the place-name credit.
-// Items added by a module through TD.addCredit (data-credit) are kept.
-function fillFooter(vars) {
-  const ul = $('footer-sources');
-  ul.querySelectorAll('li:not([data-credit])').forEach((li) => li.remove()); // init() can run again ("Try again")
-  const used = vars ? new Set(vars.flatMap((v) => v.sources || [])) : null;
-  const items = [];
-  Object.entries(SOURCES).forEach(([id, src]) => {
-    if (used && !used.has(id)) return;
-    if (!used && id === 'grace') return; // known only through the catalog
-    const li = el('li', {}), sp = el('span', {}); // one span, so the row's text flows as one line of text
-    if (src.credit) {
-      // link, ", dataset, ", link
-      sp.append(el('a', { href: src.url, class: 'srclink' }, src.credit), `, ${src.dataset}, `, el('a', { href: src.licence.url, class: 'srclink' }, src.licence.name));
-    } else srcLink(sp, src);
-    li.append(sp);
-    items.push(li);
+/* ---------- text and link helpers ---------- */
+
+// A place name from a link or a search is only ever shown with textContent. Control characters and angle brackets
+// are dropped, 60 characters at most.
+function cleanPlace(s) { const t = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f-\u009f<>]/g, '').trim().slice(0, 60); return t || null; }
+// "YYYY" or "YYYY-MM", years 1850 to 2100; anything else is null.
+const yr = (v) => (/^(18[5-9]\d|19\d\d|20\d\d|2100)(-(0[1-9]|1[0-2]))?$/.test(v || '') ? v : null);
+// "40.71° N, 74.01° W"
+function coordText(lat, lon) { return `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(2)}° ${lon >= 0 ? 'E' : 'W'}`; }
+
+// Names that older or hand-typed links may carry, mapped to the catalogue's ids. None of these was ever a catalogue id
+// (the five ids have not changed since the catalogue was written); they are friendly aliases only. Any other unknown
+// id is an out-of-date link.
+const VARIABLE_ALIASES = { precipitation: 'precip', rain: 'precip', temperature: 'air_temp', air_temperature: 'air_temp',
+  max_temperature: 'air_temp_max', hottest_day: 'air_temp_max', groundwater: 'water_storage', land_water: 'water_storage' };
+
+/* ---------- the five windows ---------- */
+
+const WINDOWS = [
+  { id: 'sea_level', slug: 'sea-level', name: 'Sea level', search: 'Search a coastal town or city',
+    question: 'Is the sea rising where you live, build or invest? Tide gauges have measured it for up to 125 years.', units: ['cm', 'inches'] },
+  { id: 'air_temp', slug: 'air-temperature', name: 'Air temperature', search: 'Search a town or city',
+    question: 'Is the air getting warmer where you live? Our records start in 1981 and come from weather models and weather stations.', units: ['°C', '°F'] },
+  { id: 'air_temp_max', slug: 'hottest-days', name: 'Hottest days', search: 'Search a town or city',
+    question: 'Are the hottest days getting hotter where you live? We follow the hottest day of every month since 1981.', units: ['°C', '°F'] },
+  { id: 'precip', slug: 'rain', name: 'Rain', search: 'Search a town or city',
+    question: 'Is it getting wetter or drier where you live? Our rainfall records start in 1981.', units: ['mm', 'inches'] },
+  { id: 'water_storage', slug: 'water-storage', name: 'Water storage', search: 'Search a town or city',
+    question: 'Is the land holding more or less water where you live? Satellites have measured it since 2002, as an average over about 400 km.', units: ['cm', 'inches'] },
+];
+const WIN_BY_ID = {}; const WIN_BY_SLUG = {};
+WINDOWS.forEach((w) => { WIN_BY_ID[w.id] = w; WIN_BY_SLUG[w.slug] = w; });
+const DEFAULT_WINDOW = 'sea_level';
+const MAX_PINS = 6, MAX_FLIGHT = 3;
+const PIN_KEY = 'td.pins.v2';
+
+const D = (label, lat, lon) => ({ label, lat, lon });
+const DEFAULT_PINS = {
+  sea_level: [D('Grand Isle, LA', 29.2633, -89.9567), D('New Orleans, LA', 30.0272, -90.1133), D('Galveston, TX', 29.31, -94.7933),
+    D('Miami, FL', 25.7314, -80.1618), D('New York, NY', 40.7006, -74.0142), D('Seattle, WA', 47.6026, -122.3393)],
+  air_temp: [D('New York', 40.71, -74.01), D('Princeton, NJ', 40.35, -74.66), D('Delhi', 28.58, 77.21), D('Chennai', 13.08, 80.27), D('London', 51.51, -0.13), D('Seattle', 47.61, -122.33)],
+  air_temp_max: [D('Delhi', 28.58, 77.21), D('Mumbai', 19.08, 72.88), D('Chennai', 13.08, 80.27), D('New York', 40.71, -74.01), D('Princeton, NJ', 40.35, -74.66), D('London', 51.51, -0.13)],
+  precip: [D('Chennai', 13.08, 80.27), D('Mumbai', 19.08, 72.88), D('Delhi', 28.58, 77.21), D('London', 51.51, -0.13), D('Seattle', 47.61, -122.33), D('New York', 40.71, -74.01)],
+  water_storage: [D('Punjab, India', 30.90, 75.85), D('Delhi', 28.58, 77.21), D('Central Valley, California', 36.75, -119.77), D('Chennai', 13.08, 80.27), D('London', 51.51, -0.13), D('New York', 40.71, -74.01)],
+};
+
+/* ---------- state ---------- */
+
+// Old chart code reads state.params (the place being drawn), state.place (its name) and state.selIdx (the readout).
+const state = { variables: [], params: null, place: null, selIdx: null };
+const pinKeyOf = (lat, lon) => `${Number(lat).toFixed(2)},${Number(lon).toFixed(2)}`;
+const store = {};          // variable id -> { pins: [{label, lat, lon, slot, link?}], selected: key }
+const wsrc = {};           // variable id -> the data source chosen by hand (null = the measurement's default)
+const results = {};        // "variable|source|key" -> { status, trend, series, error }
+const queue = [];
+let flight = 0;
+let curWin = DEFAULT_WINDOW; // a variable id, or 'settings'
+
+function varById(id) { return state.variables.find((v) => v.id === id); }
+function nameOf(id) { const v = varById(id); return stripParens(v ? v.name : String(id).replace(/_/g, ' ')); }
+function winOf(id) { return WIN_BY_ID[id] || null; }
+
+// The name used in a sentence: a station or gauge name from the data; else the visitor's word for the place
+// (first part of its label); a name that came from a link is not trusted, so coordinates stay.
+function placeOf(t) {
+  const q = state.params || {};
+  const lat = q.lat !== undefined ? q.lat : t.place.lat, lon = q.lon !== undefined ? q.lon : t.place.lon;
+  const named = placeFor(lat, lon, t.place && t.place.name, t.source && t.source.id);
+  if (!state.place || state.place.link || named !== `${fixed(Number(lat), 2)}, ${fixed(Number(lon), 2)}`) return named;
+  return cleanPlace(state.place.label.split(',')[0]) || named;
+}
+
+function loadStore() {
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(PIN_KEY)); } catch (e) { /* storage may be off */ }
+  WINDOWS.forEach((w) => {
+    const r = raw && typeof raw === 'object' ? raw[w.id] : null;
+    let pins = [];
+    if (r && Array.isArray(r.pins)) {
+      r.pins.forEach((p) => {
+        const label = p && cleanPlace(p.label), lat = p && Number(p.lat), lon = p && Number(p.lon);
+        if (!label || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return;
+        if (pins.length < MAX_PINS && !pins.some((q) => pinKeyOf(q.lat, q.lon) === pinKeyOf(lat, lon))) pins.push({ label, lat, lon, link: p.link === true });
+      });
+    }
+    let selected = r && typeof r.selected === 'string' ? r.selected : null;
+    if (!pins.length && !(r && Array.isArray(r.pins))) { pins = DEFAULT_PINS[w.id].map((p) => Object.assign({}, p)); selected = null; }
+    assignSlots(pins);
+    if (!pins.some((p) => pinKeyOf(p.lat, p.lon) === selected)) selected = pins.length ? pinKeyOf(pins[0].lat, pins[0].lon) : null;
+    store[w.id] = { pins, selected };
   });
-  const pl = el('li', {}), psp = el('span', {}, 'Place names: ');
-  srcLink(psp, PLACE_SOURCE, true);
-  pl.append(psp);
-  items.push(pl);
-  ul.prepend(...items);
+}
+// slot 0 to 5 picks the colour; a pin keeps its slot while it stays pinned
+function assignSlots(pins) {
+  const used = new Set(pins.map((p) => p.slot).filter((s) => Number.isInteger(s) && s >= 0 && s < MAX_PINS));
+  const seen = new Set();
+  pins.forEach((p) => {
+    if (Number.isInteger(p.slot) && p.slot >= 0 && p.slot < MAX_PINS && !seen.has(p.slot)) { seen.add(p.slot); return; }
+    let s = 0; while (used.has(s) || seen.has(s)) s++;
+    p.slot = s; seen.add(s); used.add(s);
+  });
+}
+function saveStore() {
+  const out = {};
+  WINDOWS.forEach((w) => { const e = store[w.id]; out[w.id] = { pins: e.pins.map((p) => ({ label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, link: p.link || undefined })), selected: e.selected }; });
+  try { localStorage.setItem(PIN_KEY, JSON.stringify(out)); } catch (e) { /* storage may be off */ }
 }
 
-/* ---------- the tab bar ---------- */
+/* ---------- requests: at most three pins in flight ---------- */
 
-let tabEls = [], panelEls = [];
-function hashFor(id) {
-  if (id === 'explore') return state.params && !state.fromGeo ? writeHash({ tab: 'explore', explore: Object.assign({ place: state.place && state.place.label }, state.params) }) : '';
-  return writeHash({ tab: id, app: tabState.app });
+// The source the page sends: only one chosen by hand, offered by the measurement, and not its default.
+function sourceFor(win) {
+  const v = varById(win), s = wsrc[win];
+  return v && Array.isArray(v.sources) && v.sources.length > 1 && s && v.sources.includes(s) && s !== v.sources[0] ? s : undefined;
 }
-function showTab(id, push) {
-  tabState.tab = id;
-  const i = TABS.findIndex((t) => t.id === id);
-  selectTab(tabEls, panelEls, i);
-  document.title = TABS[i].title;
-  $('skip').setAttribute('href', '#h-' + id);
-  if (push) {
-    const h = hashFor(id);
-    if (h !== location.hash.slice(1)) history.pushState(null, '', h ? '#' + h : location.pathname + location.search);
+const resKey = (win, p) => `${win}|${sourceFor(win) || ''}|${pinKeyOf(p.lat, p.lon)}`;
+
+function plainError(r) {
+  if (r.status === 429) return (r.body && typeof r.body.detail === 'string' && r.body.detail) || 'Too many requests right now. Please wait a little and try again.';
+  if (r.net || (r.status !== 400 && r.status !== 422 && r.status !== 502)) return "We can't reach the server. Check your connection and try again.";
+  if (r.status === 502) return "The data source isn't answering. That's on their end, not yours. Try again in a minute.";
+  if (r.status === 422) return "We couldn't read that place.";
+  return r.body && typeof r.body.detail === 'string' && r.body.detail ? r.body.detail : "We can't answer that for this place.";
+}
+
+function enqueue(win, p) {
+  const k = resKey(win, p);
+  if (results[k]) return;
+  results[k] = { status: 'loading', trend: null, series: null, error: null };
+  queue.push({ win, p, k, params: Object.assign({ variable: win, lat: p.lat, lon: p.lon }, sourceFor(win) ? { source: sourceFor(win) } : {}) });
+  pump();
+}
+function pump() {
+  while (flight < MAX_FLIGHT && queue.length) {
+    const job = queue.shift();
+    flight++;
+    Promise.all([api('/api/series', job.params), api('/api/trend', job.params)]).then(([sr, tr]) => {
+      const res = results[job.k];
+      const s = sr.ok ? sr.body : null;
+      const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
+      if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); }
+      else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; }
+      else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; }
+      else { res.status = 'ok'; res.series = s; res.trend = tr.body; }
+      flight--;
+      landed(job.win, job.p, res);
+      pump();
+    });
   }
 }
-function buildTabbar() {
-  const bar = $('tabbar');
-  bar.setAttribute('role', 'tablist');
-  bar.setAttribute('aria-label', 'Sections');
-  TABS.forEach((t) => {
-    const b = el('button', { type: 'button', role: 'tab', id: 'tab-' + t.id, 'aria-controls': 'panel-' + t.id, class: 'tab' }, t.label);
-    bar.append(b);
-    const p = $('panel-' + t.id);
-    p.setAttribute('role', 'tabpanel');
-    p.setAttribute('aria-labelledby', 'tab-' + t.id);
-    tabEls.push(b); panelEls.push(p);
-  });
-  wireTablist(tabEls, (i) => showTab(TABS[i].id, true));
-}
-
-// The hash changed (Back, Forward, or an edited address): show what it says.
-function sameExplore(a, b) {
-  return !!a && !!b && a.variable === b.variable && Number(a.lat).toFixed(2) === Number(b.lat).toFixed(2)
-    && Number(a.lon).toFixed(2) === Number(b.lon).toFixed(2) && (a.source || null) === (b.source || null)
-    && (a.start || null) === (b.start || null) && (a.end || null) === (b.end || null);
-}
-// A link that cannot be run (unknown measurement, bad number): say so in the empty card and run nothing.
-function outOfDate() {
-  dropAnswer({ status: 400, heading: 'That link is out of date.' });
-  $('answer').hidden = true; // back to the empty start, so the message is seen and announced
-  $('empty').hidden = false;
-  $('old-link').hidden = false;
-}
-function onLocation() {
-  const h = parseHash(location.hash);
-  if (typeof setApp === 'function' && h.app !== tabState.app) setApp(h.app);
-  showTab(h.tab, false);
-  if ((h.explore || h.exploreBad) && state.variables.length) {
-    // An unusable link (unknown measurement, bad number) falls back to the empty start: the hash is cleared and
-    // nothing runs. A repeat call (popstate, then hashchange) finds state.params already set, so it starts no second request.
-    const fixed = h.explore && fixExplore(h.explore, state.variables);
-    if (!fixed) { if (tabState.tab === 'explore') { history.replaceState(null, '', location.pathname + location.search); outOfDate(); } return; }
-    if (!sameExplore(fixed, state.params)) applyExplore(fixed, false, 'share-link');
-  }
-}
-
-// Put a place, measurement and source into the controls and run it. e = { lat, lon, variable?, source?, place?, start?, end? }.
-// A source that is undefined keeps the one the user chose; a measurement that is missing keeps the current one.
-function applyExplore(e, user, origin) {
-  state.origin = origin || 'share-link';
-  state.fromGeo = state.origin === 'geo' || e.place === GEO_LABEL; // that place never reaches the link, whatever the origin
-  if (e.source !== undefined) state.userSource = e.source || null;
-  state.win = e.start || e.end ? { start: e.start || null, end: e.end || null } : null;
-  // fromLink: the name came from the address bar, so nothing has checked it against the coordinates
-  state.place = e.place ? { label: e.place, fromLink: state.origin === 'share-link' } : null;
-  $('place').value = e.place && !state.fromGeo ? e.place : '';  closeList(); setPlaceStatus(''); showCredit(null);
-  const lat = Number(Number(e.lat).toFixed(2)), lon = Number(Number(e.lon).toFixed(2));
-  $('lat').value = lat; $('lon').value = lon;
-  if (e.variable) $('variable').value = e.variable;
-  syncVariableUI();
-  // a link with only coordinates shows them
-  if (state.origin === 'share-link' && !e.place && !PRESETS.some((p) => Math.abs(p.lat - lat) <= 0.005 && Math.abs(p.lon - lon) <= 0.005)) openCoords();
-  markChips();
-  submit(user);
-}
-// "Show on chart" from an Ask answer: a normal Explore hash entry, then the normal Explore flow.
-function showOnChart(e0) {
-  const e = fixExplore(e0, state.variables);
+function ensureLoaded(win) {
+  const e = store[win];
   if (!e) return;
-  history.pushState(null, '', '#' + writeHash({ tab: 'explore', explore: e }));
-  showTab('explore', false);
-  applyExplore(e, true, 'coords');
+  const first = e.pins.filter((p) => pinKeyOf(p.lat, p.lon) === e.selected).concat(e.pins.filter((p) => pinKeyOf(p.lat, p.lon) !== e.selected));
+  first.forEach((p) => enqueue(win, p));
+}
+// a result arrived
+function landed(win, p, res) {
+  if (win !== curWin) return;
+  changed();
+  const e = store[win];
+  if (pinKeyOf(p.lat, p.lon) === e.selected && res.status === 'ok') {
+    const g = res.trend.guidance;
+    TD.announce(`${p.label}: ${g && g.risk_label ? g.risk_label + '. ' + (g.why || '') : (res.trend.meaning && res.trend.meaning.headline) || 'Loaded.'}`);
+  }
 }
 
-let readyDone = false, readyRes;
-const readyPromise = new Promise((res) => { readyRes = res; });
-function tdReady(vars) {
-  if (readyDone) return;
-  readyDone = true; readyRes(vars);
-  fire('td:ready', { variables: vars });
+/* ---------- pins as the modules see them ---------- */
+
+function pinList(win) {
+  const e = store[win];
+  if (!e) return [];
+  return e.pins.map((p) => {
+    const key = pinKeyOf(p.lat, p.lon), r = results[resKey(win, p)] || { status: 'loading', trend: null, series: null, error: null };
+    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, trend: r.trend, series: r.series, link: !!p.link };
+  });
+}
+function selectedPin(win) { return pinList(win).find((p) => p.selected) || null; }
+
+function changed() {
+  renderSidebar();
+  renderRec();
+  syncCompat();
+  const pins = pinList(curWin);
+  const sel = pins.find((p) => p.selected);
+  document.dispatchEvent(new CustomEvent('td:pins', { detail: { window: curWin, pins, selected: sel ? sel.key : null } }));
 }
 
-async function init() {
-  fillFooter();
-  const r = await api('/api/variables');
-  if (!r.ok || !Array.isArray(r.body) || !r.body.length) {
-    const p = problemFor(r.ok ? { status: 500 } : r, {});
-    if (p.buttons) p.buttons = [{ label: 'Try again', fn: init }];
-    $('empty').hidden = true;
-    showProblem(p);
-    tdReady([]);
+/* ---------- units and wording ---------- */
+
+const UNIT_NAME = { degC: '°C', '°C': '°C', C: '°C' };
+const normUnit = (u) => UNIT_NAME[u] || u;
+function convert(v, unit) {
+  const u = normUnit(unit);
+  if (window.TDPrefs.get().units === 'imperial') {
+    if (u === 'cm') return { v: v / 2.54, unit: 'in' };
+    if (u === 'mm') return { v: v / 25.4, unit: 'in' };
+    if (u === '°C') return { v: v * 1.8, unit: '°F' };
+  }
+  return { v, unit: u };
+}
+const signed = (x) => (x > 0 ? '+' : '') + fixed(x, 1);
+const imperial = () => window.TDPrefs.get().units === 'imperial';
+const fmt = {
+  rate(t) {
+    const g = t && t.guidance, r = g && g.rate;
+    if (!r || typeof r.value !== 'number') return '';
+    if (!imperial()) return String(r.text || '');
+    const c = convert(r.value, r.unit);
+    return `${signed(c.v)} ${c.unit}`;
+  },
+  outlook(t, year) {
+    const g = t && t.guidance, o = g && Array.isArray(g.outlook) && g.outlook.find((x) => x && x.year === year);
+    if (!o) return '';
+    if (!imperial()) return String(o.text || '').replace(/ by \d{4}$/, '');
+    const lo = convert(o.low, o.unit), hi = convert(o.high, o.unit);
+    const a = signed(lo.v), b = signed(hi.v);
+    return a === b ? `about ${a} ${lo.unit}` : `${a} to ${b} ${lo.unit}`;
+  },
+  value(n, unit) { const c = convert(Number(n), unit); return `${fixed(c.v, 1)} ${c.unit}`; },
+  years(t) { return t && t.period ? `${t.period.start.slice(0, 4)}–${t.period.end.slice(0, 4)}` : ''; },
+  unit(t) { const g = t && t.guidance; return convert(0, (g && g.display && g.display.unit) || (t && t.units) || '').unit; },
+};
+const perOf = (t) => (t && t.guidance && t.guidance.rate && t.guidance.rate.per) || '';
+const riskShort = (g) => (g && g.risk_label ? g.risk_label.replace(/ risk$/, '') : '');
+const riskClass = (g) => (g && ['high', 'moderate', 'low', 'unknown'].includes(g.risk) ? g.risk : 'unknown');
+
+// The line under a pinned place's name.
+function pinLine(p) {
+  if (p.status === 'loading') return 'Checking…';
+  if (p.status === 'error') return p.error || "We couldn't check this place.";
+  const t = p.trend, rate = fmt.rate(t);
+  if (rate) return `${rate} ${perOf(t)}`.trim();
+  if (t.guidance) return 'No clear change';
+  return (t.meaning && t.meaning.comparison) || 'No clear change';
+}
+
+/* ---------- the sidebar ---------- */
+
+function buildSeg(box, opts, cur, onPick) {
+  clear(box);
+  opts.forEach((o) => {
+    const on = o.value === cur;
+    const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(on), class: on ? 'on' : '' }, o.label);
+    b.addEventListener('click', () => onPick(o.value));
+    box.append(b);
+  });
+}
+const SOURCE_SEG = { coops: 'NOAA tide gauges', psmsl: 'Global gauges (PSMSL)', power: 'NASA POWER', era5: 'ERA5', ghcn: 'Weather station', grace: 'GRACE satellites' };
+
+function renderControls() {
+  const w = winOf(curWin);
+  if (!w) return;
+  const prefs = window.TDPrefs.get();
+  buildSeg($('seg-units'), [{ value: 'metric', label: w.units[0] }, { value: 'imperial', label: w.units[1] }], prefs.units, (u) => window.TDPrefs.set({ units: u }));
+  buildSeg($('seg-look'), [2035, 2050, 2075].map((y) => ({ value: y, label: String(y) })), prefs.lookAhead, (y) => window.TDPrefs.set({ lookAhead: y }));
+  const v = varById(curWin), many = !!v && Array.isArray(v.sources) && v.sources.length > 1;
+  $('src-field').hidden = !many;
+  if (many) {
+    const cur = sourceFor(curWin) || v.sources[0];
+    buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, (s) => {
+      wsrc[curWin] = s === v.sources[0] ? null : s;
+      ensureLoaded(curWin);
+      renderControls(); changed(); renderFoot();
+    });
+    $('src-help').textContent = SOURCE_HELP[cur] || '';
+  }
+}
+
+function renderSidebar() {
+  const ul = $('pins');
+  clear(ul);
+  pinList(curWin).forEach((p) => {
+    const g = p.trend && p.trend.guidance;
+    const btn = el('button', { type: 'button', class: 'pin' + (p.selected ? ' on' : ''), 'aria-pressed': String(p.selected) },
+      el('i', { class: p.selected ? 'dot sel' : `dot s${p.slot}`, 'aria-hidden': 'true' }),
+      el('span', { class: 'pn' }, el('b', {}, p.label), el('small', {}, pinLine(p))),
+      g && g.risk_label ? el('span', { class: `risk ${riskClass(g)}` }, riskShort(g)) : '');
+    btn.addEventListener('click', () => TD.select(p.key));
+    const rm = el('button', { type: 'button', class: 'rm', 'aria-label': `Remove ${p.label}` }, '×');
+    rm.addEventListener('click', () => TD.removePlace(p.key));
+    ul.append(el('li', { class: 'pinrow' }, btn, rm));
+  });
+  $('pin-hint').hidden = false;
+}
+
+/* ---------- the recommendation card ---------- */
+
+function renderRec() {
+  const box = $('rec');
+  clear(box);
+  const pin = selectedPin(curWin), w = winOf(curWin);
+  box.setAttribute('aria-busy', String(!!pin && pin.status === 'loading'));
+  if (!w) return;
+  if (!pin) {
+    box.append(el('h2', { tabindex: '-1' }, 'Pin a place to see its recommendation'), el('p', { class: 'say' }, 'Search above, or click the map, to pin a place.'));
     return;
   }
-  // Display name only: the id and everything sent to the server stay `precip`.
-  state.variables = r.body.map((v) => (v && v.id === 'precip' ? { ...v, name: 'Rain' } : v));
-  $('problem').hidden = true;
-  if (!state.params) $('empty').hidden = false;
-  fillFooter(state.variables);
-  fillVariables();
-  if (varById('air_temp')) $('variable').value = 'air_temp'; // works everywhere; sea level fails inland
-  syncVariableUI();
-  const h = parseHash(location.hash);
-  const fixed = h.explore && fixExplore(h.explore, state.variables);
-  if (!fixed && (h.explore || h.exploreBad) && h.tab === 'explore') { history.replaceState(null, '', location.pathname + location.search); outOfDate(); }
-  tdReady(state.variables);
-  const first = fixed || (FIRST_LOAD && fixExplore(FIRST_LOAD, state.variables));
-  if (first) applyExplore(first, false, 'share-link');
+  const h2 = (txt) => el('h2', { tabindex: '-1', id: 'rec-h' }, txt);
+  if (pin.status === 'loading') { box.append(h2(pin.label), el('p', { class: 'say' }, `Checking the records for ${pin.label}…`)); return; }
+  if (pin.status === 'error') { box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."), el('p', { class: 'say' }, 'Try another place.')); return; }
+
+  state.params = { lat: pin.lat, lon: pin.lon, variable: curWin }; // the sentence helpers read the place being shown
+  state.place = { label: pin.label, link: pin.link };
+  const t = pin.trend, g = t.guidance, m = meaningOf(t), look = window.TDPrefs.get().lookAhead;
+  const risk = riskClass(g), years = fmt.years(t), pl = t.place && t.place.name;
+  const station = pl && t.source && ['coops', 'ghcn', 'psmsl'].includes(t.source.id) ? pl : '';
+  const srcLine = el('div', { class: 'src' });
+  if (isHttps(t.source)) srcLine.append(el('a', { href: t.source.url, class: 'srclink', target: '_blank', rel: 'noopener' }, `${t.source.name} ↗`)); else srcLine.append(t.source ? t.source.name : 'unknown source');
+  srcLine.append(` · ${years}`);
+  if (station) srcLine.append(` · measured at ${station}`);
+  box.append(el('div', { class: 'where' }, el('div', {}, h2(pin.label), srcLine), g && g.risk_label ? el('span', { class: `risk ${risk}` }, g.risk_label) : ''));
+
+  // big number
+  const rate = fmt.rate(t);
+  const big = el('div', { class: 'big' });
+  if (g && rate) big.append(rate, ' ', el('small', {}, perOf(t)));
+  else if (g) big.append('No clear change', ' ', el('small', {}, years));
+  else big.append(verdictWord(t));
+  box.append(big);
+  box.append(el('p', { class: 'say' }, g && g.why ? g.why : [m && m.headline, m && m.comparison].filter(Boolean).join(' ') || verdictCopy(t, nameOf(t.variable), placeOf(t)).p1));
+  if (g && g.recommendation) box.append(el('div', { class: `advice ${risk}` }, el('b', {}, 'Our recommendation'), g.recommendation));
+
+  // two facts
+  const facts = el('div', { class: 'facts2' });
+  const outlook = fmt.outlook(t, look);
+  if (g && outlook) facts.append(el('div', {}, g.outlook_label || 'If the past trend continues', el('b', {}, `${outlook} by ${look}`)));
+  const yrs = Number(t.period.end.slice(0, 4)) - Number(t.period.start.slice(0, 4));
+  facts.append(el('div', {}, 'How sure we are', el('b', {}, [m && m.confidence, `${yrs} years of data`].filter(Boolean).join(' · '))));
+  box.append(facts);
+
+  const acts = el('div', { class: 'acts' });
+  if (g && g.future_link && typeof g.future_link.url === 'string' && g.future_link.url.startsWith('https://')) {
+    acts.append(el('a', { class: 'btn dark', href: g.future_link.url, target: '_blank', rel: 'noopener' }, `${g.future_link.label} ↗`));
+  }
+  const how = el('button', { type: 'button', class: 'btn ghost', id: 'how-open' }, 'How we calculated this');
+  how.addEventListener('click', openHow);
+  acts.append(how);
+  box.append(acts);
+  if (g && g.disclaimer) box.append(el('p', { class: 'disc' }, g.disclaimer));
+}
+function verdictWord(t) { return t.verdict === 'rising' ? 'Rising' : t.verdict === 'falling' ? 'Falling' : 'No clear change'; }
+
+// The four plain-words strings the server sends (trend.meaning); null when they are missing or malformed.
+const CONFIDENCE = ['Very clear', 'Clear', 'Not clear'];
+function meaningOf(t) {
+  const m = t && t.meaning;
+  if (!m || typeof m !== 'object' || typeof m.headline !== 'string' || typeof m.confidence !== 'string' || typeof m.comparison !== 'string' || typeof m.limit !== 'string') return null;
+  return m.headline && m.limit && CONFIDENCE.includes(m.confidence) ? m : null;
 }
 
-/* ---------- place search (combobox; design/00-frame.md section 6) ---------- */
+/* ---------- "How we calculated this" (a native dialog with today's detail) ---------- */
+
+function openHow() {
+  const pin = selectedPin(curWin);
+  if (!pin || pin.status !== 'ok') return;
+  const dlg = $('how-dialog');
+  if (!dlg.open) dlg.showModal();
+  renderDetail(pin);
+  // Real or noise? listens for a finished answer: tell it this one is on screen now
+  document.dispatchEvent(new CustomEvent('td:load-end', { detail: compatDetail(pin) }));
+}
+function renderDetail(pin) {
+  const t = pin.trend, series = pin.series;
+  state.params = { lat: pin.lat, lon: pin.lon, variable: curWin };
+  state.place = { label: pin.label, link: pin.link };
+  $('how-place').textContent = `${pin.label}`;
+  const vk = t.verdict === 'rising' ? 'rising' : t.verdict === 'falling' ? 'falling' : 'none';
+  $('how-detail').dataset.verdict = vk;
+  renderChart(series, t);
+  renderTable(series, true);
+  const c = verdictCopy(t, nameOf(t.variable), placeOf(t));
+  $('verdict-p1').textContent = c.p1;
+  $('verdict-lean').textContent = c.lean || '';
+  $('verdict-lean').hidden = !c.lean;
+  $('verdict-p2').textContent = c.p2;
+  $('verdict-evidence').textContent = `p-value: ${fmtP(t.p_value)}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change.`;
+  const facts = $('facts');
+  clear(facts);
+  [
+    ['Period', `${t.period.start} to ${t.period.end}`],
+    ['Months of data', String(t.n)],
+    ['Exact rate', `${fmtVal(t.slope_per_decade, t.units)} per decade`],
+    ['Range of trends the data support', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
+    ['p-value', fmtP(t.p_value)],
+    ['Seasons removed', t.deseasonalized ? 'Yes' : 'No'],
+    ['Adjusted for neighbouring months', t.autocorrelation_adjusted ? 'Yes' : 'No'],
+    ['Source', 'src'],
+    ['Method', t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
+  ].forEach(([l, v]) => {
+    if (v !== 'src') { facts.append(fact(l, v)); return; }
+    const dd = el('dd', {});
+    srcLink(dd, t.source, true);
+    facts.append(el('div', {}, el('dt', {}, l), dd));
+  });
+  const list = $('notes-list');
+  clear(list);
+  const notes = [];
+  (t.caveats || []).concat(series.notes || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
+  if (!notes.length) notes.push('No extra caveats from the source.');
+  notes.forEach((n) => list.append(el('li', {}, n)));
+  $('howto-ac').textContent = t.autocorrelation_adjusted
+    ? 'We adjusted for months that resemble their neighbours; without that the result would look surer than it is.'
+    : 'We did not adjust for months that resemble their neighbours, so treat the result as less certain.';
+  try {
+    const ms = series.times.map(monthIndex);
+    window.renderStripes($('stripes-art'), yearlyAverages(ms, deseasonalize(series.times, series.values)), t.period);
+    srcBlock($('stripes-source'), 'Raw data', t.source);
+  } catch (e) { $('year-stripes').hidden = true; }
+}
+function fact(label, node) { return el('div', {}, el('dt', {}, label), el('dd', {}, node)); }
+
+/* ---------- compatibility for "Real or noise?" (it reads TD.state and td:load-end) ---------- */
+
+function compatDetail(pin) {
+  const params = { variable: curWin, lat: pin.lat, lon: pin.lon };
+  if (sourceFor(curWin)) params.source = sourceFor(curWin);
+  return { id: 0, ok: pin.status === 'ok', params, place: { lat: pin.lat, lon: pin.lon, label: pin.label }, series: pin.series, trend: pin.trend, error: null, origin: 'window' };
+}
+function compatState() {
+  const pin = selectedPin(curWin);
+  if (!pin) return { place: null, variable: curWin, source: null, start: null, end: null, status: 'idle', series: null, trend: null, error: null };
+  return { place: { lat: pin.lat, lon: pin.lon, label: pin.label }, variable: curWin, source: sourceFor(curWin) || null, start: null, end: null,
+    status: pin.status === 'ok' ? 'loaded' : pin.status === 'error' ? 'error' : 'loading', series: pin.series, trend: pin.trend, error: pin.error ? { status: 0, heading: pin.error } : null };
+}
+function syncCompat() { /* nothing to keep in step: TD.state reads the selected pin when asked */ }
+
+/* ---------- the window: head, title, footer, route ---------- */
+
+function renderFoot() {
+  const p = $('foot-data');
+  clear(p);
+  const w = winOf(curWin);
+  if (!w) return;
+  const v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]);
+  const src = SOURCES[sid];
+  p.append('Data: ');
+  if (src) srcLink(p, src, true); else p.append('public records');
+  p.append(". Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed).");
+  // the Open-Meteo attribution travels with its data
+  const ul = $('footer-sources');
+  let li = Array.prototype.find.call(ul.children, (x) => x.dataset.credit === 'era5');
+  if (sid === 'era5' && SOURCES.era5) {
+    if (!li) { li = el('li', {}); li.dataset.credit = 'era5'; ul.append(li); }
+    clear(li);
+    li.append(el('a', { href: SOURCES.era5.url, class: 'srclink' }, SOURCES.era5.credit), `, ${SOURCES.era5.dataset}, `, el('a', { href: SOURCES.era5.licence.url, class: 'srclink' }, SOURCES.era5.licence.name));
+  } else if (li) li.remove();
+}
+function placeCredit() {
+  const ul = $('footer-sources');
+  const li = el('li', {});
+  li.dataset.credit = 'places';
+  li.append('Place names: ');
+  srcLink(li, PLACE_SOURCE, true);
+  ul.prepend(li);
+}
+
+function setStatusLine(text) { const s = $('status-line'); s.textContent = text || ''; s.hidden = !text; }
+
+function showWindow(id) {
+  curWin = id;
+  const settings = id === 'settings';
+  $('win-measure').hidden = settings;
+  $('win-settings').hidden = !settings;
+  $('settings-link').setAttribute('aria-current', settings ? 'page' : 'false');
+  document.querySelectorAll('#nav a').forEach((a) => {
+    const on = a.dataset.id === id;
+    a.classList.toggle('act', on);
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+  if (settings) {
+    document.title = 'Settings · Trend Detective';
+  } else {
+    const w = winOf(id);
+    document.title = `${w.name} · Trend Detective`;
+    $('win-h1').textContent = w.name;
+    $('win-q').textContent = w.question;
+    $('place').setAttribute('placeholder', w.search);
+    closeList(); setPlaceStatus(''); showCredit(null);
+    $('place').value = '';
+    renderControls();
+    renderFoot();
+    ensureLoaded(id);
+    changed();
+  }
+  document.dispatchEvent(new CustomEvent('td:route', { detail: { window: id } }));
+  if (settings) document.dispatchEvent(new CustomEvent('td:pins', { detail: { window: id, pins: [], selected: null } }));
+}
+
+// Read the address: a window slug, "#settings", or an older link with a place.
+function route() {
+  const raw = location.hash.replace(/^#/, '');
+  setStatusLine('');
+  if (raw === 'settings') return showWindow('settings');
+  if (WIN_BY_SLUG[raw]) return showWindow(WIN_BY_SLUG[raw].id);
+  if (!raw) { const w0 = curWin === 'settings' ? DEFAULT_WINDOW : curWin; history.replaceState(null, '', '#' + WIN_BY_ID[w0].slug); return showWindow(w0); }
+  const h = new URLSearchParams(raw);
+  if (h.get('tab') === 'connect') { history.replaceState(null, '', '#settings'); return showWindow('settings'); }
+  if (h.get('tab') === 'ask') { history.replaceState(null, '', '#' + WIN_BY_ID[DEFAULT_WINDOW].slug); return showWindow(DEFAULT_WINDOW); }
+  // an older place link: #variable=…&lat=…&lon=…&place=…
+  const vid = VARIABLE_ALIASES[h.get('variable')] || h.get('variable');
+  const num = (k) => { const r = (h.get(k) || '').trim(); return r === '' ? NaN : Number(r); };
+  const lat = num('lat'), lon = num('lon');
+  const w = winOf(vid);
+  if (!w || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    history.replaceState(null, '', '#' + WIN_BY_ID[DEFAULT_WINDOW].slug);
+    showWindow(DEFAULT_WINDOW);
+    setStatusLine('That link is out of date.');
+    return undefined;
+  }
+  const src = h.get('source');
+  const v = varById(w.id);
+  if (src && v && Array.isArray(v.sources) && v.sources.includes(src)) wsrc[w.id] = src === v.sources[0] ? null : src;
+  history.replaceState(null, '', '#' + w.slug);
+  showWindow(w.id);
+  const named = cleanPlace(h.get('place'));
+  const label = named || coordText(lat, lon);
+  addPin(w.id, { label, lat, lon, link: true });
+  return undefined;
+}
+
+/* ---------- adding, selecting, removing ---------- */
+
+function addPin(win, spec) {
+  const e = store[win];
+  const lat = Number(Number(spec.lat).toFixed(4)), lon = Number(Number(spec.lon).toFixed(4));
+  const key = pinKeyOf(lat, lon);
+  if (e.pins.some((p) => pinKeyOf(p.lat, p.lon) === key)) { e.selected = key; saveStore(); if (win === curWin) { ensureLoaded(win); changed(); } return { ok: true }; }
+  if (e.pins.length >= MAX_PINS) return { ok: false, reason: 'full' };
+  const pin = { label: cleanPlace(spec.label) || coordText(lat, lon), lat, lon, link: spec.link === true };
+  e.pins.push(pin);
+  assignSlots(e.pins);
+  e.selected = key;
+  saveStore();
+  if (win === curWin) { ensureLoaded(win); changed(); TD.announce(`Pinned ${pin.label}.`); }
+  return { ok: true };
+}
+
+/* ---------- the place search (combobox) ---------- */
 
 // Suggestions while typing: 350 ms after the last key, from 3 characters; Enter searches now from 2. Only the newest
 // reply is used. Replies are kept for the visit (30 texts), so the same text is never asked for twice.
 // Everything in a reply is untrusted text: it only ever goes in through textContent or an attribute value.
 const search = { seq: 0, timer: 0, items: [], active: -1, cache: new Map(), last: null };
 const placeLabel = (r) => [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+const pinLabel = (r) => [r.name, r.admin1].filter(Boolean).join(', ');
 const goodPlace = (r) => !!r && typeof r.name === 'string' && r.name !== '' && Number.isFinite(r.lat) && Number.isFinite(r.lon) && Math.abs(r.lat) <= 90 && Math.abs(r.lon) <= 180;
 // Written only when the text changes, so a screen reader does not repeat it on every key.
 function setPlaceStatus(text) { const s = $('place-status'); if (s.textContent !== text) s.textContent = text; }
@@ -1203,7 +1054,7 @@ async function runSearch(q, enter) {
   if (r.net) setPlaceStatus("We can't reach the server. Check your connection and try again.");
   else if (r.status === 429) { const n = parseInt(r.retryAfter, 10); setPlaceStatus(n > 0 ? `Too many searches. Please wait ${n} ${n === 1 ? 'second' : 'seconds'} and try again.` : 'Too many searches. Please wait a minute and try again.'); }
   else if (r.status === 400 || r.status === 422) setPlaceStatus('Please type between 2 and 80 characters.');
-  else setPlaceStatus("Place search isn't working right now. You can use coordinates instead.");
+  else setPlaceStatus("Place search isn't working right now. Try again in a minute.");
 }
 function queued() {
   clearTimeout(search.timer);
@@ -1218,9 +1069,9 @@ function queued() {
 function pickPlace(r) {
   clearTimeout(search.timer); search.seq++;
   closeList(); showCredit(null);
-  if (!state.variables.length) { setPlaceStatus("We can't reach the server. Check your connection and try again."); return; }
-  setPlaceStatus('');
-  TD.loadPlace({ lat: r.lat, lon: r.lon, label: placeLabel(r), origin: 'search' });
+  TD.addPlace({ lat: r.lat, lon: r.lon, label: pinLabel(r) }).then((res) => {
+    if (res.ok) { $('place').value = ''; setPlaceStatus(''); const h = $('rec').querySelector('h2'); if (h) h.focus({ preventScroll: true }); } else setPlaceStatus('You can pin up to 6 places. Remove one first.');
+  });
 }
 $('place').addEventListener('input', queued);
 $('place').addEventListener('keydown', (e) => {
@@ -1256,37 +1107,62 @@ $('place').addEventListener('blur', () => setTimeout(() => {
   if (/ found\./.test($('place-status').textContent)) setPlaceStatus('');
 }, 120));
 
-/* ---------- TD: the interface the module scripts use (design/00-frame.md section 3) ---------- */
+/* ---------- TD: the interface the modules use (web/design/09-rework.md) ---------- */
 
-const ORIGINS = Object.freeze(['search', 'map', 'saved', 'recent', 'guide', 'example', 'geo', 'coords', 'share-link', 'undo', 'window']);
+let readyRes;
+const readyPromise = new Promise((res) => { readyRes = res; });
 let liveTimer = 0;
 window.TD = {
   ready: readyPromise,
   get variables() { return state.variables; },
-  // a copy of the current state; series and trend are the reply objects themselves (read them, do not change them)
-  get state() {
-    const p = state.params;
-    return { place: p ? placeNow() : null, variable: p ? p.variable : ($('variable').value || null), source: p && p.source || null,
-      start: p && p.start || null, end: p && p.end || null, status: state.status, series: state.series, trend: state.trend, error: state.err ? Object.assign({}, state.err) : null };
+  windows: WINDOWS.map((w) => ({ id: w.id, slug: w.slug, name: w.name })),
+  get window() { return curWin; },
+  pins() { return curWin === 'settings' ? [] : pinList(curWin); },
+  select(key, opts) {
+    const e = store[curWin];
+    if (!e || !e.pins.some((p) => pinKeyOf(p.lat, p.lon) === key)) return;
+    e.selected = key;
+    saveStore();
+    changed();
+    if (!opts || opts.focus !== false) { const h = $('rec').querySelector('h2'); if (h) h.focus({ preventScroll: true }); }
   },
-  // Validates, fills the controls, writes the link, scrolls and fires place-pick, load-start, load-end. Never rejects.
-  loadPlace(spec) {
+  // Pin a place in the current window (select it when it is already pinned). Resolves { ok, reason } ('full' = six pinned).
+  addPlace(spec) {
     spec = spec || {};
-    const num = (x) => (x === null || x === undefined || x === '' || typeof x === 'boolean' ? NaN : Number(x));
-    const lat = num(spec.lat), lon = num(spec.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || !state.variables.length
-      || (spec.variable && !varById(spec.variable))) return Promise.resolve({ ok: false });
-    const [start, end] = window2(spec.start, spec.end);
-    const done = new Promise((res) => loadWaiters.push(res));
-    applyExplore({ lat, lon, variable: spec.variable, source: spec.source, place: cleanPlace(spec.label), start, end }, true, ORIGINS.includes(spec.origin) ? spec.origin : 'coords');
-    return done;
+    const lat = Number(spec.lat), lon = Number(spec.lon);
+    if (spec.lat === null || spec.lon === null || spec.lat === '' || spec.lon === '' || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || curWin === 'settings') return Promise.resolve({ ok: false, reason: 'invalid' });
+    return Promise.resolve(addPin(curWin, { label: spec.label, lat, lon }));
   },
-  fetchTrend(params) { return api('/api/trend', params).then((r) => ({ ok: r.ok, status: r.status, body: r.body, retryAfter: r.retryAfter === undefined ? null : r.retryAfter })); },
-  linkFor(s) {
-    s = s || TD.state;
-    const pl = s.place;
-    const h = pl && pl.label !== GEO_LABEL ? writeHash({ tab: 'explore', explore: { variable: s.variable, lat: pl.lat, lon: pl.lon, source: s.source, start: s.start, end: s.end, place: pl.label } }) : '';
-    return location.origin + location.pathname + '#' + h;
+  removePlace(key) {
+    const e = store[curWin];
+    if (!e) return;
+    const i = e.pins.findIndex((p) => pinKeyOf(p.lat, p.lon) === key);
+    if (i < 0) return;
+    const [gone] = e.pins.splice(i, 1);
+    if (e.selected === key) e.selected = e.pins.length ? pinKeyOf(e.pins[0].lat, e.pins[0].lon) : null;
+    saveStore();
+    changed();
+    TD.announce(`Removed ${gone.label}.`);
+  },
+  fmt,
+  // What the assistant may be told about the page: bounded, on-screen strings only.
+  context() {
+    if (curWin === 'settings') return { window: 'settings', look_ahead: window.TDPrefs.get().lookAhead, units: window.TDPrefs.get().units };
+    const prefs = window.TDPrefs.get(), cut = (s, n) => String(s == null ? '' : s).slice(0, n);
+    const pins = pinList(curWin), sel = pins.find((p) => p.selected);
+    return {
+      window: curWin, look_ahead: prefs.lookAhead, units: prefs.units, selected: sel ? cut(sel.label, 60) : null,
+      places: pins.slice(0, MAX_PINS).map((p) => {
+        const t = p.trend, g = t && t.guidance, o = { label: cut(p.label, 60), lat: p.lat, lon: p.lon };
+        if (p.status !== 'ok') return o;
+        o.source = cut(t.source && t.source.name, 200);
+        o.period = fmt.years(t);
+        o.verdict = t.verdict;
+        o.rate = cut(g && fmt.rate(t) ? `${fmt.rate(t)} ${perOf(t)}`.trim() : (t.meaning && t.meaning.comparison) || '', 200);
+        if (g) { o.risk = cut(g.risk_label, 200); o.recommendation = cut(g.recommendation, 200); o.outlook = cut(fmt.outlook(t, prefs.lookAhead), 200); }
+        return o;
+      }),
+    };
   },
   announce(text) {
     const l = $('td-live');
@@ -1302,57 +1178,46 @@ window.TD = {
     clear(li);
     if (typeof url === 'string' && url.startsWith('https://')) li.append(el('a', { href: url, class: 'srclink' }, text + ' ↗')); else li.append(String(text));
   },
-  originOf: ORIGINS,
+  // for "Real or noise?" (it was written for the old page)
+  get state() { return compatState(); },
+  fetchTrend(params) { return api('/api/trend', params).then((r) => ({ ok: r.ok, status: r.status, body: r.body, retryAfter: r.retryAfter === undefined ? null : r.retryAfter })); },
+  loadPlace(spec) {
+    spec = spec || {};
+    if ($('how-dialog').open) $('how-dialog').close();
+    return TD.addPlace({ lat: spec.lat, lon: spec.lon, label: spec.label }).then((r) => Object.assign({ ok: r.ok }, r));
+  },
 };
 
-/* ---------- wiring ---------- */
+/* ---------- start ---------- */
 
-buildChips();
-$('controls').addEventListener('submit', (e) => {
-  e.preventDefault();
-  if ($('go').getAttribute('aria-disabled') === 'true') return;
-  // typed coordinates are a new pick with no name
-  state.origin = 'coords'; state.fromGeo = false; state.place = null; state.win = null; $('place').value = '';
-  submit(true);
-});
-// measurement and source act on the place already chosen; with no place yet they only change the selection
-const hasPlace = () => $('lat').value.trim() !== '' && $('lon').value.trim() !== '';
-$('variable').addEventListener('change', () => { clearGlyphs(); syncVariableUI(); if (hasPlace()) submit(true); });
-$('source').addEventListener('change', () => {
-  const v = varById($('variable').value);
-  state.userSource = v && $('source').value !== v.sources[0] ? $('source').value : null;
-  clearGlyphs();
-  sourceHelp();
-  if (hasPlace()) submit(true);
-});
-$('locate').addEventListener('click', locate);
-['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => {
-  state.fromGeo = false;
-  if (state.place && state.place.label === GEO_LABEL) state.place = null; // edited coordinates are no longer "your location"
-  markChips();
-}));
-$('how').addEventListener('toggle', () => { if ($('how').open && state.trend) drawStripes(); });
-// "How we calculated this" is printed open
-let howWasOpen = false;
-window.addEventListener('beforeprint', () => { howWasOpen = $('how').open; $('how').open = true; });
-window.addEventListener('afterprint', () => { $('how').open = howWasOpen; });
-$('coords-toggle').addEventListener('click', () => setCoords($('coords').hidden));
-$('change-place').addEventListener('click', (e) => { e.preventDefault(); $('h-explore').scrollIntoView({ block: 'start' }); $('place').focus({ preventScroll: true }); });
-// Re-draw when the chart's box width changes by 8 px or more. One observer for the page's life, so none pile up;
-// a re-draw changes the box's height at most, never its width, so it cannot trigger itself.
-if (window.ResizeObserver) new ResizeObserver(() => {
-  const w = $('chart-box').clientWidth;
-  if (w && Math.abs(w - chartW) >= 8 && state.series && !$('chart-wrap').hidden) renderChart(state.series, state.trend);
-}).observe($('chart-box'));
+function buildNav() {
+  const nav = $('nav');
+  WINDOWS.forEach((w) => {
+    const a = el('a', { href: '#' + w.slug }, w.name);
+    a.dataset.id = w.id;
+    nav.append(a);
+  });
+}
+async function init() {
+  buildNav();
+  placeCredit();
+  loadStore();
+  const r = await api('/api/variables');
+  if (r.ok && Array.isArray(r.body)) state.variables = r.body;
+  readyRes(state.variables);
+  document.dispatchEvent(new CustomEvent('td:ready', { detail: { variables: state.variables } }));
+  route();
+}
+
+$('how-close').addEventListener('click', () => $('how-dialog').close());
+$('how-dialog').addEventListener('click', (e) => { if (e.target === $('how-dialog')) $('how-dialog').close(); }); // a click on the backdrop
+$('how-dialog').addEventListener('close', () => { document.dispatchEvent(new CustomEvent('td:load-start', { detail: { id: 0, params: null, place: null, origin: 'window' } })); });
 let lastBand = layoutFor(window.innerWidth).vw;
 window.addEventListener('resize', () => {
   const b = layoutFor(window.innerWidth).vw;
-  if (b !== lastBand && state.series && !$('chart-wrap').hidden) { lastBand = b; renderChart(state.series, state.trend); }
+  if (b !== lastBand && $('how-dialog').open) { lastBand = b; const p = selectedPin(curWin); if (p && p.status === 'ok') renderChart(p.series, p.trend); }
 });
-$('skip').addEventListener('click', (e) => { e.preventDefault(); $('h-' + tabState.tab).focus(); });
-buildTabbar();
-showTab(parseHash(location.hash).tab, false);
-window.addEventListener('popstate', onLocation);
-window.addEventListener('hashchange', onLocation);
-// every script is deferred, so each module has attached its listeners before this runs
+document.addEventListener('td:prefs', () => { if (curWin !== 'settings') { renderControls(); changed(); } });
+window.addEventListener('hashchange', route);
+// the dialog's detail is printed whole
 document.addEventListener('DOMContentLoaded', init);
