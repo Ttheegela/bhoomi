@@ -11,7 +11,10 @@
   var SHAPE = { rising: '▲', falling: '▼', none: '≈' };
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var saved = [], recents = [], cur = null, ok = true, copyTimer = 0;
+  var NOSAVE = "Saving isn't available in this browser. Sharing still works.", OLDEST = 'Saved. The oldest saved place was removed (up to 6 are kept).', KEPT = 'Saved. It is kept in this browser only.';
   var els = {};
+  function isGeo(label) { return typeof label === 'string' && label.trim().toLowerCase() === 'your location'; }
+  function savedMsg(dropped) { return !ok ? NOSAVE : dropped ? OLDEST : KEPT; }
 
   function h(tag, cls, text) {
     var e = document.createElement(tag);
@@ -29,7 +32,10 @@
     var v = TD.variables.filter(function (x) { return x.id === id; })[0];
     return SHORT[id] || (v ? String(v.name).replace(/\s*\([^)]*\)/g, '').trim() : id);
   }
-  function dateText(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? (+m[3]) + ' ' + MON[+m[2] - 1] + ' ' + m[1] : ''; }
+  function dateText(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '');
+    return m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31 ? (+m[3]) + ' ' + MON[+m[2] - 1] + ' ' + m[1] : '';
+  }
   function say(t) { if (!els.status) return; els.status.textContent = t || ''; els.status.hidden = !t; }
 
   // ---- storage: every item read back is untrusted ----
@@ -38,6 +44,7 @@
     var lat = x.lat, lon = x.lon;
     if (typeof lat !== 'number' || typeof lon !== 'number' || !(Math.abs(lat) <= 90) || !(Math.abs(lon) <= 180)) return null;
     if (typeof x.variable !== 'string' || !TD.variables.some(function (v) { return v.id === x.variable; })) return null;
+    if (isGeo(x.label)) return null;
     var win = function (s) { return typeof s === 'string' && /^\d{4}(-\d{2})?$/.test(s) ? s : null; };
     return {
       lat: lat, lon: lon,
@@ -45,7 +52,7 @@
       variable: x.variable,
       source: (typeof x.source === 'string' && TD.cleanPlace(x.source)) || null,
       start: win(x.start), end: win(x.end),
-      verdict: WORD[x.verdict] ? x.verdict : null,
+      verdict: Object.prototype.hasOwnProperty.call(WORD, x.verdict) ? x.verdict : null,
       checked: typeof x.checked === 'string' && dateText(x.checked) ? x.checked : null
     };
   }
@@ -91,7 +98,7 @@
     els.actions = h('div', 'mem-actions'); els.actions.hidden = true;
     els.save = btn('btn mem-btn'); els.share = btn('btn mem-btn', 'Share this result');
     els.actions.append(els.save, els.share);
-    els.noSave = h('p', 'help mem-note', "Saving isn't available in this browser. Sharing still works."); els.noSave.hidden = true;
+    els.noSave = h('p', 'help mem-note', NOSAVE); els.noSave.hidden = true;
     els.linkBox = h('label', 'mem-linkbox'); els.linkBox.hidden = true;
     els.link = h('input', 'mem-link'); els.link.type = 'text'; els.link.readOnly = true;
     els.linkBox.append(h('span', 'help', 'Link to copy'), els.link);
@@ -101,7 +108,7 @@
     els.save.addEventListener('click', function () {
       if (!cur) return;
       if (isSaved(cur)) { unsave(cur); say('Removed from saved places.'); return; }
-      say(save(cur) ? 'Saved. The oldest saved place was removed (up to 6 are kept).' : 'Saved. It is kept in this browser only.');
+      say(savedMsg(save(cur)));
     });
     els.share.addEventListener('click', function () {
       var url = TD.linkFor();
@@ -150,12 +157,13 @@
     x.setAttribute('aria-label', isSavedList ? 'Remove ' + label + ' from saved places' : 'Save ' + label);
     x.addEventListener('click', function () {
       if (isSavedList) {
-        var items = els.savedList.querySelectorAll('.mem-open'), i = saved.indexOf(p);
+        var i = saved.indexOf(p);
         unsave(p); say(label + ' removed.');
-        var t = items[i + 1] || els.savedH || els.recentH || (els.save && !els.save.hidden && !els.actions.hidden ? els.save : null);
+        var t = (els.savedList && els.savedList.querySelectorAll('.mem-open')[i]) || els.savedH || els.recentH || (els.save && !els.save.hidden && !els.actions.hidden ? els.save : null);
         if (t) t.focus();
       } else {
-        save(p); say(label + ' saved.');
+        var dropped = save(p);
+        say(!ok ? NOSAVE : dropped ? OLDEST : label + ' saved.');
         if (els.savedH) els.savedH.focus();
       }
     });
@@ -235,7 +243,7 @@
     var lat = p && Number(p.lat), lon = p && Number(p.lon);
     if (!p || !(Math.abs(lat) <= 90) || !(Math.abs(lon) <= 180) || typeof p.variable !== 'string') { refresh(); return; }
     var place = d.place || {}, tp = d.trend && d.trend.place;
-    if (d.origin === 'geo' || (d.origin == null && place.label === 'your location')) {
+    if (d.origin === 'geo' || isGeo(place.label)) {
       say("We don't make a link for your own location, to keep it private. Search for the place by name to share it.");
       refresh(); return;
     }
@@ -249,7 +257,7 @@
     if (!cur) { refresh(); return; }
     var k = keyOf(cur), found = saved.filter(function (s) { return keyOf(s) === k; })[0];
     if (found) {
-      if (cur.verdict) { found.verdict = cur.verdict; found.checked = cur.checked; }
+      if (cur.verdict && found.start === cur.start && found.end === cur.end) { found.verdict = cur.verdict; found.checked = cur.checked; }
     } else if (d.origin !== 'undo') {
       recents = recents.filter(function (s) { return keyOf(s) !== k; });
       recents.unshift(cur);

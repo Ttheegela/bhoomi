@@ -14,7 +14,7 @@
 .mem-h:not(:first-child) { margin-top: 16px; }
 .mem-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 @media (min-width: 600px) and (max-width: 899px) { .mem-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.mem-card { display: flex; align-items: center; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.mem-card { min-width: 0; display: flex; align-items: center; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
 .mem-open { flex: 1; min-width: 0; min-height: 64px; padding: 8px 12px; display: flex; flex-direction: column; justify-content: center;
   text-align: left; font: inherit; color: var(--ink); background: transparent; border: 0; border-radius: 6px; cursor: pointer; }
 .mem-name { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
