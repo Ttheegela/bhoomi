@@ -9,8 +9,14 @@ from fastapi.testclient import TestClient
 
 from earthtrends.agent import loop, prompts, providers, ratelimit, tools, tracing
 from earthtrends.app import app
+from earthtrends.data import ghcn as ghcn_src
 
 client = TestClient(app)
+
+
+def tried(*mods):
+    """What a failed detect_trend call carries for the model: each tried source's own name and address."""
+    return [{"name": m.SOURCE["name"], "url": m.SOURCE["url"]} for m in mods]
 TREND = {"variable": "sea_level", "units": "mm", "verdict": "rising", "slope_per_decade": 41.0, "ci_low": 38.0,
          "ci_high": 44.0, "p_value": 0.0001, "source": {"id": "coops", "name": "NOAA CO-OPS"}}  # no URL: no link added
 ARGS = {"variable": "sea_level", "lat": 39.36, "lon": -74.42}
@@ -90,7 +96,8 @@ def test_tool_errors_go_back_to_model(fake, monkeypatch, exc, msg):
     fake.script = [step(tool_calls=[call()]), step("Sorry, no gauge.")]
     r = loop.ask("q", model="fake:m")
     assert r["tool_calls"][0]["error"] == msg and r["tool_calls"][0]["result"] is None
-    assert fake.results == [[{"id": "c1", "content": {"error": msg}}]]
+    sources = tried(coops_src, psmsl_src)  # sea level, no source named: CO-OPS and its automatic fallback
+    assert fake.results == [[{"id": "c1", "content": {"error": msg, "sources": sources}}]]
 
 
 @pytest.mark.parametrize("c", [
@@ -114,7 +121,7 @@ def test_call_limit_ends_honestly(fake, monkeypatch):
     monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
     fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(10)]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 10 - loop.MAX_CALLS
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(fake.script) == 10 - loop.MAX_CALLS
     # The last call's tool requests are not run: nobody would read the results.
     assert len(r["tool_calls"]) == len(ran) == loop.MAX_CALLS - 1
 
@@ -129,7 +136,7 @@ def test_time_budget_ends_honestly(fake, monkeypatch):
     fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(10)]
     r = loop.ask("q", model="fake:m")
     # t0=0, model check 50, tool check 100 (runs), next model check 150: spent.
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 9 and len(r["tool_calls"]) == 1
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(fake.script) == 9 and len(r["tool_calls"]) == 1
 
 
 def test_budget_spent_before_tools_runs_none(fake, monkeypatch):
@@ -147,7 +154,7 @@ def test_budget_spent_by_slow_concurrent_tools(fake, monkeypatch):
     fake_clock(monkeypatch, [0, 0, 1, 121, 125])  # t0, model check, tools start (all), next model check spent, latency
     fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step("never read")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(ran) == 2 and len(r["tool_calls"]) == 2
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(ran) == 2 and len(r["tool_calls"]) == 2
     assert len(fake.script) == 1  # no model call after the budget ran out
 
 
@@ -218,7 +225,7 @@ def test_tool_call_on_a_no_tools_retry_runs_nothing(fake, monkeypatch):
     monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: ran.append(1) or TREND)
     fake.script = [step(tool_calls=[call()]), EMPTY_CUT, step(tool_calls=[call(id="c2")]), step("never")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and ran == [1] and len(r["tool_calls"]) == 1 and len(fake.script) == 1
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and ran == [1] and len(r["tool_calls"]) == 1 and len(fake.script) == 1
 
 
 def test_cut_off_before_any_tool_restarts_plain_question(fake):
@@ -236,7 +243,7 @@ def test_two_empty_cut_offs_still_answer(fake):
 
 def test_endless_cut_offs_stop_at_call_limit(fake):
     fake.script = [step(tool_calls=[call()])] + [EMPTY_CUT] * 10
-    assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP and len(fake.script) == 11 - loop.MAX_CALLS
+    assert loop.ask("q", model="fake:m")["answer"].startswith(loop.FOUND_HEAD) and len(fake.script) == 11 - loop.MAX_CALLS
 
 
 def test_cut_off_by_token_count_without_stop_key(fake):
@@ -253,14 +260,14 @@ def test_normal_final_step_is_unchanged(fake):
 def test_cut_off_on_last_call_gives_up(fake):
     fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(loop.MAX_CALLS - 1)] + [CUT, step("never")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 1  # no call left for a retry
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(fake.script) == 1  # no call left for a retry
 
 
 def test_cut_off_retry_respects_budget(fake, monkeypatch):
     fake_clock(monkeypatch, [0, 0, 1, 2, 120, 125])  # t0, model, tool, model (cut off), retry check: spent
     fake.script = [step(tool_calls=[call()]), CUT, step("never")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 1
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(fake.script) == 1
 
 
 # ---- word limit ----
@@ -317,7 +324,7 @@ def test_long_retry_respects_budget(fake, monkeypatch):
 
 def test_whitespace_only_text_is_not_an_answer(fake):
     fake.script = [step(tool_calls=[call()]), step("   \n ")]
-    assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP
+    assert loop.ask("q", model="fake:m")["answer"].startswith(loop.FOUND_HEAD)
 
 
 def test_long_then_empty_retry_returns_long(fake):
@@ -396,7 +403,7 @@ def test_one_source_errors_two_answer(fake, monkeypatch):
     fake.script = [step(tool_calls=three_calls()), step(words(150))]
     r = loop.ask("q", model="fake:m")
     assert r["tool_calls"][2]["error"] == "No weather station within 50 km of this point."
-    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.STATION_REASON}}  # the model sees no digit
+    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.STATION_REASON, "sources": tried(ghcn_src)}}  # the model sees no digit
     # two sources returned results, so 180 applies; they agree, so the code adds ERA5's sentence
     assert r["answer"] == (words(150) + f" {ERA5_SENT} Its data: "
                            "https://open-meteo.com/. " + link("power"))
@@ -891,7 +898,7 @@ def test_slow_source_is_reported_late_without_blocking(fake, monkeypatch):
         release.set()  # let the straggler thread end
     assert real_time.monotonic() - t < 5  # did not wait for the hung source
     assert r["answer"] == "ok" and [c["error"] for c in r["tool_calls"]] == [None, None, loop.LATE]
-    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.LATE}}
+    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.LATE, "sources": tried(ghcn_src)}}
     assert loop.word_limit(r["tool_calls"]) == loop.MAX_WORDS_MULTI  # two sources answered
 
 
@@ -928,7 +935,7 @@ def test_call_limit_with_three_tools_per_step(fake, monkeypatch):
     monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
     fake.script = [step(tool_calls=three_calls()) for _ in range(10)]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 10 - loop.MAX_CALLS
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(fake.script) == 10 - loop.MAX_CALLS
     assert len(ran) == len(r["tool_calls"]) == 3 * (loop.MAX_CALLS - 1)
     assert r["usage"]["cost_usd"] == round(0.001 * loop.MAX_CALLS, 8)
 
@@ -1402,7 +1409,21 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "If the variable has only one source, call it once and leave source out",
     'Your first sentence says plainly that the sources disagree (use the word "disagree")',
     "this shape replaces the plain first sentence, the comparison and the how-sure sentence",
-    "if no source returned a result, give the no-data answer, say you cannot advise, and still end with the marker",
+    "if no source returned a result, give the no-data answer, say that past data alone cannot settle it, and still end with the marker",
+    "you add none of your own",
+    "Never give a number about the future",
+    "look up only the measurements it names",
+    "Describe each source's gauge or station in its own clause with that source's name",
+    "never write that \"both\" or \"the two\" sources use, share or come from a gauge or station, even when the names match",
+    "is a sea-level question: look up sea level only",
+    "(a) the question compares two or more places for safety or risk in general",
+    "When every result in the answer is rising or falling, never write \"no clear change\"",
+    "the line about that result keeps its own no-change words",
+    "\"The tool looks at all months of the year together, not only summer.\" for a summer question",
+    "This is the sea measured against the land, so the land rising or sinking is part of it.",
+    "write as if for a ten-year-old",
+    "write [GUIDANCE] on its own",
+    "at most six calls",
     "past data at single places",
     "A question is broad only when it asks which places or where across a large area and names no single place or "
     "region to check",
@@ -1454,7 +1475,7 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "never write a link to such a resource yourself",
     "check up to THREE large cities in that region (coastal ones for sea level) that you name yourself",
     'usable record nearby."',
-    '"These are examples I chose, not a ranking."',
+    'write this exact sentence once, word for word: "These are examples, not a ranking."',
     "two or more sources or places",
     '"the second source"',
     "likely because",
@@ -1481,7 +1502,7 @@ def test_prompt_rules(phrase):
                                     "a decade is ten years", "every ten years", "explaining what a decade is more than once",
                                     "the p-value phrase second", "millimetres every ten years", "comparison of slopes",
                                     "verdict, numbers and p-value", 'A question about a region or "which places"',
-                                    'Broad questions (a region or "which places"'])
+                                    'Broad questions (a region or "which places"', "you cannot advise", "judge investments", "past data cannot tell what will happen"])
 def test_prompt_rules_removed(phrase):
     assert phrase not in prompts.SYSTEM
 
@@ -1855,12 +1876,20 @@ def test_meaning_reaches_the_model_for_full_results_only(fake, monkeypatch):
 SEA_OK = {"name": "detect_trend", "arguments": NY, "error": None}
 
 
+def at(variable, source, lat, lon):
+    return {**TREND, "variable": variable, "source": {"id": source}, "place": {"lat": lat, "lon": lon}}
+
+
 @pytest.mark.parametrize("results,want", [
-    ([NY_COOPS], resources.US_COAST),
+    ([NY_COOPS], resources.US_COAST),  # The Battery via coops
     ([NY_PSMSL, NY_COOPS], resources.US_COAST),  # any coops sea-level result
     ([NY_PSMSL], resources.SEA),
-    ([{**TREND, "variable": "air_temp", "source": {"id": "power"}, "place": {"lat": 33.45, "lon": -112.07}}],
-     resources.OTHER),  # Phoenix
+    ([at("sea_level", "psmsl", 18.92, 72.83)], resources.SEA),  # Mumbai
+    ([at("air_temp", "power", 33.45, -112.07)], resources.OTHER),  # Phoenix
+    ([at("water_storage", "grace", 30.90, 75.85)], resources.WATER),  # Ludhiana, Punjab
+    ([at("air_temp_max", "power", 28.61, 77.21)], resources.WORLD),  # Delhi
+    ([at("precip", "power", 13.08, 80.27)], resources.WORLD),  # Chennai
+    ([at("precip", "power", 13.08, 80.27), at("sea_level", "psmsl", 13.1, 80.3)], resources.SEA),  # sea level first
     ([], ""),
 ])
 def test_official_resources_row(results, want):
@@ -1877,6 +1906,39 @@ def test_official_resources_row(results, want):
 ])
 def test_marker_forms(text, want):
     assert resources.fill(text, [NY_PSMSL]) == want
+
+
+TABLE = (resources.US_COAST, resources.SEA, resources.OTHER, resources.WATER, resources.WORLD)
+
+
+def test_table_sentences_have_no_digit_outside_their_address_and_urls_is_complete():
+    addresses = [u for t in TABLE for u in re.findall(r"https?://[^\s)]+", t)]
+    assert sorted(resources.URLS) == sorted(addresses)
+    for t in TABLE:
+        assert not re.search(r"\d", re.sub(r"https?://[^\s)]+", "", t))
+        assert loop.stated_numbers(t) == []  # "data_tools/17" is an address, not a stated number
+
+
+@pytest.mark.parametrize("text,want", [
+    ("It rose 17 mm (https://sealevel.nasa.gov/data_tools/17).", [("", "17")]),
+    ("https://tidesandcurrents.noaa.gov/stationhome.html?id=8518750", [("", "8518750")]),  # any other address counts
+    ("https://x/31.79", [("", "31.79")]),
+    ("see https://psmsl.org/,31.79 mm", [("", "31.79")]),
+    ("https://sealevel.nasa.gov/data_tools/17 31.79 mm", [("", "31.79")]),
+    ("https://sealevel.nasa.gov/data_tools/1731.79", [("", "31.79")]),  # the glued number is still found
+])
+def test_only_the_official_addresses_hide_their_numbers(text, want):
+    assert loop.stated_numbers(text) == want
+
+
+def test_sea_projection_link_after_a_no_lookup_answer_is_not_a_made_up_number(fake, monkeypatch):
+    # Mumbai via PSMSL: the sentence with "data_tools/17" is added after the checks, so no retry and no NO_NUMBERS.
+    r = at("sea_level", "psmsl", 18.92, 72.83)
+    monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: r)
+    fake.script = [step(tool_calls=[call(arguments={"variable": "sea_level", "lat": 18.92, "lon": 72.83})]),
+                   step("Rising. I cannot advise on moving. [OFFICIAL RESOURCES]"), step("never")]
+    out = loop.ask("Should I move away from the coast in Mumbai?", model="fake:m")
+    assert out["answer"].endswith(resources.SEA) and len(fake.script) == 1
 
 
 def test_marker_replaced_through_the_loop_outside_the_word_limit(fake, monkeypatch):
@@ -1967,7 +2029,7 @@ def test_explaining_below_0_001_costs_no_retry(fake):  # D
 
 
 @pytest.mark.parametrize("place,want", [({"lat": 33.45, "lon": -112.07}, resources.OTHER),  # Phoenix
-                                        ({"lat": 30.90, "lon": 75.85}, "")])  # Ludhiana, Punjab
+                                        ({"lat": 30.90, "lon": 75.85}, resources.WORLD)])  # Ludhiana, Punjab
 def test_climate_toolkit_link_only_in_the_united_states(place, want):  # E
     r = {**TREND, "variable": "air_temp", "source": {"id": "power"}, "place": place}
     assert resources.sentence([r]) == want
@@ -1982,3 +2044,73 @@ def test_near_miss_markers_never_reach_the_user(marker):  # F
     assert resources.fill(text, [NY_COOPS]) == f"I cannot advise on building. {resources.US_COAST}"
     assert resources.fill(text, []) == "I cannot advise on building."
     assert loop.words(text) == 5
+
+
+# ---- a failed lookup names the sources it tried, from the data modules ----
+
+def failed_call(arguments, error="No tide gauge within 100 km of (28.61, 77.21); the nearest is X, 812 km away."):
+    return {"name": "detect_trend", "arguments": arguments, "result": None, "error": error}
+
+
+INLAND_DELHI = {"variable": "sea_level", "lat": 28.61, "lon": 77.21}
+
+
+@pytest.mark.parametrize("arguments,mods", [
+    ({**INLAND_DELHI, "source": "coops"}, [coops_src]),  # a named source: that one only
+    ({**INLAND_DELHI, "source": "psmsl"}, [psmsl_src]),
+    ({**DELHI, "source": "ghcn"}, [ghcn_src]),
+    (INLAND_DELHI, [coops_src, psmsl_src]),  # sea level, no source: the default and its automatic fallback
+    ({**INLAND_DELHI, "source": None}, [coops_src, psmsl_src]),  # None is left out too
+    ({**INLAND_DELHI, "source": ""}, [coops_src]),  # "" is not left out: the data layer uses the default only
+    (DELHI, [loop.power]),  # no source: the variable's default
+])
+def test_failed_call_carries_the_sources_it_tried(arguments, mods):
+    view = loop.for_model([failed_call(arguments)])[0]
+    assert view["sources"] == tried(*mods)
+    if loop.power not in mods:  # these names and addresses carry no digit (NASA POWER's "MERRA-2" does)
+        assert not any(ch.isnumeric() for ch in json.dumps({k: view[k] for k in ("error", "sources")}))
+
+
+@pytest.mark.parametrize("call", [
+    failed_call({**INLAND_DELHI, "variable": "sea_temp"}),  # unknown variable
+    failed_call({**INLAND_DELHI, "source": "power"}),  # a source the variable does not have
+    failed_call({}, "Tool arguments were not valid JSON."),
+    {"name": "list_variables", "arguments": {}, "result": None, "error": "boom"},
+])
+def test_failed_call_without_a_known_source_carries_none(call):
+    assert "sources" not in loop.for_model([call])[0]
+
+
+def test_catalog_source_without_a_module_is_skipped(monkeypatch):
+    real = tools.list_variables
+    monkeypatch.setattr(tools, "list_variables", lambda: [
+        {**v, "sources": ["newsrc", *v["sources"]]} if v["id"] == "sea_level" else v for v in real()])
+    assert loop.for_model([failed_call(INLAND_DELHI)])[0]["sources"] == tried(coops_src)  # no KeyError
+    assert "sources" not in loop.for_model([failed_call({**INLAND_DELHI, "source": "newsrc"})])[0]
+
+
+def test_source_names_never_count_as_stated_numbers():
+    # ERA5, MERRA-2 and RL06 v2.0 have digits: a name or address written back is never taken for a number
+    for s in loop.SOURCES.values():
+        assert loop.stated_numbers(f"{s['name']} ({s['url']})") == []
+
+
+def test_failed_sources_leave_successes_and_hidden_sources_unchanged():
+    calls = [*NY_CALLS, failed_call({**NY, "source": "coops"}, "The data source did not answer.")]
+    view = loop.for_model(calls)
+    assert view[0] == calls[0]  # the default source: in full, as before
+    assert view[1]["result"] == {"variable": "sea_level", "verdict": NY_PSMSL["verdict"], "source": NY_PSMSL["source"],
+                                 "caveats": NY_PSMSL.get("caveats", []), "note": loop.AGREE_NOTE}  # hidden: as before
+    assert "sources" not in view[0] and "sources" not in view[1]
+    assert view[2]["sources"] == tried(coops_src)
+
+
+def test_failed_sources_reach_the_model_through_the_loop(fake, monkeypatch):
+    def boom(*a, **kw):
+        raise ValueError("No tide gauge within 100 km of (28.61, 77.21).")
+    monkeypatch.setattr(tools, "detect_trend", boom)
+    fake.script = [step(tool_calls=[call(arguments=INLAND_DELHI)]), step("No tide gauge near Delhi.")]
+    loop.ask("Is sea level rising in Delhi?", model="fake:m")
+    content = fake.results[0][0]["content"]
+    assert content == {"error": loop.GAUGE_REASON, "sources": tried(coops_src, psmsl_src)}
+    assert not any(ch.isnumeric() for ch in json.dumps(content))

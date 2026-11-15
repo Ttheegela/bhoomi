@@ -23,9 +23,9 @@ import httpx
 
 from earthtrends.agent import providers, resources, tracing
 from earthtrends.agent.loop import (GAVE_UP, MAX_CALLS, NUM, agree_plan, agree_sentence, ask, hidden_calls,
-                                    history_error, wrong_periods)
+                                    history_error, tried_sources, wrong_periods)
 from earthtrends.agent.loop import stated_numbers as _numbers  # one implementation, shared with the loop's check
-from earthtrends.data import coops, era5, ghcn, grace, list_variables, power, psmsl
+from earthtrends.data import list_variables
 from earthtrends.data.coops import haversine_km
 
 CASES = Path(__file__).with_name("cases.toml")
@@ -52,8 +52,6 @@ COLUMNS = {"tool": "right tool", "variable": "right variable", "place": "right p
 PLACES_KM = 100  # min_places: calls this far apart are different places
 STATS_WORDS = ("p-value", "p value", "statistically significant", "0.05 line", "slope",  # not in an ordinary answer
                "decade is ten years")  # (allow_stats lets them through)
-# Every catalog source's own address: the model may name one it checked even when the check failed.
-SOURCE_URLS = tuple(m.SOURCE["url"] for m in (power, era5, ghcn, psmsl, grace, coops))
 URL = re.compile(r"https?://[^\s)\]>\"',]+", re.I)
 VERDICT_WORDS = {
     "rising": ("rising", "going up", "increasing", "risen", "upward", "warming", "getting hotter", "getting warmer",
@@ -109,6 +107,8 @@ def load_cases(*paths: Path) -> list[dict]:
             raise SystemExit(f"Case {c.get('id')!r}: min_places must be a whole number of at least 1, got {mp!r}")
         if "allow_stats" in c and not isinstance(c["allow_stats"], bool):
             raise SystemExit(f"Case {c.get('id')!r}: allow_stats must be true or false, got {c['allow_stats']!r}")
+        if "multi_measure" in c and not isinstance(c["multi_measure"], bool):
+            raise SystemExit(f"Case {c.get('id')!r}: multi_measure must be true or false, got {c['multi_measure']!r}")
         if "allow_empty_lookup" in c and c.get("expect_tool") != "none":
             raise SystemExit(f"Case {c.get('id')!r}: allow_empty_lookup only goes with expect_tool = \"none\"")
     return cases
@@ -229,7 +229,8 @@ def check(case: dict, run: dict) -> dict[str, bool]:
         said_disagree = bool(DISAGREE.search(a.replace("’", "'")))
         # Results for several places (a broad question): each city has its own verdict, and results keyed by source
         # can't tell them apart, so the verdict-word branches are skipped; the other wording checks still apply.
-        if _places([c for c in calls if c.get("error") is None and c.get("result")]) > 1:
+        # A multi_measure case is the same: each measurement has its own verdict.
+        if case.get("multi_measure") or _places([c for c in calls if c.get("error") is None and c.get("result")]) > 1:
             pass
         elif len(verdicts) > 1:  # the sources disagree: the answer must say so, and drop none of the verdicts
             out["wording"] = said_disagree and all(any(_said(w, a.replace("’", "'")) for w in VERDICT_WORDS[v])
@@ -269,7 +270,12 @@ def check(case: dict, run: dict) -> dict[str, bool]:
             out["min_places"] = _places(calls) >= case["min_places"]
     known = {_url(r["source"]["url"]) for r in results
              if isinstance(r, dict) and isinstance(r.get("source"), dict) and r["source"].get("url")}
-    known |= {_url(u) for u in (*resources.URLS, *SOURCE_URLS)}
+    # a failed call's sources: the addresses the model read with its error, this turn only
+    known |= {_url(s["url"]) for c in run.get("tool_calls", []) if c.get("error") for s in tried_sources(c)}
+    known |= {_url(u) for u in resources.URLS}
+    # the tool's own guidance links, which code inserts word for word
+    known |= {_url(u) for r in results if isinstance(r, dict) and isinstance(r.get("guidance"), dict)
+              for u in URL.findall(json.dumps(r["guidance"]))}
     out["links"] = all(_url(u) in known for u in URL.findall(answer))
     if case.get("must_say") or case.get("must_not_say"):
         out["must_say"] = (all(w.lower() in a for w in case.get("must_say", []))

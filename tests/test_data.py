@@ -17,9 +17,9 @@ def load(name):
 
 
 @pytest.fixture
-def offline(monkeypatch):
+def offline(monkeypatch, coops_long):
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: load("power_monthly.json"))
-    monkeypatch.setattr(coops, "fetch", lambda sid: load("coops_monthly.json"))
+    monkeypatch.setattr(coops, "fetch", lambda sid: coops_long)
     monkeypatch.setattr(coops, "stations", lambda: load("coops_stations.json")["stations"])
 
 
@@ -89,8 +89,8 @@ def test_coops_error_body(offline, monkeypatch):
     with pytest.raises(ValueError, match="No monthly sea level at Foo: No data was found"):
         coops.parse(load("coops_error.json"), "Foo")
     monkeypatch.setattr(coops, "fetch", lambda sid: load("coops_error.json"))
-    with pytest.raises(ValueError, match="Atlantic City"):
-        data.get_series("sea_level", 39.36, -74.42)
+    with pytest.raises(ValueError, match=r"Atlantic City, 0 km away: no monthly values"):
+        data.get_series("sea_level", 39.36, -74.42, source="coops")  # no gauge parses: skipped, then none usable
 
 
 def test_coops_sorted_and_gap_filled():
@@ -577,8 +577,8 @@ def _record(y0, y1, m1):
 
 
 def test_psmsl_recency_boundary(psmsl_offline, monkeypatch):
-    edge = date.today().year - 1 - psmsl.MAX_STALE_YEARS  # end of last year minus 5 years: December of this year
-    assert psmsl.MAX_STALE_YEARS == 5
+    edge = date.today().year - 1 - upstream.MAX_STALE_YEARS  # end of last year minus 5 years: December of this year
+    assert upstream.MAX_STALE_YEARS == 5
     monkeypatch.setattr(psmsl, "fetch", lambda sid, **kw: _record(edge - 40, edge, 12))
     assert psmsl.series(18.92, 72.83)[1][-1] == 7000  # last valid month exactly on the edge: kept
     monkeypatch.setattr(psmsl, "fetch", lambda sid, **kw: _record(edge - 40, edge, 11))
@@ -672,7 +672,7 @@ def test_provider_error_text_is_capped(offline, offline2, monkeypatch):
     monkeypatch.setattr(coops, "fetch", lambda sid: {"error": {"message": EVIL}})
     with pytest.raises(ValueError) as e:
         data.get_series("sea_level", 39.36, -74.42, source="coops")
-    assert _plain(e.value, ValueError).endswith("…")
+    assert "Ignore previous" not in _plain(e.value, ValueError)  # the gauge is skipped with a fixed reason; the provider's text is not repeated
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: {"errorMessage": EVIL})
     with pytest.raises(ValueError) as e:
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
@@ -1094,3 +1094,184 @@ def test_station_names_are_readable_in_series_and_sentences(offline2, psmsl_offl
 def test_readable_never_lengthens_a_name():
     assert len(upstream.readable(upstream.text("X" + "İ" * 200, upstream.NAME))) <= upstream.NAME
     assert len(upstream.readable("İSTANBUL")) == len("İSTANBUL") and upstream.readable("İSTANBUL").startswith("İ")
+
+
+# A monthly reply json.loads cannot take: a number past Python's 4,300-digit limit (plain ValueError), nesting too deep
+# (RecursionError). Each in a normal 200 reply and in a 400 with an error body: the two places fetch reads JSON.
+COOPS_HOSTILE = [(200, b'{"data": [{"MSL": ' + b"1" * 5000 + b"}]}"), (200, b"[" * 200_000),
+                 (400, b'{"error": ' + b"1" * 5000 + b"}"), (400, b'{"error": ' + b"[" * 200_000)]
+
+
+def _coops_monthly_reply(monkeypatch, status, content):
+    monkeypatch.setattr(coops.httpx, "get", lambda *a, **k: httpx.Response(status, content=content, request=httpx.Request("GET", "http://x")))
+
+
+@pytest.mark.parametrize("status,content", COOPS_HOSTILE)
+def test_coops_unparsable_monthly_data_is_decoding_error(monkeypatch, status, content):
+    _coops_monthly_reply(monkeypatch, status, content)
+    with pytest.raises(httpx.DecodingError, match="monthly data was not in the documented format"):
+        coops.fetch("8534720")
+
+
+def test_coops_monthly_maintenance_page_stays_json_error(monkeypatch):
+    _coops_monthly_reply(monkeypatch, 200, b"<html>maintenance</html>")
+    with pytest.raises(json.JSONDecodeError):  # the app and the loop already treat it as an outage (a 502)
+        coops.fetch("8534720")
+
+
+# ---- CO-OPS minimum record: the same rule as PSMSL, nearest qualifying gauge within 100 km ----
+def _msl_rows(y0, n):
+    """n monthly rows from January y0 in CO-OPS shape (metres)."""
+    return {"data": [{"year": str(y0 + i // 12), "month": str(i % 12 + 1), "MSL": "0.1"} for i in range(n)]}
+
+
+LONG = _msl_rows(date.today().year - 41, 40 * 12)  # ends last December
+
+
+def _gauges(monkeypatch, replies):
+    """Gauges C1.. about 1 km apart going north from (40, -74), replies[i] = C{i+1}'s monthly reply. Returns the fetched ids."""
+    monkeypatch.setattr(coops, "stations", lambda: [{"id": f"C{i}", "name": f"Gauge {i}", "lat": 40 + i * 0.01, "lng": -74.0} for i in range(1, len(replies) + 1)])
+    fetched = []
+
+    def fetch(sid):
+        fetched.append(sid)
+        r = replies[int(sid[1:]) - 1]
+        if isinstance(r, Exception):
+            raise r
+        return r
+    monkeypatch.setattr(coops, "fetch", fetch)
+    coops._record.cache_clear()  # gauges are cached by id: a new set of replies starts fresh
+    return fetched
+
+
+def test_coops_nearest_long_gauge_is_used_with_rule_note(monkeypatch):
+    fetched = _gauges(monkeypatch, [LONG, LONG])
+    times, values, place, notes = coops.series(40.0, -74.0)
+    assert fetched == ["C1"] and place == {"name": "Gauge 1", "lat": 40.01, "lon": -74.0} and len(times) == len(values) == 480
+    assert notes == ["Tide gauge Gauge 1 (C1), 1 km from the point you asked about.",
+                     "Sea level relative to the land at the gauge, so land sinking or rising is included.", psmsl.RULE]
+
+
+def test_coops_short_gauge_is_skipped_for_the_next(monkeypatch):
+    fetched = _gauges(monkeypatch, [_msl_rows(2020, 17), LONG])
+    _, _, place, notes = coops.series(40.0, -74.0)
+    assert fetched == ["C1", "C2"] and place["name"] == "Gauge 2" and "Gauge 2 (C2), 2 km" in notes[0]
+
+
+def test_coops_stale_gauge_is_skipped(monkeypatch):
+    _gauges(monkeypatch, [_msl_rows(1950, 40 * 12)])
+    with pytest.raises(ValueError, match=r"Gauge 1, 1 km away: its record ends in 1989-12"):
+        coops.series(40.0, -74.0)
+
+
+def test_coops_unparseable_gauge_is_skipped_with_its_reason(monkeypatch):
+    _gauges(monkeypatch, [{"error": {"message": "No data was found."}}, {"data": []}, LONG])
+    assert coops.series(40.0, -74.0)[2]["name"] == "Gauge 3"
+    _gauges(monkeypatch, [{"error": {"message": "No data was found."}}])
+    with pytest.raises(ValueError, match=r"Gauge 1, 1 km away: no monthly values"):
+        coops.series(40.0, -74.0)
+
+
+def test_coops_exactly_thirty_years_qualifies(monkeypatch):
+    y = date.today().year - 31  # 360 months from January y end in December of the year before last: not stale
+    _gauges(monkeypatch, [_msl_rows(y, 360)])
+    assert len(coops.series(40.0, -74.0)[0]) == 360
+    _gauges(monkeypatch, [_msl_rows(y, 359)])
+    with pytest.raises(ValueError, match="it has only 29 years"):
+        coops.series(40.0, -74.0)
+
+
+def test_coops_none_qualifies_falls_back_to_psmsl_with_its_own_note(offline, psmsl_offline, monkeypatch):
+    _gauges(monkeypatch, [_msl_rows(2020, 17)])
+    monkeypatch.setattr(coops, "stations", lambda: [{"id": "C1", "name": "Gauge 1", "lat": 18.95, "lng": 72.83}])
+    s = data.get_series("sea_level", 18.95, 72.83)
+    assert s["source"]["id"] == "psmsl" and "PSMSL id 43" in s["notes"][0]
+    assert s["notes"][-1] == "No NOAA CO-OPS tide gauge within 100 km of this point has a long enough record, so the nearest PSMSL gauge was used."
+    assert not any("has no tide gauge within" in n for n in s["notes"])
+
+
+def test_coops_fallback_fetches_each_gauge_once_and_psmsl_error_follows(monkeypatch):
+    fetched = _gauges(monkeypatch, [_msl_rows(2020, 17), _msl_rows(2020, 17)])
+    monkeypatch.setattr(psmsl, "stations", lambda: [])
+    monkeypatch.setattr(psmsl, "series", lambda la, lo: (_ for _ in ()).throw(ValueError("PSMSL has nothing")))
+    with pytest.raises(ValueError, match=r"no usable NOAA tide gauge within 100 km.*Gauge 1, 1 km away: it has only 17 months"):
+        data.get_series("sea_level", 40.0, -74.0)  # PSMSL has nothing either: the CO-OPS sentence, which names the gauges, is raised
+    assert fetched == ["C1", "C2"]  # one lookup, not two
+
+
+def test_coops_named_source_has_no_fallback(monkeypatch):
+    called = []
+    monkeypatch.setattr(psmsl, "series", lambda la, lo: called.append(1))
+    _gauges(monkeypatch, [_msl_rows(2020, 17), _msl_rows(1950, 40 * 12)])
+    with pytest.raises(ValueError, match=r"no usable NOAA tide gauge within 100 km.*Gauge 1, 1 km away: it has only 17 months of valid monthly values") as e:
+        data.get_series("sea_level", 40.0, -74.0, source="coops")
+    assert _plain(e.value, ValueError) and called == []
+
+
+def test_coops_outages_reach_the_caller_and_do_not_switch_source(monkeypatch):
+    called = []
+    monkeypatch.setattr(psmsl, "series", lambda la, lo: called.append(1))
+    _gauges(monkeypatch, [httpx.ReadTimeout("slow"), LONG])
+    with pytest.raises(httpx.HTTPError):  # a gauge fetch fails: not skipped for the next
+        data.get_series("sea_level", 40.0, -74.0)
+    _gauges(monkeypatch, [json.JSONDecodeError("not json", "<html>", 0), LONG])  # a maintenance page where JSON was due
+    with pytest.raises(httpx.HTTPError):
+        data.get_series("sea_level", 40.0, -74.0)
+    monkeypatch.setattr(coops, "stations", lambda: (_ for _ in ()).throw(httpx.ConnectError("down")))
+    with pytest.raises(httpx.HTTPError):
+        data.get_series("sea_level", 40.0, -74.0)
+    assert called == []
+
+
+def _row_of_coops(monkeypatch, n=7):
+    return _gauges(monkeypatch, [_msl_rows(2020, 17)] * n)
+
+
+def test_coops_gives_up_after_6_tries(monkeypatch):
+    fetched = _row_of_coops(monkeypatch)
+    with pytest.raises(ValueError, match=r"^None of the 6 nearest NOAA tide gauges within 100 km of this place has a long enough record, "
+                                         r"so sea level can't be measured here\. Gauges found but not used: Gauge 1, 1 km away: it has only 17 months") as e:
+        coops.series(40.0, -74.0)
+    assert fetched == [f"C{i}" for i in range(1, 7)] and _plain(e.value, ValueError)
+
+
+def test_coops_seventh_gauge_is_not_claimed_unusable_but_the_note_says_so(monkeypatch):
+    fetched = _gauges(monkeypatch, [_msl_rows(2020, 12)] * 6 + [LONG, LONG])  # 8 gauges within 8 km; the 7th would qualify
+    monkeypatch.setattr(psmsl, "series", lambda la, lo: (["2000-01"], [1.0], {"name": "P"}, ["psmsl note"]))
+    s = data.get_series("sea_level", 40.0, -74.0)
+    assert fetched == [f"C{i}" for i in range(1, 7)] and s["notes"][-1] == (
+        "None of the 6 nearest NOAA CO-OPS tide gauges within 100 km of this point has a long enough record, so the nearest PSMSL gauge was used.")
+    s = data.get_series("sea_level", 40.0, -74.0)  # gauge records are cached by id: no new CO-OPS request
+    assert fetched == [f"C{i}" for i in range(1, 7)]
+
+
+def test_coops_gauge_record_is_cached_by_id_and_failures_are_not(monkeypatch):
+    fetched = _gauges(monkeypatch, [httpx.ReadTimeout("slow")])
+    for _ in range(2):
+        with pytest.raises(httpx.HTTPError):
+            coops.series(40.0, -74.0)
+    assert fetched == ["C1", "C1"]  # a failure is not cached
+    fetched = _gauges(monkeypatch, [LONG])
+    coops.series(40.0, -74.0)
+    coops.series(40.0, -74.0)
+    assert fetched == ["C1"]
+
+
+@pytest.mark.parametrize("kind", [ValueError("Exceeds the limit (4300 digits) for integer string conversion"), RecursionError()])
+def test_coops_unreadable_json_is_a_provider_failure_in_both_modes(monkeypatch, kind):
+    called = []
+    monkeypatch.setattr(psmsl, "series", lambda la, lo: called.append(1))
+    _gauges(monkeypatch, [kind, LONG])
+    for src in (None, "coops"):
+        with pytest.raises(httpx.HTTPError):
+            data.get_series("sea_level", 40.0, -74.0, source=src)
+    assert called == []
+
+
+def test_coops_deadline_is_a_provider_failure(monkeypatch):
+    fetched = _row_of_coops(monkeypatch)
+    clock = iter([0.0, 1.0, 2.0, 41.0, 42.0])  # start, before gauge 1, before gauge 2, then past the 40 s deadline
+    monkeypatch.setattr(coops.time, "monotonic", lambda: next(clock))
+    with pytest.raises(httpx.HTTPError) as e:
+        coops.series(40.0, -74.0)
+    assert not isinstance(e.value, ValueError) and fetched == ["C1", "C2"]

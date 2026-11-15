@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -13,7 +14,8 @@ from earthtrends.data import coops, power
 FX = Path(__file__).parent / "fixtures"
 SERIES_KEYS = {"variable", "units", "freq", "place", "times", "values", "source", "notes"}
 TREND_KEYS = {"variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
-              "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "caveats", "meaning"}
+              "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "caveats", "meaning",
+              "guidance"}
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 client = TestClient(app)
 
@@ -23,9 +25,9 @@ def load(name):
 
 
 @pytest.fixture
-def offline(monkeypatch):
+def offline(monkeypatch, coops_long):
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: load("power_monthly.json"))
-    monkeypatch.setattr(coops, "fetch", lambda sid: load("coops_monthly.json"))
+    monkeypatch.setattr(coops, "fetch", lambda sid: coops_long)
     monkeypatch.setattr(coops, "stations", lambda: load("coops_stations.json")["stations"])
 
 
@@ -123,6 +125,7 @@ def test_mcp_tools(mcp_client, offline, monkeypatch):
 
     for fetch in (connect_error, html_page):
         monkeypatch.setattr(coops, "fetch", fetch)
+        coops._record.cache_clear()  # the gauge's record from the first call is cached; this call must reach the failing fetch
         res = mcp_call(mcp_client, "tools/call", {"name": "detect_trend", "arguments": args})
         assert res["isError"] and "The data source did not answer" in res["content"][0]["text"]
 
@@ -198,7 +201,7 @@ def test_data_routes_limit_per_client(offline):
 def test_ask_limit_unchanged_and_separate(offline, monkeypatch):
     monkeypatch.setattr(loop, "ask", lambda q: {"answer": "ok"})
     a = {"X-Forwarded-For": "3.3.3.3"}
-    assert (ratelimit.PER_CLIENT, ratelimit.PER_CLIENT_HOUR, ratelimit.GLOBAL) == (10, 100, 200)
+    assert (ratelimit.PER_CLIENT, ratelimit.PER_CLIENT_HOUR, ratelimit.GLOBAL) == (30, 150, 200)
     for _ in range(ratelimit.PER_CLIENT):
         assert client.post("/api/ask", json={"question": "hi"}, headers=a).status_code == 200
     r = client.post("/api/ask", json={"question": "hi"}, headers=a)
@@ -282,3 +285,14 @@ def test_wrong_address_is_a_friendly_page_but_api_stays_json():
         r = client.get(u)
         assert r.status_code == 404 and r.json() == {"detail": "Not Found"}, u
     assert client.get("/favicon.svg").headers["content-type"].startswith("image/svg+xml")
+
+
+@pytest.mark.parametrize("status,content", [(200, b'{"data": [{"MSL": ' + b"1" * 5000 + b"}]}"), (200, b"[" * 200_000),
+                                            (400, b'{"error": ' + b"1" * 5000 + b"}"), (400, b'{"error": ' + b"[" * 200_000),
+                                            (200, b"<html>maintenance</html>")])
+def test_coops_unparsable_monthly_data_is_502(monkeypatch, status, content):
+    monkeypatch.setattr(coops, "stations", lambda: load("coops_stations.json")["stations"])
+    monkeypatch.setattr(coops.httpx, "get", lambda *a, **k: httpx.Response(status, content=content, request=httpx.Request("GET", "http://x")))
+    for path in ("/api/series", "/api/trend"):
+        r = client.get(path, params={"variable": "sea_level", "lat": 39.36, "lon": -74.42})
+        assert r.status_code == 502 and r.json() == {"detail": "The data source did not answer. Please try again."}

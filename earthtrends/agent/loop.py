@@ -11,9 +11,10 @@ from decimal import ROUND_HALF_UP, Decimal
 
 import httpx
 
-from earthtrends.agent import prompts, resources, tools
+from earthtrends.agent import guidance, prompts, resources, tools
 from earthtrends.agent.providers import MAX_TOKENS, PROVIDERS, NotConfigured, parse_spec
 from earthtrends.agent.tracing import Trace
+from earthtrends.data import coops, era5, ghcn, grace, power, psmsl
 
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
 MAX_CALLS = 6
@@ -128,6 +129,23 @@ def model_reason(error: str) -> str:
     if "tide gauge" in low or "sea level" in low:
         return GAUGE_REASON
     return FALLBACK_REASON
+
+
+SOURCES = {m.SOURCE["id"]: m.SOURCE for m in (coops, era5, ghcn, grace, power, psmsl)}
+
+
+def tried_sources(call: dict) -> list[dict]:
+    """The sources a detect_trend call tried, as {"name", "url"} from the data modules' own SOURCE: the source it named,
+    else the variable's default, and for sea level also PSMSL (the automatic fallback). An unknown variable or source,
+    or another tool: none. The model reads them with a failed call, so it never writes an address from memory."""
+    args = call.get("arguments")
+    entry = isinstance(args, dict) and next((v for v in tools.list_variables() if v["id"] == args.get("variable")), None)
+    if call.get("name") != "detect_trend" or not entry:
+        return []
+    src = args.get("source")
+    # Only a source left out (None) gets the sea-level fallback, as in the data layer; "" is its default alone.
+    ids = entry["sources"][:2 if entry["id"] == "sea_level" else 1] if src is None else [src or entry["sources"][0]]
+    return [{"name": SOURCES[i]["name"], "url": SOURCES[i]["url"]} for i in ids if i in entry["sources"] and i in SOURCES]
 
 
 # ---- sources that agree: the code writes their sentence, the model never sees their numbers ----
@@ -292,14 +310,15 @@ def hidden_calls(calls: list[dict]) -> set[int]:
 
 
 def for_model(calls: list[dict]) -> list[dict]:
-    """What the model reads: digit-free error reasons, and each agreeing non-default source without its numbers (nor
-    its "meaning"). Every other result goes in full, "meaning" included."""
+    """What the model reads: digit-free error reasons, each with the sources the call tried (tried_sources), and each
+    agreeing non-default source without its numbers (nor its "meaning"). Every other result goes in full, "meaning"
+    included."""
     hidden = hidden_calls(calls)
 
     def brief(r):
         return {"variable": r.get("variable"), "verdict": r.get("verdict"), "source": r.get("source"),
                 "caveats": r.get("caveats", []), "note": AGREE_NOTE}
-    return [{**c, "error": model_reason(c["error"])} if c["error"]
+    return [{**c, "error": model_reason(c["error"]), **({"sources": s} if (s := tried_sources(c)) else {})} if c["error"]
             else {**c, "result": brief(c["result"])} if i in hidden else c
             for i, c in enumerate(calls)]
 
@@ -312,8 +331,9 @@ def word_limit(calls: list[dict]) -> int:
 
 
 def words(text: str) -> int:
-    """What the word limit counts: the official-resources marker and its sentence are outside it."""
-    return len(resources.strip(text).split())
+    """What the word limit counts: the official-resources and guidance markers (and what code puts there) are
+    outside it."""
+    return len(guidance.strip(resources.strip(text)).split())
 
 
 # ---- numbers an answer states: the loop's no-data check and the eval scorer share this ----
@@ -331,8 +351,10 @@ UNDER_001 = re.compile(r"\b(?:below|less than) 0\.001(?!\d)", re.I)
 
 
 def stated_numbers(text: str) -> list[tuple[str, str]]:
-    """(sign, digits) for each number an answer states. Left out: list numbering, the prompt's fixed phrases, and
-    whole numbers under 10 with no unit after them (words like "2 sources")."""
+    """(sign, digits) for each number an answer states. Left out: the official-resources addresses, list numbering,
+    the prompt's fixed phrases, and whole numbers under 10 with no unit after them (words like "2 sources")."""
+    for u in resources.URLS:  # "data_tools/17" is no number; any other address's digits still count
+        text = text.replace(u, " ")
     text = re.sub(r"(?m)^\s*\d+[.)]\s", " ", text)
     text = ALLOWED.sub(" ", text)
     text = re.sub(r"(?<=\d),(?=\d{3}\b)", "", text)
@@ -554,6 +576,52 @@ def best(kept: list[str], calls: list[dict]) -> str | None:
     return fixed[min(range(len(fixed)), key=lambda i: (0, flags[i], -i) if n[i] <= limit else (1, flags[i], n[i]))]
 
 
+FOUND_HEAD = "Here is what I found."
+VERDICT_WORDS = {"rising": "clearly rising", "falling": "clearly falling", "no_clear_change": "no clear change"}
+NOT_FOUND = "I could not look up: {}."
+
+
+def found_answer(calls: list[dict]) -> str:
+    """The answer when the loop ends with results but no answer from the model (it kept asking for tools until the
+    call cap or the time budget ran out): one line per place and measurement, from the first source in catalog order
+    that returned, then the measurements that returned nothing. Every number and period is a result's own; guidance
+    and official links are added after, as for any answer."""
+    names = {v["id"]: v["name"].split(" (")[0] for v in tools.list_variables()}
+    best_of: dict = {}
+    for c in ok_calls(calls):
+        k = (_where(c), c["result"].get("variable"))
+        if k not in best_of or _rank(c["result"]) < _rank(best_of[k]):
+            best_of[k] = c["result"]
+    lines = [FOUND_HEAD]
+    for r in best_of.values():
+        where = (r.get("place") or {}).get("name")
+        head = ((r.get("meaning") or {}).get("headline") or "").strip()
+        src = r.get("source") or {}
+        line = f"{names.get(r.get('variable'), r.get('variable'))}{f' at {where}' if where else ''}: "
+        line += f"{head or VERDICT_WORDS.get(r.get('verdict'), 'no verdict').capitalize() + '.'} "
+        if all(isinstance(r.get(k), (int, float)) for k in ("slope_per_decade", "ci_low", "ci_high")):
+            units = DEG_C.sub("°C", str(r.get("units") or ""))
+            line += (f"Rate {fmt(r['slope_per_decade'])} {units} per decade (95% range {fmt(r['ci_low'])} to "
+                     f"{fmt(r['ci_high'])})" + (f", {_in_words(r['period'])}" if _period(r) else "") + ". ")
+        line += f"Source: {(src.get('name') or '?').split(',')[0].strip()}" + (f", {src['url']}." if src.get("url") else ".")
+        lines.append(line)
+    # Missing: a catalog measurement asked for at a point where no source returned it. The point is named by a
+    # result there; ponytail: a point with no result at all has no name (calls carry only lat/lon), so it is "another
+    # place". A geocoder lookup would name it.
+    named = {w: (r.get("place") or {}).get("name") for (w, _), r in best_of.items()}
+    missing = []
+    for c in calls:
+        v = (c.get("arguments") or {}).get("variable") if c.get("name") == "detect_trend" else None
+        if v not in names or (_where(c), v) in best_of:
+            continue
+        n = f"{names[v].lower()} at {named.get(_where(c)) or 'another place'}"
+        if n not in missing:
+            missing.append(n)
+    if missing:
+        lines.append(NOT_FOUND.format(", ".join(missing)))
+    return "\n".join(lines)
+
+
 def ask(question: str, model: str | None = None, history: list[dict] | None = None) -> dict:
     """`history`: earlier turns of the chat (see history_error), sent as plain text before the question; no tool
     call or result from them is carried over."""
@@ -671,7 +739,7 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
             calls += done
             view = for_model(calls)
             seen = view[len(calls) - len(done):]  # agreement judged over every result so far
-            content = [d["result"] if d["error"] is None else {"error": d["error"]} for d in seen]
+            content = [d["result"] if d["error"] is None else {k: d[k] for k in ("error", "sources") if k in d} for d in seen]
             # Sent without numbers in an earlier step but no longer agreeing (e.g. a later source disagrees):
             # the model gets those full results now, with this step's first result.
             now = hidden_calls(calls)
@@ -682,7 +750,11 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                 first = content[k] if isinstance(content[k], dict) else {"result": content[k]}
                 content[k] = {**first, "earlier_results_in_full": {"note": RESTORED_NOTE, "results": back}}
             provider.add_tool_results([{"id": c["id"], "content": x} for c, x in zip(todo, content)])
-        answer = answer or best(kept, calls) or (NO_NUMBERS if numbered else GAVE_UP)
+        # Results but no usable answer of the model's: never give up on data we have (code writes it from them).
+        answer = answer or best(kept, calls) or (found_answer(calls) if ok_calls(calls)
+                                                 else NO_NUMBERS if numbered else GAVE_UP)
+        if answer not in (GAVE_UP, NO_NUMBERS):
+            answer = guidance.fill(answer, ok_calls(calls))  # the tool's own guidance, word for word
         # After every check, so it is outside the word limit; on every path, so the marker never reaches the user.
         answer = resources.fill(answer, [c["result"] for c in ok_calls(calls)])
     finally:
