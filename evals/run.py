@@ -144,6 +144,8 @@ def _pool(x, out: list[float]) -> list[float]:
         out += [float(s) * (-1 if sign else 1) for sign, s in NUM.findall(x)]
     elif isinstance(x, dict):
         for k, v in x.items():
+            if k == "meaning":  # the page's plain-words strings: the model is not sent them
+                continue
             _pool(v, out)
             if (k == "slope_per_decade" and isinstance(v, (int, float)) and not isinstance(v, bool)
                     and x.get("verdict") in ("rising", "falling")):

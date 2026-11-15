@@ -4,6 +4,8 @@ import math
 
 import numpy as np
 
+from earthtrends.stats.meaning import meaning_for
+
 MIN_POINTS = 10
 MIN_DAYS_PER_MONTH = 20
 
@@ -89,7 +91,7 @@ def compute_trend(series: dict) -> dict:
     if idx[-1] - idx[0] + 1 < 10 * per_year:
         caveats.append("Short record: trends over less than 10 years are unreliable.")
 
-    return {
+    result = {
         "variable": series["variable"],
         "units": series["units"],
         "place": series["place"],
@@ -106,6 +108,8 @@ def compute_trend(series: dict) -> dict:
         "source": series["source"],
         "caveats": caveats,
     }
+    result["meaning"] = meaning_for(result)
+    return result
 
 
 def _daily_to_monthly(times: list, values: list) -> tuple[list, list]:
