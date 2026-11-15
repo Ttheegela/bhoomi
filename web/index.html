@@ -69,12 +69,11 @@
         <label for="variable">Measurement</label>
         <select id="variable" aria-describedby="variable-help"></select>
       </div>
-      <p id="variable-help" class="help span2"></p>
       <div class="field" id="source-field" hidden>
         <label for="source">Data source</label>
         <select id="source" aria-describedby="source-help"></select>
       </div>
-      <p id="source-help" class="help span2"></p>
+      <p id="pick-help" class="help span2"><span id="variable-help"></span> <span id="source-help"></span></p>
     </div>
   </form>
 
@@ -91,7 +90,7 @@
           <p class="card-label">Our answer</p>
           <h2 id="verdict-heading" tabindex="-1" class="verdict-head"></h2>
           <div class="card-body">
-            <p id="verdict-big" class="big"></p>
+            <div class="numrow"><p id="verdict-big" class="big"></p><div id="spark" class="spark" hidden></div></div>
             <p id="verdict-calc" class="source"></p>
             <div id="verdict-source" class="srcline"></div>
             <p id="verdict-p1"></p>
