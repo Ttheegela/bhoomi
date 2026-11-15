@@ -11,7 +11,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 import httpx
 
-from earthtrends.agent import prompts, resources, tools
+from earthtrends.agent import guidance, prompts, resources, tools
 from earthtrends.agent.providers import MAX_TOKENS, PROVIDERS, NotConfigured, parse_spec
 from earthtrends.agent.tracing import Trace
 from earthtrends.data import coops, era5, ghcn, grace, power, psmsl
@@ -331,8 +331,9 @@ def word_limit(calls: list[dict]) -> int:
 
 
 def words(text: str) -> int:
-    """What the word limit counts: the official-resources marker and its sentence are outside it."""
-    return len(resources.strip(text).split())
+    """What the word limit counts: the official-resources and guidance markers (and what code puts there) are
+    outside it."""
+    return len(guidance.strip(resources.strip(text)).split())
 
 
 # ---- numbers an answer states: the loop's no-data check and the eval scorer share this ----
@@ -349,9 +350,11 @@ UNIT = re.compile(r"\s*(?:%|°|degrees?\b|deg\b|mm\b|cm\b|m\b|km\b|inch|feet\b|f
 UNDER_001 = re.compile(r"\b(?:below|less than) 0\.001(?!\d)", re.I)
 
 
-def stated_numbers(text: str) -> list[tuple[str, str]]:
+def stated_numbers(text: str, allowed: tuple[str, ...] = ()) -> list[tuple[str, str]]:
     """(sign, digits) for each number an answer states. Left out: the official-resources addresses, list numbering,
-    the prompt's fixed phrases, and whole numbers under 10 with no unit after them (words like "2 sources")."""
+    the prompt's fixed phrases, whole numbers under 10 with no unit after them (words like "2 sources"), and the
+    numbers written in the `allowed` strings (the tool's guidance, which code inserts word for word)."""
+    ok = {("-" if sg else "", float(d)) for a in allowed for sg, d in NUM.findall(a)}
     for u in resources.URLS:  # "data_tools/17" is no number; any other address's digits still count
         text = text.replace(u, " ")
     text = re.sub(r"(?m)^\s*\d+[.)]\s", " ", text)
@@ -360,7 +363,7 @@ def stated_numbers(text: str) -> list[tuple[str, str]]:
     out = []
     for m in NUM.finditer(text):
         sign, s = m.groups()
-        if "." not in s and int(s) < 10 and not UNIT.match(text, m.end()):
+        if ("." not in s and int(s) < 10 and not UNIT.match(text, m.end())) or ("-" if sign else "", float(s)) in ok:
             continue
         out.append(("-" if sign else "", s))
     return out
@@ -575,6 +578,44 @@ def best(kept: list[str], calls: list[dict]) -> str | None:
     return fixed[min(range(len(fixed)), key=lambda i: (0, flags[i], -i) if n[i] <= limit else (1, flags[i], n[i]))]
 
 
+FOUND_HEAD = "Here is what I found."
+NOT_FOUND = "I could not look up: {}."
+
+
+def found_answer(calls: list[dict]) -> str:
+    """The answer when the loop ends with results but no answer from the model (it kept asking for tools until the
+    call cap or the time budget ran out): one line per place and measurement, from the first source in catalog order
+    that returned, then the measurements that returned nothing. Every number and period is a result's own; guidance
+    and official links are added after, as for any answer."""
+    names = {v["id"]: v["name"].split(" (")[0] for v in tools.list_variables()}
+    best_of: dict = {}
+    for c in ok_calls(calls):
+        k = (_where(c), c["result"].get("variable"))
+        if k not in best_of or _rank(c["result"]) < _rank(best_of[k]):
+            best_of[k] = c["result"]
+    lines = [FOUND_HEAD]
+    for r in best_of.values():
+        where = (r.get("place") or {}).get("name")
+        head = ((r.get("meaning") or {}).get("headline") or "").strip()
+        src = r.get("source") or {}
+        line = f"{names.get(r.get('variable'), r.get('variable'))}{f' at {where}' if where else ''}: "
+        line += f"{head} " if head else ""
+        if all(isinstance(r.get(k), (int, float)) for k in ("slope_per_decade", "ci_low", "ci_high")):
+            units = DEG_C.sub("°C", str(r.get("units") or ""))
+            line += (f"Rate {fmt(r['slope_per_decade'])} {units} per decade (95% range {fmt(r['ci_low'])} to "
+                     f"{fmt(r['ci_high'])})" + (f", {_in_words(r['period'])}" if _period(r) else "") + ". ")
+        line += f"Source: {(src.get('name') or '?').split(',')[0].strip()}" + (f", {src['url']}." if src.get("url") else ".")
+        lines.append(line)
+    got, missing = {r.get("variable") for r in best_of.values()}, []
+    for c in calls:
+        v = (c.get("arguments") or {}).get("variable") if c.get("name") == "detect_trend" else None
+        if v and v not in got and (n := str(names.get(v, v)).lower()) not in missing:
+            missing.append(n)
+    if missing:
+        lines.append(NOT_FOUND.format(", ".join(missing)))
+    return "\n".join(lines)
+
+
 def ask(question: str, model: str | None = None, history: list[dict] | None = None) -> dict:
     """`history`: earlier turns of the chat (see history_error), sent as plain text before the question; no tool
     call or result from them is carried over."""
@@ -703,7 +744,11 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                 first = content[k] if isinstance(content[k], dict) else {"result": content[k]}
                 content[k] = {**first, "earlier_results_in_full": {"note": RESTORED_NOTE, "results": back}}
             provider.add_tool_results([{"id": c["id"], "content": x} for c, x in zip(todo, content)])
-        answer = answer or best(kept, calls) or (NO_NUMBERS if numbered else GAVE_UP)
+        # Results but no usable answer of the model's: never give up on data we have (code writes it from them).
+        answer = answer or best(kept, calls) or (found_answer(calls) if ok_calls(calls)
+                                                 else NO_NUMBERS if numbered else GAVE_UP)
+        if answer not in (GAVE_UP, NO_NUMBERS):
+            answer = guidance.fill(answer, ok_calls(calls))  # the tool's own guidance, word for word
         # After every check, so it is outside the word limit; on every path, so the marker never reaches the user.
         answer = resources.fill(answer, [c["result"] for c in ok_calls(calls)])
     finally:

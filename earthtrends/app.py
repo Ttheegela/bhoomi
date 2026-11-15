@@ -1,4 +1,5 @@
 import contextlib
+import hmac
 import ipaddress
 import json
 import os
@@ -180,6 +181,13 @@ def client_id(request: Request) -> str:
     return key
 
 
+def from_tool(request: Request) -> bool:
+    """The voice widget's tool: X-Tool-Secret equals ELEVENLABS_TOOL_SECRET. Unset or empty: the header is ignored.
+    The value is never logged or echoed."""
+    secret, got = os.environ.get("ELEVENLABS_TOOL_SECRET") or "", request.headers.get("x-tool-secret")
+    return bool(secret) and got is not None and hmac.compare_digest(got.encode(), secret.encode())
+
+
 @app.post("/api/ask")
 def ask(body: AskBody, request: Request) -> dict:
     q = body.question.strip()
@@ -190,7 +198,8 @@ def ask(body: AskBody, request: Request) -> dict:
     h = [] if body.history is None else body.history
     if err := loop.history_error(h):
         raise HTTPException(400, err)
-    if wait := ratelimit.check(client_id(request)):  # after validation, so a 400 uses no quota
+    # after validation, so a 400 uses no quota
+    if wait := ratelimit.check_tool() if from_tool(request) else ratelimit.check(client_id(request)):
         raise HTTPException(429, f"Too many questions right now. Please wait {wait} seconds and try again.",
                             headers={"Retry-After": str(wait)})
     try:

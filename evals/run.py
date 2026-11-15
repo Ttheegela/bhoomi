@@ -270,6 +270,9 @@ def check(case: dict, run: dict) -> dict[str, bool]:
     # a failed call's sources: the addresses the model read with its error, this turn only
     known |= {_url(s["url"]) for c in run.get("tool_calls", []) if c.get("error") for s in tried_sources(c)}
     known |= {_url(u) for u in resources.URLS}
+    # the tool's own guidance links, which code inserts word for word
+    known |= {_url(u) for r in results if isinstance(r, dict) and isinstance(r.get("guidance"), dict)
+              for u in URL.findall(json.dumps(r["guidance"]))}
     out["links"] = all(_url(u) in known for u in URL.findall(answer))
     if case.get("must_say") or case.get("must_not_say"):
         out["must_say"] = (all(w.lower() in a for w in case.get("must_say", []))

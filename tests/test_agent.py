@@ -121,7 +121,7 @@ def test_call_limit_ends_honestly(fake, monkeypatch):
     monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
     fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(10)]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 10 - loop.MAX_CALLS
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(fake.script) == 10 - loop.MAX_CALLS
     # The last call's tool requests are not run: nobody would read the results.
     assert len(r["tool_calls"]) == len(ran) == loop.MAX_CALLS - 1
 
@@ -136,7 +136,7 @@ def test_time_budget_ends_honestly(fake, monkeypatch):
     fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(10)]
     r = loop.ask("q", model="fake:m")
     # t0=0, model check 50, tool check 100 (runs), next model check 150: spent.
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 9 and len(r["tool_calls"]) == 1
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(fake.script) == 9 and len(r["tool_calls"]) == 1
 
 
 def test_budget_spent_before_tools_runs_none(fake, monkeypatch):
@@ -154,7 +154,7 @@ def test_budget_spent_by_slow_concurrent_tools(fake, monkeypatch):
     fake_clock(monkeypatch, [0, 0, 1, 121, 125])  # t0, model check, tools start (all), next model check spent, latency
     fake.script = [step(tool_calls=[call(id="a"), call(id="b")]), step("never read")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(ran) == 2 and len(r["tool_calls"]) == 2
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(ran) == 2 and len(r["tool_calls"]) == 2
     assert len(fake.script) == 1  # no model call after the budget ran out
 
 
@@ -225,7 +225,7 @@ def test_tool_call_on_a_no_tools_retry_runs_nothing(fake, monkeypatch):
     monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: ran.append(1) or TREND)
     fake.script = [step(tool_calls=[call()]), EMPTY_CUT, step(tool_calls=[call(id="c2")]), step("never")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and ran == [1] and len(r["tool_calls"]) == 1 and len(fake.script) == 1
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and ran == [1] and len(r["tool_calls"]) == 1 and len(fake.script) == 1
 
 
 def test_cut_off_before_any_tool_restarts_plain_question(fake):
@@ -243,7 +243,7 @@ def test_two_empty_cut_offs_still_answer(fake):
 
 def test_endless_cut_offs_stop_at_call_limit(fake):
     fake.script = [step(tool_calls=[call()])] + [EMPTY_CUT] * 10
-    assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP and len(fake.script) == 11 - loop.MAX_CALLS
+    assert loop.ask("q", model="fake:m")["answer"].startswith(loop.FOUND_HEAD) and len(fake.script) == 11 - loop.MAX_CALLS
 
 
 def test_cut_off_by_token_count_without_stop_key(fake):
@@ -260,14 +260,14 @@ def test_normal_final_step_is_unchanged(fake):
 def test_cut_off_on_last_call_gives_up(fake):
     fake.script = [step(tool_calls=[call(id=str(i))]) for i in range(loop.MAX_CALLS - 1)] + [CUT, step("never")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 1  # no call left for a retry
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(fake.script) == 1  # no call left for a retry
 
 
 def test_cut_off_retry_respects_budget(fake, monkeypatch):
     fake_clock(monkeypatch, [0, 0, 1, 2, 120, 125])  # t0, model, tool, model (cut off), retry check: spent
     fake.script = [step(tool_calls=[call()]), CUT, step("never")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 1
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(fake.script) == 1
 
 
 # ---- word limit ----
@@ -324,7 +324,7 @@ def test_long_retry_respects_budget(fake, monkeypatch):
 
 def test_whitespace_only_text_is_not_an_answer(fake):
     fake.script = [step(tool_calls=[call()]), step("   \n ")]
-    assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP
+    assert loop.ask("q", model="fake:m")["answer"].startswith(loop.FOUND_HEAD)
 
 
 def test_long_then_empty_retry_returns_long(fake):
@@ -935,7 +935,7 @@ def test_call_limit_with_three_tools_per_step(fake, monkeypatch):
     monkeypatch.setattr(tools, "detect_trend", lambda **kw: ran.append(kw) or TREND)
     fake.script = [step(tool_calls=three_calls()) for _ in range(10)]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == loop.GAVE_UP and len(fake.script) == 10 - loop.MAX_CALLS
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and len(fake.script) == 10 - loop.MAX_CALLS
     assert len(ran) == len(r["tool_calls"]) == 3 * (loop.MAX_CALLS - 1)
     assert r["usage"]["cost_usd"] == round(0.001 * loop.MAX_CALLS, 8)
 
@@ -1409,7 +1409,12 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "If the variable has only one source, call it once and leave source out",
     'Your first sentence says plainly that the sources disagree (use the word "disagree")',
     "this shape replaces the plain first sentence, the comparison and the how-sure sentence",
-    "if no source returned a result, give the no-data answer, say you cannot advise, and still end with the marker",
+    "if no source returned a result, give the no-data answer, say that past data alone cannot settle it, and still end with the marker",
+    "you add none of your own",
+    "Never give a number about the future",
+    "write as if for a ten-year-old",
+    "write [GUIDANCE] on its own",
+    "at most six calls",
     "past data at single places",
     "A question is broad only when it asks which places or where across a large area and names no single place or "
     "region to check",
@@ -1488,7 +1493,7 @@ def test_prompt_rules(phrase):
                                     "a decade is ten years", "every ten years", "explaining what a decade is more than once",
                                     "the p-value phrase second", "millimetres every ten years", "comparison of slopes",
                                     "verdict, numbers and p-value", 'A question about a region or "which places"',
-                                    'Broad questions (a region or "which places"'])
+                                    'Broad questions (a region or "which places"', "you cannot advise", "judge investments"])
 def test_prompt_rules_removed(phrase):
     assert phrase not in prompts.SYSTEM
 

@@ -10,6 +10,7 @@ PER_CLIENT_HOUR, CLIENT_HOUR_S = 100, 3600  # so one client cannot spend the who
 GLOBAL, GLOBAL_WINDOW_S = 200, 3600
 DATA_PER_CLIENT, DATA_PER_CLIENT_HOUR = 120, 1200  # same windows; no overall cap, so one client can't lock out all
 MAX_CLIENTS = 10_000
+TOOL_PER_MIN = 60  # the voice widget's tool: every visitor's question comes from a few ElevenLabs addresses
 
 # ponytail: three caps for /api/ask (10/min and 100/hour per client, 200/hour overall), two for data
 # (120/min and 1,200/hour per client). The counters live in one serverless instance's memory, so this slows a
@@ -20,6 +21,7 @@ _lock = threading.Lock()
 _clients: dict[str, deque] = {}
 _all: deque = deque()
 _data_clients: dict[str, deque] = {}
+_tool: dict[str, deque] = {}
 
 
 def _expire(q: deque, before: float) -> None:
@@ -69,8 +71,15 @@ def check_data(client: str, now: float | None = None) -> int:
     return _check(_data_clients, None, DATA_PER_CLIENT, DATA_PER_CLIENT_HOUR, 0, client, now)
 
 
+def check_tool(now: float | None = None) -> int:
+    """Same as check, for questions from the voice widget's tool (app.py checks its secret): one shared bucket of
+    TOOL_PER_MIN a minute instead of the per-address one. The overall hourly cap still counts them."""
+    return _check(_tool, _all, TOOL_PER_MIN, TOOL_PER_MIN * 60, GLOBAL, "tool", now)
+
+
 def reset() -> None:
     with _lock:
+        _tool.clear()
         _clients.clear()
         _all.clear()
         _data_clients.clear()
