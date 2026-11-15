@@ -9,6 +9,7 @@ All checks are code; only the plain-language score uses a model (a fixed judge),
 import argparse
 import datetime
 import json
+import math
 import os
 import re
 import subprocess
@@ -74,7 +75,8 @@ def load_cases(path: Path = CASES) -> list[dict]:
         cases = tomllib.load(f)["case"]
     for c in cases:
         km = c.get("max_km")
-        if "max_km" in c and (isinstance(km, bool) or not isinstance(km, (int, float)) or not km > 0):
+        if "max_km" in c and (isinstance(km, bool) or not isinstance(km, (int, float))
+                               or not math.isfinite(km) or not km > 0):
             raise SystemExit(f"Case {c.get('id')!r}: max_km must be a positive number of km, got {km!r}")
         if "allow_empty_lookup" in c and not isinstance(c["allow_empty_lookup"], bool):
             raise SystemExit(f"Case {c.get('id')!r}: allow_empty_lookup must be true or false, "

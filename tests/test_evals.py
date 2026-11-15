@@ -225,7 +225,8 @@ def _toml(tmp_path, extra, expect_tool="detect_trend"):
     return p
 
 
-@pytest.mark.parametrize("extra", ["max_km = 0", "max_km = -5", "max_km = true", 'max_km = "200"'])
+@pytest.mark.parametrize("extra", ["max_km = 0", "max_km = -5", "max_km = true", 'max_km = "200"',
+                                   "max_km = inf", "max_km = nan"])
 def test_bad_max_km_is_rejected_at_load(tmp_path, extra):
     with pytest.raises(SystemExit, match="x-case.*max_km"):
         run.load_cases(_toml(tmp_path, extra))
