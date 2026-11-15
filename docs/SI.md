@@ -1,4 +1,4 @@
-# Use of AI (SI) in Trend Detective
+# Use of AI (SI) in Bhoomi
 
 Space Apps allows SI tools if we say clearly where and how we used them. This file collects that.
 Regenerate the PR list before submitting:
