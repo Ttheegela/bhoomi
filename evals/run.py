@@ -318,8 +318,7 @@ def run_case(case: dict, spec: str) -> dict:
     failed = 0.0
     for attempt in range(2):
         try:
-            hist = {"history": case["history"]} if case.get("history") else {}
-            return {**ask(case["question"], model=spec, **hist), "failed_cost": failed}
+            return {**ask(case["question"], model=spec, history=case.get("history")), "failed_cost": failed}
         except providers.UpstreamError as e:
             failed += UNKNOWN_COST * MAX_CALLS
             if attempt:

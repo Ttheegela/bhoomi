@@ -286,7 +286,7 @@ def test_plan_skips_a_case_that_cannot_run(monkeypatch):
 def test_retry_once_on_upstream_error(monkeypatch):
     tries = []
 
-    def ask(q, model):
+    def ask(q, model, history=None):
         tries.append(model)
         if len(tries) == 1:
             raise providers.UpstreamError("blip")
@@ -296,7 +296,7 @@ def test_retry_once_on_upstream_error(monkeypatch):
 
 
 def test_two_upstream_errors_fail_the_case(monkeypatch):
-    def ask(q, model):
+    def ask(q, model, history=None):
         raise providers.UpstreamError("down")
     monkeypatch.setattr(run, "ask", ask)
     r = run.run_case(CASE, "a/b")
@@ -304,7 +304,7 @@ def test_two_upstream_errors_fail_the_case(monkeypatch):
 
 
 def test_budget_guard_stops_one_provider_only(monkeypatch):
-    monkeypatch.setattr(run, "ask", lambda q, model: fake_run(cost=1.0 if model.startswith("openrouter") else 0.01))
+    monkeypatch.setattr(run, "ask", lambda q, model, history=None: fake_run(cost=1.0 if model.startswith("openrouter") else 0.01))
     cases = [{**CASE, "id": f"c{i}"} for i in range(5)]
     out = run.evaluate(["openrouter:a/b", "anthropic:claude-haiku-5-5"], cases, {"openrouter": 2.5, "anthropic": 2.0})
     by = {m: [r["case"] for r in out["records"] if r["model"] == m] for m in ("openrouter:a/b", "anthropic:claude-haiku-5-5")}
@@ -317,7 +317,7 @@ def test_unknown_cost_counts(monkeypatch):
     want = run.UNKNOWN_COST * run.MAX_CALLS  # every response the loop may make, its length retry included
     assert run.guard_cost(fake_run(cost=None)) == pytest.approx(want)
     assert run.guard_cost(fake_run(cost=None, calls=[])) == pytest.approx(want)
-    monkeypatch.setattr(run, "ask", lambda q, model: fake_run(cost=None))
+    monkeypatch.setattr(run, "ask", lambda q, model, history=None: fake_run(cost=None))
     out = run.evaluate(["openrouter:a/b"], [{**CASE, "id": f"c{i}"} for i in range(5)],
                        {"openrouter": 2.5 * want, "anthropic": 2})
     assert len(out["records"]) == 3 and out["tripped"]
@@ -326,7 +326,7 @@ def test_unknown_cost_counts(monkeypatch):
 def test_judge_cost_counts_toward_anthropic(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-not-a-key")
     monkeypatch.setattr(run, "judge", lambda answer: (5, 1.0))
-    monkeypatch.setattr(run, "ask", lambda q, model: fake_run(cost=0.0))
+    monkeypatch.setattr(run, "ask", lambda q, model, history=None: fake_run(cost=0.0))
     out = run.evaluate(["openrouter:a/b"], [{**CASE, "id": f"c{i}"} for i in range(4)], {"openrouter": 9, "anthropic": 2.0})
     assert [r["plain_language"] for r in out["records"]] == [5, 5, None, None]  # judge stops at $2, the model goes on
     assert list(out["tripped"]) == ["anthropic"]
@@ -337,7 +337,7 @@ def test_scores_posted_and_flushed(monkeypatch):
     monkeypatch.setattr(run.tracing, "score", lambda tid, name, value, comment=None: posted.append((tid, name, value)))
     monkeypatch.setattr(run.tracing, "flush", lambda: flushed.append(1))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-not-a-key")
-    monkeypatch.setattr(run, "ask", lambda q, model: fake_run())
+    monkeypatch.setattr(run, "ask", lambda q, model, history=None: fake_run())
     run.evaluate(["openrouter:a/b"], [CASE], {"openrouter": 9, "anthropic": 9})
     assert ("t-1", "eval_numbers", 1) in posted and ("t-1", "eval_plain_language", 4) in posted
     assert len(posted) == 11 and flushed == [1]
@@ -348,7 +348,7 @@ def test_scores_posted_and_flushed(monkeypatch):
 def test_main_writes_markdown_and_json(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-not-a-key")
     answers = {"atlantic-city-sea-level": fake_run(), "springfield-ambiguous": fake_run("It is warming 0.3 per decade.", [])}
-    monkeypatch.setattr(run, "ask", lambda q, model: answers["springfield-ambiguous" if "Springfield" in q else "atlantic-city-sea-level"])
+    monkeypatch.setattr(run, "ask", lambda q, model, history=None: answers["springfield-ambiguous" if "Springfield" in q else "atlantic-city-sea-level"])
     cases = run.load_cases() + [{**CASE, "id": "snow-depth", "expect_variable": "snow_depth"}]  # a case that cannot run
     monkeypatch.setattr(run, "load_cases", lambda: cases)
     assert run.main(["--models", "openrouter:anthropic/claude-haiku-5.5", "--cases",
@@ -407,7 +407,7 @@ def test_price_unknown_anthropic_model_dropped(monkeypatch):
 def test_failed_attempts_count_toward_budget(monkeypatch):
     tries = []
 
-    def ask(q, model):
+    def ask(q, model, history=None):
         tries.append(1)
         if len(tries) == 1:
             raise providers.UpstreamError("blip")
@@ -415,13 +415,13 @@ def test_failed_attempts_count_toward_budget(monkeypatch):
     monkeypatch.setattr(run, "ask", ask)
     r = run.run_case(CASE, "a/b")
     assert run.guard_cost(r) == pytest.approx(run.UNKNOWN_COST * run.MAX_CALLS + 0.001)
-    monkeypatch.setattr(run, "ask", lambda q, model: (_ for _ in ()).throw(providers.UpstreamError("down")))
+    monkeypatch.setattr(run, "ask", lambda q, model, history=None: (_ for _ in ()).throw(providers.UpstreamError("down")))
     assert run.guard_cost(run.run_case(CASE, "a/b")) == pytest.approx(2 * run.UNKNOWN_COST * run.MAX_CALLS)
 
 
 def test_records_appended_as_they_finish(monkeypatch, tmp_path):
     log = tmp_path / "x.jsonl"
-    monkeypatch.setattr(run, "ask", lambda q, model: fake_run())
+    monkeypatch.setattr(run, "ask", lambda q, model, history=None: fake_run())
     run.evaluate(["openrouter:a/b"], [{**CASE, "id": f"c{i}"} for i in range(3)], {"openrouter": 9, "anthropic": 9}, log)
     assert [json.loads(line)["case"] for line in log.read_text().splitlines()] == ["c0", "c1", "c2"]
 
@@ -888,12 +888,17 @@ def test_sentence_about_both_sources_passes_wording(fine, monkeypatch):
 
 # ---- the agent lane's case file and the history field ----
 
+def agent_case(cid):
+    return next(c for c in run.load_cases() if c["id"] == cid)
+
+
 def test_agent_case_file_loads_after_cases_toml():
-    cases = run.load_cases()
-    ids = [c["id"] for c in cases]
-    assert ids[-1] == "followup-jakarta-sea-level" and len(ids) == len(run.load_cases(run.CASES)) + 1
-    jak = cases[-1]
+    ids = [c["id"] for c in run.load_cases()]
+    assert ids[-2:] == ["followup-jakarta-sea-level", "followup-explain-range"]
+    assert len(ids) == len(run.load_cases(run.CASES)) + 2
+    jak = agent_case("followup-jakarta-sea-level")
     assert [m["role"] for m in jak["history"]] == ["user", "assistant"] and "expect_verdict" not in jak
+    assert agent_case("followup-explain-range")["history"] == jak["history"]
 
 
 def test_duplicate_id_across_files_is_refused(tmp_path):
@@ -911,15 +916,15 @@ def test_bad_history_is_refused_at_load(tmp_path):
 
 def test_history_passes_through_to_ask(monkeypatch):
     seen = []
-    monkeypatch.setattr(run, "ask", lambda q, model, **kw: seen.append(kw) or fake_run())
-    jak = run.load_cases()[-1]
+    monkeypatch.setattr(run, "ask", lambda q, model, history=None: seen.append(history) or fake_run())
+    jak = agent_case("followup-jakarta-sea-level")
     run.run_case(jak, "a/b")
     run.run_case(CASE, "a/b")
-    assert seen == [{"history": jak["history"]}, {}]  # no history field: called exactly as before
+    assert seen == [jak["history"], None]
 
 
 def test_jakarta_case_scores_an_errored_call():
-    jak = run.load_cases()[-1]
+    jak = agent_case("followup-jakarta-sea-level")
     args = {"variable": "sea_level", "lat": -6.2, "lon": 106.85}
     calls = [{"name": "detect_trend", "arguments": {**args, "source": s}, "result": None,
               "error": "No tide gauge within 100 km has a usable record."} for s in ("coops", "psmsl")]
@@ -929,3 +934,14 @@ def test_jakarta_case_scores_an_errored_call():
     assert copied["numbers"] is False  # a number from the earlier answer is no tool result of this turn
     far = run.check(jak, fake_run(answer="No gauge.", calls=[{**calls[0], "arguments": {**args, "lat": 40.7, "lon": -74.0}}]))
     assert far["place"] is False
+
+
+def test_explain_range_case_catches_a_copied_number():
+    case = agent_case("followup-explain-range")
+    copied = run.check(case, fake_run(answer="The 95% range of 28.10 to 30.21 means the true slope is likely in it.",
+                                      calls=[]))
+    assert copied["numbers"] is False and copied["tool"] is True
+    plain = run.check(case, fake_run(answer="A 95% range is where the true slope most likely lies.", calls=[]))
+    assert plain == {"answered": True, "tool": True, "numbers": True}
+    looked = run.check(case, fake_run(answer="A 95% range is where the true slope most likely lies."))
+    assert looked["tool"] is False  # a data tool call fails, even one that returned data
