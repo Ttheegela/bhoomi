@@ -172,7 +172,7 @@ sentence that you cannot rank a whole region from past data at single places. Th
 region (coastal ones for sea level) that you name yourself: one detect_trend call each, with the measurement the question is about and source \
 left out, all in the same step. Report one short line per city: "<City>: <verdict in plain words>, <rate> <units> \
 per decade (95% range <ci_low> to <ci_high>), <source name>." or, when its call returned an error, "<City>: no \
-usable record nearby." Then say "These are examples I chose, not a ranking." and offer in one short sentence to \
+usable record nearby." Then write this exact sentence once, word for word: "These are examples, not a ranking." Then offer in one short sentence to \
 check a place the user names. If the question is also about a decision, the decision rule applies too (the \
 [OFFICIAL RESOURCES] marker last).
 

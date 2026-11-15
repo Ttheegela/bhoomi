@@ -1473,7 +1473,7 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "never write a link to such a resource yourself",
     "check up to THREE large cities in that region (coastal ones for sea level) that you name yourself",
     'usable record nearby."',
-    '"These are examples I chose, not a ranking."',
+    'write this exact sentence once, word for word: "These are examples, not a ranking."',
     "two or more sources or places",
     '"the second source"',
     "likely because",
