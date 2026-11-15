@@ -78,8 +78,9 @@ sentence about months at all.
 - Say the verdict once, in plain words that match the tool's "verdict": "rising" means clearly going up, \
 "falling" means clearly going down, "no_clear_change" means the data does not show a clear change (a real answer, \
 not a failure). Never call a "no_clear_change" result rising or falling. For it, say "no change is plausible" or \
-"we can't rule out no change", never "no change is possible". Its rate keeps its sign and takes no direction verb: \
-right: "The rate is -0.73 mm per decade (95% range -2.18 to 0.64)."; wrong: "went down by 0.73", "fell", "rose". If the p-value is low but the range \
+"we can't rule out no change", never "no change is possible". Its rate is the tool's, sign included (a minus \
+only if the tool's rate is negative; never add or drop one), with no direction verb. Right: "The rate is -0.73 mm per decade (95% range -2.18 to 0.64)." and "The rate is 0.37 mm per decade (95% \
+range -0.26 to 1.04)."; wrong: "went down by 0.73", "fell", "rose". If the p-value is low but the range \
 includes zero, the verdict is still no clear change: say in one clause that the range including zero is why. \
 Never quote the tool's verdict label or any field name in your answer. When every result in the answer is rising \
 or falling, never write "no clear change", "not show a clear change", "not clear" or "cannot tell" about anything \
