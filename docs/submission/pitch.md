@@ -36,12 +36,13 @@
 **Say:** "Most tools draw a line through the data. A line always goes up or down. We ask whether the change is real. Tarun will show you."
 
 ## Slide 3: Live, New York sea level (Tarun, 45 s)
-Tab 2, Explore: New York, **Sea level**.
-Point at:
+Tab 2, Explore. Live: type "New York" in **Search for a place** (or tap it on the map, where the dots are tide gauges), then pick **Sea level**. Tab 2 is preloaded with the same result in case the search is slow.
+Point at, top to bottom:
+- **What this means for you:** "Sea level here has clearly been rising. About 3 cm higher every 10 years." How sure we are: **Very clear**. What past data can't tell you: "It cannot tell you how high the sea will get."
 - the verdict: **rising, +31.8 mm per decade** (95% range +30.6 to +33.0), January 1900 to October 2026
-- the lower chart: the seasons removed, the trend line and its shaded range
+- the chart with the seasons removed, the trend line and its shaded range
 - the source line: NOAA CO-OPS tide gauge at The Battery
-**Say:** "Pick a place and a measurement. It pulls the monthly record, takes out the seasons, and tests whether the change beats chance. Rising, about three centimetres every decade, and it names the gauge."
+**Say:** "Search for your town or tap the map. It pulls the monthly record, takes out the seasons, and tests whether the change beats chance. Then it says it in plain words: about three centimetres higher every ten years, very clear, and what the past can't tell you. And it names the gauge."
 
 ## Slide 4: Live, Delhi, when sources disagree (Tarun, 60 s)
 Tab 3, Ask: **"Are Delhi's hottest days getting hotter? Check more than one data source."** (about 20 s to answer; talk while it works)
@@ -69,7 +70,7 @@ Tab 4: **Use in your AI**. Show the server address and the Claude steps.
 ## Slide 8: How we know it's right (Sairam, 45 s)
 - **Truth check:** Atlantic City sea level, ours +42.5 mm per decade (41.1 to 44.0) versus NOAA's own published 42.4 ± 0.8 for the same gauge (station 8534720). They match.
 - **Satellites versus a published study:** north-west India, Aug 2002 to Oct 2008. Our GRACE land water fall is 5.3 cm a year (3.9 to 6.9); Rodell, Velicogna and Famiglietti (2009, *Nature*) report groundwater falling 4.0 ± 1.0. The ranges overlap.
-- **Golden questions:** 15 questions with answers set from NOAA and published papers, never from our own tool. The agent (Claude Haiku 5.5) passes 13 of 15 (Sat 14 Nov), including the ones it must decline: "Will it rain tomorrow?" (a forecast) and "Is sea level rising in Delhi?" (inland). Re-run Sunday morning and quote that score.
+- **Golden questions:** 15 questions with answers set from NOAA and published papers, never from our own tool. The agent on the live site (Claude Haiku 5.5) passes **all 15** in the run of Sun 15 Nov, 06:00 UTC, on the code that's live, including the ones it must decline: "Will it rain tomorrow?" (a forecast) and "Is sea level rising in Delhi?" (inland). It never invented a number.
 - **Stats tests:** pure noise, seasons only and autocorrelated noise all come back "no clear change", so it doesn't cry wolf.
 
 ## Slide 9: Who it's for (Sairam, 30 s)
@@ -83,7 +84,7 @@ Tab 4: **Use in your AI**. Show the server address and the Claude steps.
 ## Likely judge questions
 - *Why not just fit a line?* A line always has a slope. Mann-Kendall asks if the change beats chance; Sen's slope isn't thrown off by outliers.
 - *Why do sources disagree?* Grid cells 25 to 50 km wide versus a single station, different methods, a city growing around the station.
-- *Where's the AI risk?* The agent can't invent numbers: every number in an answer must appear in a tool result, and our evals check that. The two misses in the eval run: it looked up tide gauges for Delhi before saying it's inland (the answer itself had no numbers), and it named the wrong source in one "agrees" sentence. The second is fixed (#62: the code now writes the "agrees" sentence).
+- *Where's the AI risk?* The agent can't invent numbers: every number in an answer must appear in a tool result, and our evals check that. In Sunday's run it passed all 15 golden questions and 3 of 4 extra behaviour checks; the one miss was wording ("cannot show" where the check wanted "cannot tell").
 - *What NASA data?* NASA POWER (built on MERRA-2, from the challenge's Resources list) and the NASA GSFC GRACE/GRACE-FO mascons (RL06 v2.0; Loomis, Luthcke and Sabaka 2019).
 - *Is the GRACE number groundwater?* No. It is all water on land together (soil moisture, groundwater, snow and ice, lakes and rivers), averaged over about 400 km and compared with its 2004 to 2009 average. The answer says so. There is no data from mid-2017 to mid-2018, between the two satellite missions.
 - *Why does Central Valley say "no clear change" for 2003 to 2010?* A short window. Our range (−48 to +5 mm a year) contains the published −31.0 ± 2.7 (Famiglietti et al. 2011). Over the full record it is clearly falling, 17.5 cm per decade.

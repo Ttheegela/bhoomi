@@ -183,7 +183,10 @@ expect_tool = "none"                # Delhi is inland: no coast, no tide gauge. 
 # to have something to report; one short sentence offering what could be checked instead is fine.
 allow_empty_lookup = true           # looking for a gauge, finding none, then declining is a correct answer (#16)
 must_say = ["coast"]
-must_not_say = ["mm per", "per decade"]
+# Verdict phrases too (#16, Tarun): a made-up verdict with no digits ("sea level is clearly rising near Delhi")
+# would otherwise pass. Plain "rising" is not listed, because a correct answer can say "we can't say whether
+# sea level is rising there".
+must_not_say = ["mm per", "per decade", "clearly rising", "clearly falling", "going up", "going down", "no clear change"]
 reference = "Issue #46: do not create numbers when no data exist"
 
 [[case]]
