@@ -13,6 +13,7 @@ gh pr list --state merged --limit 100 --json number,title,body \
 - **OpenAI Codex CLI:** drafted the demo video script (`docs/submission/video.md`) from a brief; Claude reviewed and edited it (#36).
 - **Claude Slides and Claude Design (artifacts on claude.ai):** the pitch deck and a UI design study.
 - **The agent inside the app:** Claude Haiku 5.5 (`anthropic/claude-haiku-5.5`) through OpenRouter. It is the default in `earthtrends/agent/loop.py`, and production sets `AGENT_MODEL=openrouter:anthropic/claude-haiku-5.5` (the owner's decision on 2026-11-15 UTC; a live answer that day names this model). It chooses tools and words the answer; the numbers come only from our tools. Production tried Gemini 3.8 Flash for about an hour on 2026-11-15 before that decision (`evals/results/2026-11-15-flash-check/`). `AGENT_MODEL` can still switch the model, so check the deployed value before submitting.
+- **The assistant on the site (ElevenLabs Agents, "ElevenAgents"):** the chat and voice assistant on every window (#113) is an ElevenLabs agent that Tarun configured in ElevenLabs. It hears or reads the visitor's question, calls its one tool, our `/api/ask` agent, and reads or shows the answer back, so the numbers still come from our tools. Its spoken voice is AI-generated. Its own language model and voice are set in the ElevenLabs dashboard. **Tarun: name them here before submitting.**
 - **Reference checks:** Claude looked up the papers we cite for expected answers and validity claims in Crossref and PubMed (title, journal, and the abstract's figures where available) before they went into `evals/cases.toml`, the pitch or the project page. People decide which references to use.
 - **Claude auto-fix workflow:** makes one attempt at fixing a failing CI check. Those commits come from `claude[bot]` and start with `fix(ci):`.
 
@@ -23,6 +24,7 @@ Check each version against what was actually used on the day before submitting.
 - Anthropic. (2026). *Claude Haiku 5.5* [Large language model]. Accessed through OpenRouter. https://openrouter.ai/anthropic/claude-haiku-5.5
 - Google. (2026). *Gemini 3.8 Flash* [Large language model]. Accessed through OpenRouter; ran the in-app agent in production for about an hour on 2026-11-15 (UTC). https://openrouter.ai/google/gemini-3.8-flash
 - Anthropic. (2026). *Claude* (Slides and Design artifacts, Opus 5.5) [Large language model]. https://claude.ai
+- ElevenLabs. (2026). *ElevenLabs Agents* (conversational AI widget, version 0.18.3 of the embed) [AI voice and chat agent; AI-generated speech]. https://elevenlabs.io/agents
 - OpenAI. (2026). *Codex CLI* (Version 0.162.1, model gpt-6.1-sol) [Computer software; AI coding agent]. https://github.com/openai/codex
 
 In-text, for example: "The demo script was drafted with Codex CLI (OpenAI, 2026) and edited by the team."
@@ -32,10 +34,10 @@ Chose the problem and audience, chose the method (deseasonalize, then Mann-Kenda
 
 ## Images, video, audio
 - Slides and the demo video carry a visible "Built with AI assistance" label. So does the app UI.
-- AI voiceover: none planned; the video uses captions only. If an AI voice is added, name it here and in the video's description and file metadata.
-- Screenshots in `docs/submission/screenshots/` are real captures of the live site, taken by Claude Code's built-in browser; nothing in them is edited.
+- AI voice: the site's assistant speaks with an AI-generated ElevenLabs voice when a visitor talks to it. The demo video doesn't use it; it has captions only. If an AI voice is added to the video, name it here and in the video's description and file metadata.
+- Screenshots in `docs/submission/screenshots/` are real captures of the live site after the rework (Sun 15 Nov), taken by Claude Code's built-in browser; nothing in them is edited.
 
-## Merged PRs (as of Sun 15 Nov, 06:00 UTC)
+## Merged PRs (as of Sun 15 Nov, 17:00 UTC)
 - #1 ci: run gitleaks on pull requests only: Claude wrote this change.
 - #7 feat: /api/health/keys key check: Claude wrote this endpoint and its test.
 - #8 docs: README live URL, agent connect, team: Claude drafted this README update.
@@ -120,10 +122,16 @@ Chose the problem and audience, chose the method (deseasonalize, then Mann-Kenda
 - #104 ui: tide gauge dots on the map: Claude (ui-ux agent) wrote the specification; Claude (frontend builder agent) built it; Claude (orchestrator) wrote the task card and this description.
 - #105 data: readable station and gauge names: Claude (data-integrator builder agent) wrote the function, wired it into the two station-list parsers and updated the tests; Claude (orchestrator) wrote the task card from the issue report and this description.
 - #106 story: Sunday-morning score, new Explore in the pitch and page, SI through #105 (part of #18, #16): Claude Code (Opus 5.5) ran the eval suite on current main, checked the new Explore and Ask on production, took the screenshots in its built-in browser, edited the case, pitch, project page and SI list; Sairam asked for it and reviews it.
+- #107 ui: 'How we calculated this' toggle; 'Rain' for Precipitation: Claude (frontend builder agent) made both edits and ran the checks; Claude (orchestrator) wrote the task card and this description.
 - #108 agent: official links for decision questions outside the United States: Claude (backend builder agent) added the rows, found and fixed the address-digits issue and wrote the tests; Claude (orchestrator) checked each link in a browser, wrote the task card and this description.
 - #109 data: NOAA CO-OPS gauges need 30 years of readings, like PSMSL: Claude (data-integrator builder agent) moved the shared rule, wrote the CO-OPS lookup and the fallback change and the tests; Claude (orchestrator) wrote the task card and this description.
 - #110 agent, data: failed lookups carry their source addresses; malformed NOAA reply is a clean 502: Claude (backend builder agent) wrote both fixes and their offline tests; Claude (orchestrator) wrote the task card and this description.
 - #112 stats: guidance on every trend result (risk level, recommendation, if the past trend continues): AI wrote the guidance rules, sentences, tests and docs/RISK.md, checked the two reference figures on the NASA and NOAA pages, and reviewed the diff.
 - #114 docs: contracts for the guidance field, guidance in Ask answers and the new Ask limits: AI wrote the contract text from the built field shapes.
 - #115 agent: Ask passes on the tool's recommendation, compares places, never gives up over good results: AI wrote the guidance insertion, the loop fix, the prompt rules, the eval cases and tests, ran the eval suite and reviewed the diff.
-- This PR, story: guidance in the pitch and page, Sunday-noon eval score, SI through #115 (part of #18, #16): Claude Code (Opus 5.5) re-ran the eval suite on current main, checked the guidance on production, saved the results, edited the pitch, project page and SI list; Sairam asked for it and reviews it.
+- #111 ui: layout pass (one answer card, one grid, one collapsed 'How we calculated this'): AI wrote the layout specification, built the page frame and the map, guide, memory and noise module changes, wrote the browser overlap check, captured the screenshots and reviewed the diff.
+- #113 ui: page rework (a window per measurement, pinned places, recommendation card, Settings, assistant): AI wrote the module contract from the owner's mock, built the shell, map, comparison chart and table, Settings and the assistant mount in parallel, integrated them, and tested the page in a headless browser.
+- #116 Look-ahead for records of 20 to 29 years (2035 and 2050 only): AI changed the look-ahead rule, the tests and docs/RISK.md, and reviewed the diff.
+- #117 docs: contracts, look-ahead for records of 20 to 29 years stops at 2050: AI edited the contract sentence to match the owner's rule.
+- #118 story: guidance in the pitch and page, Sunday-noon eval score, SI through #115 (part of #18, #16): Claude Code (Opus 5.5) re-ran the eval suite on current main, re-checked the demo answers and the guidance on production, saved the results, edited the pitch, project page and SI list; Sairam asked for it and reviews it.
+- This PR, story: demo flow, video and page for the reworked site; ElevenLabs in the SI (part of #18): Claude Code (Opus 5.5) walked the reworked production site in its built-in browser, timed each demo step, took the new screenshots, rewrote the demo flow, video shots and page text, and added the ElevenLabs disclosure; Sairam asked for it and reviews it.
