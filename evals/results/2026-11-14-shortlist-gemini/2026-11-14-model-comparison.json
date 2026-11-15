@@ -1,0 +1,2810 @@
+[
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "atlantic-city-sea-level",
+  "answer": "Sea level in Atlantic City is clearly going up. From September 1911 to October 2026, it rises by 42.54 mm per decade (a decade is ten years), with a 95% range of 41.11 to 43.96 mm per decade. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line. Permanent Service for Mean Sea Level (PSMSL), RLR monthly means agrees, over its own record, September 1911 to December 2025.\n\nThe data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Both measure sea level relative to the land at the gauge, so land sinking or rising is included, and PSMSL left out some doubtful monthly values.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -74.4229,
+     "variable": "sea_level",
+     "source": "coops",
+     "lat": 39.3643
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 39.3643,
+     "source": "psmsl",
+     "variable": "sea_level",
+     "lon": -74.4229
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "ATLANTIC CITY",
+      "lat": 39.355,
+      "lon": -74.418333
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2025-12"
+     },
+     "n": 1276,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.47,
+     "ci_low": 40.9928,
+     "ci_high": 43.9317,
+     "p_value": 1.06e-171,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "psmsl",
+      "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means",
+      "url": "https://psmsl.org/"
+     },
+     "caveats": [
+      "Tide gauge ATLANTIC CITY (PSMSL id 180), 1 km from the point you asked about.",
+      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, so only the change over time matters, not the height itself.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
+      "The gauge used is the nearest one within 100 km with at least 30 years of valid monthly values and a last valid month no more than 5 years before the end of last year.",
+      "9 monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.03777615,
+  "latency_s": 25.193,
+  "trace_id": "d1eb1c805fce966caaec40bd07819ddf",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "juneau-sea-level-falling",
+  "answer": "Sea level in Juneau is clearly going down, falling by 136.14 mm per decade (every ten years), with a 95% range of -139.00 to -133.27 mm per decade, from June 1936 to September 2026. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line. Permanent Service for Mean Sea Level (PSMSL), RLR monthly means agrees, over its own record, January 1936 to December 2025.\n\nThese results come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Both use a Juneau tide gauge 1 km away and measure sea level relative to the land, so land rising or sinking is included. PSMSL uses a fixed local reference where only the change over time matters, and 37 doubtful or interpolated monthly values were left out.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 58.3,
+     "lon": -134.42,
+     "source": "coops",
+     "variable": "sea_level"
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Juneau",
+      "lat": 58.2988,
+      "lon": -134.4106
+     },
+     "period": {
+      "start": "1936-06",
+      "end": "2026-09"
+     },
+     "n": 1020,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.1448,
+     "ci_low": -139.004,
+     "ci_high": -133.2692,
+     "p_value": 4.45e-160,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Juneau (9452210), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "source": "psmsl",
+     "variable": "sea_level",
+     "lon": -134.42,
+     "lat": 58.3
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "JUNEAU",
+      "lat": 58.298333,
+      "lon": -134.411667
+     },
+     "period": {
+      "start": "1936-01",
+      "end": "2025-12"
+     },
+     "n": 1007,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.0873,
+     "ci_low": -139.2132,
+     "ci_high": -132.9268,
+     "p_value": 1.56e-140,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "psmsl",
+      "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means",
+      "url": "https://psmsl.org/"
+     },
+     "caveats": [
+      "Tide gauge JUNEAU (PSMSL id 405), 1 km from the point you asked about.",
+      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, so only the change over time matters, not the height itself.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
+      "The gauge used is the nearest one within 100 km with at least 30 years of valid monthly values and a last valid month no more than 5 years before the end of last year.",
+      "37 monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0447873,
+  "latency_s": 31.175,
+  "trace_id": "e70207b815fb508c74f8455a770907cd",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "astoria-sea-level-no-change",
+  "answer": "In Astoria, Oregon, the data does not show a clear change in sea level from February 1925 to October 2026. The slope is -1.53 mm per decade (a decade is ten years), with a 95% range of -4.20 to 1.16 mm per decade, so no change is plausible. The p-value is 0.27, above the usual 0.05 line. Permanent Service for Mean Sea Level (PSMSL), RLR monthly means agrees, over its own record, February 1925 to December 2025.\n\nThis comes from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Both use a tide gauge 5 km away and measure sea level relative to the land, so land sinking or rising is included. PSMSL uses a fixed local reference, so only the change over time matters, and left out 6 doubtful monthly values.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "source": "coops",
+     "lat": 46.1879,
+     "variable": "sea_level",
+     "lon": -123.8313
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Astoria",
+      "lat": 46.207306,
+      "lon": -123.7683
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2026-10"
+     },
+     "n": 1199,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.5319,
+     "ci_low": -4.1977,
+     "ci_high": 1.1649,
+     "p_value": 0.265,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Astoria (9439040), 5 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 46.1879,
+     "source": "psmsl",
+     "variable": "sea_level",
+     "lon": -123.8313
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "ASTORIA (TONGUE POINT)",
+      "lat": 46.206667,
+      "lon": -123.768333
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2025-12"
+     },
+     "n": 1191,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.7848,
+     "ci_low": -4.5054,
+     "ci_high": 0.9589,
+     "p_value": 0.198,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "psmsl",
+      "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means",
+      "url": "https://psmsl.org/"
+     },
+     "caveats": [
+      "Tide gauge ASTORIA (TONGUE POINT) (PSMSL id 265), 5 km from the point you asked about.",
+      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, so only the change over time matters, not the height itself.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
+      "The gauge used is the nearest one within 100 km with at least 30 years of valid monthly values and a last valid month no more than 5 years before the end of last year.",
+      "6 monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.05903708,
+  "latency_s": 42.331,
+  "trace_id": "ea8133124f5429d274be853784158bd1",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "port-orford-sea-level-no-change",
+  "answer": "The data does not show a clear change in sea level at Port Orford, Oregon, so no change is plausible. From October 1977 to October 2026, the trend is 3.01 mm per decade, with a 95% range of -4.67 to 10.53 mm per decade. The p-value is 0.44, which is not below the usual 0.05 line.\n\nPermanent Service for Mean Sea Level (PSMSL), RLR monthly means agrees, over its own record, January 1985 to December 2025.\n\nThis comes from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Both measure sea level relative to the land at the gauge, so any land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 42.7457,
+     "lon": -124.4973,
+     "source": "coops",
+     "variable": "sea_level"
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Port Orford",
+      "lat": 42.739,
+      "lon": -124.4983
+     },
+     "period": {
+      "start": "1977-10",
+      "end": "2026-10"
+     },
+     "n": 527,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 3.0057,
+     "ci_low": -4.6652,
+     "ci_high": 10.5263,
+     "p_value": 0.44,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Port Orford (9431647), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -124.4973,
+     "lat": 42.7457,
+     "variable": "sea_level",
+     "source": "psmsl"
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "PORT ORFORD",
+      "lat": 42.738333,
+      "lon": -124.498333
+     },
+     "period": {
+      "start": "1985-01",
+      "end": "2025-12"
+     },
+     "n": 448,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 8.3982,
+     "ci_low": -0.0587,
+     "ci_high": 16.8119,
+     "p_value": 0.0531,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "psmsl",
+      "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means",
+      "url": "https://psmsl.org/"
+     },
+     "caveats": [
+      "Tide gauge PORT ORFORD (PSMSL id 1640), 1 km from the point you asked about.",
+      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, so only the change over time matters, not the height itself.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
+      "The gauge used is the nearest one within 100 km with at least 30 years of valid monthly values and a last valid month no more than 5 years before the end of last year."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0373218,
+  "latency_s": 24.97,
+  "trace_id": "b12ab7d95f2ad6bd2d55e9e6f63cc753",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "mumbai-sea-level-psmsl",
+  "answer": "NOAA CO-OPS gave no result because no tide gauge near this place has a usable record.\n\nSea level in Mumbai is clearly going up by 9.36 mm per decade (95% range 8.30 to 10.44 mm per decade) from January 1878 to December 2024. A change this steady would be very unlikely if nothing were really changing, below the usual 0.05 line.\n\nSource: Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). This uses the Apollo Bandar tide gauge, measures sea level relative to the land (including land sinking or rising), and leaves out a few doubtful monthly values.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "source": "coops",
+     "lon": 72.88,
+     "lat": 19.08
+    },
+    "error": "No tide gauge within 100 km of (19.08, 72.88); the nearest is Apra Harbor, Guam, 7638 km away.",
+    "result": null
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 19.08,
+     "variable": "sea_level",
+     "lon": 72.88,
+     "source": "psmsl"
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "MUMBAI / BOMBAY (APOLLO BANDAR)",
+      "lat": 18.916667,
+      "lon": 72.833333
+     },
+     "period": {
+      "start": "1878-01",
+      "end": "2024-12"
+     },
+     "n": 1538,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 9.3631,
+     "ci_low": 8.301,
+     "ci_high": 10.4402,
+     "p_value": 1.52e-53,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "psmsl",
+      "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means",
+      "url": "https://psmsl.org/"
+     },
+     "caveats": [
+      "Tide gauge MUMBAI / BOMBAY (APOLLO BANDAR) (PSMSL id 43), 19 km from the point you asked about.",
+      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, so only the change over time matters, not the height itself.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
+      "The gauge used is the nearest one within 100 km with at least 30 years of valid monthly values and a last valid month no more than 5 years before the end of last year.",
+      "7 monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.04421258,
+  "latency_s": 31.543,
+  "trace_id": "22cd89fee1125d579b0b3ea33d059aec",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "The sources disagree on whether Delhi's hottest days are getting hotter from January 1981 to December 2025.\n\nNASA POWER (MERRA-2): clearly going down by 0.25 degC per decade (95% range -0.47 to -0.04).\n\nERA5 reanalysis via Open-Meteo archive: no clear change, 0.13 degC per decade (95% range -0.02 to 0.27).\n\nNOAA NCEI GHCN-Daily: clearly going up by 0.25 degC per decade (95% range 0.11 to 0.38) (January 1981 to July 2025).\n\nThey can differ because NASA POWER and ERA5 use grid cells (about 50 km and 25 km wide), while GHCN-Daily uses a single weather station 3 km away with some missing months. Each monthly value is the hottest single day of that month, and months with fewer than 20 valid days are left empty. Data from NASA POWER (https://power.larc.nasa.gov/), ERA5 via Open-Meteo (https://open-meteo.com/), and NOAA NCEI GHCN-Daily (https://www.ncei.noaa.gov/).",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp_max",
+     "lat": 28.6139,
+     "lon": 77.209,
+     "source": "power"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.61, 77.21",
+      "lat": 28.61,
+      "lon": 77.21
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -0.2512,
+     "ci_low": -0.4667,
+     "ci_high": -0.0363,
+     "p_value": 0.0224,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp_max",
+     "lat": 28.6139,
+     "lon": 77.209,
+     "source": "era5"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.61, 77.21",
+      "lat": 28.61,
+      "lon": 77.21
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.125,
+     "ci_low": -0.0151,
+     "ci_high": 0.266,
+     "p_value": 0.0871,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "era5",
+      "name": "ERA5 reanalysis via Open-Meteo archive",
+      "url": "https://open-meteo.com/"
+     },
+     "caveats": [
+      "Grid cell about 25 km wide, not a single station.",
+      "Monthly values are built from daily ones; a month with fewer than 20 valid days is left empty.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "source": "ghcn",
+     "lat": 28.6139,
+     "lon": 77.209,
+     "variable": "air_temp_max"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "NEW DELHI SAFDARJUN, IN",
+      "lat": 28.583,
+      "lon": 77.2
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-07"
+     },
+     "n": 458,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.246,
+     "ci_low": 0.1111,
+     "ci_high": 0.3814,
+     "p_value": 0.000377,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "ghcn",
+      "name": "NOAA NCEI GHCN-Daily",
+      "url": "https://www.ncei.noaa.gov/"
+     },
+     "caveats": [
+      "Weather station NEW DELHI SAFDARJUN, IN (IN022021900), 3 km from the point you asked about.",
+      "Station records have gaps: a month with fewer than 20 valid days is left empty.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.04381875,
+  "latency_s": 30.523,
+  "trace_id": "219236c085d95ccd0d02d78ac9509673",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "phoenix-air-temp",
+  "answer": "Yes, Phoenix is clearly going up in air temperature. From January 1981 to December 2025, it rises by 0.47 degC per decade (a decade is ten years), with a 95% range of 0.35 to 0.59 degC per decade. A change this steady would be very unlikely if nothing were really changing, below the usual 0.05 line. ERA5 reanalysis via Open-Meteo archive and NOAA NCEI GHCN-Daily agree.\n\nThese results come from NASA POWER (MERRA-2) (https://power.larc.nasa.gov/), ERA5 reanalysis via Open-Meteo archive (https://open-meteo.com/), and NOAA NCEI GHCN-Daily (https://www.ncei.noaa.gov/). NASA POWER (MERRA-2) and ERA5 reanalysis via Open-Meteo archive average over grid cells rather than a single station. ERA5 reanalysis via Open-Meteo archive and NOAA NCEI GHCN-Daily leave months with too few valid days empty. NOAA NCEI GHCN-Daily uses the Phoenix Airport station and averages each day's highest and lowest readings.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -112.07,
+     "variable": "air_temp",
+     "lat": 33.45,
+     "source": "power"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -112.07,
+     "lat": 33.45,
+     "source": "era5",
+     "variable": "air_temp"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4333,
+     "ci_low": 0.3261,
+     "ci_high": 0.54,
+     "p_value": 4.06e-14,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "era5",
+      "name": "ERA5 reanalysis via Open-Meteo archive",
+      "url": "https://open-meteo.com/"
+     },
+     "caveats": [
+      "Grid cell about 25 km wide, not a single station.",
+      "Monthly values are built from daily ones; a month with fewer than 20 valid days is left empty."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lon": -112.07,
+     "source": "ghcn",
+     "lat": 33.45
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "PHOENIX AIRPORT, AZ US",
+      "lat": 33.4278,
+      "lon": -112.00365
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3445,
+     "ci_low": 0.234,
+     "ci_high": 0.4538,
+     "p_value": 1.59e-09,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "ghcn",
+      "name": "NOAA NCEI GHCN-Daily",
+      "url": "https://www.ncei.noaa.gov/"
+     },
+     "caveats": [
+      "Weather station PHOENIX AIRPORT, AZ US (USW00023183), 7 km from the point you asked about.",
+      "Station records have gaps: a month with fewer than 20 valid days is left empty.",
+      "This station has no daily average temperature, so each day is the mean of its highest and lowest reading."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.04398593,
+  "latency_s": 31.709,
+  "trace_id": "c57ea20c0246e90ffe22b0e74622c10f",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "london-air-temp",
+  "answer": "Yes, air temperature in London is clearly going up. From January 1981 to December 2025, it rises by 0.34 degC per decade (a decade is ten years), with a 95% range of 0.24 to 0.45 degC per decade. A change this steady would be very unlikely if nothing were really changing, below the usual 0.05 line. ERA5 reanalysis via Open-Meteo archive agrees. NOAA NCEI GHCN-Daily agrees, over its own record, January 1981 to June 2016.\n\nData come from NASA POWER (MERRA-2) (https://power.larc.nasa.gov/), ERA5 reanalysis via Open-Meteo archive (https://open-meteo.com/), and NOAA NCEI GHCN-Daily (https://www.ncei.noaa.gov/). NASA POWER and ERA5 use grid cells (about 50 km and 25 km wide), not a single station. The weather station (Hampstead, UK, 22 km away) has gaps, averages daily highs and lows, and ends in June 2016. For ERA5 and the station, months with fewer than 20 valid days are left empty.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 51.5074,
+     "start": "1981",
+     "source": "power",
+     "lon": -0.1278
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.51, -0.13",
+      "lat": 51.51,
+      "lon": -0.13
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 51.5074,
+     "lon": -0.1278,
+     "variable": "air_temp",
+     "start": "1981",
+     "source": "era5"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.51, -0.13",
+      "lat": 51.51,
+      "lon": -0.13
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3635,
+     "ci_low": 0.2601,
+     "ci_high": 0.4654,
+     "p_value": 2.05e-11,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "era5",
+      "name": "ERA5 reanalysis via Open-Meteo archive",
+      "url": "https://open-meteo.com/"
+     },
+     "caveats": [
+      "Grid cell about 25 km wide, not a single station.",
+      "Monthly values are built from daily ones; a month with fewer than 20 valid days is left empty."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -0.1278,
+     "start": "1981",
+     "lat": 51.5074,
+     "source": "ghcn",
+     "variable": "air_temp"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "HAMPSTEAD, UK",
+      "lat": 51.5608,
+      "lon": 0.1789
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2016-06"
+     },
+     "n": 423,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3057,
+     "ci_low": 0.1436,
+     "ci_high": 0.4738,
+     "p_value": 0.000262,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "ghcn",
+      "name": "NOAA NCEI GHCN-Daily",
+      "url": "https://www.ncei.noaa.gov/"
+     },
+     "caveats": [
+      "Weather station HAMPSTEAD, UK (UKE00105915), 22 km from the point you asked about.",
+      "Station records have gaps: a month with fewer than 20 valid days is left empty.",
+      "This station has no daily average temperature, so each day is the mean of its highest and lowest reading.",
+      "This station's record ends in June 2016."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.04943152,
+  "latency_s": 34.748,
+  "trace_id": "c41650758fd2e8f361bb86a56373f560",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "chennai-rain",
+  "answer": "Rainfall in Chennai is clearly going up. From January 1981 to December 2025, monthly rainfall measured in millimetres per day is rising by 0.16 mm/day per decade (95% range 0.07 to 0.26). A change this steady would be very unlikely if nothing were really changing, which is below the usual 0.05 line. ERA5 reanalysis via Open-Meteo archive agrees. GHCN gave no result because no weather station near this place has a long enough record.\n\nData comes from NASA POWER (MERRA-2) (https://power.larc.nasa.gov/) and ERA5 reanalysis via Open-Meteo archive (https://open-meteo.com/). These grid cells are about 50 km and 25 km wide rather than a single station, and ERA5 leaves a month empty if it has fewer than 20 valid days.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": 80.27,
+     "lat": 13.08,
+     "source": "power",
+     "variable": "precip"
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "precip",
+     "lon": 80.27,
+     "source": "era5",
+     "lat": 13.08
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1483,
+     "ci_low": 0.0634,
+     "ci_high": 0.236,
+     "p_value": 0.000237,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "era5",
+      "name": "ERA5 reanalysis via Open-Meteo archive",
+      "url": "https://open-meteo.com/"
+     },
+     "caveats": [
+      "Grid cell about 25 km wide, not a single station.",
+      "Monthly values are built from daily ones; a month with fewer than 20 valid days is left empty."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 13.08,
+     "lon": 80.27,
+     "source": "ghcn",
+     "variable": "precip"
+    },
+    "error": "No weather station within 50 km has 30 years of rainfall data since 1981. The nearest is MADRAS MINAMBAKKAM, IN, 13 km away.",
+    "result": null
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.04100265,
+  "latency_s": 27.567,
+  "trace_id": "bb12582e135fb0479c7dee1d88942d7f",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "visakhapatnam-air-temp",
+  "answer": "The sources give about the same slope but disagree on whether the change is clear, over January 1981 to December 2025.\n\nNASA POWER (MERRA-2): no clear change, 0.05 degC per decade (95% range -0.001 to 0.09).\n\nERA5 reanalysis via Open-Meteo archive: clearly going up by 0.05 degC per decade (95% range 0.0004 to 0.09).\n\nGHCN gave no result because no weather station near this place has a long enough record. Both results come from monthly values over grid cells (about 50 km wide for NASA POWER and 25 km wide for ERA5), not a single station, and ERA5 leaves a month empty if fewer than 20 days are valid.\n\nSources: NASA POWER (MERRA-2) (https://power.larc.nasa.gov/) and ERA5 reanalysis via Open-Meteo archive (https://open-meteo.com/).",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.69,
+     "source": "power",
+     "lon": 83.22
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.69, 83.22",
+      "lat": 17.69,
+      "lon": 83.22
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 17.69,
+     "variable": "air_temp",
+     "source": "era5",
+     "lon": 83.22
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.69, 83.22",
+      "lat": 17.69,
+      "lon": 83.22
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0459,
+     "ci_low": 0.0004,
+     "ci_high": 0.0913,
+     "p_value": 0.0468,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "era5",
+      "name": "ERA5 reanalysis via Open-Meteo archive",
+      "url": "https://open-meteo.com/"
+     },
+     "caveats": [
+      "Grid cell about 25 km wide, not a single station.",
+      "Monthly values are built from daily ones; a month with fewer than 20 valid days is left empty."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 17.69,
+     "variable": "air_temp",
+     "source": "ghcn",
+     "lon": 83.22
+    },
+    "error": "No weather station within 50 km has 30 years of air temperature data since 1981. The nearest is VISHAKHAPATNAM, IN, 3 km away.",
+    "result": null
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.042864,
+  "latency_s": 31.644,
+  "trace_id": "ecfac04ac2b74338a42560d795318cf2",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "northwest-india-groundwater",
+  "answer": "Land water storage in Punjab and Haryana is clearly going down, falling by 40.32 cm per decade (ten years) from April 2002 to June 2026 (95% range -42.73 to -37.87 cm). A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line.\n\nThis comes from NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0 (OBP-ICE6GD) (https://earth.gsfc.nasa.gov/geo/data/grace-mascons). Note that satellites measure all land water together over a wide area, not groundwater alone, and some months are missing, including mid-2017 to mid-2018.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 30.3,
+     "lon": 76,
+     "variable": "water_storage"
+    },
+    "error": null,
+    "result": {
+     "variable": "water_storage",
+     "units": "cm",
+     "place": {
+      "name": "Average of 16 land cells about 400 km across",
+      "lat": 30.3,
+      "lon": 76.0
+     },
+     "period": {
+      "start": "2002-04",
+      "end": "2026-06"
+     },
+     "n": 258,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -40.3174,
+     "ci_low": -42.7261,
+     "ci_high": -37.8733,
+     "p_value": 1.52e-18,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "grace",
+      "name": "NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0 (OBP-ICE6GD)",
+      "url": "https://earth.gsfc.nasa.gov/geo/data/grace-mascons"
+     },
+     "caveats": [
+      "GRACE satellites measure the pull of gravity, so one value stands for an area a few hundred kilometres wide, not for the exact spot you asked about.",
+      "The number is how much water is stored on land (soil moisture, groundwater, snow and ice, lakes and rivers together) compared with its 2004 to 2009 average, in centimetres of water.",
+      "It is a change, not a total, and it cannot tell groundwater from surface water.",
+      "There is no data between mid-2017 and mid-2018, when one satellite pair ended and the next began, and a few other months are missing.",
+      "Near coasts, ocean signal can leak into land values.",
+      "Average of 16 land cells (each about 110 km across, weighted by area) whose centres lie in a box about 444 km tall and as wide."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.03875873,
+  "latency_s": 25.226,
+  "trace_id": "12fdf233dd6061d8d47223be85226e95",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "central-valley-groundwater",
+  "answer": "Monthly land water storage in California's Central Valley is clearly going down by 17.45 cm per decade (a decade is ten years), with a 95% range of -22.11 to -12.92 cm per decade, from April 2002 to June 2026. A change this steady would be very unlikely if nothing were really changing, below the usual 0.05 line.\n\nSource: NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0 (OBP-ICE6GD) (https://earth.gsfc.nasa.gov/geo/data/grace-mascons). Note that satellite gravity measures all land water together over a wide area, not just groundwater at one spot, some months are missing, and near coasts ocean signals can leak in.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -119.8,
+     "variable": "water_storage",
+     "lat": 36.7
+    },
+    "error": null,
+    "result": {
+     "variable": "water_storage",
+     "units": "cm",
+     "place": {
+      "name": "Average of 14 land cells about 400 km across",
+      "lat": 36.7,
+      "lon": -119.8
+     },
+     "period": {
+      "start": "2002-04",
+      "end": "2026-06"
+     },
+     "n": 258,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -17.4524,
+     "ci_low": -22.1133,
+     "ci_high": -12.9187,
+     "p_value": 1.68e-05,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "grace",
+      "name": "NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0 (OBP-ICE6GD)",
+      "url": "https://earth.gsfc.nasa.gov/geo/data/grace-mascons"
+     },
+     "caveats": [
+      "GRACE satellites measure the pull of gravity, so one value stands for an area a few hundred kilometres wide, not for the exact spot you asked about.",
+      "The number is how much water is stored on land (soil moisture, groundwater, snow and ice, lakes and rivers together) compared with its 2004 to 2009 average, in centimetres of water.",
+      "It is a change, not a total, and it cannot tell groundwater from surface water.",
+      "There is no data between mid-2017 and mid-2018, when one satellite pair ended and the next began, and a few other months are missing.",
+      "Near coasts, ocean signal can leak into land values.",
+      "Average of 14 land cells (each about 110 km across, weighted by area) whose centres lie in a box about 444 km tall and as wide."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.04080623,
+  "latency_s": 27.729,
+  "trace_id": "baee0657be8af325dd1d87269c045833",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "delhi-sea-level-inland",
+  "answer": "Sea level is measured by tide gauges on coasts, so a place with no tide gauge nearby has no sea-level data. Both sea-level data sources report that there is no tide gauge near Delhi with a usable record, so we cannot check whether sea level is rising there.\n\nIf you like, we can check air temperature, the hottest day of the month, rainfall, or land water storage in Delhi instead.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lon": 77.209,
+     "source": "coops",
+     "lat": 28.6139
+    },
+    "error": "No tide gauge within 100 km of (28.61, 77.21); the nearest is Apra Harbor, Guam, 7113 km away.",
+    "result": null
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lon": 77.209,
+     "lat": 28.6139,
+     "source": "psmsl"
+    },
+    "error": "There is no tide gauge within 100 km of this place, so sea level can't be measured here. The nearest gauge is BHAUNAGAR I, 904 km away.",
+    "result": null
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": false,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.01545757,
+  "latency_s": 10.178,
+  "trace_id": "984a300b56c66630c20bdd5a3387e85a",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "rain-tomorrow-forecast",
+  "answer": "I cannot tell you if it will rain tomorrow. Weather forecasts predict future weather, and I only look at past observations to check long-term trends, such as whether rainfall has been changing over time in a place.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.009297,
+  "latency_s": 7.728,
+  "trace_id": "bd01327faa77d6c35c9173dfad266099",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-4-hydrogen",
+  "case": "springfield-ambiguous",
+  "answer": "There are many places called Springfield, so could you tell me which state or country you mean?",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00385237,
+  "latency_s": 4.487,
+  "trace_id": "624f56763341dac8f00156a4d1648b92",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "atlantic-city-sea-level",
+  "answer": "Sea level in Atlantic City is clearly going up. In monthly data from September 1911 to October 2026, it rises by 42.54 mm per decade, with a 95% range from 41.11 to 43.96 mm per decade (a decade is ten years). A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line. Permanent Service for Mean Sea Level (PSMSL), RLR monthly means agrees, over its own record, September 1911 to December 2025.\n\nMeasurements come from a local tide gauge. Because sea level is measured relative to the land at the gauge, any sinking or rising of the land is included. A few doubtful monthly values were left out.\n\nData from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/).",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -74.42,
+     "lat": 39.36,
+     "source": "coops",
+     "variable": "sea_level"
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Atlantic City",
+      "lat": 39.356667,
+      "lon": -74.41805
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2026-10"
+     },
+     "n": 1333,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.536,
+     "ci_low": 41.1091,
+     "ci_high": 43.9643,
+     "p_value": 1.95e-186,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Atlantic City (8534720), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 39.36,
+     "source": "psmsl",
+     "variable": "sea_level",
+     "lon": -74.42
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "ATLANTIC CITY",
+      "lat": 39.355,
+      "lon": -74.418333
+     },
+     "period": {
+      "start": "1911-09",
+      "end": "2025-12"
+     },
+     "n": 1276,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 42.47,
+     "ci_low": 40.9928,
+     "ci_high": 43.9317,
+     "p_value": 1.06e-171,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "psmsl",
+      "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means",
+      "url": "https://psmsl.org/"
+     },
+     "caveats": [
+      "Tide gauge ATLANTIC CITY (PSMSL id 180), 1 km from the point you asked about.",
+      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, so only the change over time matters, not the height itself.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
+      "The gauge used is the nearest one within 100 km with at least 30 years of valid monthly values and a last valid month no more than 5 years before the end of last year.",
+      "9 monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.012552,
+  "latency_s": 16.725,
+  "trace_id": "bd304d74f062a2dcd9bd96349841dc0e",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "juneau-sea-level-falling",
+  "answer": "The sea is clearly going down. According to NOAA CO-OPS tide gauges, relative sea level falls by 136.14 mm per decade (a decade is ten years), with a 95% range of -139.00 to -133.27 mm per decade, from June 1936 to September 2026. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line. Permanent Service for Mean Sea Level (PSMSL), RLR monthly means agrees, over its own record, January 1936 to December 2025.\n\nData come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Sea level is measured relative to the land at the gauge, so land rising or sinking is included. Measurements come from the Juneau tide gauge, and doubtful monthly values were left out.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "lon": -134.42,
+     "lat": 58.3,
+     "source": "coops"
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Juneau",
+      "lat": 58.2988,
+      "lon": -134.4106
+     },
+     "period": {
+      "start": "1936-06",
+      "end": "2026-09"
+     },
+     "n": 1020,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.1448,
+     "ci_low": -139.004,
+     "ci_high": -133.2692,
+     "p_value": 4.45e-160,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Juneau (9452210), 1 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "source": "psmsl",
+     "variable": "sea_level",
+     "lon": -134.42,
+     "lat": 58.3
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "JUNEAU",
+      "lat": 58.298333,
+      "lon": -134.411667
+     },
+     "period": {
+      "start": "1936-01",
+      "end": "2025-12"
+     },
+     "n": 1007,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -136.0873,
+     "ci_low": -139.2132,
+     "ci_high": -132.9268,
+     "p_value": 1.56e-140,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "psmsl",
+      "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means",
+      "url": "https://psmsl.org/"
+     },
+     "caveats": [
+      "Tide gauge JUNEAU (PSMSL id 405), 1 km from the point you asked about.",
+      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, so only the change over time matters, not the height itself.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
+      "The gauge used is the nearest one within 100 km with at least 30 years of valid monthly values and a last valid month no more than 5 years before the end of last year.",
+      "37 monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00692325,
+  "latency_s": 10.88,
+  "trace_id": "062057c1cc96ef51e3cc781675f7a093",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "astoria-sea-level-no-change",
+  "answer": "The data does not show a clear change in sea level at Astoria, Oregon, so we can't rule out no change. From February 1925 to October 2026, the slope is -1.53 mm per decade (a decade is ten years), with a 95% range from -4.20 to 1.16 mm per decade. The range including zero is why the verdict is no clear change. The p-value is 0.27, which is above the usual 0.05 line.\n\nPermanent Service for Mean Sea Level (PSMSL), RLR monthly means agrees, over its own record, February 1925 to December 2025.\n\nSources are NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Both use a tide gauge about 5 km away. Measurements are relative to local land, so land rising or sinking is included. PSMSL leaves out 6 doubtful months and measures relative to a fixed gauge datum.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -123.83,
+     "source": "coops",
+     "variable": "sea_level",
+     "lat": 46.19
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Astoria",
+      "lat": 46.207306,
+      "lon": -123.7683
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2026-10"
+     },
+     "n": 1199,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.5319,
+     "ci_low": -4.1977,
+     "ci_high": 1.1649,
+     "p_value": 0.265,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Astoria (9439040), 5 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -123.83,
+     "lat": 46.19,
+     "source": "psmsl",
+     "variable": "sea_level"
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "ASTORIA (TONGUE POINT)",
+      "lat": 46.206667,
+      "lon": -123.768333
+     },
+     "period": {
+      "start": "1925-02",
+      "end": "2025-12"
+     },
+     "n": 1191,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -1.7848,
+     "ci_low": -4.5054,
+     "ci_high": 0.9589,
+     "p_value": 0.198,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "psmsl",
+      "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means",
+      "url": "https://psmsl.org/"
+     },
+     "caveats": [
+      "Tide gauge ASTORIA (TONGUE POINT) (PSMSL id 265), 5 km from the point you asked about.",
+      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, so only the change over time matters, not the height itself.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
+      "The gauge used is the nearest one within 100 km with at least 30 years of valid monthly values and a last valid month no more than 5 years before the end of last year.",
+      "6 monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00726375,
+  "latency_s": 8.648,
+  "trace_id": "5810f7619def5ded6476f5cadca6df51",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "port-orford-sea-level-no-change",
+  "answer": "The data does not show a clear change in sea level at Port Orford, Oregon, so we can't rule out no change. From NOAA CO-OPS tide gauges, sea level has a slope of 3.01 mm per decade (a decade is ten years), with a 95% range from -4.67 to 10.53 mm, from October 1977 to October 2026. The range includes zero, which is why there is no clear change. The p-value of 0.44 is above the usual 0.05 line.\n\nPermanent Service for Mean Sea Level (PSMSL), RLR monthly means agrees, over its own record, January 1985 to December 2025.\n\nSources are NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Sea level is relative to the land at the tide gauge, so land sinking or rising is included.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -124.5,
+     "lat": 42.74,
+     "source": "coops",
+     "variable": "sea_level"
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "Port Orford",
+      "lat": 42.739,
+      "lon": -124.4983
+     },
+     "period": {
+      "start": "1977-10",
+      "end": "2026-10"
+     },
+     "n": 527,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 3.0057,
+     "ci_low": -4.6652,
+     "ci_high": 10.5263,
+     "p_value": 0.44,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "coops",
+      "name": "NOAA CO-OPS tide gauges",
+      "url": "https://tidesandcurrents.noaa.gov/"
+     },
+     "caveats": [
+      "Tide gauge Port Orford (9431647), 0 km from the point you asked about.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "source": "psmsl",
+     "lat": 42.74,
+     "lon": -124.5
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "PORT ORFORD",
+      "lat": 42.738333,
+      "lon": -124.498333
+     },
+     "period": {
+      "start": "1985-01",
+      "end": "2025-12"
+     },
+     "n": 448,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 8.3982,
+     "ci_low": -0.0587,
+     "ci_high": 16.8119,
+     "p_value": 0.0531,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "psmsl",
+      "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means",
+      "url": "https://psmsl.org/"
+     },
+     "caveats": [
+      "Tide gauge PORT ORFORD (PSMSL id 1640), 0 km from the point you asked about.",
+      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, so only the change over time matters, not the height itself.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
+      "The gauge used is the nearest one within 100 km with at least 30 years of valid monthly values and a last valid month no more than 5 years before the end of last year."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.01742775,
+  "latency_s": 28.521,
+  "trace_id": "40c1912d8db29c05c4bd655a4c0b94fb",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "mumbai-sea-level-psmsl",
+  "answer": "NOAA CO-OPS gave no result because no tide gauge near this place has a usable record. \n\nSea level is clearly going up in Mumbai. It rises by 9.36 mm per decade, with a 95% range of 8.30 to 10.44 mm per decade, from January 1878 to December 2024. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line.\n\nData comes from Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Heights are relative to land at the gauge, so land sinking or rising is included, and doubtful monthly values were left out.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 18.95,
+     "lon": 72.83,
+     "variable": "sea_level",
+     "source": "coops"
+    },
+    "error": "No tide gauge within 100 km of (18.95, 72.83); the nearest is Apra Harbor, Guam, 7645 km away.",
+    "result": null
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "source": "psmsl",
+     "lat": 18.95,
+     "lon": 72.83
+    },
+    "error": null,
+    "result": {
+     "variable": "sea_level",
+     "units": "mm",
+     "place": {
+      "name": "MUMBAI / BOMBAY (APOLLO BANDAR)",
+      "lat": 18.916667,
+      "lon": 72.833333
+     },
+     "period": {
+      "start": "1878-01",
+      "end": "2024-12"
+     },
+     "n": 1538,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 9.3631,
+     "ci_low": 8.301,
+     "ci_high": 10.4402,
+     "p_value": 1.52e-53,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "psmsl",
+      "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means",
+      "url": "https://psmsl.org/"
+     },
+     "caveats": [
+      "Tide gauge MUMBAI / BOMBAY (APOLLO BANDAR) (PSMSL id 43), 4 km from the point you asked about.",
+      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, so only the change over time matters, not the height itself.",
+      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
+      "The gauge used is the nearest one within 100 km with at least 30 years of valid monthly values and a last valid month no more than 5 years before the end of last year.",
+      "7 monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0067395,
+  "latency_s": 11.504,
+  "trace_id": "930b910076591232291bc957563f0734",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "delhi-hot-days-sources-disagree",
+  "answer": "The sources disagree.\n\nNASA POWER (MERRA-2): clearly going down, 0.25 degC per decade (95% range -0.47 to -0.04) (January 1981 to December 2025).\n\nERA5 reanalysis via Open-Meteo archive: no clear change, 0.13 degC per decade (95% range -0.02 to 0.27) (January 1981 to December 2025).\n\nNOAA NCEI GHCN-Daily: clearly going up, 0.25 degC per decade (95% range 0.11 to 0.38) (January 1981 to July 2025).\n\nNASA POWER averages over a grid cell about 50 km wide, ERA5 uses a grid cell about 25 km wide, and NOAA NCEI GHCN-Daily comes from a single weather station with missing days. Each monthly value is the hottest single day of that month, not the average of daily highs.\n\nSources: NASA POWER (MERRA-2) at https://power.larc.nasa.gov/, ERA5 reanalysis via Open-Meteo archive at https://open-meteo.com/, and NOAA NCEI GHCN-Daily at https://www.ncei.noaa.gov/.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 28.61,
+     "variable": "air_temp_max",
+     "source": "power",
+     "lon": 77.21
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.61, 77.21",
+      "lat": 28.61,
+      "lon": 77.21
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -0.2512,
+     "ci_low": -0.4667,
+     "ci_high": -0.0363,
+     "p_value": 0.0224,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": 77.21,
+     "source": "era5",
+     "lat": 28.61,
+     "variable": "air_temp_max"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "28.61, 77.21",
+      "lat": 28.61,
+      "lon": 77.21
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.125,
+     "ci_low": -0.0151,
+     "ci_high": 0.266,
+     "p_value": 0.0871,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "era5",
+      "name": "ERA5 reanalysis via Open-Meteo archive",
+      "url": "https://open-meteo.com/"
+     },
+     "caveats": [
+      "Grid cell about 25 km wide, not a single station.",
+      "Monthly values are built from daily ones; a month with fewer than 20 valid days is left empty.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": 77.21,
+     "variable": "air_temp_max",
+     "lat": 28.61,
+     "source": "ghcn"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp_max",
+     "units": "degC",
+     "place": {
+      "name": "NEW DELHI SAFDARJUN, IN",
+      "lat": 28.583,
+      "lon": 77.2
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-07"
+     },
+     "n": 458,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.246,
+     "ci_low": 0.1111,
+     "ci_high": 0.3814,
+     "p_value": 0.000377,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "ghcn",
+      "name": "NOAA NCEI GHCN-Daily",
+      "url": "https://www.ncei.noaa.gov/"
+     },
+     "caveats": [
+      "Weather station NEW DELHI SAFDARJUN, IN (IN022021900), 3 km from the point you asked about.",
+      "Station records have gaps: a month with fewer than 20 valid days is left empty.",
+      "Each monthly value is the hottest single day of that month, not the average of the daily highs."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00759525,
+  "latency_s": 7.747,
+  "trace_id": "bb166a67a1d5287d521f90d03587b8db",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "phoenix-air-temp",
+  "answer": "Air temperature in Phoenix is clearly going up. According to NASA POWER (MERRA-2), it rises by 0.47 degC per decade, with a 95% range from 0.35 to 0.59 degC, from January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line. A decade is ten years. \n\nERA5 reanalysis via Open-Meteo archive and NOAA NCEI GHCN-Daily both agree.\n\nNASA POWER averages over a grid cell about 50 km wide rather than a single spot, ERA5 uses a grid cell about 25 km wide, and the NOAA weather station is at Phoenix Airport. Months with too few valid days are left empty. Data come from NASA POWER (https://power.larc.nasa.gov/), ERA5 (https://open-meteo.com/), and NOAA NCEI (https://www.ncei.noaa.gov/).",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "source": "power",
+     "variable": "air_temp",
+     "lon": -112.074,
+     "lat": 33.4484
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4684,
+     "ci_low": 0.3488,
+     "ci_high": 0.5892,
+     "p_value": 5.28e-13,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "source": "era5",
+     "lon": -112.074,
+     "lat": 33.4484,
+     "variable": "air_temp"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "33.45, -112.07",
+      "lat": 33.45,
+      "lon": -112.07
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.4333,
+     "ci_low": 0.3261,
+     "ci_high": 0.54,
+     "p_value": 4.06e-14,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "era5",
+      "name": "ERA5 reanalysis via Open-Meteo archive",
+      "url": "https://open-meteo.com/"
+     },
+     "caveats": [
+      "Grid cell about 25 km wide, not a single station.",
+      "Monthly values are built from daily ones; a month with fewer than 20 valid days is left empty."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -112.074,
+     "variable": "air_temp",
+     "lat": 33.4484,
+     "source": "ghcn"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "PHOENIX AIRPORT, AZ US",
+      "lat": 33.4278,
+      "lon": -112.00365
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3445,
+     "ci_low": 0.234,
+     "ci_high": 0.4538,
+     "p_value": 1.59e-09,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "ghcn",
+      "name": "NOAA NCEI GHCN-Daily",
+      "url": "https://www.ncei.noaa.gov/"
+     },
+     "caveats": [
+      "Weather station PHOENIX AIRPORT, AZ US (USW00023183), 7 km from the point you asked about.",
+      "Station records have gaps: a month with fewer than 20 valid days is left empty.",
+      "This station has no daily average temperature, so each day is the mean of its highest and lowest reading."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00720975,
+  "latency_s": 9.502,
+  "trace_id": "3afd7a877a59743851482836efc8526d",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "london-air-temp",
+  "answer": "Air temperature in London is clearly going up. According to NASA POWER (MERRA-2), it rises by 0.34 degC every ten years, with a 95% range of 0.24 to 0.45 degC, from January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line.\n\nERA5 reanalysis via Open-Meteo archive agrees. NOAA NCEI GHCN-Daily agrees, over its own record, January 1981 to June 2016.\n\nData come from NASA POWER (MERRA-2) at https://power.larc.nasa.gov/, ERA5 reanalysis via Open-Meteo archive at https://open-meteo.com/, and NOAA NCEI GHCN-Daily at https://www.ncei.noaa.gov/. NASA POWER covers a grid cell about fifty kilometres wide, ERA5 covers a grid cell about twenty-five kilometres wide, and the NOAA weather station is Hampstead, which ends in June 2016 and estimates daily averages from highest and lowest readings. Gaps in station or model daily records leave incomplete months empty.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -0.13,
+     "variable": "air_temp",
+     "start": "1981",
+     "lat": 51.51,
+     "source": "power"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.51, -0.13",
+      "lat": 51.51,
+      "lon": -0.13
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3414,
+     "ci_low": 0.2362,
+     "ci_high": 0.4487,
+     "p_value": 6.54e-10,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "source": "era5",
+     "start": "1981",
+     "lon": -0.13,
+     "lat": 51.51
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "51.51, -0.13",
+      "lat": 51.51,
+      "lon": -0.13
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3635,
+     "ci_low": 0.2601,
+     "ci_high": 0.4654,
+     "p_value": 2.05e-11,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "era5",
+      "name": "ERA5 reanalysis via Open-Meteo archive",
+      "url": "https://open-meteo.com/"
+     },
+     "caveats": [
+      "Grid cell about 25 km wide, not a single station.",
+      "Monthly values are built from daily ones; a month with fewer than 20 valid days is left empty."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": -0.13,
+     "start": "1981",
+     "variable": "air_temp",
+     "lat": 51.51,
+     "source": "ghcn"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "HAMPSTEAD, UK",
+      "lat": 51.5608,
+      "lon": 0.1789
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2016-06"
+     },
+     "n": 423,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.3057,
+     "ci_low": 0.1436,
+     "ci_high": 0.4738,
+     "p_value": 0.000262,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "ghcn",
+      "name": "NOAA NCEI GHCN-Daily",
+      "url": "https://www.ncei.noaa.gov/"
+     },
+     "caveats": [
+      "Weather station HAMPSTEAD, UK (UKE00105915), 22 km from the point you asked about.",
+      "Station records have gaps: a month with fewer than 20 valid days is left empty.",
+      "This station has no daily average temperature, so each day is the mean of its highest and lowest reading.",
+      "This station's record ends in June 2016."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.008274,
+  "latency_s": 12.998,
+  "trace_id": "1cd841061528093229f165e6ebbdb0f3",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "chennai-rain",
+  "answer": "Precipitation in Chennai is clearly going up. According to NASA POWER (MERRA-2), it rises by 0.16 mm/day per decade, with a 95% range of 0.07 to 0.26 mm/day per decade, from January 1981 to December 2025. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line. ERA5 reanalysis via Open-Meteo archive agrees. GHCN gave no result because no weather station near this place has a long enough record.\n\nNASA POWER (MERRA-2) uses a grid cell about 50 km wide, and ERA5 reanalysis via Open-Meteo archive uses a grid cell about 25 km wide, not a single station. Monthly values in ERA5 are built from daily ones, leaving months with fewer than 20 valid days empty. Data come from NASA POWER (MERRA-2) at https://power.larc.nasa.gov/ and ERA5 reanalysis via Open-Meteo archive at https://open-meteo.com/.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "source": "power",
+     "variable": "precip",
+     "lat": 13.08,
+     "lon": 80.27
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1631,
+     "ci_low": 0.0699,
+     "ci_high": 0.262,
+     "p_value": 0.000297,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 13.08,
+     "lon": 80.27,
+     "variable": "precip",
+     "source": "era5"
+    },
+    "error": null,
+    "result": {
+     "variable": "precip",
+     "units": "mm/day",
+     "place": {
+      "name": "13.08, 80.27",
+      "lat": 13.08,
+      "lon": 80.27
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.1483,
+     "ci_low": 0.0634,
+     "ci_high": 0.236,
+     "p_value": 0.000237,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "era5",
+      "name": "ERA5 reanalysis via Open-Meteo archive",
+      "url": "https://open-meteo.com/"
+     },
+     "caveats": [
+      "Grid cell about 25 km wide, not a single station.",
+      "Monthly values are built from daily ones; a month with fewer than 20 valid days is left empty."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": 80.27,
+     "variable": "precip",
+     "source": "ghcn",
+     "lat": 13.08
+    },
+    "error": "No weather station within 50 km has 30 years of rainfall data since 1981. The nearest is MADRAS MINAMBAKKAM, IN, 13 km away.",
+    "result": null
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0072075,
+  "latency_s": 11.904,
+  "trace_id": "c511e763425e6e126a62f7ce451085c6",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "visakhapatnam-air-temp",
+  "answer": "The sources give about the same slope but disagree on whether the change is clear. GHCN gave no result because no weather station close enough has a long enough record. The period for both working sources is January 1981 to December 2025.\n\nNASA POWER (MERRA-2): no clear change, 0.05 degC per decade (95% range -0.001 to 0.09).\n\nERA5 reanalysis via Open-Meteo archive: clearly going up by 0.05 degC per decade (95% range 0.0004 to 0.09).\n\nData come from NASA POWER (MERRA-2) at https://power.larc.nasa.gov/ and ERA5 reanalysis via Open-Meteo archive at https://open-meteo.com/. Both sources represent wide grid cells rather than a single weather station. For ERA5, months with fewer than twenty valid days are left empty.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "lat": 17.69,
+     "lon": 83.22,
+     "source": "power"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.69, 83.22",
+      "lat": 17.69,
+      "lon": 83.22
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0472,
+     "ci_low": -0.0008,
+     "ci_high": 0.0948,
+     "p_value": 0.0551,
+     "autocorrelation_adjusted": true,
+     "verdict": "no_clear_change",
+     "source": {
+      "id": "power",
+      "name": "NASA POWER (MERRA-2)",
+      "url": "https://power.larc.nasa.gov/"
+     },
+     "caveats": [
+      "Grid cell about 50 km wide, not a single station."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": 83.22,
+     "lat": 17.69,
+     "source": "era5",
+     "variable": "air_temp"
+    },
+    "error": null,
+    "result": {
+     "variable": "air_temp",
+     "units": "degC",
+     "place": {
+      "name": "17.69, 83.22",
+      "lat": 17.69,
+      "lon": 83.22
+     },
+     "period": {
+      "start": "1981-01",
+      "end": "2025-12"
+     },
+     "n": 540,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": 0.0459,
+     "ci_low": 0.0004,
+     "ci_high": 0.0913,
+     "p_value": 0.0468,
+     "autocorrelation_adjusted": true,
+     "verdict": "rising",
+     "source": {
+      "id": "era5",
+      "name": "ERA5 reanalysis via Open-Meteo archive",
+      "url": "https://open-meteo.com/"
+     },
+     "caveats": [
+      "Grid cell about 25 km wide, not a single station.",
+      "Monthly values are built from daily ones; a month with fewer than 20 valid days is left empty."
+     ]
+    }
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "air_temp",
+     "source": "ghcn",
+     "lat": 17.69,
+     "lon": 83.22
+    },
+    "error": "No weather station within 50 km has 30 years of air temperature data since 1981. The nearest is VISHAKHAPATNAM, IN, 3 km away.",
+    "result": null
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.01697625,
+  "latency_s": 20.318,
+  "trace_id": "3fbf918cadaae3c5ff9bdbd10e188c24",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "northwest-india-groundwater",
+  "answer": "Land water storage across Punjab and Haryana is clearly going down, falling by 41.57 cm per decade, with a 95% range of -44.20 to -38.94 cm per decade, from April 2002 to June 2026. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line.\n\nThe data comes from NASA GSFC GRACE and GRACE-FO mascons (https://earth.gsfc.nasa.gov/geo/data/grace-mascons). GRACE satellites measure gravity over an area a few hundred kilometres across, not an exact spot. The measurement includes all land water together, so it cannot separate groundwater from soil moisture or surface water. It shows change relative to a baseline, not total water, and has missing months between mid-2017 and mid-2018.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lon": 76,
+     "variable": "water_storage",
+     "lat": 30
+    },
+    "error": null,
+    "result": {
+     "variable": "water_storage",
+     "units": "cm",
+     "place": {
+      "name": "Average of 20 land cells about 400 km across",
+      "lat": 30.0,
+      "lon": 76.0
+     },
+     "period": {
+      "start": "2002-04",
+      "end": "2026-06"
+     },
+     "n": 258,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -41.5714,
+     "ci_low": -44.2011,
+     "ci_high": -38.9361,
+     "p_value": 3.06e-17,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "grace",
+      "name": "NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0 (OBP-ICE6GD)",
+      "url": "https://earth.gsfc.nasa.gov/geo/data/grace-mascons"
+     },
+     "caveats": [
+      "GRACE satellites measure the pull of gravity, so one value stands for an area a few hundred kilometres wide, not for the exact spot you asked about.",
+      "The number is how much water is stored on land (soil moisture, groundwater, snow and ice, lakes and rivers together) compared with its 2004 to 2009 average, in centimetres of water.",
+      "It is a change, not a total, and it cannot tell groundwater from surface water.",
+      "There is no data between mid-2017 and mid-2018, when one satellite pair ended and the next began, and a few other months are missing.",
+      "Near coasts, ocean signal can leak into land values.",
+      "Average of 20 land cells (each about 110 km across, weighted by area) whose centres lie in a box about 444 km tall and as wide."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0072135,
+  "latency_s": 11.676,
+  "trace_id": "fc24cc9b440537eec5cc0cdf7afc382a",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "central-valley-groundwater",
+  "answer": "Land water storage is clearly going down. It falls by 17.26 cm every ten years, with a 95% range of -21.93 to -12.78 cm, from April 2002 to June 2026. A change this steady would be very unlikely if nothing were really changing, well below the usual 0.05 line.\n\nData comes from NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0 (OBP-ICE6GD) at https://earth.gsfc.nasa.gov/geo/data/grace-mascons. Satellites track gravity across an area a few hundred kilometres wide, averaging all water stored on land (soil moisture, groundwater, snow, and surface water combined), so it cannot separate groundwater alone. A gap exists between mid-2017 and mid-2018.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "lat": 36.75,
+     "lon": -119.75,
+     "variable": "water_storage"
+    },
+    "error": null,
+    "result": {
+     "variable": "water_storage",
+     "units": "cm",
+     "place": {
+      "name": "Average of 15 land cells about 400 km across",
+      "lat": 36.75,
+      "lon": -119.75
+     },
+     "period": {
+      "start": "2002-04",
+      "end": "2026-06"
+     },
+     "n": 258,
+     "deseasonalized": true,
+     "method": "mann_kendall_sen",
+     "slope_per_decade": -17.2597,
+     "ci_low": -21.9345,
+     "ci_high": -12.7823,
+     "p_value": 1.86e-05,
+     "autocorrelation_adjusted": true,
+     "verdict": "falling",
+     "source": {
+      "id": "grace",
+      "name": "NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0 (OBP-ICE6GD)",
+      "url": "https://earth.gsfc.nasa.gov/geo/data/grace-mascons"
+     },
+     "caveats": [
+      "GRACE satellites measure the pull of gravity, so one value stands for an area a few hundred kilometres wide, not for the exact spot you asked about.",
+      "The number is how much water is stored on land (soil moisture, groundwater, snow and ice, lakes and rivers together) compared with its 2004 to 2009 average, in centimetres of water.",
+      "It is a change, not a total, and it cannot tell groundwater from surface water.",
+      "There is no data between mid-2017 and mid-2018, when one satellite pair ended and the next began, and a few other months are missing.",
+      "Near coasts, ocean signal can leak into land values.",
+      "Average of 15 land cells (each about 110 km across, weighted by area) whose centres lie in a box about 444 km tall and as wide."
+     ]
+    }
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "variable": true,
+   "place": true,
+   "source": true,
+   "verdict": true,
+   "wording": true,
+   "numbers": true,
+   "source_named": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.00676275,
+  "latency_s": 11.579,
+  "trace_id": "6cd323a9aaef2aebe190897d9039a60c",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "delhi-sea-level-inland",
+  "answer": "Sea level is measured by tide gauges on coasts. Delhi is inland and has no tide gauge nearby, so there is no sea-level data for this place. We cannot estimate sea level without a nearby tide gauge. Instead, we could check air temperature, rainfall, or land water storage for Delhi.",
+  "tool_calls": [
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "variable": "sea_level",
+     "source": "coops",
+     "lon": 77.21,
+     "lat": 28.61
+    },
+    "error": "No tide gauge within 100 km of (28.61, 77.21); the nearest is Apra Harbor, Guam, 7113 km away.",
+    "result": null
+   },
+   {
+    "name": "detect_trend",
+    "arguments": {
+     "source": "psmsl",
+     "lat": 28.61,
+     "lon": 77.21,
+     "variable": "sea_level"
+    },
+    "error": "There is no tide gauge within 100 km of this place, so sea level can't be measured here. The nearest gauge is BHAUNAGAR I, 904 km away.",
+    "result": null
+   }
+  ],
+  "checks": {
+   "answered": true,
+   "tool": false,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": false,
+  "plain_language": null,
+  "cost_usd": 0.007374,
+  "latency_s": 11.889,
+  "trace_id": "5ffb69d063e4251a4e72016609815c76",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "rain-tomorrow-forecast",
+  "answer": "Forecasts are not trends, so I cannot answer whether it will rain tomorrow. I only look at past observations to check for long-term changes over time, rather than predicting future daily weather. We do not produce weather forecasts.\n\nFor past data, the measurements available are air temperature, the hottest day of the month, precipitation, coastal sea level, and land water storage. These past records can show whether conditions in a specific place are clearly rising, falling, or showing no clear change.",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.007887,
+  "latency_s": 10.798,
+  "trace_id": "1b247b5bf82d4e2c2e424f12c429f260",
+  "error": null
+ },
+ {
+  "model": "openrouter:google/gemini-3.8-flash",
+  "case": "springfield-ambiguous",
+  "answer": "There are many places called Springfield, including cities in Illinois, Massachusetts, Missouri, and several other states. Which Springfield do you mean?",
+  "tool_calls": [],
+  "checks": {
+   "answered": true,
+   "tool": true,
+   "numbers": true,
+   "must_say": true
+  },
+  "passed": true,
+  "plain_language": null,
+  "cost_usd": 0.0031335,
+  "latency_s": 5.357,
+  "trace_id": "ad7c8f822415a01d4108c28ca639fe14",
+  "error": null
+ }
+]
