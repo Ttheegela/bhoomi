@@ -238,7 +238,8 @@ async function send(raw) {
   askS.tick = setInterval(() => {
     const sec = Math.floor((Date.now() - t0) / 1000);
     wait.lastChild.textContent = `${sec} s`;
-    wait.firstChild.textContent = ASK_STAGES.filter(([from]) => sec >= from).pop()[1];
+    const words = ASK_STAGES.filter(([from]) => sec >= from).pop()[1];
+    if (wait.firstChild.textContent !== words) wait.firstChild.textContent = words; // live region changes only at a stage change
   }, 1000);
   askS.timers = [
     setTimeout(() => { askS.reason = 'timeout'; askS.ctrl.abort(); }, ASK_STOP_MS),
