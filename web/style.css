@@ -358,3 +358,7 @@ pre::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; bord
 /* 404 page only (web/404.html): space under the header row */
 .nf-h { margin-top: var(--gap); }
 .nf-link { margin-top: var(--s3); }
+
+/* Ask tab waiting line: stage text with the seconds counter beside it */
+.ask-wait .msg-text { display: inline; }
+.ask-secs { margin-left: var(--s3); white-space: nowrap; font-variant-numeric: tabular-nums; }

@@ -228,7 +228,7 @@ async function send(raw) {
   $('ask-empty').hidden = true;
   const thread = $('ask-thread');
   const you = youBlock(q);
-  const wait = el('div', { class: 'msg ai', role: 'status' }, el('p', { class: 'msg-text', style: 'display:inline' }, ASK_STAGES[0][1]), el('span', { class: 'small', 'aria-hidden': 'true', style: 'font-variant-numeric:tabular-nums;margin-left:.5em;white-space:nowrap' }, '0 s'));
+  const wait = el('div', { class: 'msg ai ask-wait', role: 'status' }, el('p', { class: 'msg-text' }, ASK_STAGES[0][1]), el('span', { class: 'small ask-secs', 'aria-hidden': 'true' }, '0 s'));
   thread.append(you, wait);
   you.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
   askBusy(true);
