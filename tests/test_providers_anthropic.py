@@ -202,3 +202,13 @@ def test_openrouter_deep_json_is_upstream_error(monkeypatch):
     p.start("sys", "q", loop.TOOLS)
     with pytest.raises(providers.UpstreamError):
         p.step()
+
+
+def test_history_goes_before_the_question(sdk):
+    sent, replies, _ = sdk
+    hist = [{"role": "user", "content": "Is sea level rising in New York?"}, {"role": "assistant", "content": "Yes."}]
+    replies += [msg(tool_use("t1"), stop="tool_use"), msg(text("Rising. Source: NOAA CO-OPS, https://example.org/."))]
+    loop.ask("ok what about jakarta?", model="anthropic:claude-haiku-5-5", history=hist)
+    for s in sent:
+        assert s["messages"][:3] == [*hist, {"role": "user", "content": "ok what about jakarta?"}]
+    assert [m["role"] for m in sent[1]["messages"][3:]] == ["assistant", "user"]  # this turn's tool call and result

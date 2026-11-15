@@ -40,8 +40,10 @@ class OpenRouterProvider:
         if not self.key:
             raise NotConfigured("OPENROUTER_API_KEY is not set.")
 
-    def start(self, system: str, question: str, tools: list[dict]) -> None:
-        self.messages = [{"role": "system", "content": system}, {"role": "user", "content": question}]
+    def start(self, system: str, question: str, tools: list[dict], history: list[dict] = ()) -> None:
+        self.messages = [{"role": "system", "content": system},
+                         *({"role": m["role"], "content": m["content"]} for m in history),
+                         {"role": "user", "content": question}]
         self.tools = [{"type": "function", "function": t} for t in tools]
 
     def step(self) -> dict:
@@ -139,9 +141,10 @@ class AnthropicProvider:
         self._errors = (anthropic.APIError,)
         self.client = anthropic.Anthropic(api_key=key, timeout=TIMEOUT_S, max_retries=0)
 
-    def start(self, system: str, question: str, tools: list[dict]) -> None:
+    def start(self, system: str, question: str, tools: list[dict], history: list[dict] = ()) -> None:
         self.system = system
-        self.messages = [{"role": "user", "content": question}]
+        self.messages = [*({"role": m["role"], "content": m["content"]} for m in history),
+                         {"role": "user", "content": question}]
         self.tools = [{"name": t["name"], "description": t["description"], "input_schema": t["parameters"]} for t in tools]
 
     def step(self) -> dict:
