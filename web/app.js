@@ -724,6 +724,7 @@ function renderSpark(t, series, word) {
 
 function fact(label, node) { return el('div', {}, el('dt', {}, label), el('dd', {}, node)); }
 
+let drawStripes = () => {}; // set by renderVerdict for the current answer
 // The four plain-words strings the server sends (trend.meaning); null when they are missing or malformed.
 const CONFIDENCE = ['Very clear', 'Clear', 'Not clear'];
 function meaningOf(t) {
@@ -753,13 +754,17 @@ function renderVerdict(t, series) {
     $('ac-limit-text').textContent = m.limit;
   }
   // The stripes and the sparkline are extra: if one fails, hide it and keep the answer.
-  try {
-    const ms = series.times.map(monthIndex);
-    window.renderStripes($('stripes-art'), yearlyAverages(ms, deseasonalize(series.times, series.values)), t.period);
-    srcBlock($('stripes-source'), 'Raw data', t.source);
-  } catch (e) {
-    $('year-stripes').hidden = true;
-  }
+  // Drawn now and again when #how opens (a closed section has no width to draw in); nothing is fetched again.
+  drawStripes = () => {
+    try {
+      const ms = series.times.map(monthIndex);
+      window.renderStripes($('stripes-art'), yearlyAverages(ms, deseasonalize(series.times, series.values)), t.period);
+      srcBlock($('stripes-source'), 'Raw data', t.source);
+    } catch (e) {
+      $('year-stripes').hidden = true;
+    }
+  };
+  drawStripes();
   if (m) { try { renderSpark(t, series, c.head); } catch (e) { $('spark').hidden = true; } }
   srcBlock($('verdict-source'), 'Raw data', t.source);
   $('answer-card').hidden = false;
@@ -1319,6 +1324,7 @@ $('locate').addEventListener('click', locate);
   if (state.place && state.place.label === GEO_LABEL) state.place = null; // edited coordinates are no longer "your location"
   markChips();
 }));
+$('how').addEventListener('toggle', () => { if ($('how').open && state.trend) drawStripes(); });
 // "How we calculated this" is printed open
 let howWasOpen = false;
 window.addEventListener('beforeprint', () => { howWasOpen = $('how').open; $('how').open = true; });
