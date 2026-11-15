@@ -62,9 +62,12 @@
   function niceTicks(lo, hi) {
     lo = Math.min(lo, 0); hi = Math.max(hi, 0);
     if (hi - lo < 1e-9) hi = lo + 1;
-    var raw = (hi - lo) / 5, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
-    var step = (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p;
-    var a = Math.floor(lo / step + 1e-9) * step, b = Math.ceil(hi / step - 1e-9) * step, t = [];
+    // smallest step from 5, 10, 20, 25, 50, 100 (x10^k) that gives at most 7 ticks; limits = first tick at or beyond the data
+    var step, a, b, t = [], p = Math.pow(10, Math.floor(Math.log10((hi - lo) / 7)) - 1), i = 0, M = [1, 2, 2.5, 5];
+    do {
+      step = M[i % 4] * p * (i >= 4 ? Math.pow(10, Math.floor(i / 4)) : 1);
+      a = Math.floor(lo / step + 1e-9) * step; b = Math.ceil(hi / step - 1e-9) * step; i++;
+    } while ((b - a) / step + 1 > 7 && i < 40);
     for (var v = a; v <= b + step / 2; v += step) t.push(Math.round(v / step) * step);
     return { ticks: t, step: step, lo: a, hi: b };
   }
@@ -200,8 +203,7 @@
     var selLine = m.lines.filter(function (l) { return l.selected; })[0] || null, wedge = selLine && selLine.wedge;
     var unitLabel = (P && P.fmt && P.fmt.unit && selLine && P.fmt.unit(selLine.pin.trend)) || m.unit || 'the unit shown';
     var cap = 'Five-year average, in ' + unitLabel + ', compared with each place’s 2000–2009 level.';
-    if (m.fallback.length) cap += ' ' + m.fallback.join(', ') + ' ' + (m.fallback.length > 1 ? 'have' : 'has') +
-      ' no records for most of those years, so the first 10 years are used instead.';
+    m.fallback.forEach(function (n) { cap += ' ' + n + ': compared with its first 10 years instead (no records for 2000–2009).'; });
     if (wedge) cap += ' The shaded wedge shows where ' + selLine.pin.label + ' would be if its past trend simply continued.';
     g.appendChild(h('p', 'cmp-cap', cap));
 
@@ -212,7 +214,7 @@
 
     m.y.ticks.forEach(function (v) {
       var y = m.py(v);
-      s.appendChild(svg('line', { x1: X0, x2: X1, y1: y.toFixed(1), y2: y.toFixed(1), class: 'cmp-grid' }));
+      s.appendChild(svg('line', { x1: X0, x2: X1, y1: y.toFixed(1), y2: y.toFixed(1), class: v === 0 ? 'cmp-grid zero' : 'cmp-grid' }));
       s.appendChild(svg('text', { x: X0 - 10, y: (y + 4).toFixed(1), class: 'cmp-ax', 'text-anchor': 'end' }, signed(v, m.y.step)));
     });
     m.xTicks.forEach(function (t) {
@@ -257,8 +259,23 @@
         cls: 'cmp-dl t' + slotCls(l) + (l.selected ? ' b' : '')
       });
     });
-    if (wedge && wedge.label) items.push({ x: m.px(lp.year) + 16, y: m.py(lp.v) - 3, text: wedge.label, cls: 'cmp-pl' });
-    stack(items, 15, Y0 + 8, Y1 - 4).forEach(function (it) {
+    var placed = stack(items, 15, Y0 + 8, Y1 - 4);
+    if (wedge && wedge.label) {
+      // 60 % of the way to the look-ahead year, 6 px above the wedge's upper edge; up past any line-end label, else below the lower edge
+      var wx = m.px(lp.year) + 0.6 * (m.px(wedge.year) - m.px(lp.year)), w = wedge.label.length * 6.6;
+      var edge = function (v) { return m.py(lp.v) + 0.6 * (m.py(v) - m.py(lp.v)); };
+      var hit = function (y) {
+        return placed.some(function (it) {
+          var iw = it.text.length * 7;
+          return wx - w / 2 < it.x + iw && it.x < wx + w / 2 && y - 12 < it.ly + 4 && it.ly - 12 < y + 3;
+        });
+      };
+      var wy = edge(wedge.hi) - 6;
+      while (hit(wy) && wy - 4 - 12 >= Y0) wy -= 4;
+      if (hit(wy) || wy - 12 < Y0) wy = edge(wedge.lo) + 18;
+      s.appendChild(svg('text', { x: wx.toFixed(1), y: wy.toFixed(1), class: 'cmp-pl', 'text-anchor': 'middle' }, wedge.label));
+    }
+    placed.forEach(function (it) {
       if (it.ax != null && Math.abs(it.ly - it.y) > 6) {
         s.appendChild(svg('line', { x1: it.ax.toFixed(1), y1: it.ay.toFixed(1), x2: (it.x - 2).toFixed(1), y2: (it.ly - 4).toFixed(1), class: 'cmp-lead' }));
       }
@@ -288,8 +305,9 @@
       box.appendChild(rp);
     }
     var wrap = h('div', 'cmp-scroll'), tbl = h('table', 'cmp-tbl'), thead = h('thead'), hr = h('tr');
-    ['Place', 'Measured at', 'Record', 'Change per 10 years', 'vs world average', 'Risk', 'By ' + o.lookAhead + ' if the trend continues']
-      .forEach(function (c) { var th = h('th', null, c); th.scope = 'col'; hr.appendChild(th); });
+    var hasRatio = (pins || []).some(function (p) { return p.trend && p.trend.guidance && typeof p.trend.guidance.ratio === 'number'; });
+    ['Place', 'Measured at', 'Record', 'Change per 10 years', hasRatio && 'vs world average', 'Risk', 'By ' + o.lookAhead + ' if the trend continues']
+      .filter(Boolean).forEach(function (c) { var th = h('th', null, c); th.scope = 'col'; hr.appendChild(th); });
     thead.appendChild(hr); tbl.appendChild(thead);
     var tb = h('tbody');
     (pins || []).forEach(function (p) {
@@ -304,14 +322,13 @@
       c0.appendChild(dot); c0.appendChild(document.createTextNode(p.label)); tr.appendChild(c0);
       if (p.status !== 'ok' || !t) {
         var cs = h('td', 'cmp-msg', p.status === 'error' ? (p.error || 'Could not load this place.') : 'Checking…');
-        cs.colSpan = 6; tr.appendChild(cs); tb.appendChild(tr); return;
+        cs.colSpan = hasRatio ? 6 : 5; tr.appendChild(cs); tb.appendChild(tr); return;
       }
       var name = t.place && t.place.name ? String(t.place.name).trim() : '', lab = String(p.label).trim().toLowerCase();
-      var same = !name || name.toLowerCase() === lab || lab.indexOf(name.toLowerCase()) === 0;
-      tr.appendChild(dash(h('td'), same ? (t.source && t.source.name) : name));
+      tr.appendChild(dash(h('td'), /[^\d\s.,;°+\-−NSEWnsew]/.test(name) ? name : (t.source && t.source.name)));
       tr.appendChild(dash(h('td', 'n'), f.years && f.years(t)));
       tr.appendChild(h('td', 'n', (f.rate && f.rate(t)) || 'No clear change'));
-      tr.appendChild(dash(h('td', 'n'), g && typeof g.ratio === 'number' ? g.ratio.toFixed(1) + '×' : ''));
+      if (hasRatio) tr.appendChild(dash(h('td', 'n'), g && typeof g.ratio === 'number' ? g.ratio.toFixed(1) + '×' : ''));
       var cr = h('td');
       if (g && g.risk_label) cr.appendChild(h('span', 'risk ' + (/^(high|moderate|low|unknown)$/.test(g.risk) ? g.risk : 'unknown'), g.risk_label));
       else cr.textContent = '—';
@@ -321,7 +338,7 @@
     });
     if (!(pins || []).length) {
       var er = h('tr'), ec = h('td', 'cmp-msg', 'No places yet. Search for a place or click the map.');
-      ec.colSpan = 7; er.appendChild(ec); tb.appendChild(er);
+      ec.colSpan = hasRatio ? 7 : 6; er.appendChild(ec); tb.appendChild(er);
     }
     tbl.appendChild(tb); wrap.appendChild(tbl); box.appendChild(wrap);
     slot.replaceChildren(box);
