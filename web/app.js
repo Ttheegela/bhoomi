@@ -344,7 +344,7 @@ function placeOf(t) {
   const lat = q.lat !== undefined ? q.lat : t.place.lat, lon = q.lon !== undefined ? q.lon : t.place.lon;
   const named = placeFor(lat, lon, t.place && t.place.name, t.source && t.source.id);
   // Only coordinates from the data (gridded sources) and a place the visitor named: say the visitor's word, not numbers.
-  if (!state.place || named !== `${fixed(Number(lat), 2)}, ${fixed(Number(lon), 2)}`) return named;
+  if (!state.place || state.place.fromLink || named !==`${fixed(Number(lat), 2)}, ${fixed(Number(lon), 2)}`) return named;
   if (state.place.label === GEO_LABEL) return GEO_LABEL;
   return cleanPlace(state.place.label.split(',')[0]) || named;
 }
@@ -619,7 +619,9 @@ function show(sr, tr, params, user, id) {
   $('answer-bar').hidden = !state.series;
   if (state.series) {
     const pl = (state.trend || state.series).place;
-    $('answer-place').textContent = 'Showing: ' + (state.place && state.place.label || pl && cleanPlace(pl.name) || coordText(params.lat, params.lon));
+    const pn = state.place;
+    $('answer-place').textContent = 'Showing: ' + (pn && pn.fromLink ? `${pn.label} (${coordText(params.lat, params.lon)})` // a name from a link is shown with its coordinates
+      : pn && pn.label || pl && cleanPlace(pl.name) || coordText(params.lat, params.lon));
   }
   fire('td:load-end', { id, ok, params, place: placeNow(), series: state.series, trend: state.trend, error: err, origin: state.origin });
   if (state.scrollId === id) setTimeout(() => { if (id === state.req && !visitorScrolled) scrollToAnswer(); }, 60);
@@ -1048,7 +1050,8 @@ function applyExplore(e, user, origin) {
   state.fromGeo = state.origin === 'geo' || e.place === GEO_LABEL; // that place never reaches the link, whatever the origin
   if (e.source !== undefined) state.userSource = e.source || null;
   state.win = e.start || e.end ? { start: e.start || null, end: e.end || null } : null;
-  state.place = e.place ? { label: e.place } : null;
+  // fromLink: the name came from the address bar, so nothing has checked it against the coordinates
+  state.place = e.place ? { label: e.place, fromLink: state.origin === 'share-link' } : null;
   $('place').value = e.place && !state.fromGeo ? e.place : '';  closeList(); setPlaceStatus(''); showCredit(null);
   const lat = Number(Number(e.lat).toFixed(2)), lon = Number(Number(e.lon).toFixed(2));
   $('lat').value = lat; $('lon').value = lon;
@@ -1301,7 +1304,11 @@ $('source').addEventListener('change', () => {
   if (hasPlace()) submit(true);
 });
 $('locate').addEventListener('click', locate);
-['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => { state.fromGeo = false; markChips(); }));
+['lat', 'lon'].forEach((id) => $(id).addEventListener('input', () => {
+  state.fromGeo = false;
+  if (state.place && state.place.label === GEO_LABEL) state.place = null; // edited coordinates are no longer "your location"
+  markChips();
+}));
 $('coords-toggle').addEventListener('click', () => setCoords($('coords').hidden));
 $('change-place').addEventListener('click', (e) => { e.preventDefault(); $('h-explore').scrollIntoView({ block: 'start' }); $('place').focus({ preventScroll: true }); });
 let lastBand = layoutFor(window.innerWidth).vw;
