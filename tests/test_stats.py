@@ -13,6 +13,7 @@ NOTE = "Grid cell about 50 km wide, not a single station."
 CONTRACT_KEYS = {
     "variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
     "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "caveats", "meaning",
+    "guidance",
 }
 
 

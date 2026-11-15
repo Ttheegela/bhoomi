@@ -4,6 +4,7 @@ import math
 
 import numpy as np
 
+from earthtrends.stats.guidance import guidance_for
 from earthtrends.stats.meaning import meaning_for
 
 MIN_POINTS = 10
@@ -25,6 +26,7 @@ def compute_trend(series: dict) -> dict:
 
     x = np.array([_num(v) for v in values])
     year = np.array([int(t[:4]) for t in times])
+    mean = float(x[~np.isnan(x)].mean()) if (~np.isnan(x)).any() else None  # raw mean, before deseasonalizing
     if freq == "monthly":
         month = np.array([int(t[5:7]) for t in times])
         for m in range(1, 13):  # anomalies from each calendar month's mean
@@ -109,6 +111,10 @@ def compute_trend(series: dict) -> dict:
         "caveats": caveats,
     }
     result["meaning"] = meaning_for(result)
+    try:
+        result["guidance"] = guidance_for(result, mean)
+    except Exception:  # guidance must never sink a result: fall back to the "no guidance rule" object
+        result["guidance"] = guidance_for({})
     return result
 
 
