@@ -11,7 +11,7 @@ from math import isfinite
 import httpx
 
 from .coops import haversine_km
-from .upstream import LIMIT, NAME, text
+from .upstream import LIMIT, NAME, readable, text
 
 BASE = "https://psmsl.org/data/obtaining/rlr.monthly.data"
 SOURCE = {"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/"}
@@ -42,7 +42,7 @@ def parse_stations(listing: str) -> list[dict]:
         try:
             lat, lon = float(p[1]), float(p[2])
             if len(p) >= 4 and p[0].isascii() and p[0].isdigit() and len(p[0]) <= 10 and isfinite(lat) and isfinite(lon) and abs(lat) <= 90 and abs(lon) <= 180 and p[3]:
-                if name := text(p[3], NAME):  # a name of only invisible characters is no name
+                if name := readable(text(p[3], NAME)):  # a name of only invisible characters is no name
                     out.append({"id": int(p[0]), "name": name, "lat": lat, "lon": lon})
         except (ValueError, IndexError):
             continue

@@ -7,7 +7,7 @@ from math import cos, isfinite, radians
 import httpx
 
 from .coops import haversine_km
-from .upstream import LIMIT, NAME, fit, text
+from .upstream import LIMIT, NAME, fit, readable, text
 
 SEARCH = "https://www.ncei.noaa.gov/access/services/search/v1/data"
 DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
@@ -61,7 +61,7 @@ def parse_search(resp: dict) -> list[dict]:
             sid = text(st["id"], 40)
             if not sid:
                 continue
-            out.append({"id": sid, "name": text(st["name"], NAME) or sid, "lat": lat, "lon": lon, "types": types})
+            out.append({"id": sid, "name": readable(text(st["name"], NAME)) or sid, "lat": lat, "lon": lon, "types": types})
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             continue
     return out
