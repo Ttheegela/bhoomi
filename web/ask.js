@@ -310,6 +310,8 @@ function refreshThreadUI() {
   // the clarifying-question line already says to name the place again, so the "on its own" line waits
   $('ask-nohist').hidden = nohistHidden(askS.turns, ASK_HISTORY);
   $('ask-hint').hidden = !ASK_HISTORY || !askS.turns.some((t) => t.kind === 'answer');
+  const lastA = askS.turns.filter((t) => t.kind === 'answer').pop();
+  $('ask-hint').textContent = `Ask a follow-up, for example: "What about ${lastA && /delhi/i.test(lastA.q + ' ' + lastA.a) ? 'Mumbai' : 'Delhi'}?"`;
 }
 
 function setOff() {
