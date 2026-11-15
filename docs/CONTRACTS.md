@@ -67,7 +67,7 @@ One variable can come from several sources. Tools take an optional `source`; res
     "why": "It is warming here about as fast as the world average.",
     "ratio": 1.0,
     "reference": {"text": "World average for land and ocean together: about 0.20 °C every 10 years since 1975.", "source": {"name": "NOAA Climate.gov: Climate Change: Global Temperature", "url": "https://www.climate.gov/news-features/understanding-climate/climate-change-global-temperature"}},
-    "rate": {"value": 0.21, "unit": "°C", "text": "+0.21 °C", "per": "every 10 years"},
+    "rate": {"value": 0.21, "unit": "°C", "text": "+0.21 °C", "per": "every 10 years", "note": null},
     "display": {"unit": "°C", "factor": 1},
     "recommendation": "It has been getting warmer here. Build cooling and shade into long-term plans.",
     "outlook_label": "If the past trend continues",
@@ -89,7 +89,7 @@ One variable can come from several sources. Tools take an optional `source`; res
 - `guidance` (added 2026-11-15, after `meaning`, always the last field): a risk level and a recommendation worded for decisions, computed in code (`earthtrends/stats/guidance.py`) from the fields above by the rules in `docs/RISK.md`. The page, the agent and outside clients show these strings as they are; nobody else works out a risk, a recommendation or a future figure.
   - `risk`: `"high"` | `"moderate"` | `"low"` | `"unknown"`; `risk_label`: `"High risk"` | `"Moderate risk"` | `"Low risk"` | `"Not enough data"`.
   - `why`: one plain sentence on the reason. `ratio`: the trend against the reference rate (a number), or `null` where the rule uses no world rate. `reference`: `{"text", "source": {"name", "url"} | null}` naming what the trend was compared with, or `null`.
-  - `rate`: the change per 10 years in familiar units (`value`, `unit`, signed `text`, `per`), or `null` when there is no clear change. `display`: the familiar unit and the factor that turns values in `units` into it.
+  - `rate`: the change per 10 years in familiar units (`value`, `unit`, signed `text`, `per`, `note`), or `null` when there is no clear change. For rainfall it is the share of the place's usual rainfall, with the amount in `note`: `{"value": 4.8, "unit": "%", "text": "+4.8%", "per": "more rain every 10 years", "note": {"value": 60, "unit": "mm", "text": "about 60 mm more a year"}}` (falling: `"−4.8%"`, `"less rain every 10 years"`, a negative `note.value`, `"about 60 mm less a year"`). `note` is `null` for every other measurement. `display`: the familiar unit and the factor that turns values in `units` into it.
   - `recommendation`: one or two sentences for the risk level and measurement.
   - `outlook`: for 2035, 2050 and 2075, the range the past trend would reach if it simply continued (`ci_low` and `ci_high` × the decades from the last data year), with `text` ready to show under the label `outlook_label` ("If the past trend continues"). It is `[]` unless the verdict is rising or falling and the record spans at least 30 years. It is not a forecast and is never called one.
   - `future_link`: `{"label", "url"}` to an official projection tool (sea level only), or `null`.
