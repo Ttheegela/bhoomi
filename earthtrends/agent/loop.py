@@ -325,6 +325,11 @@ UNIT = re.compile(r"\s*(?:%|°|degrees?\b|deg\b|mm\b|cm\b|m\b|km\b|inch|feet\b|f
                   r"|years?\b|decades?\b|times\b|percent\b)", re.I)
 
 
+# Fixed p-value phrases. The scorer allows them only when a result's p-value is under the line; the loop's no-lookup
+# check strips them anyway, so explaining an earlier answer's wording ("what does below 0.001 mean?") passes.
+UNDER_001 = re.compile(r"\b(?:below|less than) 0\.001(?!\d)", re.I)
+
+
 def stated_numbers(text: str) -> list[tuple[str, str]]:
     """(sign, digits) for each number an answer states. Left out: list numbering, the prompt's fixed phrases, and
     whole numbers under 10 with no unit after them (words like "2 sources")."""
@@ -594,8 +599,7 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                     text = compose(text, calls)  # before the checks: they hold for what the user sees
                     long, wrong = words(text) > limit, bool(wrong_periods(text, calls))
                     # No result to take a number from: any number but the fixed phrases is made up.
-                    nums = not any(c["error"] is None and c["result"] is not None for c in calls) and bool(
-                        stated_numbers(text))
+                    nums = not ok_calls(calls) and bool(stated_numbers(UNDER_001.sub(" ", text)))
                     if not (long or wrong or nums):
                         answer = text
                         break

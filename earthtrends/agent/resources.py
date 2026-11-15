@@ -3,7 +3,11 @@ Links only, no numbers. Addresses checked to respond on 2026-11-14."""
 import re
 
 MARKER = "[OFFICIAL RESOURCES]"
-_MARK = re.compile(r"[ \t]*\[\s*official\s+resources\s*\]", re.I)
+# Tolerant: any case, singular or plural, space, underscore or hyphen, and markdown asterisks around it.
+_MARK = re.compile(r"[ \t]*\**\[\s*official[\s_-]+resources?\s*\]\**", re.I)
+# ponytail: rough boxes (contiguous states, Alaska, Hawaii), not borders; parts of Canada and Mexico near the edges
+# count as US. Use real borders if a near-border place ever gets the wrong link.
+US_BOXES = ((24.4, 49.5, -125.0, -66.9), (51.0, 71.5, -170.0, -129.9), (18.9, 22.3, -160.3, -154.8))
 US_COAST = ("For future flood risk at a US address, see NOAA's Sea Level Rise Viewer (https://coast.noaa.gov/slr/) "
             "and FEMA's flood maps (https://msc.fema.gov/portal/home).")
 SEA = "For how sea level may change in future, see NASA's sea level portal (https://sealevel.nasa.gov/)."
@@ -14,12 +18,17 @@ URLS = ("https://coast.noaa.gov/slr/", "https://msc.fema.gov/portal/home", "http
 
 
 def sentence(results: list[dict]) -> str:
-    """The row of the table for this turn's successful results; "" when there are none."""
+    """The row of the table for this turn's successful results; "" when there are none, or when no sea-level result
+    came back and the first result's place is outside the United States."""
     if any(r.get("variable") == "sea_level" and (r.get("source") or {}).get("id") == "coops" for r in results):
         return US_COAST
     if any(r.get("variable") == "sea_level" for r in results):
         return SEA
-    return OTHER if results else ""
+    p = (results[0].get("place") or {}) if results else {}
+    lat, lon = p.get("lat"), p.get("lon")
+    us = (isinstance(lat, (int, float)) and isinstance(lon, (int, float))
+          and any(a <= lat <= b and c <= lon <= d for a, b, c, d in US_BOXES))
+    return OTHER if us else ""  # the Toolkit is for the United States only
 
 
 def strip(text: str) -> str:

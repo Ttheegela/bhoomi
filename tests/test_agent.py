@@ -1400,7 +1400,10 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "all in the same step",
     "call detect_trend once with that source only",
     "If the variable has only one source, call it once and leave source out",
-    'your first sentence says plainly that the sources disagree (use the word "disagree")',
+    'Your first sentence says plainly that the sources disagree (use the word "disagree")',
+    "this shape replaces the plain first sentence, the comparison and the how-sure sentence",
+    "if no source returned a result, give the no-data answer, say you cannot advise, and still end with the marker",
+    "past data at single places",
     "Never pick a winner and never average them",
     "only from the results' caveats",
     "Never give a difference between sources",
@@ -1444,7 +1447,7 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "using the default source's meaning.limit word for word",
     "write [OFFICIAL RESOURCES] as the very last thing",
     "never write a link to such a resource yourself",
-    "check up to THREE large coastal cities in that region that you name yourself",
+    "check up to THREE large cities in that region (coastal ones for sea level) that you name yourself",
     'usable record nearby."',
     '"These are examples I chose, not a ranking."',
     "two or more sources or places",
@@ -1850,7 +1853,8 @@ SEA_OK = {"name": "detect_trend", "arguments": NY, "error": None}
     ([NY_COOPS], resources.US_COAST),
     ([NY_PSMSL, NY_COOPS], resources.US_COAST),  # any coops sea-level result
     ([NY_PSMSL], resources.SEA),
-    ([{**TREND, "variable": "air_temp", "source": {"id": "power"}}], resources.OTHER),
+    ([{**TREND, "variable": "air_temp", "source": {"id": "power"}, "place": {"lat": 33.45, "lon": -112.07}}],
+     resources.OTHER),  # Phoenix
     ([], ""),
 ])
 def test_official_resources_row(results, want):
@@ -1936,3 +1940,39 @@ def test_two_places_get_the_longer_limit():
     two = done_calls(({**NY, "source": "coops"}, NY_COOPS), ({**SEATTLE, "source": "coops"}, SEA_COOPS))
     assert loop.word_limit(two) == loop.MAX_WORDS_MULTI
     assert loop.word_limit(two[:1]) == loop.MAX_WORDS
+
+
+# ---- fix round 1 ----
+
+def test_list_variables_alone_is_no_data_for_the_number_check(fake):  # C
+    fake.script = [step(tool_calls=[call("list_variables", {}, id="lv")]),
+                   step("Sea level in Miami rose 3 cm per decade."), step("I did not check Miami's sea level.")]
+    r = loop.ask("Is sea level rising in Miami?", model="fake:m")
+    assert r["answer"] == "I did not check Miami's sea level." and loop.NUMBER_ASK in fake.started[1]
+
+
+def test_explaining_below_0_001_costs_no_retry(fake):  # D
+    hist = [{"role": "user", "content": "Is sea level rising in New York?"},
+            {"role": "assistant", "content": "Yes. The p-value is below 0.001."}]
+    text = "Below 0.001 means a change this steady would be very unlikely if nothing were really changing."
+    fake.script = [step(text), step("never")]
+    r = loop.ask("what does below 0.001 mean?", model="fake:m", history=hist)
+    assert r["answer"] == text and len(fake.script) == 1
+
+
+@pytest.mark.parametrize("place,want", [({"lat": 33.45, "lon": -112.07}, resources.OTHER),  # Phoenix
+                                        ({"lat": 30.90, "lon": 75.85}, "")])  # Ludhiana, Punjab
+def test_climate_toolkit_link_only_in_the_united_states(place, want):  # E
+    r = {**TREND, "variable": "air_temp", "source": {"id": "power"}, "place": place}
+    assert resources.sentence([r]) == want
+    out = resources.fill("Warming. I cannot advise on farming. [OFFICIAL RESOURCES]", [r])
+    assert out == "Warming. I cannot advise on farming." + (f" {want}" if want else "") and "[" not in out
+
+
+@pytest.mark.parametrize("marker", ["[OFFICIAL RESOURCE]", "[Official Resources]", "[OFFICIAL_RESOURCES]",
+                                    "**[OFFICIAL RESOURCES]**", "[official-resources]"])
+def test_near_miss_markers_never_reach_the_user(marker):  # F
+    text = f"I cannot advise on building. {marker}"
+    assert resources.fill(text, [NY_COOPS]) == f"I cannot advise on building. {resources.US_COAST}"
+    assert resources.fill(text, []) == "I cannot advise on building."
+    assert loop.words(text) == 5

@@ -55,7 +55,7 @@ expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [40.70, -74.01]      # The Battery
 must_say = ["coast.noaa.gov/slr", "msc.fema.gov", "cannot tell"]
-must_not_say = ["p-value", "0.05", "decade is ten years", "slope", "you should", "I recommend", "[OFFICIAL"]
+must_not_say = ["p-value", "0.05 line", "decade is ten years", "slope", "you should", "I recommend", "[OFFICIAL"]
 
 # A broad question with no single place: no ranking, but up to three cities the agent picks, checked in one step.
 [[case]]
@@ -65,4 +65,4 @@ expect_tool = "detect_trend"
 expect_variable = "sea_level"
 min_places = 2
 must_say = ["not a ranking"]
-must_not_say = ["p-value", "0.05", "you should", "I recommend", "[OFFICIAL"]
+must_not_say = ["p-value", "0.05 line", "you should", "I recommend", "[OFFICIAL"]

@@ -1020,8 +1020,8 @@ def test_plain_fails_statistics_words(words):
 ])
 def test_links(extra, ok):
     assert run.check(CASE, fake_run(ANSWER + extra))["links"] is ok
-    # no result this turn: only the resources table's addresses are known
-    assert run.check(NONE_CASE, fake_run("Which Springfield?" + extra, []))["links"] is extra.startswith(" For")
+    # no result this turn: the resources table and every catalog source's own address are still known
+    assert run.check(NONE_CASE, fake_run("Which Springfield?" + extra, []))["links"] is ok
 
 
 def test_agreeing_figures_belong_in_the_code_sentence_only():
@@ -1047,3 +1047,51 @@ def test_headline_verdict_words(answer, verdict):
 def test_new_columns_in_the_table():
     assert list(run.COLUMNS)[-3:] == ["min_places", "plain", "links"]
     assert run.CHECKS[-4:] == ["min_places", "plain", "links", "answered"]
+
+
+# ---- fix round 1 ----
+
+INLAND = ("There is no tide gauge near Delhi, so there is no sea-level record to check: Delhi is far from the coast. "
+          "Sources checked: NOAA CO-OPS (https://tidesandcurrents.noaa.gov) and PSMSL, the Permanent Service for Mean "
+          "Sea Level (https://psmsl.org).")
+
+
+@pytest.mark.parametrize("answer,ok", [
+    (INLAND, True),  # the live answer that failed: both sources errored, their own addresses are fine
+    (INLAND.replace("https://psmsl.org", "https://psmsl.org.example.com"), False),  # a look-alike host
+    (INLAND.replace("https://tidesandcurrents.noaa.gov", "https://tidesandcurrents-noaa.gov"), False),
+])
+def test_links_accept_catalog_sources_of_failed_calls(answer, ok):  # A
+    case = agent_case("delhi-sea-level-inland")  # the case that failed on the live run
+    failed = [{"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 28.61, "lon": 77.21, "source": s},
+               "result": None, "error": "No tide gauge within 100 km of this point."} for s in ("coops", "psmsl")]
+    assert run.check(case, fake_run(answer, failed))["links"] is ok
+
+
+TOKYO = {**AC, "verdict": "no_clear_change", "slope_per_decade": 1.234, "ci_low": -0.5, "ci_high": 2.9,
+         "place": {"name": "Tokyo", "lat": 35.65, "lon": 139.77},
+         "source": {"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"}, "caveats": []}
+SINGAPORE = {**TOKYO, "verdict": "rising", "slope_per_decade": 20.5, "ci_low": 18.0, "ci_high": 23.0,
+             "place": {"name": "Singapore", "lat": 1.26, "lon": 103.82}}
+BROAD = ("I cannot rank places or judge investments from past data at single places. Tokyo: no clear change, 1.23 mm "
+         "per decade (95% range -0.50 to 2.90), PSMSL. Singapore: clearly rising, 20.50 mm per decade (95% range 18.00 "
+         "to 23.00), PSMSL. These are examples I chose, not a ranking. I can check a place you name. "
+         "Source: https://psmsl.org/")
+
+
+def test_broad_answer_with_two_verdicts_passes_wording():  # B: the verdict-word branches are skipped for several places
+    calls = [at(35.65, 139.77, TOKYO), at(1.26, 103.82, SINGAPORE)]
+    out = run.check({**ASIA, "must_say": ["not a ranking"]}, fake_run(BROAD, calls))
+    assert out.get("wording", True) and all(out.values())
+    assert "wording" in run.check(CASE, fake_run())  # one place: still checked
+
+
+def test_plain_catches_p_value_without_hyphen_and_significant():  # H
+    for words in ("p value", "statistically significant"):
+        assert run.check(CASE, fake_run(ANSWER.replace("Source:", f"It is {words}. Source:")))["plain"] is False
+
+
+def test_new_cases_ban_the_0_05_line_not_the_digits():  # G
+    for cid in ("manhattan-build-house", "asia-sea-level-broad"):
+        banned = agent_case(cid)["must_not_say"]
+        assert "0.05 line" in banned and "0.05" not in banned
