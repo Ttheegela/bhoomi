@@ -62,9 +62,12 @@
   function niceTicks(lo, hi) {
     lo = Math.min(lo, 0); hi = Math.max(hi, 0);
     if (hi - lo < 1e-9) hi = lo + 1;
-    var raw = (hi - lo) / 5, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
-    var step = (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p;
-    var a = Math.floor(lo / step + 1e-9) * step, b = Math.ceil(hi / step - 1e-9) * step, t = [];
+    // smallest step from 5, 10, 20, 25, 50, 100 (x10^k) that gives at most 7 ticks; limits = first tick at or beyond the data
+    var step, a, b, t = [], p = Math.pow(10, Math.floor(Math.log10((hi - lo) / 7)) - 1), i = 0, M = [1, 2, 2.5, 5];
+    do {
+      step = M[i % 4] * p * (i >= 4 ? Math.pow(10, Math.floor(i / 4)) : 1);
+      a = Math.floor(lo / step + 1e-9) * step; b = Math.ceil(hi / step - 1e-9) * step; i++;
+    } while ((b - a) / step + 1 > 7 && i < 40);
     for (var v = a; v <= b + step / 2; v += step) t.push(Math.round(v / step) * step);
     return { ticks: t, step: step, lo: a, hi: b };
   }
@@ -200,8 +203,7 @@
     var selLine = m.lines.filter(function (l) { return l.selected; })[0] || null, wedge = selLine && selLine.wedge;
     var unitLabel = (P && P.fmt && P.fmt.unit && selLine && P.fmt.unit(selLine.pin.trend)) || m.unit || 'the unit shown';
     var cap = 'Five-year average, in ' + unitLabel + ', compared with each place’s 2000–2009 level.';
-    if (m.fallback.length) cap += ' ' + m.fallback.join(', ') + ' ' + (m.fallback.length > 1 ? 'have' : 'has') +
-      ' no records for most of those years, so the first 10 years are used instead.';
+    m.fallback.forEach(function (n) { cap += ' ' + n + ': compared with its first 10 years instead (no records for 2000–2009).'; });
     if (wedge) cap += ' The shaded wedge shows where ' + selLine.pin.label + ' would be if its past trend simply continued.';
     g.appendChild(h('p', 'cmp-cap', cap));
 
@@ -212,7 +214,7 @@
 
     m.y.ticks.forEach(function (v) {
       var y = m.py(v);
-      s.appendChild(svg('line', { x1: X0, x2: X1, y1: y.toFixed(1), y2: y.toFixed(1), class: 'cmp-grid' }));
+      s.appendChild(svg('line', { x1: X0, x2: X1, y1: y.toFixed(1), y2: y.toFixed(1), class: v === 0 ? 'cmp-grid zero' : 'cmp-grid' }));
       s.appendChild(svg('text', { x: X0 - 10, y: (y + 4).toFixed(1), class: 'cmp-ax', 'text-anchor': 'end' }, signed(v, m.y.step)));
     });
     m.xTicks.forEach(function (t) {
@@ -307,8 +309,7 @@
         cs.colSpan = 6; tr.appendChild(cs); tb.appendChild(tr); return;
       }
       var name = t.place && t.place.name ? String(t.place.name).trim() : '', lab = String(p.label).trim().toLowerCase();
-      var same = !name || name.toLowerCase() === lab || lab.indexOf(name.toLowerCase()) === 0;
-      tr.appendChild(dash(h('td'), same ? (t.source && t.source.name) : name));
+      tr.appendChild(dash(h('td'), /[^\d\s.,;°+\-−NSEWnsew]/.test(name) ? name : (t.source && t.source.name)));
       tr.appendChild(dash(h('td', 'n'), f.years && f.years(t)));
       tr.appendChild(h('td', 'n', (f.rate && f.rate(t)) || 'No clear change'));
       tr.appendChild(dash(h('td', 'n'), g && typeof g.ratio === 'number' ? g.ratio.toFixed(1) + '×' : ''));
