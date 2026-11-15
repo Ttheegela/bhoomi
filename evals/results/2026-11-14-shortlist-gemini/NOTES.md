@@ -1,6 +1,6 @@
-# Two more models on the same test, 2026-11-15
+# Two more models on the same test (run 2026-11-15 00:32 UTC, filed with the 2026-11-14 shortlist)
 
-Why: to check that the comparison does not favour one model family. Two Google models were run on the same 15 cases, with
+Why: to add a third model family to the comparison. Two Google models were run on the same 15 cases, with
 the same agent code, settings and budget guard as the five-model run in `../2026-11-14-shortlist/`.
 
 - Commit of `main` used: `c200739`, the same commit as the five-model run (no local changes), so the agent code, the
@@ -36,6 +36,7 @@ the same agent code, settings and budget guard as the five-model run in `../2026
 
 ## Reading it
 
+- The default model stays Claude Haiku 5.5; this run changes nothing.
 - Both Gemini models failed one check, on the same case: `delhi-sea-level-inland` expects no tool call, and both looked
   for a tide gauge first, found none, and declined with no numbers. That is a correct answer; the case is too strict
   (noted on issue #16). Neither got a variable, a source or a verdict wrong, and neither wrote a number that was not in
@@ -43,8 +44,8 @@ the same agent code, settings and budget guard as the five-model run in `../2026
 - Across all seven models, no model got a variable, source or verdict wrong. The pass counts differ by one or two checks,
   and most of those are the cases' strictness (a 50 km place tolerance for a 400 km groundwater average; the case
   above), not wrong answers. One run per model is too few to rank models that are this close.
-- What does separate them is time and cost. Gemini 4 Hydrogen took about twice as long as the others and costs about
-  twenty times the default per question. Gemini 3.8 Flash is as fast as the default and costs about five times as much.
+- What does separate them is time and cost. Gemini 4 Hydrogen took about twice the default's time (25.8 s against
+  12.7 s) and costs about twenty times the default per question. Gemini 3.8 Flash is as fast as the default and costs about five times as much.
 - Limits of this test, stated plainly: the prompt was written and tuned while testing with the default model, and the
   other models run it unchanged; each model ran once; 15 cases.
 - The seconds are longer than on the live site. On the machine that ran the tests, the tracing export was blocked, and
