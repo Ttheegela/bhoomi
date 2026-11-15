@@ -1012,16 +1012,16 @@ def test_plain_fails_statistics_words(words):
     assert "plain" not in run.check(NONE_CASE, fake_run(f"Which one? The {words}.", []))  # no result reported
 
 
-@pytest.mark.parametrize("extra,ok", [
-    (" " + resources.US_COAST, True),
-    (" See http://www.tidesandcurrents.noaa.gov.", True),  # the source's own address, written another way
-    (" See https://tidesandcurrents.noaa.gov/sltrends/.", False),  # a page no result gave
-    (" See https://example.org/flood.", False),
+@pytest.mark.parametrize("extra,ok,ok_none", [
+    (" " + resources.US_COAST, True, True),
+    (" See http://www.tidesandcurrents.noaa.gov.", True, False),  # the source's own address, written another way
+    (" See https://tidesandcurrents.noaa.gov/sltrends/.", False, False),  # a page no result gave
+    (" See https://example.org/flood.", False, False),
 ])
-def test_links(extra, ok):
+def test_links(extra, ok, ok_none):
     assert run.check(CASE, fake_run(ANSWER + extra))["links"] is ok
-    # no result this turn: the resources table and every catalog source's own address are still known
-    assert run.check(NONE_CASE, fake_run("Which Springfield?" + extra, []))["links"] is ok
+    # no call this turn: only the resources table is known, no catalog source's address
+    assert run.check(NONE_CASE, fake_run("Which Springfield?" + extra, []))["links"] is ok_none
 
 
 def test_agreeing_figures_belong_in_the_code_sentence_only():
@@ -1060,12 +1060,23 @@ INLAND = ("There is no tide gauge near Delhi, so there is no sea-level record to
     (INLAND, True),  # the live answer that failed: both sources errored, their own addresses are fine
     (INLAND.replace("https://psmsl.org", "https://psmsl.org.example.com"), False),  # a look-alike host
     (INLAND.replace("https://tidesandcurrents.noaa.gov", "https://tidesandcurrents-noaa.gov"), False),
+    (INLAND + " See also https://power.larc.nasa.gov.", False),  # a catalog source this turn never tried
 ])
-def test_links_accept_catalog_sources_of_failed_calls(answer, ok):  # A
+@pytest.mark.parametrize("sources", [("coops", "psmsl"), (None,)])  # both named, or left out (CO-OPS, then PSMSL)
+def test_links_accept_the_sources_of_failed_calls(answer, ok, sources):  # A
     case = agent_case("delhi-sea-level-inland")  # the case that failed on the live run
-    failed = [{"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 28.61, "lon": 77.21, "source": s},
-               "result": None, "error": "No tide gauge within 100 km of this point."} for s in ("coops", "psmsl")]
+    failed = [{"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 28.61, "lon": 77.21,
+                                                     **({"source": s} if s else {})},
+               "result": None, "error": "No tide gauge within 100 km of this point."} for s in sources]
     assert run.check(case, fake_run(answer, failed))["links"] is ok
+
+
+def test_links_take_failed_sources_from_this_turn_only():
+    case = agent_case("delhi-sea-level-inland")
+    coops_only = [{"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 28.61, "lon": 77.21,
+                                                         "source": "coops"}, "result": None, "error": "Down."}]
+    assert run.check(case, fake_run(INLAND, coops_only))["links"] is False  # PSMSL was never tried
+    assert run.check(case, fake_run(INLAND, []))["links"] is False
 
 
 TOKYO = {**AC, "verdict": "no_clear_change", "slope_per_decade": 1.234, "ci_low": -0.5, "ci_high": 2.9,

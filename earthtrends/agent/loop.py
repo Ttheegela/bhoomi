@@ -14,6 +14,7 @@ import httpx
 from earthtrends.agent import prompts, resources, tools
 from earthtrends.agent.providers import MAX_TOKENS, PROVIDERS, NotConfigured, parse_spec
 from earthtrends.agent.tracing import Trace
+from earthtrends.data import coops, era5, ghcn, grace, power, psmsl
 
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
 MAX_CALLS = 6
@@ -128,6 +129,22 @@ def model_reason(error: str) -> str:
     if "tide gauge" in low or "sea level" in low:
         return GAUGE_REASON
     return FALLBACK_REASON
+
+
+SOURCES = {m.SOURCE["id"]: m.SOURCE for m in (coops, era5, ghcn, grace, power, psmsl)}
+
+
+def tried_sources(call: dict) -> list[dict]:
+    """The sources a detect_trend call tried, as {"name", "url"} from the data modules' own SOURCE: the source it named,
+    else the variable's default, and for sea level also PSMSL (the automatic fallback). An unknown variable or source,
+    or another tool: none. The model reads them with a failed call, so it never writes an address from memory."""
+    args = call.get("arguments")
+    entry = isinstance(args, dict) and next((v for v in tools.list_variables() if v["id"] == args.get("variable")), None)
+    if call.get("name") != "detect_trend" or not entry:
+        return []
+    src = args.get("source")
+    ids = [src] if src else entry["sources"][:2 if entry["id"] == "sea_level" else 1]
+    return [{"name": SOURCES[i]["name"], "url": SOURCES[i]["url"]} for i in ids if i in entry["sources"]]
 
 
 # ---- sources that agree: the code writes their sentence, the model never sees their numbers ----
@@ -292,14 +309,15 @@ def hidden_calls(calls: list[dict]) -> set[int]:
 
 
 def for_model(calls: list[dict]) -> list[dict]:
-    """What the model reads: digit-free error reasons, and each agreeing non-default source without its numbers (nor
-    its "meaning"). Every other result goes in full, "meaning" included."""
+    """What the model reads: digit-free error reasons, each with the sources the call tried (tried_sources), and each
+    agreeing non-default source without its numbers (nor its "meaning"). Every other result goes in full, "meaning"
+    included."""
     hidden = hidden_calls(calls)
 
     def brief(r):
         return {"variable": r.get("variable"), "verdict": r.get("verdict"), "source": r.get("source"),
                 "caveats": r.get("caveats", []), "note": AGREE_NOTE}
-    return [{**c, "error": model_reason(c["error"])} if c["error"]
+    return [{**c, "error": model_reason(c["error"]), **({"sources": s} if (s := tried_sources(c)) else {})} if c["error"]
             else {**c, "result": brief(c["result"])} if i in hidden else c
             for i, c in enumerate(calls)]
 
@@ -671,7 +689,7 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
             calls += done
             view = for_model(calls)
             seen = view[len(calls) - len(done):]  # agreement judged over every result so far
-            content = [d["result"] if d["error"] is None else {"error": d["error"]} for d in seen]
+            content = [d["result"] if d["error"] is None else {k: d[k] for k in ("error", "sources") if k in d} for d in seen]
             # Sent without numbers in an earlier step but no longer agreeing (e.g. a later source disagrees):
             # the model gets those full results now, with this step's first result.
             now = hidden_calls(calls)
