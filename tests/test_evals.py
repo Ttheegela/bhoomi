@@ -884,3 +884,48 @@ def test_sentence_about_both_sources_passes_wording(fine, monkeypatch):
         assert real_ny(CODE_SENT + " " + fine) == got  # the pattern adds no failure of its own
     else:
         assert real_ny(CODE_SENT + " " + fine) is True
+
+
+# ---- the agent lane's case file and the history field ----
+
+def test_agent_case_file_loads_after_cases_toml():
+    cases = run.load_cases()
+    ids = [c["id"] for c in cases]
+    assert ids[-1] == "followup-jakarta-sea-level" and len(ids) == len(run.load_cases(run.CASES)) + 1
+    jak = cases[-1]
+    assert [m["role"] for m in jak["history"]] == ["user", "assistant"] and "expect_verdict" not in jak
+
+
+def test_duplicate_id_across_files_is_refused(tmp_path):
+    a, b = tmp_path / "a.toml", tmp_path / "b.toml"
+    a.write_text('[[case]]\nid = "same"\nquestion = "q"\nexpect_tool = "none"\n')
+    b.write_text('[[case]]\nid = "same"\nquestion = "q2"\nexpect_tool = "none"\n')
+    with pytest.raises(SystemExit, match="'same' is used twice"):
+        run.load_cases(a, b)
+
+
+def test_bad_history_is_refused_at_load(tmp_path):
+    with pytest.raises(SystemExit, match="x-case.*whole pairs"):
+        run.load_cases(_toml(tmp_path, 'history = [{ role = "user", content = "hi" }]'))
+
+
+def test_history_passes_through_to_ask(monkeypatch):
+    seen = []
+    monkeypatch.setattr(run, "ask", lambda q, model, **kw: seen.append(kw) or fake_run())
+    jak = run.load_cases()[-1]
+    run.run_case(jak, "a/b")
+    run.run_case(CASE, "a/b")
+    assert seen == [{"history": jak["history"]}, {}]  # no history field: called exactly as before
+
+
+def test_jakarta_case_scores_an_errored_call():
+    jak = run.load_cases()[-1]
+    args = {"variable": "sea_level", "lat": -6.2, "lon": 106.85}
+    calls = [{"name": "detect_trend", "arguments": {**args, "source": s}, "result": None,
+              "error": "No tide gauge within 100 km has a usable record."} for s in ("coops", "psmsl")]
+    ok = run.check(jak, fake_run(answer="No tide gauge near Jakarta has a usable sea-level record.", calls=calls))
+    assert ok == {"answered": True, "tool": True, "variable": True, "place": True, "numbers": True}
+    copied = run.check(jak, fake_run(answer="Jakarta: rising by 29.15 mm per decade.", calls=calls))
+    assert copied["numbers"] is False  # a number from the earlier answer is no tool result of this turn
+    far = run.check(jak, fake_run(answer="No gauge.", calls=[{**calls[0], "arguments": {**args, "lat": 40.7, "lon": -74.0}}]))
+    assert far["place"] is False

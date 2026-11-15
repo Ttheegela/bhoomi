@@ -3,6 +3,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -131,6 +132,7 @@ def trend(request: Request, response: Response, variable: str, lat: float, lon: 
 class AskBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     question: str
+    history: Any = None  # earlier turns; checked by loop.history_error, so each refusal has a plain message
 
 
 def client_id(request: Request) -> str:
@@ -156,11 +158,14 @@ def ask(body: AskBody, request: Request) -> dict:
         raise HTTPException(400, "Please type a question.")
     if len(q) > 500:
         raise HTTPException(400, "Please keep your question under 500 characters.")
+    h = [] if body.history is None else body.history
+    if err := loop.history_error(h):
+        raise HTTPException(400, err)
     if wait := ratelimit.check(client_id(request)):  # after validation, so a 400 uses no quota
         raise HTTPException(429, f"Too many questions right now. Please wait {wait} seconds and try again.",
                             headers={"Retry-After": str(wait)})
     try:
-        return loop.ask(q)
+        return loop.ask(q, history=h) if h else loop.ask(q)  # no history: the call is exactly as before
     except NotConfigured:
         raise HTTPException(503, "The assistant is not set up on this server.") from None
     except UpstreamError:
