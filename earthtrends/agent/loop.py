@@ -61,8 +61,11 @@ TOOLS = [
      }}},
 ]
 TREND_ARGS = ("variable", "lat", "lon", "start", "end", "source")
-# A text step naming a tool is a tool call written out, not an answer (the prompt keeps tool names out of answers).
-TOOL_NAME = re.compile(r"\b(?:" + "|".join(re.escape(t["name"]) for t in TOOLS) + r")\b")
+# A tool call written out as text, not a mention: a tool's name, then only quotes, colons, ">" or space, then "{" or
+# "(" (optionally both) and a quote, ")" or an argument name. "detect_trend\n{"variable": ...}", "detect_trend({...",
+# "detect_trend(variable=...)" match; "a tool called detect_trend" and "detect_trend (the trend check)" do not.
+TOOL_NAME = re.compile(r"\b(?:" + "|".join(re.escape(t["name"]) for t in TOOLS) + r")\b[\"'`>:\s]*[{(]\s*(?:[{(]\s*)?"
+                       r"(?:[\"')]|(?:" + "|".join(TREND_ARGS) + r")\b)")
 HISTORY_MSGS = 6  # earlier chat messages sent with a question: the same limits as web/ask.js
 HISTORY_CHARS = 4000
 
@@ -583,6 +586,8 @@ PLACE_KM = 50  # lookups this far apart are different places
 # The broad-question rule's own opener, not any "can't rank" ("I can't rank which home is safer").
 CANNOT_RANK = re.compile(r"\b(?:cannot|can not|can['’]t)\s+rank\s+a\s+whole\s+region\b", re.I)
 _SENT_END = re.compile(r"[.!?](?=\s|$)")  # a decimal point is followed by a digit, so "9.36" is no sentence end
+# ponytail: an abbreviation with a space after it ("U.S. ") inside the opener would count as its end; the opener is
+# the prompt's fixed sentence, which has none.
 
 
 def add_examples(text: str, calls: list[dict]) -> str:
@@ -696,8 +701,12 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                 if not cut:
                     if not (text or "").strip():
                         break  # empty text (e.g. reasoning spent the cap): falls through to kept or GAVE_UP
-                    if TOOL_NAME.search(text):
-                        break  # a tool call written out as text (seen on a no-tools retry) is no answer: same fall-through
+                    if TOOL_NAME.search(text):  # a tool call written out as text is no answer, and never kept
+                        if calls or checked or i == MAX_CALLS - 1:
+                            break  # same fall-through as empty text: kept, found_answer or GAVE_UP
+                        checked = True  # nothing fetched yet: the failed-check restart, once, tools offered
+                        provider.start(system, question, TOOLS, history=history)
+                        continue
                     text = compose(text, calls)  # before the checks: they hold for what the user sees
                     long, wrong = words(text) > limit, bool(wrong_periods(text, calls))
                     # No result to take a number from: any number but the fixed phrases is made up.

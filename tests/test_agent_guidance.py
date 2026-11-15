@@ -286,8 +286,39 @@ def test_leak_as_first_text_returns_the_found_answer(fake, monkeypatch):
 
 
 def test_leak_with_no_results_gives_up(fake):
-    fake.script = [step(LEAK)]
+    fake.script = [step(LEAK), step(LEAK)]  # the one restart leaks again
     assert loop.ask("Is sea level rising at Grand Isle?", model="fake:m")["answer"] == loop.GAVE_UP
+    assert fake.script == []  # two model calls: the first answer and the one restart, no third
+
+
+@pytest.mark.parametrize("text", [LEAK, 'detect_trend({"variable": "air_temp_max", "lat": 28.61, "lon": 77.21})',
+                                  'detect_trend(variable="air_temp_max", lat=28.61, lon=77.21)',
+                                  "Calling `detect_trend`: {'variable': 'precip'}", "list_variables()"])
+def test_written_out_tool_calls_match(text):
+    assert loop.TOOL_NAME.search(text)
+
+
+@pytest.mark.parametrize("text", ["I use a tool called detect_trend to check the records.",
+                                  "detect_trend (the trend check) looks at all months together.",
+                                  "The list_variables tool lists what we measure."])
+def test_mentions_do_not_match(text):
+    assert not loop.TOOL_NAME.search(text)
+
+
+def test_answer_that_mentions_a_tool_is_returned(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    text = (f"I use a tool called detect_trend to check this. Sea level at Grand Isle has clearly been rising. "
+            f"Source: NOAA CO-OPS tide gauges, {SRC['url']}.")
+    fake.script = [step(calls=[call("a", **GI_ARGS)]), step(text)]
+    assert loop.ask("Is sea level rising at Grand Isle?", model="fake:m")["answer"] == text
+
+
+def test_leak_before_any_call_restarts_once_with_tools(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    text = f"Yes. Sea level at Grand Isle has clearly been rising. Source: NOAA CO-OPS tide gauges, {SRC['url']}."
+    fake.script = [step(LEAK), step(calls=[call("a", **GI_ARGS)]), step(text)]
+    r = loop.ask("Is sea level rising at Grand Isle?", model="fake:m")
+    assert r["answer"] == text and len(r["tool_calls"]) == 1 and fake.script == []
 
 
 def test_normal_answer_is_untouched(fake, monkeypatch):
