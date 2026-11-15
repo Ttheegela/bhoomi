@@ -7,7 +7,7 @@
   var SEARCH = 'You can still search for a place above.';
   var map = null, pin = null, lib = null, prev = null, cur = null;
   var gauges = null, gaugeSrcs = [], gTries = 0, gLoading = false, wantDots = false, hideTimer = 0, snap = null;
-  var legend = null, gCredits = [], tip = null, tipFor = null;
+  var legend = null, tip = null, tipFor = null;
   var curGeo = false, loaded = false, failed = false, retried = false, slowTimer = 0;
 
   function h(tag, cls, text) {
@@ -36,14 +36,7 @@
   undo.hidden = true;
   var row = h('div', 'map-row');
   row.append(status, undo);
-  var credit = h('p', 'map-credit');
-  var a1 = h('a', '', 'OpenFreeMap © OpenMapTiles');
-  a1.href = 'https://openfreemap.org/';
-  var a2 = h('a', '', 'Data from OpenStreetMap');
-  a2.href = 'https://www.openstreetmap.org/copyright';
-  a1.rel = a2.rel = 'noopener';
-  credit.append(a1, a2);
-  slot.append(frame, row, credit);
+  slot.append(frame, row);
   slot.hidden = false;
   if (TD.addCredit) TD.addCredit('map', 'Map: OpenFreeMap © OpenMapTiles, data from OpenStreetMap', 'https://www.openstreetmap.org/copyright');
 
@@ -75,6 +68,12 @@
   }
 
   // no WebGL or the library did not import: no retry (a failed module import is cached by the browser)
+  // the control opens itself when it is added; start collapsed (just the info button) until the visitor taps it
+  function collapseAttrib() {
+    var a = canvas.querySelector('.maplibregl-ctrl-attrib');
+    if (a) { a.removeAttribute('open'); a.classList.remove('maplibregl-compact-show'); }
+  }
+
   function noMap() {
     fail("Your browser can't show the map. Search for a place above.", false);
     status.textContent = SEARCH;
@@ -112,6 +111,11 @@
       var cv = map.getCanvas();
       cv.tabIndex = -1;
       cv.setAttribute('aria-hidden', 'true');
+      // the required credit lives inside the map, bottom right (compact: an info button that opens the words)
+      // the style carries the base-map credit itself, so no custom copy (it would show twice)
+      map.addControl(new lib.AttributionControl({ compact: true }), 'bottom-right');
+      collapseAttrib();
+      map.on('resize', collapseAttrib);
       map.addControl(new lib.NavigationControl({ showCompass: false, visualizePitch: false }), 'top-right');
       map.touchZoomRotate.disableRotation();
       map.on('load', function () {
@@ -122,6 +126,7 @@
         wait.hidden = true;
         if (cur) put(cur.lat, cur.lon, true);
         maybeFetch();
+        collapseAttrib();
         applyDots();
       });
       // errors after load (a missed tile on a slow line) are ignored on purpose
@@ -215,6 +220,17 @@
       .then(function () { clearTimeout(timer); gLoading = false; applyDots(); });
   }
 
+  function isHttps(u) { return typeof u === 'string' && u.indexOf('https://') === 0; }
+  function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+  // the gauges source's own attribution (HTML, built only from escaped text and https addresses): the control shows it while the layer is shown
+  function gaugeAttribution() {
+    return gaugeSrcs.map(function (x) {
+      var text = esc('Gauge locations: ' + x.name);
+      return isHttps(x.url) ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + text + '</a>' : text;
+    }).join(' ');
+  }
+
   function buildLegend() {
     legend = h('p', 'map-legend');
     legend.setAttribute('aria-hidden', 'true');
@@ -228,15 +244,9 @@
     c.setAttribute('cx', '5'); c.setAttribute('cy', '5'); c.setAttribute('r', '4');
     svg.append(c);
     legend.append(svg, document.createTextNode('Tide gauge. Zoom in and tap one. A gauge with only a few years of readings cannot give a clear answer.'));
-    slot.insertBefore(legend, credit);
+    slot.append(legend);
     gaugeSrcs.forEach(function (x) {
-      var text = 'Gauge locations: ' + x.name;
-      var https = typeof x.url === 'string' && x.url.indexOf('https://') === 0;
-      var el = h(https ? 'a' : 'span', 'map-gauge-credit', text);
-      if (https) { el.href = x.url; el.rel = 'noopener'; }
-      credit.append(el);
-      gCredits.push(el);
-      if (TD.addCredit) TD.addCredit('gauges-' + x.id, text, https ? x.url : undefined);
+      if (TD.addCredit) TD.addCredit('gauges-' + x.id, 'Gauge locations: ' + x.name, isHttps(x.url) ? x.url : undefined);
     });
   }
 
@@ -246,7 +256,7 @@
     var show = wantDots;
     if (!map.getSource('gauges')) {
       var feats = gauges.map(function (g, i) { return { type: 'Feature', properties: { i: i }, geometry: { type: 'Point', coordinates: [g.lon, g.lat] } }; });
-      map.addSource('gauges', { type: 'geojson', data: { type: 'FeatureCollection', features: feats } });
+      map.addSource('gauges', { type: 'geojson', attribution: gaugeAttribution(), data: { type: 'FeatureCollection', features: feats } });
       map.addLayer({
         id: 'gauges-dots', type: 'circle', source: 'gauges',
         layout: { visibility: show ? 'visible' : 'none' },
@@ -258,6 +268,7 @@
         }
       });
       if (!legend) buildLegend();
+      collapseAttrib();
     }
     clearTimeout(hideTimer);
     map.setPaintProperty('gauges-dots', 'circle-opacity-transition', { duration: reduced() ? 0 : 200 });
@@ -273,7 +284,6 @@
       tipOff();
     }
     legend.hidden = !show;
-    gCredits.forEach(function (el) { el.hidden = !show; });
   }
 
   // the nearest dot within 14 px of the pointer (dots on, zoom 4 or more); { g: gauge, lng: its longitude in the world copy shown }
