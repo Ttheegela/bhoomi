@@ -72,7 +72,7 @@ def test_request_and_history(sdk):
     assert r["answer"] == "Sea level is rising. Source: NOAA CO-OPS, https://example.org/." and (r["provider"], r["model"]) == ("anthropic", "claude-haiku-5-5")
     assert made == [{"api_key": "test-not-a-key", "timeout": 60, "max_retries": 0}]
     for s in sent:
-        assert s["model"] == "claude-haiku-5-5" and s["max_tokens"] == providers.MAX_TOKENS == 2000
+        assert s["model"] == "claude-haiku-5-5" and s["max_tokens"] == providers.MAX_TOKENS == 4000
         assert s["tool_choice"] == {"type": "auto"} and s["output_config"] == {"effort": providers.ANTHROPIC_EFFORT}
         assert not {"temperature", "top_p", "top_k"} & s.keys()
         assert "sea_level" in s["system"]
@@ -89,12 +89,13 @@ def test_request_and_history(sdk):
     assert r["usage"] == {"prompt_tokens": 2000, "completion_tokens": 400, "cost_usd": 0.0004}
 
 
-def test_cut_off_retry_uses_low_effort_and_no_tools(sdk):
+def test_cut_off_retry_keeps_effort_and_offers_no_tools(sdk):
     sent, replies, _ = sdk
-    replies += [msg(tool_use("t1"), stop="tool_use"), msg(THINK, stop="max_tokens", out=2000),
+    replies += [msg(tool_use("t1"), stop="tool_use"), msg(THINK, stop="max_tokens", out=4000),
                 msg(text("Sea level is rising. Source: NOAA CO-OPS, https://example.org/."))]
     assert loop.ask("q", model="anthropic:claude-haiku-5-5")["answer"] == "Sea level is rising. Source: NOAA CO-OPS, https://example.org/."
-    assert [s["output_config"]["effort"] for s in sent] == [providers.ANTHROPIC_EFFORT] * 2 + ["low"]
+    assert [s["output_config"] for s in sent] == [{"effort": providers.ANTHROPIC_EFFORT}] * 3 == [{"effort": "medium"}] * 3
+    assert all(s["max_tokens"] == 4000 for s in sent)
     assert "tools" in sent[1] and not {"tools", "tool_choice"} & sent[2].keys()
 
 
