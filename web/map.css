@@ -5,6 +5,7 @@
 .map-wait { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s3); text-align: center; margin: 0; padding: var(--s4); color: var(--ink-2); font-size: 16px; max-width: none; pointer-events: none; }
 .map-wait[hidden] { display: none; }
 .map-failed .map-wait { background: var(--surface); pointer-events: auto; }
+.map-failed .maplibregl-ctrl-top-right { display: none; }
 .map-retry { min-height: 48px; }
 .map-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
 .map-status { margin: var(--s2) 0; min-height: 24px; display: flex; align-items: center; flex: 1 1 auto; }
@@ -17,7 +18,7 @@
 .map-canvas .maplibregl-ctrl-group { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; box-shadow: none; }
 .map-canvas .maplibregl-ctrl-group button { width: 48px; height: 48px; }
 .map-canvas .maplibregl-ctrl-group button + button { border-top: 1px solid var(--line); }
-.map-canvas .maplibregl-ctrl button:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.map-canvas .maplibregl-ctrl button:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; box-shadow: none; }
 .map-canvas .maplibregl-cooperative-gesture-screen { background: color-mix(in srgb, var(--ink) 82%, transparent); color: var(--bg); font: 16px/1.4 Inter, system-ui, sans-serif; }
 @media (prefers-color-scheme: dark) {
   .map-canvas .maplibregl-canvas { filter: grayscale(1) invert(1) brightness(.9); }

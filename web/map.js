@@ -6,7 +6,7 @@
   var STYLE = 'https://tiles.openfreemap.org/styles/positron';
   var SEARCH = 'You can still search for a place above.';
   var map = null, pin = null, lib = null, prev = null, cur = null;
-  var loaded = false, failed = false, retried = false, slowTimer = 0;
+  var curGeo = false, loaded = false, failed = false, retried = false, slowTimer = 0;
 
   function h(tag, cls, text) {
     var e = document.createElement(tag);
@@ -72,6 +72,12 @@
     if (fly) map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 4.5), duration: reduced() ? 0 : 900, essential: false });
   }
 
+  // no WebGL or the library did not import: no retry (a failed module import is cached by the browser)
+  function noMap() {
+    fail("Your browser can't show the map. Search for a place above.", false);
+    status.textContent = SEARCH;
+  }
+
   function start() {
     if (map) { map.remove(); map = null; pin = null; }
     failed = false; loaded = false;
@@ -98,35 +104,35 @@
         });
       } catch (e) {
         map = null;
-        fail("Your browser can't show the map. Search for a place above.", false);
-        status.textContent = SEARCH;
+        noMap();
         return;
       }
+      var cv = map.getCanvas();
+      cv.tabIndex = -1;
+      cv.setAttribute('aria-hidden', 'true');
       map.addControl(new lib.NavigationControl({ showCompass: false, visualizePitch: false }), 'top-right');
       map.touchZoomRotate.disableRotation();
       map.on('load', function () {
         loaded = true;
+        failed = false;
         clearTimeout(slowTimer);
+        frame.classList.remove('map-failed');
         wait.hidden = true;
-        var c = canvas.querySelector('canvas');
-        if (c) { c.tabIndex = -1; c.setAttribute('aria-hidden', 'true'); }
         if (cur) put(cur.lat, cur.lon, true);
       });
       // errors after load (a missed tile on a slow line) are ignored on purpose
       map.on('error', function () { if (!loaded) fail("The map couldn't load. " + SEARCH, true); });
       map.on('click', function (e) {
         var s = TD.state;
-        prev = s.place ? { lat: s.place.lat, lon: s.place.lon, label: s.place.label, variable: s.variable, source: s.source } : null;
+        prev = s.place ? { lat: s.place.lat, lon: s.place.lon, label: s.place.label, variable: s.variable, source: s.source, start: s.start, end: s.end, geo: curGeo } : null;
         var lat = Math.max(-85, Math.min(85, e.lngLat.lat));
         var lon = (((e.lngLat.lng + 180) % 360) + 360) % 360 - 180;
         cur = { lat: lat, lon: lon };
         put(lat, lon, false);
         TD.loadPlace({ lat: lat, lon: lon, label: 'Pinned spot (' + fmt(lat, lon) + ')', origin: 'map' });
       });
-    }).catch(function () { fail("The map couldn't load. " + SEARCH, true); });
+    }).catch(noMap);
   }
-
-  new ResizeObserver(function () { if (map) map.resize(); }).observe(frame);
 
   var io = null;
   if ('IntersectionObserver' in window) {
@@ -141,6 +147,7 @@
   document.addEventListener('td:place-pick', function (e) {
     var d = e.detail, fromMap = d.origin === 'map';
     cur = { lat: d.lat, lon: d.lon };
+    curGeo = d.origin === 'geo';
     if (!fromMap) put(d.lat, d.lon, true);
     status.textContent = (fromMap ? 'Pinned ' : 'Showing ') + fmt(d.lat, d.lon) + '. We use the nearest data we have.';
     undo.hidden = !(fromMap && prev);
@@ -150,6 +157,6 @@
     var p = prev;
     prev = null;
     undo.hidden = true;
-    if (p) TD.loadPlace({ lat: p.lat, lon: p.lon, label: p.label, variable: p.variable, source: p.source, origin: 'undo' });
+    if (p) TD.loadPlace({ lat: p.lat, lon: p.lon, label: p.label, variable: p.variable, source: p.source, start: p.start, end: p.end, origin: p.geo ? 'geo' : 'undo' });
   });
 })();
