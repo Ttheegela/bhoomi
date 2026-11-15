@@ -21,6 +21,7 @@ Check each version against what was actually used on the day before submitting.
 
 - Anthropic. (2026). *Claude Code* (Version 2.1.302) [Computer software; AI coding assistant using Claude Opus 5.5]. https://claude.com/claude-code
 - Anthropic. (2026). *Claude Haiku 5.5* [Large language model]. Accessed through OpenRouter. https://openrouter.ai/anthropic/claude-haiku-5.5
+- Google. (2026). *Gemini 3.8 Flash* [Large language model]. Accessed through OpenRouter; ran the in-app agent in production for about an hour on 2026-11-15 (UTC). https://openrouter.ai/google/gemini-3.8-flash
 - Anthropic. (2026). *Claude* (Slides and Design artifacts, Opus 5.5) [Large language model]. https://claude.ai
 - OpenAI. (2026). *Codex CLI* (Version 0.162.1, model gpt-6.1-sol) [Computer software; AI coding agent]. https://github.com/openai/codex
 
@@ -34,7 +35,7 @@ Chose the problem and audience, chose the method (deseasonalize, then Mann-Kenda
 - AI voiceover: none planned; the video uses captions only. If an AI voice is added, name it here and in the video's description and file metadata.
 - Screenshots in `docs/submission/screenshots/` are real captures of the live site, taken by Claude Code's built-in browser; nothing in them is edited.
 
-## Merged PRs (as of Sat 19:15 EST)
+## Merged PRs (as of Sun 15 Nov, 04:30 UTC)
 - #1 ci: run gitleaks on pull requests only: Claude wrote this change.
 - #7 feat: /api/health/keys key check: Claude wrote this endpoint and its test.
 - #8 docs: README live URL, agent connect, team: Claude drafted this README update.
@@ -83,4 +84,21 @@ Chose the problem and audience, chose the method (deseasonalize, then Mann-Kenda
 - #64 evals: GRACE cases runnable, Mumbai answered from PSMSL (part of #16): Claude Code (Opus 5.5) edited the cases, checked the Mumbai reference's title and journal on Crossref, and ran the three changed cases (3/3 passed); Sairam asked for it and reviewed it.
 - #65 story: GRACE and worldwide tide gauges in the pitch, project page and SI (part of #18): Claude Code (Opus 5.5) checked the numbers on production, looked up the references in Crossref and PubMed, re-ran the evals and edited the docs and slides; Sairam asked for it and reviews it.
 - #66 ui: no minus or plus sign after a direction word in the answer sentence: Claude (frontend builder agent) edited the sentence builder in `web/app.js` and the design notes and ran the checks; the orchestrator session wrote this description.
+- #67 ui: trend scene, a picture of the verdict for every measurement (proposal): Claude Code (Opus 5.5) designed and wrote the scene module, CSS and wiring, and tested it in a browser at phone and desktop sizes, light and dark.
+- #68 agent: periods checked against the tool's, word limits enforced, "below 0.001" allowed, °C: Claude (backend builder agent) wrote the period check, the shared retry, the p-value phrase rule, the unit and zero replacements, the scorer change and the tests, and ran the period check over saved real answers; reviewer agents reviewed each round; the orchestrator session ran the final live questions and wrote this description.
+- #69 polish from the rehearsal: tab icon, link preview, a friendly 404 page, one message reworded: Claude (builder agent) wrote the favicon, the 404 page, the meta tags, the app, data and MCP changes and the tests; the orchestrator session wrote this description.
+- #70 story: final pitch, video script, project page and SI for the new demo flow (part of #18): Claude Code (Opus 5.5) ran the demo questions on production, rewrote the pitch and video script around Tarun's demo flow, took the screenshots in its built-in browser, finished the project page and SI list, and republished the slides; Sairam asked for it and reviews it.
+- #71 evals: shortlist model comparison re-run on current main (results only): Claude (backend builder agent) ran the existing eval runner through a wrapper outside the repo that served ERA5 from the live site, read every failed answer to judge whose fault it was, and wrote NOTES.md; the orchestrator session wrote this description.
+- #72 Ask tab: no raw tool error under an AI answer; far-away gauge not named: Claude (builder agent) made the change and the test; the orchestrator session wrote the task card and this description.
+- #74 Ask tab: staged progress line and a seconds counter while waiting: Claude (builder agent) made the change; the orchestrator session wrote the task card, the words and this description.
+- #75 Evals: two Gemini models on the same test; where slow answers spend their time (results only): the orchestrator session (Claude) ran the evals and the timing, read the failed answers and wrote the notes and this description.
+- #76 evals: rain case without a required word; max_km and allow_empty_lookup fields (part of #16): Claude Code (Opus 5.5) read the runner, edited the cases and ran the tests and three eval cases; Sairam asked for it and reviews it.
+- #77 Trend picture and year stripes (Sairam's proposal, with the review's changes): Sairam's proposal was built with AI assistance (see #67); an AI builder made the review's changes, AI reviewers did the code and design reviews, and the orchestrator session did the browser check and wrote this description.
+- #78 Evals: the runner honours max_km and allow_empty_lookup: Claude (backend builder agent) wrote the two checks, the load-time validation and the tests; the orchestrator session wrote the task card and this description.
+- #79 Agent: output cap 4,000 and no reduced reasoning anywhere: Claude (backend builder agent) made the change and the tests; the orchestrator session measured the cut-off rate and the prices from live answers and wrote the task card and this description.
+- #80 Evals: the scorer catches "both use the tide gauge": Claude (backend builder agent) wrote the pattern and the tests; the orchestrator session found the sentences in live answers and wrote the task card and this description.
+- #81 UI refresh: colour for the data, brand fonts, bigger number with a sparkline, arrows on place chips: Claude designed the layout and palette checks on a mock of the real page, ported it into the page's stylesheet and scripts, reviewed it, and measured it in a browser at phone and desktop sizes in light and dark.
+- #82 evals: Gemini 3.8 Flash against Haiku 5.5 (results only); SI names the production model: Claude (orchestrator session) ran the eval runner for the two models with the project's keys, asked the live site ten questions, committed the runner's unedited output with notes, and edited the model line in docs/SI.md from the owner's decision.
+- #83 Ask: follow-up questions remember the chat (bounded history on /api/ask): Claude (a builder agent) wrote the history check, the loop and provider wiring, the follow-up prompt paragraph, the eval runner changes, the follow-up eval case with its made-up earlier answer, and the tests; Claude (the orchestrator) planned the change and wrote this description.
+- #84 Place search by name: lookup function and GET /api/places: Claude (builder agents) wrote the lookup function, the route and the tests; Claude (a reviewer agent) reviewed the lookup, and its findings were fixed; Claude (the orchestrator) planned the change and wrote this description.
 - This PR, story: final pitch, video script, project page and SI for the new demo flow (part of #18): Claude Code (Opus 5.5) ran the demo questions on production, rewrote the pitch and video script around Tarun's demo flow, took the new screenshots in its built-in browser, finished the project page and this list, and updated the slides; Sairam asked for it and reviews it.
