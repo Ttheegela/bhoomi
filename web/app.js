@@ -618,7 +618,18 @@ function pinList(win) {
 }
 function selectedPin(win) { return pinList(win).find((p) => p.selected) || null; }
 
+// When the selected place was answered by another source than the one highlighted, say so.
+function renderSrcNote() {
+  const n = $('src-note'), pin = curWin === 'settings' ? null : selectedPin(curWin), v = varById(curWin);
+  const sid = pin && pin.status === 'ok' && pin.trend.source && pin.trend.source.id;
+  const cur = v && Array.isArray(v.sources) ? (sourceFor(curWin) || v.sources[0]) : null;
+  const show = !!sid && !!cur && v.sources.length > 1 && sid !== cur;
+  n.hidden = !show;
+  n.textContent = show ? `This place is measured by ${pin.trend.source.name}.` : '';
+}
+
 function changed() {
+  renderSrcNote();
   renderSidebar();
   renderRec();
   syncCompat();
