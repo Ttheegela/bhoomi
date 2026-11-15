@@ -260,8 +260,11 @@ def for_model(calls: list[dict]) -> list[dict]:
     def brief(r):
         return {"variable": r.get("variable"), "verdict": r.get("verdict"), "source": r.get("source"),
                 "caveats": r.get("caveats", []), "note": AGREE_NOTE}
+    def bare(r):  # the plain-words "meaning" block is for the page only, not yet for the model
+        return {k: v for k, v in r.items() if k != "meaning"} if isinstance(r, dict) else r
     return [{**c, "error": model_reason(c["error"])} if c["error"]
-            else {**c, "result": brief(c["result"])} if i in hidden else c for i, c in enumerate(calls)]
+            else {**c, "result": brief(c["result"])} if i in hidden else {**c, "result": bare(c["result"])}
+            for i, c in enumerate(calls)]
 
 
 def word_limit(calls: list[dict]) -> int:
@@ -580,12 +583,13 @@ def ask(question: str, model: str | None = None) -> dict:
             done = [f.result() if f.done() and not f.cancelled() else failed(c, LATE) for f, c in zip(futs, run)]
             done += [failed(c, f"Too many tool calls at once; at most {MAX_TOOLS} per step.") for c in todo[MAX_TOOLS:]]
             calls += done
-            seen = for_model(calls)[len(calls) - len(done):]  # agreement judged over every result so far
+            view = for_model(calls)
+            seen = view[len(calls) - len(done):]  # agreement judged over every result so far
             content = [d["result"] if d["error"] is None else {"error": d["error"]} for d in seen]
             # Sent without numbers in an earlier step but no longer agreeing (e.g. a later source disagrees):
             # the model gets those full results now, with this step's first result.
             now = _hidden(calls)
-            back = [calls[j]["result"] for j in sorted(sent_hidden - now)]
+            back = [view[j]["result"] for j in sorted(sent_hidden - now)]  # not hidden now: full, as the model sees it
             sent_hidden = now
             if back:
                 k = next((j for j, x in enumerate(content) if isinstance(x, dict)), 0)  # a dict result keeps its shape

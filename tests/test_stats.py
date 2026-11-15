@@ -12,7 +12,7 @@ SOURCE = {"id": "power", "name": "NASA POWER (MERRA-2)", "url": "https://power.l
 NOTE = "Grid cell about 50 km wide, not a single station."
 CONTRACT_KEYS = {
     "variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
-    "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "caveats",
+    "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "caveats", "meaning",
 }
 
 

@@ -13,7 +13,7 @@ from earthtrends.data import coops, power
 FX = Path(__file__).parent / "fixtures"
 SERIES_KEYS = {"variable", "units", "freq", "place", "times", "values", "source", "notes"}
 TREND_KEYS = {"variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
-              "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "caveats"}
+              "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "caveats", "meaning"}
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 client = TestClient(app)
 
