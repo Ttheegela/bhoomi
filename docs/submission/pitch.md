@@ -2,9 +2,9 @@
 
 **Final draft, Sat 14 Nov night.** It follows the demo flow Tarun set on #18: New York sea level → Delhi "sources disagree" on the Ask tab → Delhi groundwater → Mumbai sea level since 1878 → the "Use in your AI" page.
 
-**Slot:** 7 to 10 minutes including Q&A, and **both of us present**. This script runs about 6½ minutes, which leaves 2 to 3 minutes for questions.
+**Slot:** 7 to 10 minutes including Q&A, and **both of us present**. This script runs about 6¾ minutes, which leaves 2 to 3 minutes for questions.
 **Slides:** a 10-slide deck in Claude Slides ("Trend Detective pitch"); Sairam shares the link. It downloads as PDF or PowerPoint. The demo slides (3 to 6) hold the same numbers as screenshots. If the Wi-Fi or a live answer fails, stay on the slide and keep talking.
-**Rules:** every slide shows **"Built with AI assistance"**. No NASA logos or branding. Every number we say or show names its source. Numbers below were checked on production on Sat 14 Nov at about 23:50 UTC; re-check on Sunday morning and quote what the tool returns then.
+**Rules:** every slide shows **"Built with AI assistance"**. No NASA logos or branding. Every number we say or show names its source. Numbers below were checked on production on Sat 14 Nov at about 23:50 UTC and again on Sun 15 Nov at about 16:30 UTC (unchanged); quote what the tool returns on the day.
 
 | # | Slide | Who | Time |
 |---|---|---|---|
@@ -12,7 +12,7 @@
 | 2 | Why it's hard | Sairam | 0:30 |
 | 3 | Live: New York sea level (Explore) | Tarun | 0:45 |
 | 4 | Live: Delhi, sources disagree (Ask) | Tarun | 1:00 |
-| 5 | Live: Delhi groundwater (Ask) | Sairam | 0:40 |
+| 5 | Live: Delhi groundwater (Ask) | Sairam | 0:50 |
 | 6 | Live: Mumbai since 1878 (Ask) | Sairam | 0:30 |
 | 7 | Live: Use in your AI + how it works | Tarun | 0:45 |
 | 8 | How we know it's right | Sairam | 0:45 |
@@ -51,15 +51,17 @@ Tab 3, Ask: **"Are Delhi's hottest days getting hotter? Check more than one data
 **Say:** "Grid cells 25 to 50 km wide, versus one station in a growing city. An honest tool shows the disagreement instead of picking a side."
 **Fallback:** if the answer is slow or odd, show slide 4, or use Explore: Delhi, "Hottest day", switch the source.
 
-## Slide 5: Live, Delhi groundwater (Sairam, 40 s)
+## Slide 5: Live, Delhi groundwater (Sairam, 50 s)
 Tab 3, Ask: **"Is groundwater running out in Delhi?"** (about 6 s)
 **Point at:** water stored on land near Delhi is **clearly falling, −43.85 cm per decade** (range −47.27 to −40.08), April 2002 to June 2026, from NASA's GRACE and GRACE-FO satellites, which weigh water by its gravity.
 **Then the honest part:** the answer says this adds up soil moisture, groundwater, snow, lakes and rivers, so it can't show groundwater alone or how much is left.
-**Say:** "It tells you what the data can show, and what it can't."
+**Then the guidance line** at the end of the answer: **High risk**, falling about 4.4 cm a year; for farming or a new well, don't rely on groundwater here without a secure supply. It ends: "This guidance isn't perfect. It is based only on past records."
+**Say:** "It tells you what the data can show, and what it can't. And then what that could mean for a decision, with the warning attached."
 
 ## Slide 6: Live, Mumbai since 1878 (Sairam, 30 s)
 Tab 3, Ask: **"Is sea level rising in Mumbai?"** (about 8 s)
 **Point at:** **rising, +9.36 mm per decade** (range 8.30 to 10.44), January 1878 to December 2024, Apollo Bandar tide gauge, PSMSL.
+**Guidance line:** **Low risk**, rising more slowly than the world average (NASA, about 3.4 mm a year since 1993). If the past trend continues: +2.2 to +2.7 cm by 2050, with a link to NASA's sea-level projection tool for the real future.
 **Say:** "Not just US coasts. Tide gauges worldwide, and this one has almost 150 years of records. The US network had no gauge here, so the agent switched to the worldwide archive and said so."
 
 ## Slide 7: Live, use it in your own AI, and how it works (Tarun, 45 s)
@@ -70,7 +72,7 @@ Tab 4: **Use in your AI**. Show the server address and the Claude steps.
 ## Slide 8: How we know it's right (Sairam, 45 s)
 - **Truth check:** Atlantic City sea level, ours +42.5 mm per decade (41.1 to 44.0) versus NOAA's own published 42.4 ± 0.8 for the same gauge (station 8534720). They match.
 - **Satellites versus a published study:** north-west India, Aug 2002 to Oct 2008. Our GRACE land water fall is 5.3 cm a year (3.9 to 6.9); Rodell, Velicogna and Famiglietti (2009, *Nature*) report groundwater falling 4.0 ± 1.0. The ranges overlap.
-- **Golden questions:** 15 questions with answers set from NOAA and published papers, never from our own tool. The agent on the live site (Claude Haiku 5.5) passes **all 15** in the run of Sun 15 Nov, 06:00 UTC, on the code that's live, including the ones it must decline: "Will it rain tomorrow?" (a forecast) and "Is sea level rising in Delhi?" (inland). It never invented a number.
+- **Golden questions:** 15 questions with answers set from NOAA and published papers, never from our own tool. The agent on the live site (Claude Haiku 5.5) passes **all 15** in the runs of Sun 15 Nov at 06:00 and again at about 16:20 UTC, after the guidance feature, on the code that's live, including the ones it must decline: "Will it rain tomorrow?" (a forecast) and "Is sea level rising in Delhi?" (inland). It never invented a number.
 - **Stats tests:** pure noise, seasons only and autocorrelated noise all come back "no clear change", so it doesn't cry wolf.
 
 ## Slide 9: Who it's for (Sairam, 30 s)
@@ -84,8 +86,9 @@ Tab 4: **Use in your AI**. Show the server address and the Claude steps.
 ## Likely judge questions
 - *Why not just fit a line?* A line always has a slope. Mann-Kendall asks if the change beats chance; Sen's slope isn't thrown off by outliers.
 - *Why do sources disagree?* Grid cells 25 to 50 km wide versus a single station, different methods, a city growing around the station.
-- *Where's the AI risk?* The agent can't invent numbers: every number in an answer must appear in a tool result, and our evals check that. In Sunday's run it passed all 15 golden questions and 3 of 4 extra behaviour checks; the one miss was wording ("cannot show" where the check wanted "cannot tell").
+- *Where's the AI risk?* The agent can't invent numbers: every number in an answer must appear in a tool result, and our evals check that. In Sunday's runs it passed all 15 golden questions every time. At noon it also passed 14 of 15 extra behaviour checks; the one miss was a connection error in our test runner, and the live site answers that question fine.
 - *What NASA data?* NASA POWER (built on MERRA-2, from the challenge's Resources list) and the NASA GSFC GRACE/GRACE-FO mascons (RL06 v2.0; Loomis, Luthcke and Sabaka 2019).
+- *Isn't a risk level dangerous advice?* It is computed in code from the measured rate against a published reference (NASA's world-average sea-level rise, for example), never by the model. Every guidance line says it is based only on past records and isn't professional advice, and "if the past trend continues" is labelled as exactly that, with a link to the official projection tool. Rules are in `docs/RISK.md`.
 - *Is the GRACE number groundwater?* No. It is all water on land together (soil moisture, groundwater, snow and ice, lakes and rivers), averaged over about 400 km and compared with its 2004 to 2009 average. The answer says so. There is no data from mid-2017 to mid-2018, between the two satellite missions.
 - *Why does Central Valley say "no clear change" for 2003 to 2010?* A short window. Our range (−48 to +5 mm a year) contains the published −31.0 ± 2.7 (Famiglietti et al. 2011). Over the full record it is clearly falling, 17.5 cm per decade.
 - *Why did New York use two sources?* The agent checks NOAA's gauge, then the worldwide PSMSL archive; both agree for The Battery.
