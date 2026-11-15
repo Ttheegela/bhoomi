@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -23,9 +24,9 @@ def load(name):
 
 
 @pytest.fixture
-def offline(monkeypatch):
+def offline(monkeypatch, coops_long):
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: load("power_monthly.json"))
-    monkeypatch.setattr(coops, "fetch", lambda sid: load("coops_monthly.json"))
+    monkeypatch.setattr(coops, "fetch", lambda sid: coops_long)
     monkeypatch.setattr(coops, "stations", lambda: load("coops_stations.json")["stations"])
 
 
@@ -123,6 +124,7 @@ def test_mcp_tools(mcp_client, offline, monkeypatch):
 
     for fetch in (connect_error, html_page):
         monkeypatch.setattr(coops, "fetch", fetch)
+        coops._record.cache_clear()  # the gauge's record from the first call is cached; this call must reach the failing fetch
         res = mcp_call(mcp_client, "tools/call", {"name": "detect_trend", "arguments": args})
         assert res["isError"] and "The data source did not answer" in res["content"][0]["text"]
 

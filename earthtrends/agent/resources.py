@@ -1,5 +1,5 @@
 """Official links for decision questions: the model writes MARKER, the code puts one fixed sentence there.
-Links only, no numbers. Addresses checked to respond on 2026-11-14."""
+Links only, no numbers outside an address. Addresses checked to respond on 2026-11-14 and 2026-11-15."""
 import re
 
 MARKER = "[OFFICIAL RESOURCES]"
@@ -10,25 +10,33 @@ _MARK = re.compile(r"[ \t]*\**\[\s*official[\s_-]+resources?\s*\]\**", re.I)
 US_BOXES = ((24.4, 49.5, -125.0, -66.9), (51.0, 71.5, -170.0, -129.9), (18.9, 22.3, -160.3, -154.8))
 US_COAST = ("For future flood risk at a US address, see NOAA's Sea Level Rise Viewer (https://coast.noaa.gov/slr/) "
             "and FEMA's flood maps (https://msc.fema.gov/portal/home).")
-SEA = "For how sea level may change in future, see NASA's sea level portal (https://sealevel.nasa.gov/)."
+SEA = ("For how sea level may change in future near you, see NASA's Sea Level Projection Tool, which shows the IPCC's "
+       "projections (https://sealevel.nasa.gov/data_tools/17).")
 OTHER = ("For what the climate may do next in the United States, see the U.S. Climate Resilience Toolkit "
          "(https://toolkit.climate.gov/).")
-URLS = ("https://coast.noaa.gov/slr/", "https://msc.fema.gov/portal/home", "https://sealevel.nasa.gov/",
-        "https://toolkit.climate.gov/")  # every address above; the eval scorer imports it
+WATER = "For water risk where you are, see the World Resources Institute's Aqueduct tools (https://www.wri.org/aqueduct)."
+WORLD = ("For what the climate may do next in your region, see the IPCC's Interactive Atlas "
+         "(https://interactive-atlas.ipcc.ch/).")
+URLS = ("https://coast.noaa.gov/slr/", "https://msc.fema.gov/portal/home", "https://sealevel.nasa.gov/data_tools/17",
+        "https://toolkit.climate.gov/", "https://www.wri.org/aqueduct",
+        "https://interactive-atlas.ipcc.ch/")  # every address above; the eval scorer imports it
 
 
 def sentence(results: list[dict]) -> str:
-    """The row of the table for this turn's successful results; "" when there are none, or when no sea-level result
-    came back and the first result's place is outside the United States."""
+    """The row of the table for this turn's successful results; "" when there are none."""
     if any(r.get("variable") == "sea_level" and (r.get("source") or {}).get("id") == "coops" for r in results):
         return US_COAST
     if any(r.get("variable") == "sea_level" for r in results):
         return SEA
-    p = (results[0].get("place") or {}) if results else {}
+    if not results:
+        return ""
+    p = results[0].get("place") or {}
     lat, lon = p.get("lat"), p.get("lon")
     us = (isinstance(lat, (int, float)) and isinstance(lon, (int, float))
           and any(a <= lat <= b and c <= lon <= d for a, b, c, d in US_BOXES))
-    return OTHER if us else ""  # the Toolkit is for the United States only
+    if us:
+        return OTHER  # the Toolkit is for the United States only
+    return WATER if results[0].get("variable") == "water_storage" else WORLD
 
 
 def strip(text: str) -> str:

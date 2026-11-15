@@ -1014,6 +1014,10 @@ def test_plain_fails_statistics_words(words):
 
 @pytest.mark.parametrize("extra,ok,ok_none", [
     (" " + resources.US_COAST, True, True),
+    (" " + resources.SEA, True, True),
+    (" " + resources.OTHER, True, True),
+    (" " + resources.WATER, True, True),
+    (" " + resources.WORLD, True, True),
     (" See http://www.tidesandcurrents.noaa.gov.", True, False),  # the source's own address, written another way
     (" See https://tidesandcurrents.noaa.gov/sltrends/.", False, False),  # a page no result gave
     (" See https://example.org/flood.", False, False),
@@ -1022,6 +1026,14 @@ def test_links(extra, ok, ok_none):
     assert run.check(CASE, fake_run(ANSWER + extra))["links"] is ok
     # no call this turn: only the resources table is known, no catalog source's address
     assert run.check(NONE_CASE, fake_run("Which Springfield?" + extra, []))["links"] is ok_none
+
+
+@pytest.mark.parametrize("sentence", [resources.US_COAST, resources.SEA, resources.OTHER, resources.WATER,
+                                      resources.WORLD])
+def test_each_resources_sentence_passes_numbers_and_links(sentence):  # "data_tools/17" is in an address
+    for case, answer, results in ((CASE, ANSWER, None), (NONE_CASE, "Which Springfield?", [])):
+        out = run.check(case, fake_run(f"{answer} {sentence}", *([] if results is None else [results])))
+        assert out["numbers"] and out["links"]
 
 
 def test_agreeing_figures_belong_in_the_code_sentence_only():
