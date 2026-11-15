@@ -201,12 +201,12 @@ def test_second_cut_off_is_retried_again(fake):
 EMPTY_CUT = step(None, stop="length", tokens=providers.MAX_TOKENS)  # reasoning spent the whole cap
 
 
-def test_reasoning_spent_cap_retried_without_reasoning(fake):
+def test_reasoning_spent_cap_retried_with_normal_reasoning(fake):
     three = [call(id=f"c{i}") for i in range(3)]
     fake.script = [step(tool_calls=three), EMPTY_CUT, step("Hottest days: the sources disagree.")]
     r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
     assert r["answer"] == "Hottest days: the sources disagree." and len(r["tool_calls"]) == 3
-    assert fake.low == [False, False, True]  # only the retry turns reasoning down
+    assert fake.low == [False, False, False]  # the retry never turns reasoning down
     assert fake.started[1].startswith("Are Delhi's hottest days getting hotter?" + loop.RETRY.format(target=100))
     assert fake.started[2] == []
 
@@ -223,13 +223,13 @@ def test_cut_off_before_any_tool_restarts_plain_question(fake):
     fake.script = [EMPTY_CUT, step(tool_calls=[call()]), step("Rising.")]
     r = loop.ask("Is sea level rising?", model="fake:m")
     assert r["answer"] == "Rising." and len(r["tool_calls"]) == 1
-    assert fake.starts[1][1:] == ("Is sea level rising?", loop.TOOLS) and fake.low == [False, True, True]
+    assert fake.starts[1][1:] == ("Is sea level rising?", loop.TOOLS) and fake.low == [False, False, False]
 
 
 def test_two_empty_cut_offs_still_answer(fake):
     fake.script = [step(tool_calls=[call()]), EMPTY_CUT, EMPTY_CUT, step("Rising.")]
     r = loop.ask("q", model="fake:m")
-    assert r["answer"] == "Rising." and fake.low == [False, False, True, True]
+    assert r["answer"] == "Rising." and fake.low == [False] * 4
 
 
 def test_endless_cut_offs_stop_at_call_limit(fake):
@@ -238,12 +238,12 @@ def test_endless_cut_offs_stop_at_call_limit(fake):
 
 
 def test_cut_off_by_token_count_without_stop_key(fake):
-    fake.script = [step(tool_calls=[call()]), step("Sea level is ris", tokens=providers.MAX_TOKENS), step("Rising.")]
+    fake.script = [step(tool_calls=[call()]), step("Sea level is ris", tokens=4000), step("Rising.")]
     assert loop.ask("q", model="fake:m")["answer"] == "Rising."
 
 
 def test_normal_final_step_is_unchanged(fake):
-    fake.script = [step(tool_calls=[call()]), step("Rising.", stop="stop", tokens=providers.MAX_TOKENS - 1), step("never")]
+    fake.script = [step(tool_calls=[call()]), step("Rising.", stop="stop", tokens=3999), step("never")]
     r = loop.ask("q", model="fake:m")
     assert r["answer"] == "Rising." and fake.script == [step("never")]
 
@@ -1273,7 +1273,7 @@ def test_between_and_form(text, flagged, fixed):
     assert loop.fix_periods(text, calls) == (fixed or text)
 
 
-# ---- the check retry turns reasoning down, like the cut-off retry ----
+# ---- the check retry keeps normal reasoning, like the cut-off retry ----
 
 def test_check_retry_runs_with_no_tools_and_normal_reasoning(fake, monkeypatch):
     fake.script = [step(tool_calls=[call()]), step(words(133)), step(words(110)), step("never")]
@@ -1515,47 +1515,35 @@ def test_openrouter_request_body(openrouter, monkeypatch, arg, env, want):
         b = s["json"]
         assert s["url"] == "https://openrouter.ai/api/v1/chat/completions" and s["timeout"] == 60
         assert b["model"] == want and b["provider"]["data_collection"] == "deny" and b["usage"]["include"] is True
-        assert b["max_tokens"] == 2000 and "reasoning" not in b  # normal steps: the model's own default
+        assert b["max_tokens"] == 4000 and "reasoning" not in b  # the model's own default
         assert [t["function"]["name"] for t in b["tools"]] == ["list_variables", "detect_trend"]
     msgs = sent[1]["json"]["messages"]
     assert msgs[2]["tool_calls"][0]["id"] == "c1"
     assert msgs[3] == {"role": "tool", "tool_call_id": "c1", "content": json.dumps(TREND)}
 
 
-def test_openrouter_retry_after_empty_cut_off_turns_reasoning_off(openrouter):
-    sent, replies = openrouter
-    empty = {"model": "x", "choices": [{"message": {"role": "assistant", "content": None}, "finish_reason": "length"}],
-             "usage": {"prompt_tokens": 50, "completion_tokens": 2000, "cost": 0.001}}
-    replies += [or_response(TOOL_MSG), raw(empty), or_response({"role": "assistant", "content": "Rising."})]
-    assert loop.ask("q")["answer"] == "Rising."
-    assert [s["json"].get("reasoning") for s in sent] == [None, None, {"effort": "none"}]
-    assert "tools" in sent[0]["json"] and "tools" not in sent[2]["json"]  # the retry offers no tools
-
-
-def bad_request():
-    return httpx.Response(400, json={"error": {"message": "Reasoning is mandatory"}},
-                          request=httpx.Request("POST", providers.OPENROUTER_URL))
-
-
 EMPTY_OR = {"model": "x", "choices": [{"message": {"role": "assistant", "content": None}, "finish_reason": "length"}],
-            "usage": {"prompt_tokens": 50, "completion_tokens": 2000, "cost": 0.001}}
+            "usage": {"prompt_tokens": 50, "completion_tokens": 4000, "cost": 0.001}}
 
 
-def test_openrouter_mandatory_reasoning_falls_back_to_low(openrouter):
+def test_openrouter_cut_off_and_check_retries_keep_reasoning(openrouter):
     sent, replies = openrouter
-    replies += [or_response(TOOL_MSG), raw(EMPTY_OR), bad_request(), raw(EMPTY_OR),
-                or_response({"role": "assistant", "content": "Rising."})]
-    assert loop.ask("q")["answer"] == "Rising."
-    assert [s["json"].get("reasoning") for s in sent] == [None, None, {"effort": "none"}, {"effort": "low"},
-                                                          {"effort": "low"}]  # "low" stays for the question
+    replies += [or_response(TOOL_MSG), raw(EMPTY_OR), or_response({"role": "assistant", "content": words(133)}),
+                or_response({"role": "assistant", "content": words(110)})]
+    assert loop.ask("q")["answer"] == words(110)
+    assert len(sent) == 4  # first step, its tool-result step, the cut-off retry, the check retry
+    for s in sent:
+        assert s["json"]["max_tokens"] == 4000 and "reasoning" not in s["json"]
+    assert "tools" in sent[1]["json"] and not any("tools" in s["json"] for s in sent[2:])  # retries offer no tools
 
 
-def test_openrouter_second_refusal_is_upstream_error(openrouter):
+def test_openrouter_400_on_a_retry_is_sent_once(openrouter):
     sent, replies = openrouter
-    replies += [or_response(TOOL_MSG), raw(EMPTY_OR), bad_request(), bad_request()]
+    bad = httpx.Response(400, json={"error": {"message": "bad request"}}, request=httpx.Request("POST", providers.OPENROUTER_URL))
+    replies += [or_response(TOOL_MSG), raw(EMPTY_OR), bad, or_response({"role": "assistant", "content": "never"})]
     with pytest.raises(providers.UpstreamError):
         loop.ask("q")
-    assert len(sent) == 4
+    assert len(sent) == 3 and "reasoning" not in sent[2]["json"]  # no second send with another setting
 
 
 def test_openrouter_bad_json_arguments(openrouter):
