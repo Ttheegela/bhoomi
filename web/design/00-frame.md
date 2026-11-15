@@ -134,7 +134,7 @@ Today (vercel.json, report-only): `default-src 'self'; script-src 'self'; style-
 
 ## 13. Built differently from the text above (frame builder's notes)
 - Grid (section 8): a seventh row, `"more more"`, holds `#more` ("How to read this") under both columns; without it `#more` would fall into an implicit row in the map column. Row gaps are margins on each item (a hidden slot leaves no gap), not `row-gap`.
-- Page title (section 2): `<title>` and the Explore tab title stay "Trend Detective" (the question is the h2); `<meta name=description>`, og and twitter copy use the new sentence.
+- Page title (section 2): `<title>` and the Explore tab title stay "Bhoomi" (the question is the h2); `<meta name=description>`, og and twitter copy use the new sentence.
 - `#guide-reopen` ("Quick start") sits right-aligned in the "Or try an example" label row at every width (not in the search label row, which is too tight at 375 px).
 - Map column: 340 px from 900 to 1279, 360 px from 1280 to 1535 (not 380), 520 px from 1536. `#more` spans both columns.
 - Scroll to the answer: an instant jump (`behavior: 'auto'`) at load-start and again about 60 ms after load-end, because the page above the answer can change in between (for example a closing guide card). The second jump is skipped if the visitor scrolled in between (wheel, touch move, or a scroll key on the page). Conditions as before: below 900 px always, from 900 px only when the top of `#answer-wrap` is off screen, never for a share-link load or a retry.

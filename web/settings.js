@@ -104,7 +104,7 @@
   }
 
   /* ---------- Use in your AI ---------- */
-  const OWN = ['bhoomi.earth', 'www.bhoomi.earth', 'trend-detective-six.vercel.app'];
+  const OWN = ['bhoomi.earth', 'www.bhoomi.earth'];
   const ADDR = (OWN.indexOf(location.hostname) >= 0 ? 'https://bhoomi.earth' : location.origin) + '/mcp/';
   const addrInput = (id) => {
     const i = h('input', { id, class: 'st-addr', type: 'text', readonly: '', value: ADDR });

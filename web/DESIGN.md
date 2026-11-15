@@ -39,7 +39,7 @@ Is it really changing here?      [Question line]
 - Ask slot: `<section id="ask" hidden aria-label="Ask a question"></section>` after "How to read this". Empty now.
 
 ## 3. Words on screen
-- Title (h1): "Trend Detective". Question (h2, 22/24 px): "Is this really changing where I live?" (frame section 2).
+- Title (h1): "Bhoomi". Question (h2, 22/24 px): "Is this really changing where I live?" (frame section 2).
 - Controls: search box "Search for a place" (frame section 6); fieldset legend "Example places" (chips use `aria-pressed`); "Latitude" (help: "-90 to 90"); "Longitude" (help: "-180 to 180"); button "Use my location"; select label "Measurement" (options = catalog `name`; help under it = `good_for` and `resolution`, e.g. "Good for: heat, long-term warming. Covers a ~50 km grid."); select "Data source" appears only if the entry has more than one `sources`; button "Show trend".
 - Client validation (inline, `aria-describedby`, no request sent): "Latitude must be a number from -90 to 90." / "Longitude must be a number from -180 to 180."
 - Geolocation denied or unavailable: "We couldn't get your location. Type coordinates or pick an example place."
@@ -141,7 +141,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - New York replaces Atlantic City as the example (follows from "instead of atlantic city"). That it no longer loads on its own is the agent's choice (see "Chosen by the agent").
 - Tab bar on desktop: left-aligned.
 - Grey labels stay at 14 px. This overrides the 'about 12 px' label rule from the Konam checklist.
-- Use in your AI: framed as 'use Trend Detective in your own AI agent'; example agents (Claude, GitHub Copilot) named in one line only when their docs confirm remote MCP support; detailed tabs only for apps with verified steps; one 'Any other AI agent' tab; no ChatGPT tab.
+- Use in your AI: framed as 'use Bhoomi in your own AI agent'; example agents (Claude, GitHub Copilot) named in one line only when their docs confirm remote MCP support; detailed tabs only for apps with verified steps; one 'Any other AI agent' tab; no ChatGPT tab.
 - MCP page: both, tabs per AI app with steps, then a config block for developers.
 - Map first, with a place search box; coordinates and "Use my location" are the secondary way (his approval of the general-audience redesign, 2026-11-14). The Explore tab starts from a question, a search box and a map; the answer is built from small parts. The design lives in `web/design/` (start with `00-frame.md`).
 - Visual choices (his words, 2026-11-14: "go with the leans": 1B 2C 3C 4B 5C, picked from screenshots):
