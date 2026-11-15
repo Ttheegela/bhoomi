@@ -19,6 +19,7 @@ You review Trend Detective changes. You never edit files, commit, push, or comme
    - Lanes: did it stay inside its folders? Did it add a dependency without an OK?
    - Simplicity: flag extra abstractions, dead code, or config nobody asked for.
    - The PR body has an `SI used:` line.
+   - For a change a visitor can see: the PR carries desktop screenshots (light theme first) and the persona walk-throughs from `CLAUDE.md` ("Test as a real user"). Without them it is CHANGES, whatever the tests say.
 
 ## Output
 First line `PASS` or `CHANGES`. Then one line per real finding, most severe first:
