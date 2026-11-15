@@ -9,8 +9,14 @@ from fastapi.testclient import TestClient
 
 from earthtrends.agent import loop, prompts, providers, ratelimit, tools, tracing
 from earthtrends.app import app
+from earthtrends.data import ghcn as ghcn_src
 
 client = TestClient(app)
+
+
+def tried(*mods):
+    """What a failed detect_trend call carries for the model: each tried source's own name and address."""
+    return [{"name": m.SOURCE["name"], "url": m.SOURCE["url"]} for m in mods]
 TREND = {"variable": "sea_level", "units": "mm", "verdict": "rising", "slope_per_decade": 41.0, "ci_low": 38.0,
          "ci_high": 44.0, "p_value": 0.0001, "source": {"id": "coops", "name": "NOAA CO-OPS"}}  # no URL: no link added
 ARGS = {"variable": "sea_level", "lat": 39.36, "lon": -74.42}
@@ -90,7 +96,8 @@ def test_tool_errors_go_back_to_model(fake, monkeypatch, exc, msg):
     fake.script = [step(tool_calls=[call()]), step("Sorry, no gauge.")]
     r = loop.ask("q", model="fake:m")
     assert r["tool_calls"][0]["error"] == msg and r["tool_calls"][0]["result"] is None
-    assert fake.results == [[{"id": "c1", "content": {"error": msg}}]]
+    sources = tried(coops_src, psmsl_src)  # sea level, no source named: CO-OPS and its automatic fallback
+    assert fake.results == [[{"id": "c1", "content": {"error": msg, "sources": sources}}]]
 
 
 @pytest.mark.parametrize("c", [
@@ -396,7 +403,7 @@ def test_one_source_errors_two_answer(fake, monkeypatch):
     fake.script = [step(tool_calls=three_calls()), step(words(150))]
     r = loop.ask("q", model="fake:m")
     assert r["tool_calls"][2]["error"] == "No weather station within 50 km of this point."
-    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.STATION_REASON}}  # the model sees no digit
+    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.STATION_REASON, "sources": tried(ghcn_src)}}  # the model sees no digit
     # two sources returned results, so 180 applies; they agree, so the code adds ERA5's sentence
     assert r["answer"] == (words(150) + f" {ERA5_SENT} Its data: "
                            "https://open-meteo.com/. " + link("power"))
@@ -891,7 +898,7 @@ def test_slow_source_is_reported_late_without_blocking(fake, monkeypatch):
         release.set()  # let the straggler thread end
     assert real_time.monotonic() - t < 5  # did not wait for the hung source
     assert r["answer"] == "ok" and [c["error"] for c in r["tool_calls"]] == [None, None, loop.LATE]
-    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.LATE}}
+    assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.LATE, "sources": tried(ghcn_src)}}
     assert loop.word_limit(r["tool_calls"]) == loop.MAX_WORDS_MULTI  # two sources answered
 
 
@@ -2023,3 +2030,73 @@ def test_near_miss_markers_never_reach_the_user(marker):  # F
     assert resources.fill(text, [NY_COOPS]) == f"I cannot advise on building. {resources.US_COAST}"
     assert resources.fill(text, []) == "I cannot advise on building."
     assert loop.words(text) == 5
+
+
+# ---- a failed lookup names the sources it tried, from the data modules ----
+
+def failed_call(arguments, error="No tide gauge within 100 km of (28.61, 77.21); the nearest is X, 812 km away."):
+    return {"name": "detect_trend", "arguments": arguments, "result": None, "error": error}
+
+
+INLAND_DELHI = {"variable": "sea_level", "lat": 28.61, "lon": 77.21}
+
+
+@pytest.mark.parametrize("arguments,mods", [
+    ({**INLAND_DELHI, "source": "coops"}, [coops_src]),  # a named source: that one only
+    ({**INLAND_DELHI, "source": "psmsl"}, [psmsl_src]),
+    ({**DELHI, "source": "ghcn"}, [ghcn_src]),
+    (INLAND_DELHI, [coops_src, psmsl_src]),  # sea level, no source: the default and its automatic fallback
+    ({**INLAND_DELHI, "source": None}, [coops_src, psmsl_src]),  # None is left out too
+    ({**INLAND_DELHI, "source": ""}, [coops_src]),  # "" is not left out: the data layer uses the default only
+    (DELHI, [loop.power]),  # no source: the variable's default
+])
+def test_failed_call_carries_the_sources_it_tried(arguments, mods):
+    view = loop.for_model([failed_call(arguments)])[0]
+    assert view["sources"] == tried(*mods)
+    if loop.power not in mods:  # these names and addresses carry no digit (NASA POWER's "MERRA-2" does)
+        assert not any(ch.isnumeric() for ch in json.dumps({k: view[k] for k in ("error", "sources")}))
+
+
+@pytest.mark.parametrize("call", [
+    failed_call({**INLAND_DELHI, "variable": "sea_temp"}),  # unknown variable
+    failed_call({**INLAND_DELHI, "source": "power"}),  # a source the variable does not have
+    failed_call({}, "Tool arguments were not valid JSON."),
+    {"name": "list_variables", "arguments": {}, "result": None, "error": "boom"},
+])
+def test_failed_call_without_a_known_source_carries_none(call):
+    assert "sources" not in loop.for_model([call])[0]
+
+
+def test_catalog_source_without_a_module_is_skipped(monkeypatch):
+    real = tools.list_variables
+    monkeypatch.setattr(tools, "list_variables", lambda: [
+        {**v, "sources": ["newsrc", *v["sources"]]} if v["id"] == "sea_level" else v for v in real()])
+    assert loop.for_model([failed_call(INLAND_DELHI)])[0]["sources"] == tried(coops_src)  # no KeyError
+    assert "sources" not in loop.for_model([failed_call({**INLAND_DELHI, "source": "newsrc"})])[0]
+
+
+def test_source_names_never_count_as_stated_numbers():
+    # ERA5, MERRA-2 and RL06 v2.0 have digits: a name or address written back is never taken for a number
+    for s in loop.SOURCES.values():
+        assert loop.stated_numbers(f"{s['name']} ({s['url']})") == []
+
+
+def test_failed_sources_leave_successes_and_hidden_sources_unchanged():
+    calls = [*NY_CALLS, failed_call({**NY, "source": "coops"}, "The data source did not answer.")]
+    view = loop.for_model(calls)
+    assert view[0] == calls[0]  # the default source: in full, as before
+    assert view[1]["result"] == {"variable": "sea_level", "verdict": NY_PSMSL["verdict"], "source": NY_PSMSL["source"],
+                                 "caveats": NY_PSMSL.get("caveats", []), "note": loop.AGREE_NOTE}  # hidden: as before
+    assert "sources" not in view[0] and "sources" not in view[1]
+    assert view[2]["sources"] == tried(coops_src)
+
+
+def test_failed_sources_reach_the_model_through_the_loop(fake, monkeypatch):
+    def boom(*a, **kw):
+        raise ValueError("No tide gauge within 100 km of (28.61, 77.21).")
+    monkeypatch.setattr(tools, "detect_trend", boom)
+    fake.script = [step(tool_calls=[call(arguments=INLAND_DELHI)]), step("No tide gauge near Delhi.")]
+    loop.ask("Is sea level rising in Delhi?", model="fake:m")
+    content = fake.results[0][0]["content"]
+    assert content == {"error": loop.GAUGE_REASON, "sources": tried(coops_src, psmsl_src)}
+    assert not any(ch.isnumeric() for ch in json.dumps(content))

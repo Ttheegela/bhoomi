@@ -284,3 +284,14 @@ def test_wrong_address_is_a_friendly_page_but_api_stays_json():
         r = client.get(u)
         assert r.status_code == 404 and r.json() == {"detail": "Not Found"}, u
     assert client.get("/favicon.svg").headers["content-type"].startswith("image/svg+xml")
+
+
+@pytest.mark.parametrize("status,content", [(200, b'{"data": [{"MSL": ' + b"1" * 5000 + b"}]}"), (200, b"[" * 200_000),
+                                            (400, b'{"error": ' + b"1" * 5000 + b"}"), (400, b'{"error": ' + b"[" * 200_000),
+                                            (200, b"<html>maintenance</html>")])
+def test_coops_unparsable_monthly_data_is_502(monkeypatch, status, content):
+    monkeypatch.setattr(coops, "stations", lambda: load("coops_stations.json")["stations"])
+    monkeypatch.setattr(coops.httpx, "get", lambda *a, **k: httpx.Response(status, content=content, request=httpx.Request("GET", "http://x")))
+    for path in ("/api/series", "/api/trend"):
+        r = client.get(path, params={"variable": "sea_level", "lat": 39.36, "lon": -74.42})
+        assert r.status_code == 502 and r.json() == {"detail": "The data source did not answer. Please try again."}
