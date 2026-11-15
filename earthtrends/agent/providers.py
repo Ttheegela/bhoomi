@@ -13,6 +13,11 @@ TIMEOUT_S = 60
 # (reasoning off); a model that cannot turn it off answers 400 (GLM: "Reasoning is mandatory"), so that step is sent
 # once more with "low", and "low" stays for the rest of the question. A provider without reasoning ignores the
 # parameter (https://openrouter.ai/docs/features/provider-routing: unknown parameters are ignored).
+# Which host serves the model (https://openrouter.ai/docs/features/provider-routing, read 2026-11-15): `sort` orders
+# hosts by "price", "throughput" (end-to-end output tokens per second) or "latency", over a rolling 5-minute window,
+# instead of the default price-weighted load balancing; fallbacks to the next host stay on. Throughput, because a
+# non-streamed answer of up to MAX_TOKENS is dominated by generation speed. Only the host changes, never reasoning.
+PROVIDER_SORT = "throughput"
 
 
 # Why a step ended, the same words for every provider: "length" (hit MAX_TOKENS), "refusal", "tool", "end";
@@ -51,7 +56,7 @@ class OpenRouterProvider:
     def step(self) -> dict:
         body = {
             "model": self.model, "messages": self.messages, "max_tokens": MAX_TOKENS,
-            "provider": {"data_collection": "deny"}, "usage": {"include": True},
+            "provider": {"data_collection": "deny", "sort": PROVIDER_SORT}, "usage": {"include": True},
             **({"tools": self.tools} if self.tools else {}),
             **({"reasoning": {"effort": self.reduced}} if self.low_reasoning else {}),
         }
