@@ -1855,12 +1855,20 @@ def test_meaning_reaches_the_model_for_full_results_only(fake, monkeypatch):
 SEA_OK = {"name": "detect_trend", "arguments": NY, "error": None}
 
 
+def at(variable, source, lat, lon):
+    return {**TREND, "variable": variable, "source": {"id": source}, "place": {"lat": lat, "lon": lon}}
+
+
 @pytest.mark.parametrize("results,want", [
-    ([NY_COOPS], resources.US_COAST),
+    ([NY_COOPS], resources.US_COAST),  # The Battery via coops
     ([NY_PSMSL, NY_COOPS], resources.US_COAST),  # any coops sea-level result
     ([NY_PSMSL], resources.SEA),
-    ([{**TREND, "variable": "air_temp", "source": {"id": "power"}, "place": {"lat": 33.45, "lon": -112.07}}],
-     resources.OTHER),  # Phoenix
+    ([at("sea_level", "psmsl", 18.92, 72.83)], resources.SEA),  # Mumbai
+    ([at("air_temp", "power", 33.45, -112.07)], resources.OTHER),  # Phoenix
+    ([at("water_storage", "grace", 30.90, 75.85)], resources.WATER),  # Ludhiana, Punjab
+    ([at("air_temp_max", "power", 28.61, 77.21)], resources.WORLD),  # Delhi
+    ([at("precip", "power", 13.08, 80.27)], resources.WORLD),  # Chennai
+    ([at("precip", "power", 13.08, 80.27), at("sea_level", "psmsl", 13.1, 80.3)], resources.SEA),  # sea level first
     ([], ""),
 ])
 def test_official_resources_row(results, want):
@@ -1877,6 +1885,39 @@ def test_official_resources_row(results, want):
 ])
 def test_marker_forms(text, want):
     assert resources.fill(text, [NY_PSMSL]) == want
+
+
+TABLE = (resources.US_COAST, resources.SEA, resources.OTHER, resources.WATER, resources.WORLD)
+
+
+def test_table_sentences_have_no_digit_outside_their_address_and_urls_is_complete():
+    addresses = [u for t in TABLE for u in re.findall(r"https?://[^\s)]+", t)]
+    assert sorted(resources.URLS) == sorted(addresses)
+    for t in TABLE:
+        assert not re.search(r"\d", re.sub(r"https?://[^\s)]+", "", t))
+        assert loop.stated_numbers(t) == []  # "data_tools/17" is an address, not a stated number
+
+
+@pytest.mark.parametrize("text,want", [
+    ("It rose 17 mm (https://sealevel.nasa.gov/data_tools/17).", [("", "17")]),
+    ("https://tidesandcurrents.noaa.gov/stationhome.html?id=8518750", [("", "8518750")]),  # any other address counts
+    ("https://x/31.79", [("", "31.79")]),
+    ("see https://psmsl.org/,31.79 mm", [("", "31.79")]),
+    ("https://sealevel.nasa.gov/data_tools/17 31.79 mm", [("", "31.79")]),
+    ("https://sealevel.nasa.gov/data_tools/1731.79", [("", "31.79")]),  # the glued number is still found
+])
+def test_only_the_official_addresses_hide_their_numbers(text, want):
+    assert loop.stated_numbers(text) == want
+
+
+def test_sea_projection_link_after_a_no_lookup_answer_is_not_a_made_up_number(fake, monkeypatch):
+    # Mumbai via PSMSL: the sentence with "data_tools/17" is added after the checks, so no retry and no NO_NUMBERS.
+    r = at("sea_level", "psmsl", 18.92, 72.83)
+    monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: r)
+    fake.script = [step(tool_calls=[call(arguments={"variable": "sea_level", "lat": 18.92, "lon": 72.83})]),
+                   step("Rising. I cannot advise on moving. [OFFICIAL RESOURCES]"), step("never")]
+    out = loop.ask("Should I move away from the coast in Mumbai?", model="fake:m")
+    assert out["answer"].endswith(resources.SEA) and len(fake.script) == 1
 
 
 def test_marker_replaced_through_the_loop_outside_the_word_limit(fake, monkeypatch):
@@ -1967,7 +2008,7 @@ def test_explaining_below_0_001_costs_no_retry(fake):  # D
 
 
 @pytest.mark.parametrize("place,want", [({"lat": 33.45, "lon": -112.07}, resources.OTHER),  # Phoenix
-                                        ({"lat": 30.90, "lon": 75.85}, "")])  # Ludhiana, Punjab
+                                        ({"lat": 30.90, "lon": 75.85}, resources.WORLD)])  # Ludhiana, Punjab
 def test_climate_toolkit_link_only_in_the_united_states(place, want):  # E
     r = {**TREND, "variable": "air_temp", "source": {"id": "power"}, "place": place}
     assert resources.sentence([r]) == want
