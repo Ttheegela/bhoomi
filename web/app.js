@@ -384,11 +384,12 @@ function paintGlyphs() {
     b.setAttribute('aria-label', `${label}, ${GLYPH_WORD[g]}`);
   });
 }
+// One key for a measurement and source, always taken from the request's own params (never from the selects).
+const glyphKey = (params) => params.variable + '|' + (params.source || '');
 function clearGlyphs() { glyphs.key = ''; glyphs.map = {}; paintGlyphs(); }
 function noteGlyph(t, params) {
   if (!t || !params) return;
-  const key = $('variable').value + '|' + ($('source-field').hidden ? '' : $('source').value);
-  if (key !== glyphs.key) { glyphs.key = key; glyphs.map = {}; }
+  if (glyphKey(params) !== glyphs.key) { glyphs.key = glyphKey(params); glyphs.map = {}; }
   const i = PRESETS.findIndex((p) => Math.abs(p.lat - params.lat) <= 0.005 && Math.abs(p.lon - params.lon) <= 0.005);
   if (i >= 0) glyphs.map[i] = t.verdict === 'rising' || t.verdict === 'falling' ? t.verdict : 'none';
   paintGlyphs();
@@ -400,7 +401,6 @@ function applyPreset(i) {
   $('lat').value = p.lat; $('lon').value = p.lon;
   if (varById(p.variable)) $('variable').value = p.variable;
   syncVariableUI();
-  if ($('variable').value + '|' + ($('source-field').hidden ? '' : $('source').value) !== glyphs.key) clearGlyphs();
   submit(true);
 }
 // Both selects use short names at every width, open or closed (full names clip in the closed select).
@@ -512,6 +512,7 @@ function setBusy(on, first) {
 async function run(params, user, keep) {
   const id = ++state.req;
   state.params = params;
+  if (glyphKey(params) !== glyphs.key) { clearGlyphs(); glyphs.key = glyphKey(params); } // arrows belong to the latest request's measurement and source
   const first = !keep;
   if (first) { ['chart-wrap', 'more', 'verdict-card'].forEach((i) => { $(i).hidden = true; }); state.series = null; state.trend = null; }
   $('problem').hidden = true;
@@ -635,6 +636,7 @@ function shapeSvg(kind) {
 function renderSpark(t, series, word) {
   const box = $('spark');
   clear(box);
+  if (![t.slope_per_decade, t.ci_low, t.ci_high].every(Number.isFinite)) { box.hidden = true; return; }
   const ms = series.times.map(monthIndex), des = deseasonalize(series.times, series.values);
   const yrs = yearlyAverages(ms, des);
   if (yrs.length < 3) { box.hidden = true; return; }

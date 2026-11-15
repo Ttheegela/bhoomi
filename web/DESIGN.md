@@ -82,7 +82,7 @@ Container `figure`, width 100%, SVG `viewBox` scales with it. Two stacked panels
 ## 6. Tokens
 Light: `--bg #FFFFFF`, `--surface #F4F4F4`, `--ink #111111` (18:1), `--ink-2 #4A4A4A` (8.9:1), `--line #767676` (4.5:1, control borders, icons), `--hairline #D6D6D6` (decorative only), `--chart-faint #767676`, `--focus #111111`.
 Dark: `--bg #0D0D0D`, `--surface #1A1A1A`, `--ink #F2F2F2`, `--ink-2 #BDBDBD`, `--line #8C8C8C`, `--hairline #333333`, `--chart-faint #8C8C8C`, `--focus #FFFFFF`. Selected via `@media (prefers-color-scheme: dark)`; set `color-scheme: light dark`. SVG uses `currentColor` / the tokens, never hard-coded colours. Verdict card for rising/falling/no clear change: `--surface` fill, 2 px `--ink` border, headline row in the verdict colour with its text token (`--v-bg` / `--v-tx`; `--bg` on `--ink` with no verdict). The data colours are listed in the last section.
-Type: `system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`; numbers `font-variant-numeric: tabular-nums`. Sizes px (phone/desktop): small 14, body 16, lead 18, h2 22/24, verdict headline 28/32 weight 700, h1 24/28 weight 700. Line height 1.5 body, 1.2 headings. Max line length 70 ch.
+Type: Inter for the body, Space Grotesk (`--font-head`) for h1, h2, the banner, the big number and `.chart-head`, with `system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` as the fallback; numbers `font-variant-numeric: tabular-nums`. Sizes px (phone/desktop): small 14, body 16, lead 18, h2 22/24, verdict headline 28/32 weight 700, h1 24/28 weight 700. Line height 1.5 body, 1.2 headings. Max line length 70 ch.
 Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Controls min height 44 px; chips 44 px tall, 12 px gap. Borders 1 px (controls), 2 px (verdict card). Focus: 3 px solid `--focus`, offset 2 px, never removed. No gradients. No shadows, except that the selected tab's 3 px underline is drawn as an inset `box-shadow`.
 
 ## 7. Accessibility checklist
@@ -116,9 +116,9 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 1. No sample data is shown as real. A demo value is labelled "sample" or not shown. Every number names its source with a link, including numbers inside error cards.
 2. What we computed is marked. The verdict, trend line, shaded band, yearly averages and "seasons removed" line carry a grey label: "Trend, range and verdict: our calculation." directly under the big number, then a "Raw data: {source} ↗" link. The legend groups "From the dataset" and "Our calculation".
 3. The verdict sentence holds the number and the uncertainty in plain words, for example "rose by about 42.5 mm per decade; the shaded band shows where the true trend likely sits". Never "X% chance it's real" or "95% sure". Never claim more than the data show.
-4. Contrast meets WCAG AA in light and dark. Text is at least 4.5:1. Borders, icons and chart lines are at least 3:1. Recompute from the tokens after any token change, and measure muted text on the surface and the inverted verdict header in both themes.
+4. Contrast meets WCAG AA in light and dark. Text is at least 4.5:1. Borders, icons and chart lines are at least 3:1. Recompute from the tokens after any token change, and measure muted text on the surface and the verdict banner in both themes.
 5. Labels are sentence case, grey, 14 px (12 px minimum), regular weight. No ALL CAPS, no small caps, no letter-spacing.
-6. Colour appears only inside the data and always with a legend. Today there is none; colour is for the data only (banner, trend line and band, year stripes, sparkline); everything else is black, white and grey.
+6. Colour appears only inside the data and always with a legend. Colour is for the data only (banner, trend line and band, year stripes, sparkline); everything else is black, white and grey.
 7. At 375 px nothing sticky covers content. Tap targets (chips, buttons, inputs, select, summary, skip link, source links) are at least 48 px. The verdict number, range and source are on screen without scrolling on a first load.
 8. The chart has an accessible name that states place, variable, period, verdict, slope and range. Decorative marks are `aria-hidden`. Icon-only controls have a screen-reader name.
 9. Chart: x tick labels at least 56 screen px apart; axis titles never touch a tick label; the trend line stays visible on a series of 1,400 points.
@@ -162,9 +162,9 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Keyboard chart control: arrows, shift-arrows, Home, End and Esc.
 - Chart x ticks chosen by screen spacing (at least 56 px).
 - Chip order (New York, Princeton, Delhi, Visakhapatnam, Mumbai, Chennai, London, Seattle); which measurement each chip opens (table in section 1 item 6); Delhi at 28.58 (matches the eval case and the Safdarjung station). A chip is pressed only while both its place and its measurement are shown.
-- Phone first screen (375 x 812): example places in one sideways-scrolling row (5 px padding so the focus ring shows, a chip cut off at the right edge); measurement and data source side by side in one row (equal columns, so "NASA POWER" and its arrow fit at 360 px) with short names in the closed selects; "Good for" and the source help line as full-width grey lines under that row; header top padding 8 px; section gaps and tab bar margins 8 px; the grey "no clear change" lean line under sentence 1. Expected ends at 375 x 812: heading 561.0, source link 660.6, sentence 1 780.6 at worst (see the round 2 report; the last section has the newer values).
+- Phone first screen (375 x 812): example places in one sideways-scrolling row (5 px padding so the focus ring shows, a chip cut off at the right edge); measurement and data source side by side in one row (equal columns, so "NASA POWER" and its arrow fit at 360 px) with short names in the closed selects; "Good for" and the source help as one merged grey line, full width under that row; header top padding 8 px; section gaps and tab bar margins 8 px; the grey "no clear change" lean line under sentence 1. Expected ends at 375 x 812: heading 561.0, source link 660.6, sentence 1 780.6 at worst (see the round 2 report; the last section has the newer values).
 - Both the measurement and source lists use short names at every width, open or closed ("Air temperature", "Hottest day", "Precipitation", "Sea level"; "NASA POWER", "ERA5", "GHCN-Daily", "CO-OPS", "PSMSL"); the full names appear in the answer. Below 360 px the two selects stack.
-- Desktop: measurement select (400 px) and source select (220 px) side by side, left-aligned; help lines under them.
+- Desktop: measurement select (400 px) and source select (220 px) side by side, left-aligned; the merged help line under them.
 - The source control shows the result's source; only a hand-chosen non-default source is written to the link or sent.
 - Coordinates in a closed "Type coordinates or use my location" section.
 - Hash state `#variable=..&lat=..&lon=..` (two decimals).
@@ -188,7 +188,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Period-first sentence 1 and a separate wording when the range misses zero but p is 0.05 or more.
 - The settings-file picker on "Use in your AI" uses the same tab style as the app picker (same kind of control; his 1B addition named only the app picker).
 - One source label, "Raw data:", on every link that names where numbers came from (answer card, chart, table, Ask answers), in grey before the name. This reconciles 2C ("Raw data:") with 5C (whose patch said "Data:"). Error cards keep "Source:". The facts list keeps its row label "Source" (a table row label, not a link label). The plain-text line "Raw values: {source}." in the chart caption and table caption is unchanged.
-- Under 360 px the help line of each select sits directly under its own select (markup order: field, help, field, help); from 360 px the two fields share a row and both help lines run full width below.
+- One merged help line (`#pick-help`) follows both fields (markup order: field, field, help). Under 360 px the selects stack and the help line comes last; from 360 px the two fields share a row and the help line runs full width below. (Earlier versions had one help line per select.)
 - The footer lists a source only when the catalog (`/api/variables`) lists it. The ERA5 entry carries Open-Meteo's attribution: "Weather data by Open-Meteo.com" (link), "ERA5 reanalysis", "CC BY 4.0" (link to creativecommons.org).
 - A 429 from the data routes shows the API's own sentence in the problem card with "Try again".
 - The grey lean line ("The data lean up, but ...") now sits after sentence 1 at every width (it did so only on phones before).
@@ -236,7 +236,7 @@ The dark falling ramp ends lighter (#6BA8F0) than its banner (#2F6FC4) on purpos
 
 ### Number row and first phone screen
 - One merged help line: `<p id="pick-help" class="help span2"><span id="variable-help"></span> <span id="source-help"></span></p>`. The two ids stay (now spans), `aria-describedby` is unchanged. It saves 21 px.
-- Phone only (up to 599 px): `.card-label` padding 8 16 4, `.verdict-head` padding 8 16, `.card-body` padding-top 4, `.numrow` margin-bottom 0. Saves 16 px. Desktop: `.numrow` margin-bottom 4, other paddings unchanged.
+- Phone only (up to 599 px): `.card-label` padding 8 16 4 (already on `main`), `.verdict-head` padding 8 16, `.card-body` padding-top 4, and `.numrow` has no bottom margin. The paddings added by this change save 12 px; the measured table is unchanged. Desktop: `.numrow` margin-bottom 4, other paddings unchanged.
 - `.numrow` (flex, wrap, gap 8 12) holds `#verdict-big` and `#spark`. The number is 48 px Space Grotesk 700, line-height 1.1; its unit (the text after the first whitespace of `fmtVal`) is 24 px beside it; "per decade" is 16 px grey on its own line, line-height 1.3. If the number is wider than about 190 px the row wraps and the sparkline takes its own 40 px row.
 - Measured at 375 x 812, scrolled to the top: bottoms of heading / source line / sentence 1, in px. The limit is 804.
 | Case | Before | After |

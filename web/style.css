@@ -308,9 +308,7 @@ textarea { width: 100%; min-height: 48px; padding: var(--s3); font: inherit; col
 @media (max-width: 599px) {
   .tabbar { margin: var(--s2) 0; }
   .card-body { display: flex; flex-direction: column; padding-top: var(--s1); }
-  .card-label { padding: var(--s2) var(--s4) var(--s1); }
   .verdict-head { padding: var(--s2) var(--s4); }
-  .numrow { margin-bottom: 0; }
 }
 
 /* round 2: first phone screen, wrapping text, spacing */
@@ -339,8 +337,8 @@ pre::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; bord
   .copyrow > * { width: 100%; }
   .copyrow > .copy-btn { width: auto; align-self: flex-start; }
 }
-/* markup order is field, its help, field, help (so each help follows its own select when they stack);
-   side by side (360 to 899 px) the two fields share row 1 and both help lines run full width below */
+/* markup order is field, field, then one merged help line (#pick-help); side by side (360 to 899 px)
+   the two fields share row 1 and the help line runs full width below */
 @media (min-width: 360px) and (max-width: 899px) {
   .field-var, #source-field { grid-row: 1; }
   #source-field { grid-column: 2; }
