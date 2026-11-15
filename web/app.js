@@ -342,7 +342,7 @@ const state = { userSource: null, variables: [], req: 0, series: null, trend: nu
 function placeOf(t) {
   const q = state.params || {};
   const lat = q.lat !== undefined ? q.lat : t.place.lat, lon = q.lon !== undefined ? q.lon : t.place.lon;
-  const named = placeFor(lat, lon, t.place && t.place.name, t.source && t.source.id);
+  const named = placeFor(lat, lon, t.place && !/^Average of/.test(t.place.name) ? t.place.name : '', t.source && t.source.id);
   // Only coordinates from the data (gridded sources) and a place the visitor named: say the visitor's word, not numbers.
   if (!state.place || state.place.fromLink || named !==`${fixed(Number(lat), 2)}, ${fixed(Number(lon), 2)}`) return named;
   if (state.place.label === GEO_LABEL) return GEO_LABEL;
