@@ -43,7 +43,7 @@ def test_bad_items_skipped_and_capped(monkeypatch):
     good = {"name": "A", "latitude": 1, "longitude": 2}
     bad = [{"latitude": 1, "longitude": 2}, {"name": "", "latitude": 1, "longitude": 2}, {"name": "B", "latitude": 91, "longitude": 0},
            {"name": "C", "latitude": 0, "longitude": 181}, {"name": "D", "latitude": "1", "longitude": 2}, {"name": "E", "latitude": None, "longitude": 2},
-           {"name": "F", "latitude": float("nan"), "longitude": 2}, "junk", {"name": "G", "latitude": True, "longitude": 2}]
+           {"name": "F", "latitude": float("nan"), "longitude": 2}, "junk", {"name": "G", "latitude": True, "longitude": 2}, {"name": "H", "latitude": 10**400, "longitude": 0}]
     fake(monkeypatch, {"results": bad + [good] * 8})
     r = search_places("anything")["results"]
     assert len(r) == 5 and all(x["name"] == "A" for x in r)
@@ -59,8 +59,14 @@ def test_cache_and_param(monkeypatch):
     calls = []
     fake(monkeypatch, calls=calls)
     search_places("  New   York & Co #1 ")
-    search_places("new york & co #1")
-    assert len(calls) == 1 and calls[0]["name"] == "new york & co #1" and calls[0]["count"] == 5
+    search_places("New York & Co #1")
+    assert len(calls) == 1 and calls[0]["name"] == "New York & Co #1" and calls[0]["count"] == 5
+
+
+def test_long_text_is_cut(monkeypatch):
+    fake(monkeypatch, {"results": [{"name": "n" * 500, "admin1": "a" * 500, "country": "c" * 500, "country_code": "k" * 500, "latitude": 1, "longitude": 2}]})
+    r = search_places("long")["results"][0]
+    assert [len(r[k]) for k in ("name", "admin1", "country", "country_code")] == [100] * 4
 
 
 def test_failures_raise_and_are_not_cached(monkeypatch):
@@ -68,7 +74,10 @@ def test_failures_raise_and_are_not_cached(monkeypatch):
     with pytest.raises(httpx.HTTPStatusError):
         search_places("princeton")
     fake(monkeypatch, body=b"<html>maintenance</html>")
-    with pytest.raises(json.JSONDecodeError):
+    with pytest.raises(httpx.DecodingError):
+        search_places("princeton")
+    fake(monkeypatch, body=b'{"results": [{"name": "A", "latitude": 1' + b"0" * 5000 + b', "longitude": 2}]}')  # past the integer-digit limit
+    with pytest.raises(httpx.DecodingError):
         search_places("princeton")
     fake(monkeypatch, body=[1, 2])
     with pytest.raises(httpx.DecodingError):
