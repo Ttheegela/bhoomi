@@ -40,7 +40,7 @@ def _lookup(text: str) -> dict:
     r.raise_for_status()
     try:
         body = r.json()
-    except ValueError as e:  # not JSON (a maintenance page), or a number past Python's integer-digit limit: an outage, not bad input
+    except (ValueError, RecursionError) as e:  # not JSON (a maintenance page), a number past Python's integer-digit limit, or nesting too deep: an outage, not bad input
         raise httpx.DecodingError("The place search was not in the documented format.") from e
     return {"results": parse(body), "source": dict(SOURCE)}
 

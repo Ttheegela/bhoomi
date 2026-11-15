@@ -79,6 +79,9 @@ def test_failures_raise_and_are_not_cached(monkeypatch):
     fake(monkeypatch, body=b'{"results": [{"name": "A", "latitude": 1' + b"0" * 5000 + b', "longitude": 2}]}')  # past the integer-digit limit
     with pytest.raises(httpx.DecodingError):
         search_places("princeton")
+    fake(monkeypatch, body=b"[" * 200000 + b"]" * 200000)  # nesting too deep for the parser
+    with pytest.raises(httpx.DecodingError):
+        search_places("princeton")
     fake(monkeypatch, body=[1, 2])
     with pytest.raises(httpx.DecodingError):
         search_places("princeton")
