@@ -131,7 +131,7 @@ span.srclink { color: var(--ink-2); }
 .rec .where { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .rec .src { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
 .rec .src a { color: var(--ink-2); }
-.rec .big { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-family: var(--font-head); font-size: 44px; font-weight: 700; line-height: 1; margin: 18px 0 4px; }
+.rec .big { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 10px; font-family: var(--font-head); font-size: 44px; font-weight: 700; line-height: 1.15; margin: 18px 0 4px; }
 .rec .big small { font-size: 18px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
 .rec .say { font-size: 16.5px; margin: 6px 0 14px; max-width: none; }
 .advice { border-left: 4px solid var(--accent); background: var(--advice-bg); border-radius: 6px; padding: 12px 14px; margin: 0 0 14px; }
