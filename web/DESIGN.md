@@ -1,18 +1,20 @@
 # Trend page design (issue #6)
 
+The Explore tab is being rebuilt for a general audience. Its frame (structure, search box, the `window.TD` interface, link format, layout) is specified in `web/design/00-frame.md`; the other parts are in `web/design/` too. Where that folder and this file differ on Explore, `web/design/` wins; the rest of this file still holds.
+
 Build: `web/index.html`, `web/style.css`, `web/app.js`. No build step, no libraries, no CDN, self-hosted web fonts only (Space Grotesk, Inter). Chart is hand-written SVG. Same-origin calls to `/api/...`. No NASA logos or branding; dataset names are plain text.
 
 ## 1. Flow and first load
-1. Page opens already showing a real answer: New York (40.71, -74.01), Sea level, source from the API. Fetch `/api/variables`, then `/api/series` and `/api/trend` in parallel.
-2. User picks an example place chip, or types lat/lon and presses "Show trend", or presses "Use my location".
+1. Page opens on the empty start (a question, the place search box, the example chips, the "Pick a place to see the answer" card). Only `/api/variables` is fetched, and Air temperature is the selected measurement. A link with a place (`#variable=..&lat=..&lon=..`) runs it at once. One constant at the top of `web/app.js` (`FIRST_LOAD`) can bring back a default place. For a picked place: `/api/series` and `/api/trend` in parallel.
+2. User searches for a place by name (`GET /api/places`), picks an example place chip, or (secondary, behind "Use coordinates instead") types lat/lon and presses "Show trend", or presses "Use my location".
 3. User may change the measurement (select). Chip click and measurement change run at once. Typed coordinates run on button or Enter.
 4. Page shows: verdict, chart, numbers, caveats, how to read it. A student gets the answer from the first card in under a minute.
-5. Optional share state: write `#variable=..&lat=..&lon=..` (2 decimals) to the URL hash and read it on load. Never write the hash after "Use my location".
-6. Presets (chip label, lat, lon, default measurement): New York 40.71 -74.01 sea_level; Princeton, NJ 40.35 -74.66 air_temp; Delhi 28.58 77.21 air_temp_max; Visakhapatnam 17.69 83.22 air_temp; Mumbai 19.08 72.88 air_temp_max; Chennai 13.08 80.27 air_temp; London 51.51 -0.13 air_temp; Seattle 47.61 -122.33 sea_level. An old link to Atlantic City (`#variable=sea_level&lat=39.36&lon=-74.42`) still opens, with no chip pressed; a bad link falls back to New York. A chip sets place and its default measurement; the user can change the measurement after.
+5. Share state: write `#variable=..&lat=..&lon=..` (2 decimals), plus `source`, `start`, `end` and `place` when they apply (the full format is in `web/design/00-frame.md` section 4), to the URL hash and read it on load. Never write the hash after "Use my location".
+6. Presets (chip label, lat, lon, default measurement): New York 40.71 -74.01 sea_level; Princeton, NJ 40.35 -74.66 air_temp; Delhi 28.58 77.21 air_temp_max; Visakhapatnam 17.69 83.22 air_temp; Mumbai 19.08 72.88 air_temp_max; Chennai 13.08 80.27 air_temp; London 51.51 -0.13 air_temp; Seattle 47.61 -122.33 sea_level. An old link to Atlantic City (`#variable=sea_level&lat=39.36&lon=-74.42`) still opens, with no chip pressed; a bad link falls back to the empty start. A chip sets place and its default measurement; the user can change the measurement after.
 7. Keep the last good result on screen (dimmed, `aria-busy`) while a new request runs. Ignore stale responses (use an incrementing request id).
 
 ## 2. Layout
-Source order = reading order (header, controls, verdict, chart, numbers, notes, how-to-read, ask slot, footer). Container max 960 px, side padding 16 px (phone) / 24 px (desktop), sections 24 px apart (32 px desktop).
+Source order = reading order (header, question and search, map slot, measurement, answer, how-to-read, ask slot, footer; the Explore frame is in `web/design/00-frame.md`, which wins over the diagram below for Explore). Container width and padding follow the breakpoints 600, 900, 1280 and 1536 px (frame section 8), sections 24 px apart (32 px desktop).
 ```
 PHONE (375)                      DESKTOP (>= 900)
 [Title]      [Built with AI]     [Title ........... Built with AI assistance]
@@ -37,8 +39,8 @@ Is it really changing here?      [Question line]
 - Ask slot: `<section id="ask" hidden aria-label="Ask a question"></section>` after "How to read this". Empty now.
 
 ## 3. Words on screen
-- Title (h1): "Trend Detective". Question (p, 18 px): "Is it really changing here? Pick a place and a measurement."
-- Controls: fieldset legend "Example places" (chips use `aria-pressed`); "Latitude" (help: "-90 to 90"); "Longitude" (help: "-180 to 180"); button "Use my location"; select label "Measurement" (options = catalog `name`; help under it = `good_for` and `resolution`, e.g. "Good for: heat, long-term warming. Covers a ~50 km grid."); select "Data source" appears only if the entry has more than one `sources`; button "Show trend".
+- Title (h1): "Trend Detective". Question (h2, 22/24 px): "Is this really changing where I live?" (frame section 2).
+- Controls: search box "Search for a place" (frame section 6); fieldset legend "Example places" (chips use `aria-pressed`); "Latitude" (help: "-90 to 90"); "Longitude" (help: "-180 to 180"); button "Use my location"; select label "Measurement" (options = catalog `name`; help under it = `good_for` and `resolution`, e.g. "Good for: heat, long-term warming. Covers a ~50 km grid."); select "Data source" appears only if the entry has more than one `sources`; button "Show trend".
 - Client validation (inline, `aria-describedby`, no request sent): "Latitude must be a number from -90 to 90." / "Longitude must be a number from -180 to 180."
 - Geolocation denied or unavailable: "We couldn't get your location. Type coordinates or pick an example place."
 - Verdict card. Label (small caps, 14 px): "Our answer". Headline H2 with shape (shapes are `aria-hidden` inline SVG, word carries meaning): `▲ Rising` / `▼ Falling` / `≈ No clear change`. All three cards are the same size, weight and position; no clear change is not styled as weaker.
@@ -98,7 +100,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - [ ] Every number block has "Raw data: {name}" with a working link (error cards: "Source:"); "Built with AI assistance" visible in header and footer.
 
 ## 8. Done-check for QA (screenshots at 375 px and 1280 px, light and dark)
-- [ ] First load shows New York sea level with a verdict and chart, no empty form. Verdict names its dataset (from the API) as a link.
+- [ ] First load (no link) shows the empty start and makes no data request. Picking New York with Sea level shows a verdict and chart; the verdict names its dataset (from the API) as a link.
 - [ ] Visakhapatnam air temperature shows "No clear change" in a card the same size as the others, with the range and p-value in words.
 - [ ] Delhi + Sea level shows the 400 `detail` text verbatim plus the two recovery buttons.
 - [ ] Forced 502, network failure, empty series and bad latitude each show their exact copy above.
@@ -119,7 +121,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 4. Contrast meets WCAG AA in light and dark. Text is at least 4.5:1. Borders, icons and chart lines are at least 3:1. Recompute from the tokens after any token change, and measure muted text on the surface and the verdict banner in both themes.
 5. Labels are sentence case, grey, 14 px (12 px minimum), regular weight. No ALL CAPS, no small caps, no letter-spacing.
 6. Colour appears only inside the data and always with a legend. Colour is for the data only (banner, trend line and band, year stripes, sparkline); everything else is black, white and grey.
-7. At 375 px nothing sticky covers content. Tap targets (chips, buttons, inputs, select, summary, skip link, source links) are at least 48 px. The verdict number, range and source are on screen without scrolling on a first load.
+7. At 375 px nothing sticky covers content. Tap targets (chips, buttons, inputs, select, summary, skip link, source links) are at least 48 px. The first-screen rule for the empty start is R1 in `web/design/00-frame.md` section 9; after a pick the answer is scrolled to the top (R2), and the verdict number, range and source are then on screen without further scrolling.
 8. The chart has an accessible name that states place, variable, period, verdict, slope and range. Decorative marks are `aria-hidden`. Icon-only controls have a screen-reader name.
 9. Chart: x tick labels at least 56 screen px apart; axis titles never touch a tick label; the trend line stays visible on a series of 1,400 points.
 10. QA trap: in a hidden or background browser pane, CSS transitions freeze, so screenshots can look stale. While verifying, inject `*{transition:none!important;animation-duration:0s!important}` and remove it afterwards.
@@ -136,11 +138,12 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Theme: follow the device setting (light or dark); no theme switch.
 - Ask box: a chat thread with follow-up questions.
 - Eight example places: New York, Princeton, Delhi, Visakhapatnam, Mumbai, Chennai, London and Seattle (his words, 2026-11-14: "instead of atlantic city add princeton,new york,vizag,delhi,bombay,chennai", plus London and Seattle).
-- First load shows New York sea level instead of Atlantic City (follows from "instead of atlantic city").
+- New York replaces Atlantic City as the example (follows from "instead of atlantic city"). That it no longer loads on its own is the agent's choice (see "Chosen by the agent").
 - Tab bar on desktop: left-aligned.
 - Grey labels stay at 14 px. This overrides the 'about 12 px' label rule from the Konam checklist.
 - Use in your AI: framed as 'use Trend Detective in your own AI agent'; example agents (Claude, GitHub Copilot) named in one line only when their docs confirm remote MCP support; detailed tabs only for apps with verified steps; one 'Any other AI agent' tab; no ChatGPT tab.
 - MCP page: both, tabs per AI app with steps, then a config block for developers.
+- Map first, with a place search box; coordinates and "Use my location" are the secondary way (his approval of the general-audience redesign, 2026-11-14). The Explore tab starts from a question, a search box and a map; the answer is built from small parts. The design lives in `web/design/` (start with `00-frame.md`).
 - Visual choices (his words, 2026-11-14: "go with the leans": 1B 2C 3C 4B 5C, picked from screenshots):
   1. Tabs versus chips (1B): the three main tabs are plain text on a thin line; the selected tab is bold with a 3 px underline and no fill. Example-place chips keep their filled pressed state. The app picker on "Use in your AI" follows the same tab style (his addition).
   2. Answer card (2C): same order as before; "Trend, range and verdict: our calculation." sits directly under the big number (the Mann-Kendall wording stays only in the Method row of the facts list); the source link has a grey "Raw data:" label.
@@ -149,7 +152,8 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
   5. Chart (5C): the source link sits under the chart headline; the legend follows the chart closely (6 px margin); the "No change" label goes to the end of the dashed line the trend line is clear of; the legend lines say "(upper chart)" and "(lower chart)".
 
 ### Chosen by the agent (swappable)
-- Single-page flow: place chips, then measurement, then verdict and chart.
+- The Explore frame (`web/design/00-frame.md`): no data request on first load (the old New York sea level start is one line: `FIRST_LOAD` at the top of `web/app.js`); Air temperature is the first selected measurement (it works everywhere; sea level fails inland); breakpoints 600, 900, 1280 and 1536 px with container widths 100% / 1200 / 1360 / 1680; search timings (350 ms wait, suggestions from 3 letters, Enter from 2, 30 cached searches, list closes 120 ms after the box loses focus); five empty module slots; the `window.TD` interface and its four events; the answer is scrolled to the top on phones after a pick.
+- Single-page flow: question and search box, then the map slot, measurement, verdict and chart (it was: place chips, then measurement, then verdict and chart).
 - Hand-written SVG chart and no JS libraries or CDN fonts.
 - Two stacked chart panels (raw, then seasons removed with trend and band).
 - Tab icon `web/favicon.svg`: a rising line, then a dot, white on a black rounded square (plain presentation attributes, no embedded style, so a strict Content-Security-Policy cannot block it; reads on light and dark tabs); no text, no NASA imagery. Link previews use title and description only (no og:image).
@@ -162,13 +166,13 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Keyboard chart control: arrows, shift-arrows, Home, End and Esc.
 - Chart x ticks chosen by screen spacing (at least 56 px).
 - Chip order (New York, Princeton, Delhi, Visakhapatnam, Mumbai, Chennai, London, Seattle); which measurement each chip opens (table in section 1 item 6); Delhi at 28.58 (matches the eval case and the Safdarjung station). A chip is pressed only while both its place and its measurement are shown.
-- Phone first screen (375 x 812): example places in one sideways-scrolling row (5 px padding so the focus ring shows, a chip cut off at the right edge); measurement and data source side by side in one row (equal columns, so "NASA POWER" and its arrow fit at 360 px) with short names in the closed selects; "Good for" and the source help as one merged grey line, full width under that row; header top padding 8 px; section gaps and tab bar margins 8 px; the grey "no clear change" lean line under sentence 1. Expected ends at 375 x 812: heading 561.0, source link 660.6, sentence 1 780.6 at worst (see the round 2 report; the last section has the newer values).
+- Phone first screen (375 x 812; the numbers in this bullet describe the old page, which opened on an answer; the empty start now follows R1 in the frame): example places in one sideways-scrolling row (5 px padding so the focus ring shows, a chip cut off at the right edge); measurement and data source side by side in one row (equal columns, so "NASA POWER" and its arrow fit at 360 px) with short names in the closed selects; "Good for" and the source help as one merged grey line, full width under that row; header top padding 8 px; section gaps and tab bar margins 8 px; the grey "no clear change" lean line under sentence 1. Expected ends at 375 x 812: heading 561.0, source link 660.6, sentence 1 780.6 at worst (see the round 2 report; the last section has the newer values).
 - Both the measurement and source lists use short names at every width, open or closed ("Air temperature", "Hottest day", "Precipitation", "Sea level"; "NASA POWER", "ERA5", "GHCN-Daily", "CO-OPS", "PSMSL"); the full names appear in the answer. Below 360 px the two selects stack.
 - Desktop: measurement select (400 px) and source select (220 px) side by side, left-aligned; the merged help line under them.
 - The source control shows the result's source; only a hand-chosen non-default source is written to the link or sent.
-- Coordinates in a closed "Type coordinates or use my location" section.
+- Coordinates and "Use my location" in a closed section opened by the "Use coordinates instead" button next to the search label.
 - Hash state `#variable=..&lat=..&lon=..` (two decimals).
-- Breakpoints 600 and 900 px; 960 px container; 16/24 px side padding.
+- Breakpoints 600, 900, 1280 and 1536 px; container and padding as in `web/design/00-frame.md` section 8 (it was 960 px and 16/24 px).
 - Type scale: 14 small, 16 body, 18 lead, 22/24 h2, 28/32 verdict.
 - Greys: light #111 / #4A4A4A / #767676 / #F4F4F4; dark #F2F2F2 / #BDBDBD / #8C8C8C / #1A1A1A.
 - Tap targets at least 48 px.
@@ -238,7 +242,7 @@ The dark falling ramp ends lighter (#6BA8F0) than its banner (#2F6FC4) on purpos
 - One merged help line: `<p id="pick-help" class="help span2"><span id="variable-help"></span> <span id="source-help"></span></p>`. The two ids stay (now spans), `aria-describedby` is unchanged. It saves 21 px.
 - Phone only (up to 599 px): `.card-label` padding 8 16 4 (already on `main`), `.verdict-head` padding 8 16, `.card-body` padding-top 4, and `.numrow` has no bottom margin. The paddings added by this change save 12 px; the measured table is unchanged. Desktop: `.numrow` margin-bottom 4, other paddings unchanged.
 - `.numrow` (flex, wrap, gap 8 12) holds `#verdict-big` and `#spark`. The number is 48 px Space Grotesk 700, line-height 1.1; its unit (the text after the first whitespace of `fmtVal`) is 24 px beside it; "per decade" is 16 px grey on its own line, line-height 1.3. If the number is wider than about 190 px the row wraps and the sparkline takes its own 40 px row.
-- Measured at 375 x 812, scrolled to the top: bottoms of heading / source line / sentence 1, in px. The limit is 804.
+- Measured at 375 x 812, scrolled to the top, on the old page that opened on an answer (the frame now scrolls the answer to the top after a pick: R2 in `web/design/00-frame.md`): bottoms of heading / source line / sentence 1, in px. The limit is 804.
 | Case | Before | After |
 |---|---|---|
 | New York sea level (CO-OPS) | 561 / 681.6 / 777.6 | 532 / 678.6 / 774.6 |

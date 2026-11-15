@@ -5,7 +5,7 @@
 
 /* PURE START (no DOM; the throwaway node check reads this block) */
 
-const ASK_HISTORY = false;      // switch on when the backend accepts "history"
+const ASK_HISTORY = true;       // the backend accepts "history" (same limits, checked again on the server)
 const HISTORY_MAX_MSGS = 6;
 const HISTORY_MAX_CHARS = 4000;
 // Waiting words by elapsed seconds (the server streams nothing, so no source is named).
@@ -33,7 +33,7 @@ function buildHistory(turns, maxMsgs, maxChars) {
   return [].concat(...pairs);
 }
 
-// Today the body is exactly { question }: the server rejects other fields.
+// The body is { question } plus, after an answer, { history }: the server rejects any other field.
 function askBody(q, turns) {
   const b = { question: q };
   if (ASK_HISTORY) { const h = buildHistory(turns, HISTORY_MAX_MSGS, HISTORY_MAX_CHARS); if (h.length) b.history = h; }
