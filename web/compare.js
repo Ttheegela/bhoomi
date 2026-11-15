@@ -102,7 +102,7 @@
       if (base.fallback) out.fallback.push(p.label);
       var last = line.pts[line.pts.length - 1], oe = null;
       ((g && g.outlook) || []).forEach(function (e) { if (e && e.year === la) oe = e; });
-      if (line.selected && oe && typeof oe.low === 'number' && typeof oe.high === 'number' && la > last.year) {
+      if (oe && typeof oe.low === 'number' && typeof oe.high === 'number' && la > last.year) {
         line.wedge = {
           year: la, label: g.outlook_label || '',
           lo: last.v + convert(oe.low, oe.unit || du, units), hi: last.v + convert(oe.high, oe.unit || du, units)
@@ -140,8 +140,10 @@
 
   function describe(model, unitLabel) {
     var names = model.lines.map(function (l) { return l.pin.label; }).join(', ');
+    var w = model.lines.filter(function (l) { return l.wedge; })[0];
     return 'Line chart: five-year average change in ' + unitLabel + ' for ' + names +
-      '. Highest at the latest year: ' + model.highest + '.';
+      '. Highest at the latest year: ' + model.highest + '.' +
+      (w ? ' Dashed lines continue each place’s trend to ' + w.wedge.year + '.' : '');
   }
 
   // Path "M..L.." per run of consecutive years; runs of one point are dropped (a gap breaks the line).
@@ -205,7 +207,12 @@
         cap += ' ' + selLine.pin.label + ': ' + txt + ' had too few readings, so the line there averages the years around them.';
       }
     }
-    if (wedge) cap += ' The shaded wedge shows where ' + selLine.pin.label + ' would be if its past trend simply continued.';
+    var dashed = m.lines.filter(function (l) { return l.wedge; });
+    if (dashed.length) {
+      cap += ' Dashed lines show where each place would be if its past trend simply continued' +
+        (wedge ? '; the shaded band is the range for ' + selLine.pin.label : '') + '.';
+      if (dashed.length < (pins || []).length) cap += ' A place with no clear change, or with too short a record, has no dashed line.';
+    }
     g.appendChild(h('p', 'cmp-cap', cap));
 
     var s = svg('svg', { viewBox: '0 0 1040 340', width: '100%', role: 'img', 'aria-label': describe(m, unitLabel), class: 'cmp-svg' });
@@ -241,6 +248,14 @@
       var d = segments(l.pts, m.px, m.py);
       if (d) { var pth = svg('path', { d: d, class: 'cmp-line s' + slotCls(l) }); pth.appendChild(svg('title', {}, l.pin.label)); clip.appendChild(pth); }
     });
+    m.lines.forEach(function (l) {
+      if (!l.wedge || l.selected) return;
+      var e = l.pts[l.pts.length - 1];
+      clip.appendChild(svg('path', {
+        d: 'M' + m.px(e.year).toFixed(1) + ',' + m.py(e.v).toFixed(1) + ' L' + m.px(l.wedge.year).toFixed(1) + ',' +
+          m.py((l.wedge.lo + l.wedge.hi) / 2).toFixed(1), class: 'cmp-dash s' + slotCls(l)
+      }));
+    });
     if (wedge) {
       clip.appendChild(svg('path', {
         d: 'M' + m.px(lp.year).toFixed(1) + ',' + m.py(lp.v).toFixed(1) + ' L' + m.px(wedge.year).toFixed(1) + ',' +
@@ -259,10 +274,10 @@
       b.addEventListener('click', function () { P.select(l.pin.key); });
       leg.appendChild(b);
     });
-    if (wedge) {
+    if (dashed.length) {
       var wk = h('span', 'cmp-key wk');
-      wk.appendChild(h('i', 'cmp-sw wedge'));
-      wk.appendChild(document.createTextNode(wedge.label || 'If the past trend continues'));
+      wk.appendChild(h('i', 'cmp-sw dashk'));
+      wk.appendChild(document.createTextNode(dashed[0].wedge.label || 'If the past trend continues'));
       leg.appendChild(wk);
     }
     g.appendChild(leg);
