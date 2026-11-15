@@ -86,3 +86,7 @@ Nothing missing. (`TD.fetchTrend` returns `retryAfter` for the 429 case; the wor
 - Numbers use the page's formatter rules, including the non-breaking space between number and unit; the range shows the unit once, on the slope.
 - The place label for "Show this on the chart" is the `label` of the last `td:load-end` place.
 - Pure logic is between `/* PURE START */` and `/* PURE END */` in `noise.js`, tested by `tests/test_noise_js.py` (skipped without `node`).
+- (Fix round 1) The first three sentence templates are used only when every row has a valid reply and the last row is the full record; the mixed one only when the shortest row and the full record both have valid replies and differ; otherwise no sentence.
+- (Fix round 1) When the loaded answer is a window (`start` or `end` set) and the full record is not kept, the card is shown and the button first fetches the full record (the fourth request), then works out the stretches from it; if none qualify the card hides.
+- (Fix round 1) "Show this on the chart" sends `origin: 'geo'` when the last load came from "Use my location" or the label is "your location", so the coordinates stay out of the address bar.
+- (Fix round 1) A loaded trend is kept as the full-record row only if valid. With one valid row the status says "Compared 1 stretch." The loading placeholder row has a 1 px `--line` border. Rules are scoped with `.card.quiet.noise-card` to beat the frame's card rules.

@@ -1,13 +1,14 @@
-/* Module 05: "Real or noise?" Classes prefixed noise-. Tokens only. */
-.noise-card { padding: 0 var(--s4) var(--s4); }
-.noise-h { font-size: 20px; margin: 0; padding-top: var(--s4); }
-.noise-lead { margin: var(--s2) 0 var(--s3); }
-.noise-sentence { font-size: 18px; font-weight: 600; margin: var(--s2) 0 0; }
+/* Module 05: "Real or noise?" Classes prefixed noise-. Tokens only.
+   Rules start with .card.quiet.noise-card so they beat the frame's .card.quiet p / h2 rules. */
+.card.quiet.noise-card { padding: 0 var(--s4) var(--s4); }
+.card.quiet.noise-card p, .card.quiet.noise-card h2 { margin: 0; padding: 0; }
+.card.quiet.noise-card .noise-h { font-size: 20px; padding: var(--s4) 0 0; }
+.card.quiet.noise-card .noise-lead { margin: var(--s2) 0 var(--s3); }
+.card.quiet.noise-card .noise-sentence { font-size: 18px; font-weight: 600; margin: var(--s2) 0 0; }
 .noise-go { width: auto; }
-.noise-card .help { padding: 0; }
-.noise-list { list-style: none; margin: var(--s3) 0 0; padding: 0; }
+.card.quiet.noise-card .noise-list { list-style: none; margin: var(--s3) 0 0; padding: 0; }
 .noise-row { padding: var(--s3) 0; border-top: 1px solid var(--hairline); }
-.noise-wait { background: var(--surface); }
+.noise-row.noise-wait { background: var(--surface); border: 1px solid var(--line); padding: var(--s3); margin-top: var(--s2); }
 .noise-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--s3); }
 .noise-label, .noise-verdict { font-weight: 700; }
 .noise-bar { display: block; width: 100%; height: 36px; margin: var(--s1) 0; }
@@ -17,11 +18,10 @@
 .noise-row[data-v="falling"] .noise-range { fill: var(--dn-bg); }
 .noise-row[data-v="none"] .noise-range { fill: var(--nc-bg); }
 .noise-dot { fill: var(--ink); stroke: var(--bg); stroke-width: 2; }
-.noise-num { margin: 0; font-size: 14px; color: var(--ink-2); }
+.card.quiet.noise-card .noise-num { font-size: 14px; color: var(--ink-2); }
 .noise-show { min-height: 48px; }
 .noise-legend { margin-top: var(--s3); }
-.noise-legend .help { margin: 0; }
-.noise-tag { font-weight: 700; }
+.card.quiet.noise-card .noise-tag { font-weight: 700; }
 @media (min-width: 600px) {
   .noise-row { display: grid; grid-template-columns: minmax(200px, 2fr) 3fr; column-gap: var(--s4); align-items: center; }
   .noise-top { flex-direction: column; justify-content: flex-start; }

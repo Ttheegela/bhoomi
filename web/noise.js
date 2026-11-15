@@ -25,12 +25,14 @@
     var base = n ? 'Last ' + n + ' years' : 'Full record';
     return t ? base + ', ' + t.period.start.slice(0, 4) + ' to ' + t.period.end.slice(0, 4) : base;
   }
-  // rows: [{n, t}] shortest first, the full record last with n = 0. Rows without a valid reply are left out.
+  // rows: [{n, t}] shortest first, the full record last with n = 0.
+  // "Every stretch" claims need every row valid; the mixed claim needs the shortest and the full record valid.
   function buildSentence(rows) {
     var ok = rows.filter(function (r) { return valid(r.t); });
-    if (ok.length < 2) return '';
+    if (rows.length < 2 || !valid(rows[0].t) || !valid(rows[rows.length - 1].t) || rows[rows.length - 1].n !== 0) return '';
     var v0 = ok[0].t.verdict;
-    var same = ok.every(function (r) { return r.t.verdict === v0; });
+    var all = ok.length === rows.length;
+    var same = all && ok.every(function (r) { return r.t.verdict === v0; });
     if (same && v0 === 'no_clear_change') {
       return 'No stretch shows a clear change. Over this record, any change is too small or too noisy to separate from normal ups and downs.';
     }
@@ -56,7 +58,7 @@
   if (!slot || !window.TD) return;
   var TD = window.TD, NS = 'http://www.w3.org/2000/svg';
   var store = {};      // per place: { start: valid reply }, kept for the visit
-  var gen = 0, busy = false, view = null, slowTimer = 0;
+  var gen = 0, busy = false, view = null, slowTimer = 0, lastOrigin = '';
 
   function h(tag, cls, text) {
     var e = document.createElement(tag);
@@ -91,7 +93,7 @@
   }
 
   function showOnChart(r) {
-    var spec = { lat: view.params.lat, lon: view.params.lon, variable: view.params.variable, origin: 'window' };
+    var spec = { lat: view.params.lat, lon: view.params.lon, variable: view.params.variable, origin: lastOrigin === 'geo' || view.label === 'your location' ? 'geo' : 'window' };
     if (view.label) spec.label = view.label;
     if (view.params.source) spec.source = view.params.source;
     if (r.start) spec.start = r.start;
@@ -143,10 +145,12 @@
     if (busy) return;
     busy = true;
     var g = gen, v = view, p = v.params, kept = store[v.key] || (store[v.key] = {});
-    v.rows = v.wins.map(function (n) { return { n: n, start: startFor(v.endY, n), t: null, err: '' }; });
-    v.rows.push({ n: 0, start: '', t: null, err: '' });
-    v.rows.forEach(function (r) { if (kept[r.start]) r.t = kept[r.start]; });
-    var todo = v.rows.filter(function (r) { return !r.t; });
+    function get(start) {
+      var q = { variable: p.variable, lat: p.lat, lon: p.lon };
+      if (p.source) q.source = p.source;
+      if (start) q.start = start;
+      return Promise.resolve().then(function () { return TD.fetchTrend(q); }).catch(function () { return null; });
+    }
     v.go.textContent = 'Checking…';
     v.go.setAttribute('aria-disabled', 'true');
     v.status.textContent = 'Checking shorter stretches…';
@@ -154,14 +158,30 @@
     slowTimer = setTimeout(function () {
       if (g === gen && busy) v.status.textContent = 'Checking shorter stretches… Still working. This can take a few seconds.';
     }, 8000);
+    if (!v.wins) { // the loaded answer is a window: fetch the full record first, then work out the stretches from it
+      var fr = kept[''] ? { ok: true, body: kept[''] } : await get('');
+      if (g !== gen) return;
+      if (!(fr && fr.ok && valid(fr.body))) {
+        clearTimeout(slowTimer);
+        busy = false;
+        v.go.removeAttribute('aria-disabled');
+        v.go.textContent = 'Try again';
+        v.status.textContent = "We couldn't compare stretches right now. Try again in a minute.";
+        return;
+      }
+      kept[''] = fr.body;
+      v.endY = Number(fr.body.period.end.slice(0, 4));
+      v.wins = windowsFor(v.endY - Number(fr.body.period.start.slice(0, 4)));
+      if (!v.wins.length) { hide(); return; }
+    }
+    v.rows = v.wins.map(function (n) { return { n: n, start: startFor(v.endY, n), t: null, err: '' }; });
+    v.rows.push({ n: 0, start: '', t: null, err: '' });
+    v.rows.forEach(function (r) { if (kept[r.start]) r.t = kept[r.start]; });
+    var todo = v.rows.filter(function (r) { return !r.t; });
     renderRows(false);
     async function worker() {
       while (todo.length) {
-        var r = todo.shift(), q = { variable: p.variable, lat: p.lat, lon: p.lon };
-        if (p.source) q.source = p.source;
-        if (r.start) q.start = r.start;
-        var res = null;
-        try { res = await TD.fetchTrend(q); } catch (e) { res = null; }
+        var r = todo.shift(), res = await get(r.start);
         if (g !== gen) return;
         if (res && res.ok && valid(res.body)) { r.t = res.body; kept[r.start] = res.body; } else { r.err = failText(res); }
         renderRows(false);
@@ -179,19 +199,20 @@
     v.legend.hidden = !okN;
     v.go.removeAttribute('aria-disabled');
     v.go.textContent = okN < v.rows.length ? 'Try again' : 'Try shorter stretches';
-    v.status.textContent = okN ? 'Compared ' + okN + ' stretches.' : "We couldn't compare stretches right now. Try again in a minute.";
+    v.status.textContent = okN ? 'Compared ' + okN + (okN === 1 ? ' stretch.' : ' stretches.') : "We couldn't compare stretches right now. Try again in a minute.";
   }
 
   function setup(params, trend, label) {
     hide();
-    if (!trend || !trend.period || typeof trend.period.start !== 'string' || typeof trend.period.end !== 'string') return;
+    if (!trend) return;
     var key = placeKey(params), kept = store[key] || (store[key] = {});
-    if (!params.start && !params.end) kept[''] = trend;
-    if (params.end && !kept['']) return; // a closed window: the record's own end is unknown until it is fetched
-    var full = kept[''] && valid(kept['']) ? kept[''].period : trend.period;
-    var endY = Number(full.end.slice(0, 4)), L = endY - Number(full.start.slice(0, 4));
-    var wins = windowsFor(L);
-    if (!isNum(L) || !wins.length) return;
+    if (!params.start && !params.end && valid(trend)) kept[''] = trend;
+    var endY = 0, wins = null; // unknown until the full record is known; run() fetches it first
+    if (kept['']) {
+      endY = Number(kept[''].period.end.slice(0, 4));
+      wins = windowsFor(endY - Number(kept[''].period.start.slice(0, 4)));
+      if (!wins.length) return;
+    }
     var card = h('div', 'card quiet noise-card');
     var sentence = h('p', 'noise-sentence');
     sentence.id = 'noise-sentence';
@@ -241,6 +262,7 @@
   document.addEventListener('td:load-end', function (e) {
     var d = e.detail || {};
     gen++;
+    lastOrigin = d.origin || '';
     if (d.ok && d.params && d.trend) setup(d.params, d.trend, d.place && d.place.label);
     else hide();
   });

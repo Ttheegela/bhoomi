@@ -44,13 +44,14 @@ assert.strictEqual(buildSentence([{ n: 10, t: T(F, -2.0, -3, -1, 'degC') }, { n:
   'Every stretch points the same way: falling. Short stretches give a shakier rate, from ' + m + '0.50' + nb + '°C to ' + m +
   '2.0' + nb + '°C per decade; the full record is steadier.');
 
-// a failed row is left out; one row left gives no sentence
-var ok1 = { n: 10, t: T(R, 0.4, 0.1, 0.7, 'mm') }, ok2 = { n: 0, t: T(R, 0.4, 0.2, 0.6, 'mm') };
-assert.strictEqual(buildSentence([ok1, { n: 20, t: null }, ok2]), buildSentence([ok1, ok2]));
-assert.notStrictEqual(buildSentence([ok1, { n: 20, t: null }, ok2]), '');
+// a failed row means no "every stretch" claim: full record failed, or a middle row refused, between rising rows
+var ok1 = { n: 10, t: T(R, 0.4, 0.1, 0.7, 'mm') }, ok2 = { n: 20, t: T(R, 0.4, 0.2, 0.6, 'mm') }, okF = { n: 0, t: T(R, 0.4, 0.2, 0.6, 'mm') };
+assert.strictEqual(buildSentence([ok1, ok2, { n: 0, t: null }]), '');
+assert.strictEqual(buildSentence([ok1, { n: 20, t: null }, okF]), '');
 assert.strictEqual(buildSentence([ok1, { n: 20, t: null }, { n: 0, t: null }]), '');
-assert.strictEqual(buildSentence([{ n: 10, t: { verdict: 'bad' } }, ok2]), '');
+assert.strictEqual(buildSentence([{ n: 10, t: { verdict: 'bad' } }, okF]), '');
 assert.strictEqual(buildSentence([]), '');
+assert.strictEqual(buildSentence([{ n: 10, t: T(N, 0.1, -1, 1, 'mm') }, { n: 20, t: null }, okF]).indexOf('The answer changes'), 0);
 // mixed but the full record row failed: no sentence rather than a wrong one
 assert.strictEqual(buildSentence([{ n: 10, t: T(N, 0.1, -1, 1, 'mm') }, { n: 20, t: T(R, 0.4, 0.1, 0.7, 'mm') }, { n: 0, t: null }]), '');
 
