@@ -1,5 +1,6 @@
 """Eval runner with a fake ask: checks, skips, budget guards, output files. Offline: no model, no network, no keys."""
 import json
+import re
 
 import pytest
 
@@ -857,3 +858,27 @@ def test_ny1_answer_fails_wording():
               "29.62 mm per decade (95% range 28.76 to 30.47). Both used the gauge about 1 km from the point." + NY_TAIL)
     assert run.check(NY_CASE, fake_run(answer, multi([REAL_COOPS, REAL_PSMSL])))["wording"] is False
 
+
+
+@pytest.mark.parametrize("claim", ["Both use the tide gauge at The Battery, 1 km away.",
+                                   "Both use The Battery tide gauge located 1 km from New York.",
+                                   "Both sources use the same station.", "The two records come from one gauge."])
+def test_shared_source_claim_fails_wording(claim):
+    assert real_ny(CODE_SENT + " " + claim) is False
+
+
+@pytest.mark.parametrize("fine", [
+    "Both gauges measure sea level relative to the land, so land sinking or rising is included.",
+    "Both cover January 1981 to December 2025.",
+    "Sea level is rising at both places, according to NOAA's tide gauges.",
+    "Both use grid cells, about 50 km and 25 km wide, not a single station.",
+    "Both p-values are below 0.001, well under the usual 0.05 line.",
+    "Both areas show total land water storage falling clearly from April 2002 to June 2026."])
+def test_sentence_about_both_sources_passes_wording(fine, monkeypatch):
+    assert not run.SHARED.search(fine)
+    if "1981" in fine or "falling" in fine:  # a Delhi period or a falling verdict fails the New York answer anyway
+        got = real_ny(CODE_SENT + " " + fine)
+        monkeypatch.setattr(run, "SHARED", re.compile(r"(?!)"))
+        assert real_ny(CODE_SENT + " " + fine) == got  # the pattern adds no failure of its own
+    else:
+        assert real_ny(CODE_SENT + " " + fine) is True
