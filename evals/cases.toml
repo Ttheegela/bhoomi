@@ -8,15 +8,14 @@
 #   expect_tool      tool the agent must call; "none" = it must NOT call a data tool (can't-answer / clarify cases)
 #   expect_variable  id from list_variables (earthtrends/data/catalog.py)
 #   expect_place     [lat, lon]; the agent's call must be within 50 km (or max_km)
-#   max_km           optional, wider place tolerance in km for this case (e.g. GRACE averages ~400 km).
-#                    Read by the runner once the agent lane adds it (#16); ignored until then.
+#   max_km           optional, wider place tolerance in km for this case (e.g. GRACE averages ~400 km)
 #   expect_source    source id from docs/CONTRACTS.md, if a specific source must be used
 #   expect_verdict   rising | falling | no_clear_change. ONLY set from an independent reference, never from our own tool.
 #   must_say         words the answer must contain (case-insensitive)
 #   must_not_say     words the answer must not contain
 #   reference        where the expected verdict comes from
 #   allow_empty_lookup  optional, with expect_tool = "none": a tool call is also fine if every call
-#                    returned no data (e.g. "no tide gauge within 100 km"). Runner support pending (#16).
+#                    returned no data (e.g. "no tide gauge within 100 km").
 #
 # Sea-level verdicts: NOAA CO-OPS published relative sea level trends (sltrends), all through 2025;
 # Mumbai (PSMSL) from a published study of the Indian gauges.
