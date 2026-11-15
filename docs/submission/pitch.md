@@ -3,7 +3,7 @@
 **Final draft, Sat 14 Nov night.** It follows the demo flow Tarun set on #18, moved onto the reworked site (#113, Sun 15 Nov): New York sea level (Sea level window) → Delhi "sources disagree" (Hottest days window, switching the source) → Delhi land water (Water storage window) → Mumbai sea level since 1878 (the assistant) → Settings → "Use in your AI".
 
 **Slot:** 7 to 10 minutes including Q&A, and **both of us present**. This script runs about 6¾ minutes, which leaves 2 to 3 minutes for questions.
-**Slides:** a 10-slide deck in Claude Slides ("Trend Detective pitch"); Sairam shares the link. It downloads as PDF or PowerPoint. The demo slides (3 to 6) hold the same numbers as screenshots. If the Wi-Fi or a live answer fails, stay on the slide and keep talking.
+**Slides:** a 10-slide deck in Claude Slides ("Bhoomi pitch"); Sairam shares the link. It downloads as PDF or PowerPoint. The demo slides (3 to 6) hold the same numbers as screenshots. If the Wi-Fi or a live answer fails, stay on the slide and keep talking.
 **Rules:** every slide shows **"Built with AI assistance"**. No NASA logos or branding. Every number we say or show names its source. Numbers below were checked on production on Sun 15 Nov at about 17:15 UTC, on the reworked site; quote what the tool returns on the day.
 
 | # | Slide | Who | Time |
@@ -26,13 +26,13 @@
   - **Sea level:** New York, NY among the pinned places, selected.
   - **Hottest days:** Delhi, selected, source set to **NASA POWER**.
   - **Water storage:** Delhi, selected.
-- Tab 1: the deck. Tab 2: https://trend-detective-six.vercel.app/#sea-level. Tab 3: https://trend-detective-six.vercel.app/#hottest-days. Tab 4: https://trend-detective-six.vercel.app/#water-storage. Settings → **Use in your AI** is one click away from any of them.
+- Tab 1: the deck. Tab 2: https://bhoomi.earth/#sea-level. Tab 3: https://bhoomi.earth/#hottest-days. Tab 4: https://bhoomi.earth/#water-storage. Settings → **Use in your AI** is one click away from any of them.
 - **Type** to the assistant, don't talk to it: the room will be noisy. Ask the Mumbai question once before the slot so the data is warm in the cache.
 - Backup: a screen recording of slides 3 to 7 from Sunday, on the laptop.
 
 ## Slide 1: The question (Sairam, 20 s)
 **Say:** "Every week someone says 'the floods are getting worse here' or 'summers are hotter than when I was a kid.' Is that really true for *your* place, or is it just a bad year? That's hard to answer, even with public NASA and NOAA data."
-**Show:** title "Trend Detective", one line: *Is this really changing here?*
+**Show:** title "Bhoomi", one line: *Is this really changing here?*
 
 ## Slide 2: Why it's hard (Sairam, 30 s)
 - The data exists, but it's spread across many portals and formats.
@@ -89,7 +89,7 @@ Click the assistant's chat button (bottom right) and type: **"Is sea level risin
 ## Slide 10: How we used AI, what's next (Tarun, 30 s)
 **Say (AI use, judges asked for it):** "We built this with AI coding agents: Claude Code wrote and reviewed most of the code, tests and docs, a language model runs the agent inside the app, and the assistant's chat and voice run on ElevenLabs. We chose the problem, the statistics, the data sources and the expected answers, and reviewed every change. Details and citations are in `docs/SI.md`."
 **Next:** floods, snow and air quality; groundwater from well records next to the satellites; a classroom mode for teachers.
-**Close:** "Trend Detective: is this really changing here? Now anyone can check." Leave the URL on screen for questions.
+**Close:** "Bhoomi: is this really changing here? Now anyone can check." Leave the URL on screen for questions.
 
 ## Likely judge questions
 - *Why not just fit a line?* A line always has a slope. Mann-Kendall asks if the change beats chance; Sen's slope isn't thrown off by outliers.
