@@ -173,10 +173,12 @@
   function renderLists() {
     savedSlot.textContent = '';
     els.savedH = els.recentH = els.savedList = null;
-    var show = ok && (saved.length || recents.length);
+    // the place on screen right now is not listed again under Recent results (storage is untouched)
+    var ck = cur && keyOf(cur), shown = recents.filter(function (s) { return keyOf(s) !== ck; });
+    var show = ok && (saved.length || shown.length);
     savedSlot.hidden = !show;
     if (!show) return;
-    [[saved, 'Saved places', true], [recents, 'Recent results', false]].forEach(function (g) {
+    [[saved, 'Saved places', true], [shown, 'Recent results', false]].forEach(function (g) {
       if (!g[0].length) return;
       var hd = h('h2', 'mem-h', g[1]), ul = h('ul', 'mem-list');
       hd.tabIndex = -1;

@@ -38,7 +38,6 @@
   row.append(status, undo);
   slot.append(frame, row);
   slot.hidden = false;
-  if (TD.addCredit) TD.addCredit('map', 'Map: OpenFreeMap © OpenMapTiles, data from OpenStreetMap', 'https://www.openstreetmap.org/copyright');
 
   function fail(msg, canRetry) {
     if (failed) return;
@@ -220,14 +219,17 @@
       .then(function () { clearTimeout(timer); gLoading = false; applyDots(); });
   }
 
+  // display only: the jargon ", RLR monthly means" is dropped from the credit name (the link and the route are unchanged)
+  function creditName(x) { return 'Gauge locations: ' + x.name.replace(/,\s*RLR monthly means\s*$/, ''); }
   function isHttps(u) { return typeof u === 'string' && u.indexOf('https://') === 0; }
   function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
   // the gauges source's own attribution (HTML, built only from escaped text and https addresses): the control shows it while the layer is shown
   function gaugeAttribution() {
     return gaugeSrcs.map(function (x) {
-      var text = esc('Gauge locations: ' + x.name);
-      return isHttps(x.url) ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + text + '</a>' : text;
+      var text = esc(creditName(x));
+      // each credit in its own block (div is allowed by the control's sanitizer)
+      return '<div>' + (isHttps(x.url) ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + text + '</a>' : text) + '</div>';
     }).join(' ');
   }
 
@@ -246,7 +248,7 @@
     legend.append(svg, document.createTextNode('Tide gauge. Zoom in and tap one. A gauge with only a few years of readings cannot give a clear answer.'));
     slot.append(legend);
     gaugeSrcs.forEach(function (x) {
-      if (TD.addCredit) TD.addCredit('gauges-' + x.id, 'Gauge locations: ' + x.name, isHttps(x.url) ? x.url : undefined);
+      if (TD.addCredit) TD.addCredit('gauges-' + x.id, creditName(x), isHttps(x.url) ? x.url : undefined);
     });
   }
 
