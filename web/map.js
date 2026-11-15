@@ -96,6 +96,17 @@
       }
     });
     Object.keys(markers).forEach(function (k) { if (!seen[k]) { markers[k].mk.remove(); delete markers[k]; } });
+    placeTags();
+  }
+
+  // a tag opens to the right of its marker; in the right 45% of the map it opens to the left so the map's edge never cuts it
+  function placeTags() {
+    if (!map) return;
+    var w = frame.offsetWidth;
+    Object.keys(markers).forEach(function (k) {
+      var m = markers[k];
+      if (m.tag) m.tag.classList.toggle('left', map.project(m.mk.getLngLat()).x > w * 0.55);
+    });
   }
 
   // fit to all pins; not on a mere selection change (the key is the set of pins)
@@ -109,7 +120,8 @@
     if (!pins.length) return;
     var b = new lib.LngLatBounds([pins[0].lon, pins[0].lat], [pins[0].lon, pins[0].lat]);
     pins.forEach(function (p) { b.extend([p.lon, p.lat]); });
-    map.fitBounds(b, { padding: 30, maxZoom: 9, duration: reduced() ? 0 : 600 });
+    var pad = frame.offsetWidth < 420 ? 30 : { top: 40, bottom: 40, left: 40, right: 190 }; // room on the right for the selected tag
+    map.fitBounds(b, { padding: pad, maxZoom: 9, duration: reduced() ? 0 : 600 });
   }
 
   // base map, labels and stations from the preferences of the window on screen
@@ -199,6 +211,7 @@
         tip.setDOMContent(t).setLngLat([hit.lng, hit.g.lat]).addTo(map);
         tip.getElement().setAttribute('aria-hidden', 'true');
       });
+      map.on('moveend', placeTags);
       map.on('mouseout', tipOff);
       // the visitor moved or zoomed the map (events with an original event): do not refit over it on a resize
       ['dragstart', 'zoomstart'].forEach(function (n) { map.on(n, function (e) { if (e && e.originalEvent) userMoved = true; }); });

@@ -18,6 +18,7 @@
 .map-mk.low { background: var(--mk-low); }
 .map-mk.sel { width: 20px; height: 20px; box-shadow: 0 0 0 2px var(--ink); z-index: 2; }
 .map-mk:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+.map-tag.left { left: auto; right: calc(100% + 8px); }
 .map-tag { position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%); padding: 4px 8px; border-radius: 6px; background: var(--ink); color: var(--bg); font: 600 12px/16px Inter, system-ui, sans-serif; white-space: nowrap; pointer-events: none; }
 /* a quiet map: one grey, no hue, for the light base map; the detailed base map is left as it is */
 .map-frame:not(.map-detailed) .maplibregl-canvas { filter: grayscale(1); }
