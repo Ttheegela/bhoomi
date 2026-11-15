@@ -62,6 +62,50 @@ def test_allowed_phrases_only():
     assert run.invented_numbers("p < 0.05", [AC]) == ["0.05"]  # not one of the prompt's phrases
 
 
+@pytest.mark.parametrize("phrase", ["p-value below 0.001", "far below 0.001", "less than 0.001", "below 0.01",
+                                    "far below 0.01"])
+def test_p_value_phrases_allowed_when_true(phrase):
+    assert run.invented_numbers(f"The {phrase}.", [AC]) == []  # AC's p-value is 1.95e-186
+
+
+@pytest.mark.parametrize("phrase,p,bad", [
+    ("below 0.001", 0.02, ["0.001"]), ("less than 0.001", 0.005, ["0.001"]), ("below 0.01", 0.02, ["0.01"]),
+    ("below 0.0015", 1e-9, ["0.0015"]),  # not the fixed phrase
+])
+def test_p_value_phrases_invented_when_untrue(phrase, p, bad):
+    assert run.invented_numbers(f"The p-value is {phrase}.", [{**AC, "p_value": p}]) == bad
+
+
+def test_degree_sign_and_degc_score_the_same():
+    r = {**AC, "units": "degC", "slope_per_decade": 0.2512, "ci_low": 3.0, "ci_high": 0.42}
+    for unit in ("degC", "°C"):
+        assert run.invented_numbers(f"Rising by 0.25 {unit} per decade (range 3 {unit} to 0.42).", [r]) == []
+        assert run.invented_numbers(f"Rising by 0.26 {unit} per decade.", [r]) == ["0.26"]
+    assert run.invented_numbers("up 4 °C", [r]) == ["4"]  # a small number before °C is still checked
+
+
+@pytest.mark.parametrize("text,verdict", [
+    ("Sea level falls by 0.40 mm per decade.", "falling"), ("Land water storage falls.", "falling"),
+    ("The land is losing water.", "falling"), ("Sea level rises by 31.79 mm per decade.", "rising"),
+])
+def test_verdict_words_from_the_prompt(text, verdict):
+    assert run.wording_agrees(text, verdict)
+
+
+@pytest.mark.parametrize("text,verdict", [("The gauge is closing.", "falling"), ("Rainfalls were heavy.", "falling"),
+                                          ("Sunrises came early.", "rising")])
+def test_short_verdict_words_need_whole_words(text, verdict):
+    assert not run.wording_agrees(text, verdict)
+
+
+def test_wrong_period_fails_wording():
+    assert run.check(CASE, fake_run())["wording"] is True  # "from 1911 to 2026" is the result's period
+    out = run.check(CASE, fake_run(ANSWER.replace("from 1911 to 2026", "from October 1911 to October 2026")))
+    assert out["wording"] is False and out["numbers"] is True  # every number is in the result; the month is wrong
+    gap = ANSWER + " No data between mid-2017 and mid-2018, or mid-2017 to mid-2018."
+    assert run.check(CASE, fake_run(gap))["wording"] is True
+
+
 def test_years_are_checked():
     assert run.invented_numbers("from September 1911 to October 2026", [AC]) == []
     assert run.invented_numbers("rising since 1950", [AC]) == ["1950"]
