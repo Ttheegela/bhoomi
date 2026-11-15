@@ -19,7 +19,7 @@ from earthtrends.mcp_server import SOURCE_DOWN, mcp
 
 # Remote MCP endpoint (streamable HTTP) for agents that connect over the network.
 # DNS-rebinding protection: only these Host headers are accepted (add the deployed domain in prod).
-allowed_hosts = os.environ.get("MCP_ALLOWED_HOSTS", "127.0.0.1:*,localhost:*").split(",")
+allowed_hosts = os.environ.get("MCP_ALLOWED_HOSTS", "127.0.0.1:*,localhost:*,bhoomi.earth,www.bhoomi.earth").split(",")
 # On Vercel, also accept this deployment's own URLs (system env vars set by Vercel at runtime).
 allowed_hosts += [h for k in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL") if (h := os.environ.get(k))]
 mcp_app = mcp.streamable_http_app(
@@ -36,7 +36,7 @@ async def lifespan(_: FastAPI):
         yield
 
 
-app = FastAPI(title="Trend Detective", lifespan=lifespan)
+app = FastAPI(title="Bhoomi", lifespan=lifespan)
 
 
 @app.get("/api/health")
