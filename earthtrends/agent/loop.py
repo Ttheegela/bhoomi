@@ -55,6 +55,23 @@ TOOLS = [
      }}},
 ]
 TREND_ARGS = ("variable", "lat", "lon", "start", "end", "source")
+HISTORY_MSGS = 6  # earlier chat messages sent with a question: the same limits as web/ask.js
+HISTORY_CHARS = 4000
+
+
+def history_error(history) -> str | None:
+    """Why an earlier-turns list is refused, or None. Whole user/assistant pairs of plain text only; never trimmed.
+    /api/ask and the eval runner share it."""
+    if not isinstance(history, list) or len(history) > HISTORY_MSGS:
+        return f"history must be a list of at most {HISTORY_MSGS} earlier messages."
+    if not all(isinstance(m, dict) and m.keys() == {"role", "content"} and m["role"] in ("user", "assistant")
+               and isinstance(m["content"], str) and m["content"].strip() for m in history):
+        return 'Each earlier message must be only a "role" (user or assistant) and a "content" that is not empty.'
+    if len(history) % 2 or [m["role"] for m in history] != ["user", "assistant"] * (len(history) // 2):
+        return "Earlier messages must be whole pairs in order: a user question, then the assistant's answer."
+    if sum(len(m["content"]) for m in history) > HISTORY_CHARS:
+        return f"Earlier messages must be at most {HISTORY_CHARS:,} characters in total."
+    return None
 
 
 def run_tool(name: str, args: dict) -> tuple[dict | list | None, str | None]:
@@ -482,7 +499,10 @@ def best(kept: list[str], calls: list[dict]) -> str | None:
     return fixed[min(range(len(fixed)), key=lambda i: (0, flags[i], -i) if n[i] <= limit else (1, flags[i], n[i]))]
 
 
-def ask(question: str, model: str | None = None) -> dict:
+def ask(question: str, model: str | None = None, history: list[dict] | None = None) -> dict:
+    """`history`: earlier turns of the chat (see history_error), sent as plain text before the question; no tool
+    call or result from them is carried over."""
+    history = history or []
     t0 = time.monotonic()
     try:
         provider_name, model_id = parse_spec(model or os.environ.get("AGENT_MODEL") or DEFAULT_MODEL)
@@ -492,7 +512,7 @@ def ask(question: str, model: str | None = None) -> dict:
         raise NotConfigured("AGENT_MODEL names a provider that is not built yet.") from None
     provider = PROVIDERS[provider_name](model_id)
     system = prompts.system_prompt(tools.list_variables())
-    provider.start(system, question, TOOLS)
+    provider.start(system, question, TOOLS, history=history)
 
     trace = Trace(question, model_id)
     calls, usage, costs, answer, checked = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None, False
@@ -535,7 +555,7 @@ def ask(question: str, model: str | None = None) -> dict:
                 # Every retry keeps the model's normal reasoning: it is never reduced (the owner's rule).
                 # The seam has no "add a user message", so restart with the results inline.
                 if not calls:  # nothing fetched yet: start again from the plain question, tools offered
-                    provider.start(system, question, TOOLS)
+                    provider.start(system, question, TOOLS, history=history)
                     continue
                 if cut:
                     again = RETRY.format(target=SHORTER[limit])
@@ -543,7 +563,9 @@ def ask(question: str, model: str | None = None) -> dict:
                     asks = ([LONG_ASK.format(limit=limit, target=SHORTER[limit])] if long else []) + (
                         [PERIOD_ASK.format(periods=periods_note(calls))] if wrong else [])
                     again = "\n\n" + " ".join(asks) + NO_TOOL
-                provider.start(system, question + again + json.dumps(for_model(calls)), [])  # no tools: no refetch
+                # No tools: no refetch. No history either: the retry rewrites from this turn's results only, so an
+                # earlier answer's numbers and periods are not in front of it.
+                provider.start(system, question + again + json.dumps(for_model(calls)), [])
                 no_tools = True
                 continue
             if i == MAX_CALLS - 1:  # no model call left to read the results, so don't fetch data for nothing
