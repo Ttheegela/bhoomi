@@ -60,7 +60,7 @@ def test_cache_and_param(monkeypatch):
     fake(monkeypatch, calls=calls)
     search_places("  New   York & Co #1 ")
     search_places("New York & Co #1")
-    assert len(calls) == 1 and calls[0]["name"] == "New York & Co #1" and calls[0]["count"] == 5
+    assert len(calls) == 1 and calls[0]["name"] == "New York & Co #1" and calls[0]["count"] == 10
 
 
 def test_long_text_is_cut(monkeypatch):
@@ -87,3 +87,36 @@ def test_failures_raise_and_are_not_cached(monkeypatch):
         search_places("princeton")
     fake(monkeypatch)
     assert search_places("princeton")["results"]
+
+
+def hit(name, pop="absent", admin1=None):
+    h = {"name": name, "admin1": admin1, "latitude": 1, "longitude": 2}
+    if pop != "absent":
+        h["population"] = pop
+    return h
+
+
+def test_ranking_princeton(monkeypatch):  # a real reply, in upstream order: type first, so New Jersey came sixth
+    rows = [("Indiana", 8626), ("Illinois", 7594), ("Kentucky", 6174), ("West Virginia", 6035), ("Missouri", 1133),
+            ("New Jersey", 29603), ("Texas", 8939), ("Minnesota", 4680), ("Massachusetts", 3412), ("North Carolina", 1284)]
+    fake(monkeypatch, {"results": [hit("Princeton", p, a) for a, p in rows]})
+    r = search_places("princeton")["results"]
+    assert [x["admin1"] for x in r] == ["New Jersey", "Texas", "Indiana", "Illinois", "Kentucky"]
+    assert all("population" not in x for x in r)
+
+
+def test_exact_name_beats_bigger_prefix_match(monkeypatch):
+    fake(monkeypatch, {"results": [hit("Yorktown", 200000), hit("York", 150000)]})
+    assert [x["name"] for x in search_places("  york ")["results"]] == ["York", "Yorktown"]
+
+
+def test_odd_populations_count_as_zero(monkeypatch):
+    fake(monkeypatch, {"results": [hit("Ab", None, "n"), hit("Ab", 10**400, "huge"), hit("Ab", True, "bool"), hit("Ab", -5, "neg"),
+                                   hit("Ab", "9", "str"), hit("Ab", float("nan"), "nan"), hit("Ab", 3, "three"), hit("Ab", 0, "zero")]})
+    r = search_places("ab")["results"]
+    assert [x["admin1"] for x in r] == ["three", "n", "huge", "bool", "neg"]  # then upstream order for the zeros
+
+
+def test_fewer_than_five_all_returned(monkeypatch):
+    fake(monkeypatch, {"results": [hit("Ab", 1), hit("Ab", 2)]})
+    assert len(search_places("ab")["results"]) == 2
