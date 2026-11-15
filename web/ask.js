@@ -77,9 +77,11 @@ function describeAnswer(body) {
     good.forEach((c) => { const s = c.result.source; if (s && !seen.has(s.id || s.name)) { seen.add(s.id || s.name); sources.push(s); } });
     const spots = new Set(good.map((c) => { const t = chartTarget(c), q = c.result.place || {}; return t ? `${t.lat.toFixed(2)},${t.lon.toFixed(2)}` : String(q.name); }));
     const place = p.name ? p.name : `the spot at ${Number(p.lat).toFixed(2)}, ${Number(p.lon).toFixed(2)}`;
+    const ct = chartTarget(good[0]), la = ct ? ct.lat : Number(p.lat), lo = ct ? ct.lon : Number(p.lon);
+    const where = /^Average of/.test(p.name) ? `around ${la.toFixed(2)}, ${lo.toFixed(2)} (${p.name[0].toLowerCase() + p.name.slice(1)})` : `at ${place}`;
     return Object.assign(out, {
       variant: 'data', count: spots.size, sources, chart: chartTarget(good[0]),
-      variable: r.variable, place, y0: String(per.start || '').slice(0, 4), y1: String(per.end || '').slice(0, 4),
+      variable: r.variable, place, where, y0: String(per.start || '').slice(0, 4), y1: String(per.end || '').slice(0, 4),
     });
   }
   if (trends.length) {
@@ -149,7 +151,7 @@ function answerBlock(d) {
   const block = el('div', { class: 'msg ai' }, label, ...(d.model ? [el('p', { class: 'msg-model small' }, d.model)] : []), ...paras(d.text));
   let focus = label;
   if (d.variant === 'data') {
-    let line = `Looked up: ${nameOf(d.variable)} at ${d.place}, ${d.y0} to ${d.y1}.`;
+    let line = `Looked up: ${nameOf(d.variable)} ${d.where}, ${d.y0} to ${d.y1}.`;
     if (d.count > 1) line += ` The assistant checked ${d.count} places. The first is shown here.`;
     block.append(el('p', { class: 'small' }, line));
     d.sources.forEach((s) => { const src = el('div', { class: 'srcline' }); srcBlock(src, 'Raw data', s); block.append(src); });
@@ -308,6 +310,8 @@ function refreshThreadUI() {
   // the clarifying-question line already says to name the place again, so the "on its own" line waits
   $('ask-nohist').hidden = nohistHidden(askS.turns, ASK_HISTORY);
   $('ask-hint').hidden = !ASK_HISTORY || !askS.turns.some((t) => t.kind === 'answer');
+  const lastA = askS.turns.filter((t) => t.kind === 'answer').pop();
+  $('ask-hint').textContent = `Ask a follow-up, for example: "What about ${lastA && /delhi/i.test(lastA.q + ' ' + lastA.a) ? 'Mumbai' : 'Delhi'}?"`;
 }
 
 function setOff() {

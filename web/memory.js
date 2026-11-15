@@ -250,7 +250,7 @@
     var v = d.trend && d.trend.verdict, now = new Date();
     cur = clean({
       lat: lat, lon: lon, variable: p.variable, source: p.source || null, start: p.start || null, end: p.end || null,
-      label: TD.cleanPlace(place.label) || TD.cleanPlace(tp && tp.name) || '',
+      label: TD.cleanPlace(place.label) || (tp && /^Average of/.test(tp.name) ? '' : TD.cleanPlace(tp && tp.name)) || '',
       verdict: v === 'no_clear_change' ? 'none' : v || null,
       checked: now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2)
     });
