@@ -22,9 +22,9 @@ from urllib.parse import urlparse
 import httpx
 
 from earthtrends.agent import providers, resources, tracing
-from earthtrends.agent.loop import (GAVE_UP, MAX_CALLS, NUM, agree_plan, agree_sentence, ask, hidden_calls,
+from earthtrends.agent.loop import (GAVE_UP, MAX_CALLS, NUM, agree_plan, agree_sentence, ask,
                                     history_error, tried_sources, wrong_periods)
-from earthtrends.agent.loop import _pool, invented_numbers  # one implementation, shared with the loop's check
+from earthtrends.agent.loop import _pool, invented_numbers, model_results  # one implementation, shared with the loop's check
 from earthtrends.agent.loop import stated_numbers as _numbers  # noqa: F401 (the scorer tests use it)
 from earthtrends.data import list_variables
 from earthtrends.data.coops import haversine_km
@@ -149,9 +149,7 @@ def check(case: dict, run: dict) -> dict[str, bool]:
     calls (one per source), tool/variable/place must hold for every call."""
     answer = run.get("answer") or ""
     calls = [c for c in run.get("tool_calls", []) if c["name"] == "detect_trend"]
-    hid = hidden_calls(run.get("tool_calls", []))  # the loop's own rule: these reached the model without "meaning"
-    results = [{k: v for k, v in c["result"].items() if k != "meaning"} if i in hid else c["result"]
-               for i, c in enumerate(run.get("tool_calls", [])) if c.get("error") is None and c.get("result") is not None]
+    results = model_results(run.get("tool_calls", []))  # the loop's own list: hidden ones without "meaning"
     by_src = {_src(c["result"]): c["result"] for c in calls if c.get("error") is None and c.get("result")}
     defaults = {v["id"]: v["sources"][0] for v in list_variables()}
     # A call's source: what its result says it used, else what it asked for (the variable's default if left out).

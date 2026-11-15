@@ -517,6 +517,20 @@ def _candidates(text: str, pos: int, ok: list[dict]) -> tuple[list[dict], bool]:
     return ok, False
 
 
+def period_ranges(text: str) -> list[re.Match]:
+    """The ranges the period check treats as periods: "between" goes with "and", and no "95% range" or "page" just
+    before (so "95% range 1650 to 2010" is no period)."""
+    return [m for m in PERIOD_RANGE.finditer(text)
+            if (m["sep"].lower() == "and") == bool(m["btw"]) and not _NOT_A_PERIOD.search(text, 0, m.start())]
+
+
+def without_periods(text: str) -> str:
+    """The text with each of its period ranges blanked: those belong to the period check."""
+    for m in reversed(period_ranges(text)):
+        text = text[:m.start()] + " " + text[m.end():]
+    return text
+
+
 def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
     """(range, certain) for each wrong period range in `text`. A range passes if it is the window the user asked for
     (a call's start and end, by year) or written in a result's own caveat ("its 2004 to 2009 average": the tool's
@@ -530,8 +544,7 @@ def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
     caveats = [c.lower() for x in ok for c in x["result"].get("caveats") or [] if isinstance(c, str)]
     asked = [(str(a["start"])[:4], str(a["end"])[:4]) for a in (c.get("arguments") or {} for c in calls)
              if isinstance(a, dict) and a.get("start") and a.get("end")]
-    ranges = [m for m in PERIOD_RANGE.finditer(text)
-              if (m["sep"].lower() == "and") == bool(m["btw"]) and not _NOT_A_PERIOD.search(text, 0, m.start())]
+    ranges = period_ranges(text)
     sents = [(u.start(), u.end()) for u in _UNIT.finditer(text)]
 
     def fit(m, cs):
@@ -765,9 +778,9 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                     long, wrong = words(text) > limit, bool(wrong_periods(text, calls))
                     # No result to take a number from: any number but the fixed phrases is made up.
                     nums = not ok_calls(calls) and bool(stated_numbers(UNDER_001.sub(" ", text)))
-                    # With results: every number must be one of theirs (or the question's, e.g. "by 2050"). Period
-                    # ranges are left to the period check above, which can retry or fix them.
-                    invented = (invented_numbers(PERIOD_RANGE.sub(" ", text), model_results(calls) + [question])
+                    # With results: every number must be one of theirs. Period ranges are left to the period check
+                    # above, which can retry or fix them.
+                    invented = (invented_numbers(without_periods(text), model_results(calls))
                                 if ok_calls(calls) else [])
                     if not (long or wrong or nums or invented):
                         answer = text

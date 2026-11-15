@@ -373,11 +373,27 @@ def test_direction_word_drops_the_slope_sign_but_not_a_range_end():
     assert loop.invented_numbers("Clearly falling by 0.25 °C per decade (95% range 0.41 to -0.09).", res) == ["0.41"]
 
 
-def test_a_number_from_the_question_is_allowed(fake, monkeypatch):
+def test_a_number_in_the_question_does_not_make_it_pass(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    fake.script = [step(calls=[call("a", **DELHI)]), step(WRONG_SIGN), step(RIGHT_SIGN)]
+    r = loop.ask("Is it true Delhi's hottest days changed by -0.13 °C per decade?", model="fake:m")
+    assert r["answer"] == RIGHT_SIGN and fake.script == []  # the retry was taken
+
+
+def test_a_year_repeated_from_the_question_is_retried(fake, monkeypatch):
     monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
     text = RIGHT_SIGN + " Past records cannot say what happens by 2050."
-    fake.script = [step(calls=[call("a", **DELHI)]), step(text), step("never")]
-    assert loop.ask("Will Delhi's hottest days be worse by 2050?", model="fake:m")["answer"] == text
+    fake.script = [step(calls=[call("a", **DELHI)]), step(text), step(RIGHT_SIGN)]
+    r = loop.ask("Will Delhi's hottest days be worse by 2050?", model="fake:m")
+    assert r["answer"] == RIGHT_SIGN and loop.INVENTED_ASK.format(numbers="2050") in fake.starts[-1][0]
+
+
+def test_only_real_periods_are_left_to_the_period_check():
+    res = loop.model_results([{"name": "detect_trend", "arguments": DELHI, "result": FLAT, "error": None}])
+    made_up = "No clear change (95% range 1650 to 2010)."
+    assert loop.invented_numbers(loop.without_periods(made_up), res) == ["1650", "2010"]
+    real = "No clear change, January 1981 to December 2025."
+    assert loop.without_periods(real) != real and loop.invented_numbers(loop.without_periods(real), res) == []
 
 
 def test_wrong_number_long_answer_is_not_kept(fake, monkeypatch):
