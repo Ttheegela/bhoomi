@@ -227,7 +227,7 @@
     var c = document.createElementNS(ns, 'circle');
     c.setAttribute('cx', '5'); c.setAttribute('cy', '5'); c.setAttribute('r', '4');
     svg.append(c);
-    legend.append(svg, document.createTextNode('Tide gauge. Zoom in and tap one. Not every gauge has enough years of readings for an answer.'));
+    legend.append(svg, document.createTextNode('Tide gauge. Zoom in and tap one. A gauge with only a few years of readings cannot give a clear answer.'));
     slot.insertBefore(legend, credit);
     gaugeSrcs.forEach(function (x) {
       var text = 'Gauge locations: ' + x.name;
@@ -312,7 +312,7 @@
     curGeo = d.origin === 'geo';
     if (!fromMap) put(d.lat, d.lon, true);
     if (fromMap && snap && Math.abs(snap.lat - d.lat) <= 0.005 && Math.abs(snap.lon - d.lon) <= 0.005) {
-      status.textContent = 'Pinned the tide gauge at ' + snap.label + '. Not every gauge has enough years of readings, so we use the nearest one that does.';
+      status.textContent = 'Pinned the tide gauge at ' + snap.label + '.';
     } else {
       status.textContent = (fromMap ? 'Pinned ' : 'Showing ') + fmt(d.lat, d.lon) + '. We use the nearest data we have.';
     }

@@ -14,7 +14,7 @@ Only while the measurement is `sea_level`. Reason: dots mean nothing for rain or
 ## 2. What a tap does
 - Dots visible and zoom at least 4: a tap within 14 px of a dot (nearest one, by `queryRenderedFeatures` on a 28 x 28 px box) snaps to that gauge: pin at the gauge's own position, `prev` remembered exactly as for a plain tap, then `TD.loadPlace({lat: gauge.lat, lon: gauge.lon, label: <gauge name>, origin: 'map'})`. No `variable` (the current sea level stays). Label: the route's `name`; if it has no lowercase letter, convert to Title Case; `TD.cleanPlace` limits it to 60 characters.
 - Dots hidden, or zoom under 4, or no dot within 14 px: unchanged: pick the exact tapped point, label "Pinned spot (...)".
-- Status after a snap: "Pinned the tide gauge at {name}. Not every gauge has enough years of readings, so we use the nearest one that does." The server decides which gauge answers; the answer card already names it.
+- Status after a snap: "Pinned the tide gauge at {name}." The server decides which gauge answers; the answer card already names it.
 - Undo works as today (one step, restores the previous place; the pin goes back). The snapped pick is just another map pick.
 - Below zoom 4 dots are a texture only (they are 2 to 4 px); the user zooms in with the buttons or a pinch and taps.
 
@@ -26,7 +26,7 @@ The tile canvas is greyscale in light and `grayscale(1) invert(1) brightness(.9)
 - Pointer, hover-capable device only (`(hover: hover)`): over a dot at zoom 4 or more the cursor is `pointer` (set with `canvas.style.cursor`, allowed) and a small label shows the gauge name: `maplibregl.Popup` with class `map-tip`, no close button, offset 10, `aria-hidden="true"`, 14 px `--ink` on `--bg`, 1 px `--line` border, 6 px radius, 4 x 8 px padding, no arrow, no shadow, one line, ellipsis at 28 ch. Touch devices: no label (a tap picks).
 
 ## 4. The words
-- Legend line (14 px `--ink-2`, `p.map-legend`, `aria-hidden="true"`, between `.map-row` and `.map-credit`, only while dots are visible): a 10 px dot icon (inline SVG `aria-hidden`, drawn like the canvas dot: `--ink` fill, `--bg` ring) then "Tide gauge. Zoom in and tap one. Not every gauge has enough years of readings for an answer."
+- Legend line (14 px `--ink-2`, `p.map-legend`, `aria-hidden="true"`, between `.map-row` and `.map-credit`, only while dots are visible): a 10 px dot icon (inline SVG `aria-hidden`, drawn like the canvas dot: `--ink` fill, `--bg` ring) then "Tide gauge. Zoom in and tap one. A gauge with only a few years of readings cannot give a clear answer."
 - First status line while dots are visible and no place is picked: "Tap the map to pick a place, or search above." (unchanged; the legend carries the dot explanation).
 - Credits: for each source in the route's `sources` that has at least one gauge in the list: a link in `.map-credit`, text "Gauge locations: {source.name}", `href` its `url` (https only, 48 px tall, wraps) and `TD.addCredit('gauges-' + id, 'Gauge locations: ' + name, url)`. Names come from the route verbatim. If only one list arrives, only its credit shows. The in-map links show only while dots show; the footer line from `addCredit` stays (it is a true source line).
 
@@ -60,3 +60,4 @@ Dots show from the first view as a faint texture and are tappable from zoom 4: a
 - A gauge whose `url` does not start with `https://` is shown as plain text, not a link.
 - A list that arrives empty or without a valid gauge counts as a failure (retry allowed once more at the next switch to sea level).
 - The hover label gets `max-width: 28ch` with `text-overflow: ellipsis` on the popup's own content box.
+- The status after a snap and the legend no longer promise "the nearest gauge that has enough years": the server answers United States (NOAA CO-OPS) gauges from the nearest one whatever its length, and only the PSMSL source skips short records.
