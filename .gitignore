@@ -10,6 +10,7 @@ data/raw/
 .claude/worktrees/
 .claude/settings.local.json
 evals/results/*.jsonl
+evals/results/**/*.jsonl
 *.env
 *.pem
 *.key
