@@ -31,8 +31,8 @@ The result files carry the runner's own date in their names and title (2026-11-1
 - The seconds are too high for both models, by a few seconds: on the test machine the tracing export is blocked and
   each answer waits for it (see `../2026-11-14-shortlist-gemini/NOTES.md`; nothing in this folder measures it). Compare
   the two rows with each other, not with the live site.
-- One run per model on 15 cases: enough to see a large difference in time and cost, too few to rank two models on
-  correctness.
+- One run per model on 15 cases: enough to see a clear difference in cost and a few much slower answers, too few to
+  rank two models on correctness.
 
 ## Ten real questions on the live site while it ran Flash (answers not kept in this folder)
 
