@@ -16,7 +16,7 @@ Supersedes the Explore / Ask / Use in your AI tabs and the layout notes in `08-l
 `get()` returns `{theme: 'light'|'dark'|'device', units: 'metric'|'imperial', lookAhead: 2035|2050|2075, maps: {<variable id>: {base: 'light'|'detailed', labels, stations}}}`. `set(patch)` merges (`maps` per window), stores `td.prefs.v1`, fires `td:prefs`. It sets `<html data-theme="light|dark">` before first paint. Light is the default.
 
 ## `window.TD` (app.js)
-`ready`, `variables`, `windows`, `window`, `pins()`, `select(key)`, `addPlace({label, lat, lon})` (Promise `{ok, reason}`), `removePlace(key)`, `fmt.rate|outlook|value|years|unit`, `context()`, `announce`, `cleanPlace`, `addCredit`. Events on `document`: `td:ready`, `td:route {window}`, `td:pins {window, pins, selected}`, `td:prefs`.
+`ready`, `variables`, `windows`, `window`, `pins()`, `select(key)`, `addPlace({label, lat, lon})` (Promise `{ok, reason}`), `removePlace(key)`, `fmt.rate|outlook|years|unit`, `announce`, `cleanPlace`, `addCredit`. Events on `document`: `td:ready`, `td:route {window}`, `td:pins {window, pins, selected}`, `td:prefs`.
 - Pins (max 6 per window) live in localStorage `td.pins.v2`; each has a stable `slot` 0 to 5 (colour `--p1` to `--p6`); the selected place is drawn in `--ink`. At most 3 pins are requested at once. Results are kept per window, source and place, so switching windows does not re-request.
 - A pin's `status` is `loading`, `ok` or `error`; `trend` and `series` are the API replies, read-only.
 - On Settings `pins()` is `[]` and `td:pins` fires once with no pins.
