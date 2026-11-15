@@ -257,3 +257,42 @@ def test_loop_adds_examples_sentence(fake, monkeypatch):
                    step("I can't rank a whole region from past data at single places.\n\nTokyo and Manila: rising.")]
     assert loop.ask("Which Asian cities?", model="fake:m")["answer"].count(loop.EXAMPLES) == 1
 
+
+# ---- a tool call written out as text is never the answer ----
+
+LEAK = ("I'll run the three checks again instead of reusing the earlier results, since only fresh tool results can "
+        "support this answer.\n\ndetect_trend\n"
+        '{"variable": "air_temp_max", "lat": 28.61, "lon": 77.21, "source": "power"}')
+
+
+def _clean(answer):
+    return "detect_trend" not in answer and '{"variable"' not in answer
+
+
+def test_leak_on_the_retry_returns_the_earlier_complete_answer(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    long = " ".join(["word"] * 130) + "."
+    fake.script = [step(calls=[call("a", **GI_ARGS)]), step(long), step(LEAK)]
+    r = loop.ask("Is sea level rising at Grand Isle?", model="fake:m")
+    assert r["answer"] == loop.best([loop.compose(long, r["tool_calls"])], r["tool_calls"]) and _clean(r["answer"])
+    assert fake.script == []  # the leak was the retry's reply
+
+
+def test_leak_as_first_text_returns_the_found_answer(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    fake.script = [step(calls=[call("a", **GI_ARGS)]), step(LEAK)]
+    r = loop.ask("Is sea level rising at Grand Isle?", model="fake:m")
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and _clean(r["answer"])
+
+
+def test_leak_with_no_results_gives_up(fake):
+    fake.script = [step(LEAK)]
+    assert loop.ask("Is sea level rising at Grand Isle?", model="fake:m")["answer"] == loop.GAVE_UP
+
+
+def test_normal_answer_is_untouched(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    text = f"Yes. Sea level at Grand Isle has clearly been rising. Source: NOAA CO-OPS tide gauges, {SRC['url']}."
+    fake.script = [step(calls=[call("a", **GI_ARGS)]), step(text)]
+    assert loop.ask("Is sea level rising at Grand Isle?", model="fake:m")["answer"] == text
+

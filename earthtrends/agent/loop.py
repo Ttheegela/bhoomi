@@ -61,6 +61,8 @@ TOOLS = [
      }}},
 ]
 TREND_ARGS = ("variable", "lat", "lon", "start", "end", "source")
+# A text step naming a tool is a tool call written out, not an answer (the prompt keeps tool names out of answers).
+TOOL_NAME = re.compile(r"\b(?:" + "|".join(re.escape(t["name"]) for t in TOOLS) + r")\b")
 HISTORY_MSGS = 6  # earlier chat messages sent with a question: the same limits as web/ask.js
 HISTORY_CHARS = 4000
 
@@ -694,6 +696,8 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                 if not cut:
                     if not (text or "").strip():
                         break  # empty text (e.g. reasoning spent the cap): falls through to kept or GAVE_UP
+                    if TOOL_NAME.search(text):
+                        break  # a tool call written out as text (seen on a no-tools retry) is no answer: same fall-through
                     text = compose(text, calls)  # before the checks: they hold for what the user sees
                     long, wrong = words(text) > limit, bool(wrong_periods(text, calls))
                     # No result to take a number from: any number but the fixed phrases is made up.
