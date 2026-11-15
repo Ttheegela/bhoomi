@@ -104,7 +104,7 @@
   }
 
   /* ---------- Use in your AI ---------- */
-  const ADDR = location.origin + '/mcp';
+  const ADDR = location.origin + "/mcp/";
   const addrInput = (id) => {
     const i = h('input', { id, class: 'st-addr', type: 'text', readonly: '', value: ADDR });
     i.addEventListener('focus', () => i.select());
@@ -127,21 +127,21 @@
 
   const APPS = [
     { id: 'claude', name: 'Claude', sub: 'claude.ai and Claude desktop',
-      steps: ['Open Customize, then Connectors.', 'Click "+ Add", then "Add custom connector".', 'Enter the name "Trend Detective" and paste the server address, then click "Continue".', 'Under Authentication choose "No sign in", then click "Add".', 'In a chat, click "+" at the lower left, then "Connectors", and switch Trend Detective on.'],
+      steps: ['Open Customize, then Connectors.', 'Click "+ Add", then "Add custom connector".', 'Enter the name "Bhoomi" and paste the server address, then click "Continue".', 'Under Authentication choose "No sign in", then click "Add".', 'In a chat, click "+" at the lower left, then "Connectors", and switch Bhoomi on.'],
       note: 'Free plans can add one custom connector. On Team and Enterprise plans an owner has to add it.',
       links: [['Claude setup docs', 'https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp']], checked: true },
     { id: 'claude-code', name: 'Claude Code', sub: 'In your terminal',
       steps: ['In your terminal run the command in the box.'],
-      cmd: 'claude mcp add --transport http trend-detective ' + ADDR,
-      steps2: ['Start Claude Code and type `/mcp`. Trend Detective should show as connected.', 'Optional: add `--scope user` to the command to use it in every project.'],
+      cmd: 'claude mcp add --transport http bhoomi ' + ADDR,
+      steps2: ['Start Claude Code and type `/mcp`. Bhoomi should show as connected.', 'Optional: add `--scope user` to the command to use it in every project.'],
       note: 'The command `claude mcp list` also shows it.',
       links: [['Claude Code setup docs', 'https://code.claude.com/docs/en/mcp']], checked: true },
     { id: 'cursor', name: 'Cursor', sub: 'Config file',
-      steps: ['Create or open `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).', 'Paste the entry from "Prefer a settings file?" below, using `url` and no `type`.', 'Open Customize and check that Trend Detective is listed and on.'],
+      steps: ['Create or open `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).', 'Paste the entry from "Prefer a settings file?" below, using `url` and no `type`.', 'Open Customize and check that Bhoomi is listed and on.'],
       note: 'We could not confirm the menu names for adding a server in the Cursor app, so we show the config file instead.',
       links: [['Cursor setup docs', 'https://cursor.com/docs/context/mcp']], checked: true },
     { id: 'vscode', name: 'VS Code', sub: 'With GitHub Copilot',
-      steps: ['Open the Command Palette and run "MCP: Add Server".', 'Choose "HTTP (HTTP or Server-Sent Events)" and paste the server address.', 'Name it "trend-detective", then choose Global (or the workspace if you prefer).', 'Accept the trust prompt after reading it, then ask GitHub Copilot a question and look for Trend Detective\'s tools.'],
+      steps: ['Open the Command Palette and run "MCP: Add Server".', 'Choose "HTTP (HTTP or Server-Sent Events)" and paste the server address.', 'Name it "bhoomi", then choose Global (or the workspace if you prefer).', 'Accept the trust prompt after reading it, then ask GitHub Copilot a question and look for Bhoomi\'s tools.'],
       note: 'Or put the VS Code block from "Prefer a settings file?" in `.vscode/mcp.json`. VS Code uses `servers`, not `mcpServers`.',
       links: [['VS Code MCP servers docs', 'https://code.visualstudio.com/docs/copilot/customization/mcp-servers'], ['VS Code MCP configuration reference', 'https://code.visualstudio.com/docs/agents/reference/mcp-configuration']], checked: true },
     { id: 'other', name: 'Any other AI agent', sub: 'Any MCP client',
@@ -159,7 +159,7 @@
       ol.start = 2;
       box.append(ol);
     }
-    box.append(h('label', { for: 'st-addr-' + a.id }, 'Trend Detective server address'), copyRow(addrInput('st-addr-' + a.id), 'server address'));
+    box.append(h('label', { for: 'st-addr-' + a.id }, 'Bhoomi server address'), copyRow(addrInput('st-addr-' + a.id), 'server address'));
     if (a.note) box.append(h('p', { class: 'small' }, rich(a.note)));
     a.links.forEach(([t, u]) => box.append(docLink(t, u)));
     if (a.checked) box.append(h('p', { class: 'small' }, 'Checked 14 November 2026'));
@@ -167,18 +167,18 @@
   }
 
   const CONFIGS = [
-    ['Claude Code', 'project file `.mcp.json`. Claude Code needs `"type": "http"`.', { mcpServers: { 'trend-detective': server } }],
-    ['Cursor', 'file `mcp.json`. No `type`.', { mcpServers: { 'trend-detective': { url: ADDR } } }],
-    ['VS Code', 'file `.vscode/mcp.json`.', { servers: { 'trend-detective': server } }],
+    ['Claude Code', 'project file `.mcp.json`. Claude Code needs `"type": "http"`.', { mcpServers: { 'bhoomi': server } }],
+    ['Cursor', 'file `mcp.json`. No `type`.', { mcpServers: { 'bhoomi': { url: ADDR } } }],
+    ['VS Code', 'file `.vscode/mcp.json`.', { servers: { 'bhoomi': server } }],
   ];
 
   function connectSection() {
     const frag = document.createDocumentFragment();
     frag.append(
-      h('p', { class: 'st-lead' }, 'Connect an AI app to Trend Detective and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named.'),
+      h('p', { class: 'st-lead' }, 'Connect an AI app to Bhoomi and ask it whether something is really changing at a place. The AI calls our tools. The trend, range and verdict are our calculation from public data, with the source named.'),
       h('p', { class: 'small' }, 'Works with AI agents such as Claude and GitHub Copilot.'),
       h('p', null, 'MCP is a standard way for an AI app to use outside tools. Adding this server lets your AI look up these trends itself.'),
-      h('label', { for: 'st-addr-top' }, 'Trend Detective server address'),
+      h('label', { for: 'st-addr-top' }, 'Bhoomi server address'),
       copyRow(addrInput('st-addr-top'), 'server address'),
       h('p', { class: 'small' }, 'This address is for AI apps. It is not a web page. It needs no key and no sign-in.'),
       status,
@@ -233,7 +233,7 @@
   /* ---------- build ---------- */
   function build() {
     const secs = [
-      ['appearance', 'Appearance', 'Choose how Trend Detective looks. Light is the default.', () => radioCards('theme', 'Theme', [
+      ['appearance', 'Appearance', 'Choose how Bhoomi looks. Light is the default.', () => radioCards('theme', 'Theme', [
         { value: 'light', label: 'Light', swatch: 1 }, { value: 'dark', label: 'Dark', swatch: 1 }, { value: 'device', label: 'Match my device', swatch: 1 }],
         () => prefs().theme, (v) => window.TDPrefs.set({ theme: v }))],
       ['units', 'Units', 'Used in every window.', () => radioCards('units', 'Units', [

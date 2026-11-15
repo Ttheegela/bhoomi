@@ -2,7 +2,7 @@
 @font-face { font-family: "Inter"; src: url("fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: "Space Grotesk"; src: url("fonts/space-grotesk-latin-wght-normal.woff2") format("woff2"); font-weight: 300 700; font-display: swap; }
 
-/* Trend Detective (web/design/09-rework.md). Light is the default; every dark colour hangs off :root[data-theme="dark"],
+/* Bhoomi (web/design/09-rework.md). Light is the default; every dark colour hangs off :root[data-theme="dark"],
    which web/prefs.js sets before first paint. Nothing here uses prefers-color-scheme. */
 :root {
   color-scheme: light;

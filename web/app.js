@@ -1,5 +1,5 @@
 'use strict';
-/* Trend Detective page shell (web/design/09-rework.md). Same-origin /api/ calls only. Printed numbers come from the API;
+/* Bhoomi page shell (web/design/09-rework.md). Same-origin /api/ calls only. Printed numbers come from the API;
    the browser's own arithmetic is for drawing and for converting units (see the "pure helpers" block). */
 
 const PLACE_SOURCE = { name: 'Open-Meteo Geocoding API (GeoNames)', url: 'https://open-meteo.com/en/docs/geocoding-api' };
@@ -970,10 +970,10 @@ function showWindow(id) {
     if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
   if (settings) {
-    document.title = 'Settings · Trend Detective';
+    document.title = 'Settings · Bhoomi';
   } else {
     const w = winOf(id);
-    document.title = `${w.name} · Trend Detective`;
+    document.title = `${w.name} · Bhoomi`;
     $('win-h1').textContent = w.name;
     $('win-q').textContent = w.question;
     $('place').setAttribute('placeholder', w.search);
