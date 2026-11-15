@@ -763,26 +763,28 @@ function renderVerdict(t, series) {
   $('verdict-lean').hidden = !c.lean;
   $('verdict-p1').textContent = c.p1;
   $('verdict-p2').textContent = c.p2;
+  $('verdict-method').open = false;
   $('verdict-evidence').textContent = `p-value: ${fmtP(t.p_value)}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change.`;
   srcBlock($('verdict-source'), 'Raw data', t.source);
   $('verdict-calc').textContent = 'Trend, range and verdict: our calculation.';
 
-  const facts = $('facts');
+  const facts = $('facts'), mfacts = $('method-facts');
   clear(facts);
+  clear(mfacts);
   [
-    ['Period', `${t.period.start} to ${t.period.end}`],
-    ['Months of data', String(t.n)],
-    ['Range of trends the data support', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
-    ['p-value', fmtP(t.p_value)],
-    ['Seasons removed', t.deseasonalized ? 'Yes' : 'No'],
-    ['Adjusted for neighbouring months', t.autocorrelation_adjusted ? 'Yes' : 'No'],
-    ['Source', 'src'],
-    ['Method', t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
-  ].forEach(([l, v]) => {
-    if (v !== 'src') { facts.append(fact(l, v)); return; }
+    [facts, 'Period', `${t.period.start} to ${t.period.end}`],
+    [facts, 'Months of data', String(t.n)],
+    [facts, 'Range of trends the data support', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
+    [mfacts, 'p-value', fmtP(t.p_value)],
+    [mfacts, 'Seasons removed', t.deseasonalized ? 'Yes' : 'No'],
+    [mfacts, 'Adjusted for neighbouring months', t.autocorrelation_adjusted ? 'Yes' : 'No'],
+    [facts, 'Source', 'src'],
+    [mfacts, 'Method', t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
+  ].forEach(([dl, l, v]) => {
+    if (v !== 'src') { dl.append(fact(l, v)); return; }
     const dd = el('dd', {});
     srcLink(dd, t.source, true);
-    facts.append(el('div', {}, el('dt', {}, l), dd));
+    dl.append(el('div', {}, el('dt', {}, l), dd));
   });
 
   const list = $('notes-list');
@@ -1093,7 +1095,8 @@ async function init() {
     tdReady([]);
     return;
   }
-  state.variables = r.body;
+  // Display name only: the id and everything sent to the server stay `precip`.
+  state.variables = r.body.map((v) => (v && v.id === 'precip' ? { ...v, name: 'Rain' } : v));
   $('problem').hidden = true;
   if (!state.params) $('empty').hidden = false;
   fillFooter(state.variables);
