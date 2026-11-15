@@ -17,8 +17,8 @@ from earthtrends.agent.providers import NotConfigured, UpstreamError
 from earthtrends.data import coops, psmsl, search_places
 from earthtrends.mcp_server import SOURCE_DOWN, mcp
 
-# Public addresses people have in their AI apps: always accepted, whatever the environment says.
-PUBLIC_HOSTS = ("bhoomi.earth", "www.bhoomi.earth", "trend-detective-six.vercel.app")
+# The public domain: always accepted, whatever the environment says.
+PUBLIC_HOSTS = ("bhoomi.earth", "www.bhoomi.earth")
 
 
 def mcp_allowed_hosts(environ=os.environ) -> list[str]:

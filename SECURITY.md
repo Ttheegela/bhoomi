@@ -9,7 +9,7 @@ Tell us what you found, how to reproduce it and what it affects. This is a two-p
 ## In scope
 
 - The code in this repository.
-- The deployed site, https://trend-detective-six.vercel.app, including its `/api/` routes and the MCP endpoint at `/mcp/`.
+- The deployed site, https://bhoomi.earth, including its `/api/` routes and the MCP endpoint at `/mcp/`.
 
 The data providers' own services, the hosting provider and the AI model providers are out of scope. Please report problems with those to them.
 

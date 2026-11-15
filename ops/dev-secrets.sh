@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Stores DEV secrets outside the repo in ~/.config/trend-detective/dev.env (chmod 600).
+# Stores DEV secrets outside the repo in ~/.config/bhoomi/dev.env (chmod 600).
 # Input is hidden and never echoed. Re-run any time: Enter skips a key, a new value replaces the old one.
 # Production keys never go here; they go straight into Vercel with ops/vercel-secrets.sh.
 set -euo pipefail
 
-f="$HOME/.config/trend-detective/dev.env"
+f="$HOME/.config/bhoomi/dev.env"
 mkdir -p "$(dirname "$f")"
 chmod 700 "$(dirname "$f")"
 touch "$f"

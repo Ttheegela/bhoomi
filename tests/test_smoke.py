@@ -15,7 +15,7 @@ def test_health_and_mcp(mcp_client, monkeypatch):
 
     init = {"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {
         "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}}
-    assert c.post("/mcp/", headers=H, json=init).json()["result"]["serverInfo"]["version"] == importlib.metadata.version("trend-detective")
+    assert c.post("/mcp/", headers=H, json=init).json()["result"]["serverInfo"]["version"] == importlib.metadata.version("bhoomi")
 
     r = c.post("/mcp/", headers={**H, "Host": "evil.example"}, json=PING)
     assert r.status_code == 421  # DNS-rebinding protection rejects unknown hosts
@@ -66,7 +66,7 @@ def test_mcp_allowed_hosts_always_include_the_public_addresses():
 
     for environ in ({}, {"VERCEL_PROJECT_PRODUCTION_URL": "bhoomi.earth"}):
         hosts = mcp_allowed_hosts(environ)
-        assert {"bhoomi.earth", "www.bhoomi.earth", "trend-detective-six.vercel.app"} <= set(hosts)
+        assert {"bhoomi.earth", "www.bhoomi.earth"} <= set(hosts)
         assert {"127.0.0.1:*", "localhost:*"} <= set(hosts) and "*" not in hosts
         assert len(hosts) == len(set(hosts))
     assert mcp_allowed_hosts({"MCP_ALLOWED_HOSTS": "a.example", "VERCEL_URL": "x.vercel.app"}) == [

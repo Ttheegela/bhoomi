@@ -9,7 +9,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from earthtrends.agent import tools
 
 try:
-    VERSION = importlib.metadata.version("trend-detective")
+    VERSION = importlib.metadata.version("bhoomi")
 except importlib.metadata.PackageNotFoundError:  # run from source, not installed: never fail start-up over a label
     VERSION = "unknown"
 
@@ -100,5 +100,5 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
 
 
 def main() -> None:
-    # stdio transport, for Claude Desktop / Claude Code: `uv run trend-detective-mcp`
+    # stdio transport, for Claude Desktop / Claude Code: `uv run bhoomi-mcp`
     mcp.run()
