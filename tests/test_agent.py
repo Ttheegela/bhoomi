@@ -1028,11 +1028,11 @@ DISAGREE_TEXT = ("The sources disagree.\n\nNASA POWER: falling (January 1981 to 
 
 def test_disagree_three_periods_one_wrong(fake, monkeypatch):
     three_periods(monkeypatch)
-    # A range equal to any returned result's period passes (here POWER's, on the station's line): the check is
-    # "a period of this question", not "this source's period".
+    # Another source's period (POWER's, on the station's line) is wrong: the line names the station.
     other = DISAGREE_TEXT.format(end="December 2025")
-    assert loop.wrong_periods(other, [{"name": "detect_trend", "error": None, "result": {
-        "period": p, "source": {"id": s}}} for s, p in DELHI_P.items()]) == []
+    assert [m.group() for m in loop.wrong_periods(other, [{"name": "detect_trend", "error": None, "result": {
+        "period": p, "source": {"id": s, "name": SRC[s][0]}}} for s, p in DELHI_P.items()])] == [
+        "January 1981 to December 2025"]
     bad = DISAGREE_TEXT.format(end="March 2025")
     fake.script = [step(tool_calls=three_calls()), step(bad), step(bad), step("never")]
     r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
@@ -1093,6 +1093,153 @@ def test_period_retry_respects_budget(fake, monkeypatch):
     assert loop.ask("q", model="fake:m")["answer"] == RIGHT and len(fake.script) == 1
 
 
+# ---- periods: candidates by place and by named source (fix round 1) ----
+
+SEA = {"variable": "sea_level", "lat": 47.61, "lon": -122.33}
+SEA_COOPS = {**NY_COOPS, "place": {"name": "Seattle", "lat": 47.6, "lon": -122.34}}
+SEA_PSMSL = {**NY_PSMSL, "place": {"name": "SEATTLE", "lat": 47.6, "lon": -122.34},
+             "period": {"start": "1899-01", "end": "2025-12"}}
+
+
+def done(args, result):
+    return {"name": "detect_trend", "arguments": args, "result": result, "error": None}
+
+
+TWO_PLACES = [done({**NY, "source": "coops"}, NY_COOPS), done({**NY, "source": "psmsl"}, NY_PSMSL),
+              done({**SEA, "source": "coops"}, SEA_COOPS), done({**SEA, "source": "psmsl"}, SEA_PSMSL)]
+CMP1 = ("Sea level is rising clearly in both places.\n\n"
+        "New York (The Battery tide gauge): NOAA CO-OPS gives a rise of 31.79 mm per decade, from {ny_coops}. "
+        "PSMSL gives 29.62 mm per decade, from January 1856 to December 2025.\n\n"
+        "Seattle: NOAA CO-OPS gives 20.93 mm per decade, from January 1900 to October 2026. PSMSL gives 20.76 mm per "
+        "decade, 95% range 19.53 to 21.98, from {sea_psmsl}.\n\n"
+        "Sources: NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and PSMSL (https://psmsl.org/).")
+CMP1_OK = CMP1.format(ny_coops="January 1900 to October 2026", sea_psmsl="January 1899 to December 2025")
+
+
+def test_two_places_right_answer_passes():
+    assert loop.wrong_periods(CMP1_OK, TWO_PLACES) == []
+
+
+def test_two_places_seattle_psmsl_gets_its_own_period():  # the review's reproduction
+    bad = CMP1.format(ny_coops="January 1900 to October 2026", sea_psmsl="January 1890 to December 2025")
+    assert [m.group() for m in loop.wrong_periods(bad, TWO_PLACES)] == ["January 1890 to December 2025"]
+    assert loop.fix_periods(bad, TWO_PLACES) == CMP1_OK
+
+
+def test_two_places_new_york_coops_gets_its_own_period():
+    bad = CMP1.format(ny_coops="March 1905 to October 2026", sea_psmsl="January 1899 to December 2025")
+    assert loop.fix_periods(bad, TWO_PLACES) == CMP1_OK
+
+
+def test_retry_note_names_the_place_when_there_are_two():
+    note = loop.periods_note(TWO_PLACES)
+    assert note == ("NOAA CO-OPS tide gauges at The Battery: January 1900 to October 2026; Permanent Service for Mean "
+                    "Sea Level (PSMSL) at NEW YORK (THE BATTERY): January 1856 to December 2025; NOAA CO-OPS tide "
+                    "gauges at Seattle: January 1900 to October 2026; Permanent Service for Mean Sea Level (PSMSL) at "
+                    "SEATTLE: January 1899 to December 2025")
+    assert " at " not in loop.periods_note(TWO_PLACES[:2])  # one place: no place names
+
+
+A_RES = {**NY_COOPS}  # A: NOAA CO-OPS, 1900-01 to 2026-10
+B_RES = {**NY_PSMSL}  # B: PSMSL, 1856-01 to 2025-12, same place
+AB = [done({**NY, "source": "coops"}, A_RES), done({**NY, "source": "psmsl"}, B_RES)]
+
+
+@pytest.mark.parametrize("text,flagged", [
+    ("PSMSL gives 29.62 mm per decade. Both cover about 1900 to 2026.", ["1900 to 2026"]),
+    ("PSMSL gives 29.62 mm per decade from 1900 to 2026.", ["1900 to 2026"]),
+    ("NOAA CO-OPS gives 31 mm per decade from January 1900 to October 2026 and PSMSL gives 29.62 from January 1856 "
+     "to December 2025.", []),
+    ("Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, January 1856 to December 2025.", []),
+    ("NOAA CO-OPS and PSMSL both cover about 1900 to 2026.", ["1900 to 2026"]),  # one range for both: wrong
+])
+def test_range_must_be_a_candidates_period(text, flagged):
+    assert [m.group() for m in loop.wrong_periods(text, AB)] == flagged
+
+
+def test_named_source_wrong_range_gets_that_sources_period():
+    text = "PSMSL gives 29.62 mm per decade from 1900 to 2026."
+    assert loop.fix_periods(text, AB) == "PSMSL gives 29.62 mm per decade from January 1856 to December 2025."
+
+
+def test_both_with_one_shared_period_passes():
+    same = [done({**NY, "source": "coops"}, {**A_RES, "period": {"start": "1981-01", "end": "2025-12"}}),
+            done({**NY, "source": "psmsl"}, {**B_RES, "period": {"start": "1981-01", "end": "2025-12"}})]
+    assert loop.wrong_periods("Both cover January 1981 to December 2025.", same) == []
+
+
+def test_one_range_for_both_is_left_for_the_retry_not_rewritten():
+    text = "NOAA CO-OPS and PSMSL agree. Both cover about 1900 to 2026."
+    assert loop.wrong_periods(text, AB) and loop.fix_periods(text, AB) == text  # code can't repair it
+
+
+def test_both_sentence_retry_then_fewer_flags_wins(fake, monkeypatch):
+    ny = ny_sources(monkeypatch, psmsl={**NY_PSMSL, "verdict": "no_clear_change"})  # disagree: no agree sentence
+    bad = f"The sources disagree. NOAA CO-OPS rises; PSMSL shows no clear change. Both cover 1900 to 2026. {NY_SOURCES}"
+    good = bad.replace("Both cover 1900 to 2026.", "NOAA CO-OPS covers January 1900 to October 2026.")
+    fake.script = [step(tool_calls=ny), step(bad), step(good), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == good and len(fake.script) == 1
+    assert "January 1856 to December 2025" in fake.started[1]  # the retry note lists each source's period
+    long_good = good + " " + words(170)  # over 180 words, every period right
+    fake.script = [step(tool_calls=ny), step(long_good), step(bad), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == long_good  # fewer flags beats the shorter, still wrong retry
+    fake.script = [step(tool_calls=ny), step(bad), step(long_good), step("never")]
+    assert loop.ask("q", model="fake:m")["answer"] == long_good
+
+
+def test_requested_window_passes_and_other_ranges_still_fail():
+    calls = [done({**ARGS, "start": "1950", "end": "2020"}, {**VIZ})]
+    ok = "You asked for 1950 to 2020, but the data run from January 1981 to December 2025."
+    assert loop.wrong_periods(ok, calls) == [] and loop.fix_periods(ok, calls) == ok
+    assert [m.group() for m in loop.wrong_periods("Rising from 1960 to 2020.", calls)] == ["1960 to 2020"]
+
+
+@pytest.mark.parametrize("text", ["about 1900 to 2000 mm of rain", "a 95% range 1950 to 1990", "see page 1999 to 2001",
+                                  "1950 to 1990 °C", "1950 to 1990 degC", "1950 to 1990%", "1950 to 1990 cm"])
+def test_numbers_that_are_not_periods(text):
+    assert loop.wrong_periods(text, [done(ARGS, VIZ)]) == []
+
+
+@pytest.mark.parametrize("text,flagged,fixed", [
+    ("between 1981 and 2025", [], None),
+    ("between January 1981 and December 2025", [], None),
+    ("between 1980 and 2025", ["between 1980 and 2025"], "between January 1981 and December 2025"),
+    ("no data between mid-2017 and mid-2018", [], None),
+    ("1981 and 2025 are years", [], None),  # "and" without "between" is not a range
+])
+def test_between_and_form(text, flagged, fixed):
+    calls = [done(ARGS, VIZ)]
+    assert [m.group() for m in loop.wrong_periods(text, calls)] == flagged
+    assert loop.fix_periods(text, calls) == (fixed or text)
+
+
+# ---- the check retry turns reasoning down, like the cut-off retry ----
+
+def test_long_retry_runs_with_low_reasoning_and_no_tools(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(133)), step(words(110)), step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == words(110) and len(fake.script) == 1
+    assert fake.low == [False, False, True] and fake.started[2] == []
+
+
+def test_long_retry_cut_off_empty_returns_the_first(fake):
+    fake.script = [step(tool_calls=[call()]), step(words(133)), EMPTY_CUT, step("never")]
+    r = loop.ask("q", model="fake:m")
+    assert r["answer"] == words(133) and len(fake.script) == 1
+
+
+# ---- negative zero ----
+
+@pytest.mark.parametrize("text,want", [
+    ("95% range -0.00 to 0.09", "95% range 0.00 to 0.09"), ("range −0.00 to 0.09", "range 0.00 to 0.09"),
+    ("range -0.000 to 1", "range 0.000 to 1"), ("ends at -0.00.", "ends at 0.00."),
+    ("range -0.004 to 0.09", "range -0.004 to 0.09"), ("range -0.05 to 0.09", "range -0.05 to 0.09"),
+    ("range -0.50 to -10.00", "range -0.50 to -10.00"), ("CO-0.00 stays", "CO-0.00 stays"),
+])
+def test_negative_zero_loses_its_sign(text, want):
+    assert loop.compose(text, []) == want
+
+
 # ---- unit: the reader sees °C, the tool keeps degC ----
 
 @pytest.mark.parametrize("text,want", [
@@ -1120,6 +1267,8 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "would be very unlikely if nothing were really changing",
     'Below 0.001, write "below 0.001" or "less than 0.001", or only a plain phrase',
     "never its raw tiny number",
+    "Give each source's period with that source; never one period for \"both\" or \"all\" sources unless their "
+    "periods are the same.",
     "Write the unit degC as °C (not degC).",
     'write "less than 0.01"',
     "From 0.045 up to 0.055, use three decimals",

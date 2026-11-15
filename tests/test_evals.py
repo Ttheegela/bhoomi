@@ -84,6 +84,14 @@ def test_degree_sign_and_degc_score_the_same():
     assert run.invented_numbers("up 4 °C", [r]) == ["4"]  # a small number before °C is still checked
 
 
+@pytest.mark.parametrize("text,verdict", [
+    ("Sea level falls by 0.40 mm per decade.", "falling"), ("Land water storage falls.", "falling"),
+    ("The land is losing water.", "falling"), ("Sea level rises by 31.79 mm per decade.", "rising"),
+])
+def test_verdict_words_from_the_prompt(text, verdict):
+    assert run.wording_agrees(text, verdict)
+
+
 def test_wrong_period_fails_wording():
     assert run.check(CASE, fake_run())["wording"] is True  # "from 1911 to 2026" is the result's period
     out = run.check(CASE, fake_run(ANSWER.replace("from 1911 to 2026", "from October 1911 to October 2026")))

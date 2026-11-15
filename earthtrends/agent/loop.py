@@ -119,8 +119,15 @@ AGREE_NOTE = ("Same verdict as the default source, so its own numbers are left o
               f"Write {MARKER} where the agreeing sources belong.")
 RESTORED_NOTE = ("These sources no longer all agree, so here are the full results of those sent earlier without "
                  "their numbers.")
+NEG_ZERO = re.compile(r"(?<![\w.])[-\u2212](0(?:\.0+)?)(?!\.?\d)")  # the whole number is zero; -0.004 stays
 DEG_C = re.compile(r"(?<![A-Za-z])degC(?![A-Za-z])")  # the unit on its own, not inside another word
 _YM = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])")
+
+
+def ok_calls(calls: list[dict]) -> list[dict]:
+    """The detect_trend calls that returned a result."""
+    return [c for c in calls
+            if c["name"] == "detect_trend" and c.get("error") is None and isinstance(c.get("result"), dict)]
 
 
 def _place(args: dict) -> tuple[float, float]:
@@ -133,8 +140,7 @@ def agree_plan(calls: list[dict]) -> tuple[dict, list[dict]] | None:
     place and all gave the same verdict, all of them sources the catalog lists for it; else None. Failed calls
     don't count. The default is the first source in the catalog among those that returned (so if the catalog
     default failed, the next one leads). A source called twice counts once, with its last result."""
-    ok = [c for c in calls
-          if c["name"] == "detect_trend" and c.get("error") is None and isinstance(c.get("result"), dict)]
+    ok = ok_calls(calls)
     if len({_place(c["arguments"]) for c in ok}) > 1:  # two places are a comparison, not agreeing sources
         return None
     by_src = {(c["result"].get("source") or {}).get("id"): c["result"] for c in ok}
@@ -229,16 +235,16 @@ def compose(text: str, calls: list[dict]) -> str:
     out = left + right
     # Every source with a result names its link: any still missing goes at the end.
     srcs = {}
-    for c in calls:
-        if c["name"] == "detect_trend" and c.get("error") is None and isinstance(c.get("result"), dict):
-            src = c["result"].get("source") or {}
-            srcs.setdefault(src.get("id"), src)
+    for c in ok_calls(calls):
+        src = c["result"].get("source") or {}
+        srcs.setdefault(src.get("id"), src)
     missing = [f"Source: {s['name'].split(',')[0].strip()}, {s['url']}." for s in srcs.values()
                if _host(s.get("url")) not in out.lower() and s.get("name")]  # no URL: "" is always "in"
     if missing:
         body = out.rstrip()
         out = body + (" " if body else "") + " ".join(missing) + out[len(body):]
-    return DEG_C.sub("\u00b0C", out)  # the tool spells the unit "degC"; the reader sees "°C", as on the page
+    out = DEG_C.sub("\u00b0C", out)  # the tool spells the unit "degC"; the reader sees "°C", as on the page
+    return NEG_ZERO.sub(r"\1", out)  # "-0.00" is a zero: no sign
 
 
 def _hidden(calls: list[dict]) -> set[int]:
@@ -260,8 +266,7 @@ def for_model(calls: list[dict]) -> list[dict]:
 
 def word_limit(calls: list[dict]) -> int:
     """120 words, or 180 when detect_trend results came back from two or more distinct sources."""
-    srcs = {(c["result"].get("source") or {}).get("id") for c in calls
-            if c["name"] == "detect_trend" and c["error"] is None and isinstance(c["result"], dict)}
+    srcs = {(c["result"].get("source") or {}).get("id") for c in ok_calls(calls)}
     return MAX_WORDS_MULTI if len(srcs) >= 2 else MAX_WORDS
 
 
@@ -269,17 +274,22 @@ def word_limit(calls: list[dict]) -> int:
 
 _MON = ("jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?"
         "|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?")
-_DATE = rf"(?:\b({_MON})\.?\s+)?((?:1[5-9]|20)\d\d)"
-# A start and an end, each a month and year or a bare year, joined by to/through/until or a dash. A year glued to a
-# word or hyphen ("mid-2017"), a decimal or an ISO month ("1981-01") is not a range end.
-PERIOD_RANGE = re.compile(rf"(?<![\w.\-–—/]){_DATE}\s*(?:\b(?:to|through|until)\b|[-–—])\s*{_DATE}"
-                          r"(?![\w\-–—]|[.,]\d)", re.I)
+
+
+def _date(n: int) -> str:
+    return rf"(?:\b(?P<m{n}>{_MON})\.?\s+)?(?P<y{n}>(?:1[5-9]|20)\d\d)"
+
+
+# A start and an end, each a month and year or a bare year, joined by to/through/until or a dash, or "between ... and
+# ...". A year glued to a word or hyphen ("mid-2017"), a decimal, an ISO month ("1981-01") or a year followed by a
+# unit ("1900 to 2000 mm") is not a range end.
+PERIOD_RANGE = re.compile(
+    rf"(?<![\w.\-–—/])(?:(?P<btw>between)\s+)?{_date(1)}\s*(?P<sep>\b(?:to|through|until|and)\b|[-–—])\s*{_date(2)}"
+    r"(?![\w\-–—]|[.,]\d)(?!\s*(?:°|%|(?:mm|cm|degc)\b))", re.I)
+_NOT_A_PERIOD = re.compile(r"\b(?:range|pages?)\s*$", re.I)  # "95% range 1950 to 1990", "page 1999 to 2001"
+# One range said for several sources at once.
+PLURAL = re.compile(r"\b(?:both|each|all three|all four|all of them|all (?:the )?sources)\b", re.I)
 _MONTHS = {m[:3].lower(): i for i, m in enumerate(calendar.month_name) if m}
-
-
-def _ok_results(calls: list[dict]) -> list[dict]:
-    return [c["result"] for c in calls
-            if c["name"] == "detect_trend" and c.get("error") is None and isinstance(c.get("result"), dict)]
 
 
 def _period(r: dict) -> dict | None:
@@ -294,72 +304,150 @@ def _fits(month: str | None, year: str, ym: str) -> bool:
     return year == y and (month is None or _MONTHS[month[:3].lower()] == int(m))
 
 
-def wrong_periods(text: str, calls: list[dict]) -> list[re.Match]:
-    """The period ranges in `text` that equal no returned result's period. A range written in a result's own caveat
-    ("its 2004 to 2009 average") is the tool's words, not a period, so it passes. No result with a period: nothing to
-    check. The eval scorer imports this."""
-    rs = _ok_results(calls)
-    periods = [p for p in map(_period, rs) if p]
-    if not periods:
-        return []
-    caveats = [c.lower() for r in rs for c in r.get("caveats") or [] if isinstance(c, str)]
-    bad = []
-    for m in PERIOD_RANGE.finditer(text):
-        (m1, y1), (m2, y2) = m.group(1, 2), m.group(3, 4)
-        if any(_fits(m1, y1, p["start"]) and _fits(m2, y2, p["end"]) for p in periods):
-            continue
-        ends = [" ".join(text[m.start(i if m.group(i) else i + 1):m.end(i + 1)].lower().split()) for i in (1, 3)]
-        if any(all(re.search(rf"\b{re.escape(e)}\b", c) for e in ends) for c in caveats):
-            continue
-        bad.append(m)
-    return bad
+def _span(m: re.Match) -> tuple[int, int]:
+    """Where the dates are, without a leading "between"."""
+    return (m.start("m1") if m.group("m1") else m.start("y1")), m.end("y2")
 
 
-def _in_words(p: dict) -> str:
-    return f"{_month(p['start'])} to {_month(p['end'])}"
+def _chunks(text: str, pos: int) -> tuple[str, str]:
+    """The sentence and the line around `pos`."""
+    sent = next((u.group() for u in _UNIT.finditer(text) if u.start() <= pos < u.end()), "")
+    e = text.find("\n", pos)
+    return sent, text[text.rfind("\n", 0, pos) + 1:e if e >= 0 else len(text)]
 
 
-def _names(src: dict, chunk: str) -> bool:
-    """The chunk names the source: its id, its name up to a "," or "(", a short form in brackets, or its host."""
-    name = (src.get("name") or "").lower()
-    forms = {src.get("id") or "", re.split(r"[,(]", name)[0].strip(), *re.findall(r"\(([^)]+)\)", name),
-             _host(src.get("url"))} - {""}
+def _forms(name: str) -> set[str]:
+    """A name, its part before a "," or "(", and any short form in brackets, lower case."""
+    name = (name or "").lower()
+    return {name, re.split(r"[,(]", name)[0].strip(), *re.findall(r"\(([^)]+)\)", name)} - {""}
+
+
+def _says(forms: set[str], chunk: str) -> bool:
     low = chunk.lower()
     return any(re.search(rf"\b{re.escape(f)}\b", t) for f in forms for t in (low, low.replace("-", "")))
 
 
-def _right_period(text: str, m: re.Match, calls: list[dict]) -> dict:
-    """The period that replaces a wrong range: the only one if all results share it; else the one period of the
-    sources named in the range's sentence, then its line; else the default source's (first in the catalog)."""
-    rs = [r for r in _ok_results(calls) if _period(r)]
-    if len({(r["period"]["start"], r["period"]["end"]) for r in rs}) > 1:
-        sent = next((u.group() for u in _UNIT.finditer(text) if u.start() <= m.start() < u.end()), "")
-        e = text.find("\n", m.end())
-        line = text[text.rfind("\n", 0, m.start()) + 1:e if e >= 0 else len(text)]
+def _names(src: dict, chunk: str) -> bool:
+    """The chunk names the source: its id, its name (or a short form of it), its host, or the agency acronym its name
+    starts with ("NOAA", "NASA"; it may name two sources, which only widens the candidates)."""
+    first = ((src.get("name") or "").split() or [""])[0]
+    agency = first.lower() if len(first) >= 3 and first.isupper() and first.isalpha() else ""
+    return _says(_forms(src.get("name")) | {src.get("id") or "", _host(src.get("url")), agency} - {""}, chunk)
+
+
+def _where(c: dict):
+    try:
+        return _place(c.get("arguments") or {})
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _candidates(text: str, pos: int, ok: list[dict]) -> tuple[list[dict], bool]:
+    """The results a range at `pos` may speak for, and whether a source was named. With results for several places,
+    only the place named in the range's sentence (else its line) counts. Then the sources named in the sentence; if
+    none, those named in the line; if none, every result left. Used by the check and by the replacement."""
+    sent, line = _chunks(text, pos)
+    if len({_where(c) for c in ok}) > 1:
         for chunk in (sent, line):
-            found = {(r["period"]["start"], r["period"]["end"]) for r in rs if _names(r.get("source") or {}, chunk)}
-            if len(found) == 1:
-                start, end = found.pop()
-                return {"start": start, "end": end}
-    order = next((v["sources"] for v in tools.list_variables() if v["id"] == rs[0].get("variable")), [])
-    rank = [order.index(i) if i in order else len(order) for i in ((r.get("source") or {}).get("id") for r in rs)]
-    return rs[rank.index(min(rank))]["period"]
+            here = {_where(c) for c in ok if _says(_forms((c["result"].get("place") or {}).get("name")), chunk)}
+            if here:
+                ok = [c for c in ok if _where(c) in here]
+                break
+    for chunk in (sent, line):
+        named = [c for c in ok if _names(c["result"].get("source") or {}, chunk)]
+        if named:
+            return named, True
+    return ok, False
+
+
+def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
+    """(range, fixable by code) for each wrong period range in `text`. A range passes if it is the period of one of
+    its candidates, the window the user asked for (a call's start and end, by year), or written in a result's own
+    caveat ("its 2004 to 2009 average": the tool's words, not a period). A range given for several sources at once
+    ("both cover ...") whose candidates have different periods is wrong, and code can't repair it."""
+    ok = [c for c in ok_calls(calls) if _period(c["result"])]
+    if not ok:
+        return []
+    caveats = [c.lower() for x in ok for c in x["result"].get("caveats") or [] if isinstance(c, str)]
+    asked = [(str(a["start"])[:4], str(a["end"])[:4]) for a in (c.get("arguments") or {} for c in calls)
+             if isinstance(a, dict) and a.get("start") and a.get("end")]
+    out = []
+    for m in PERIOD_RANGE.finditer(text):
+        if (m["sep"].lower() == "and") != bool(m["btw"]) or _NOT_A_PERIOD.search(text, 0, m.start()):
+            continue
+        if (m["y1"], m["y2"]) in asked:
+            continue
+        ends = [" ".join(text[m.start(f"m{i}") if m[f"m{i}"] else m.start(f"y{i}"):m.end(f"y{i}")].lower().split())
+                for i in (1, 2)]
+        if any(all(re.search(rf"\b{re.escape(e)}\b", c) for e in ends) for c in caveats):
+            continue
+        cands, _ = _candidates(text, m.start(), ok)
+        periods = {(c["result"]["period"]["start"], c["result"]["period"]["end"]) for c in cands}
+        plural = len(periods) > 1 and bool(PLURAL.search(_chunks(text, m.start())[0]))
+        if plural or not any(_fits(m["m1"], m["y1"], a) and _fits(m["m2"], m["y2"], b) for a, b in periods):
+            out.append((m, not plural))
+    return out
+
+
+def wrong_periods(text: str, calls: list[dict]) -> list[re.Match]:
+    """The period ranges in `text` that are wrong (see _check). No result with a period: nothing to check. The eval
+    scorer imports this."""
+    return [m for m, _ in _check(text, calls)]
+
+
+def _in_words(p: dict, sep: str = "to") -> str:
+    return f"{_month(p['start'])} {sep} {_month(p['end'])}"
+
+
+def _rank(r: dict) -> int:
+    order = next((v["sources"] for v in tools.list_variables() if v["id"] == r.get("variable")), [])
+    sid = (r.get("source") or {}).get("id")
+    return order.index(sid) if sid in order else len(order)
+
+
+def _right_period(text: str, m: re.Match, calls: list[dict]) -> dict:
+    """The period that replaces a wrong range. Candidates as for the check. A source named: of its candidates' periods,
+    the closest to the range as written (months apart at both ends; ties in catalog order). No source named: the
+    default source's (first in the catalog) among the candidates."""
+    cands, named = _candidates(text, m.start(), [c for c in ok_calls(calls) if _period(c["result"])])
+    rs = [c["result"] for c in cands]
+    if not named:
+        return min(rs, key=_rank)["period"]
+
+    def apart(r):
+        d = 0
+        for i, k in ((1, "start"), (2, "end")):
+            y, mo = map(int, r["period"][k].split("-"))
+            wm = _MONTHS[m[f"m{i}"][:3].lower()] if m[f"m{i}"] else mo
+            d += abs((int(m[f"y{i}"]) - y) * 12 + wm - mo)
+        return d
+    return min(rs, key=lambda r: (apart(r), _rank(r)))["period"]
 
 
 def fix_periods(text: str, calls: list[dict]) -> str:
-    """Each wrong range replaced by the tool's period in words; text with no wrong range is returned unchanged."""
-    for m in reversed(wrong_periods(text, calls)):
-        text = text[:m.start()] + _in_words(_right_period(text, m, calls)) + text[m.end():]
+    """Each wrong range replaced by the tool's period in words; text with no wrong range is returned unchanged.
+    ponytail: a range said for several sources at once ("both cover 1900 to 2026") is left as written: one period
+    can't be right for all of them. It gets the shared retry; if it survives, it goes out as the model wrote it."""
+    for m, fixable in reversed(_check(text, calls)):
+        if fixable:
+            s, e = _span(m)
+            sep = "and" if m["sep"].lower() == "and" else "to"
+            text = text[:s] + _in_words(_right_period(text, m, calls), sep) + text[e:]
     return text
 
 
 def periods_note(calls: list[dict]) -> str:
-    """Each source's period, for the retry; agreeing sources whose numbers the model never saw are left out."""
+    """Each source's period, for the retry, with its place when results span several places. Agreeing sources whose
+    numbers the model never saw are left out."""
     hidden, seen = _hidden(calls), []
+    ok = [c for c in ok_calls(calls) if _period(c["result"])]
+    places = len({_where(c) for c in ok}) > 1
     for i, c in enumerate(calls):
-        r = c["result"] if c["name"] == "detect_trend" and c["error"] is None else None
-        if i not in hidden and isinstance(r, dict) and _period(r):
-            s = f"{((r.get('source') or {}).get('name') or '?').split(',')[0].strip()}: {_in_words(r['period'])}"
+        r = c["result"] if c in ok else None
+        if i not in hidden and r:
+            name = ((r.get("source") or {}).get("name") or "?").split(",")[0].strip()
+            at = (r.get("place") or {}).get("name") if places else None
+            s = f"{name}{f' at {at}' if at else ''}: {_in_words(r['period'])}"
             if s not in seen:
                 seen.append(s)
     return "; ".join(seen)
@@ -367,12 +455,14 @@ def periods_note(calls: list[dict]) -> str:
 
 def best(kept: list[str], calls: list[dict]) -> str | None:
     """What to return when every complete attempt failed a check: each with its wrong periods replaced by code, then
-    the last one within the word limit, else the shortest (the first of equals). Cut-off text is never in `kept`."""
+    the fewest period flags left first; among those, the last one within the word limit, else the shortest (the
+    first of equals). Cut-off text is never in `kept`."""
     if not kept:
         return None
     fixed, limit = [fix_periods(t, calls) for t in kept], word_limit(calls)
-    fits = [t for t in fixed if len(t.split()) <= limit]
-    return fits[-1] if fits else min(fixed, key=lambda t: len(t.split()))
+    flags = [len(_check(t, calls)) for t in fixed]  # left after fixing: a one-range-for-several-sources sentence
+    n = [len(t.split()) for t in fixed]
+    return fixed[min(range(len(fixed)), key=lambda i: (flags[i], 0, -i) if n[i] <= limit else (flags[i], 1, n[i]))]
 
 
 def ask(question: str, model: str | None = None) -> dict:
@@ -423,9 +513,9 @@ def ask(question: str, model: str | None = None) -> dict:
                 # complete answer is in hand. A cut-off step is retried until the call limit or the budget ends it.
                 if i == MAX_CALLS - 1 or (kept if cut else checked):
                     break
-                if cut:  # reasoning may have spent the cap: answer without it from now on
-                    provider.low_reasoning = True
-                else:
+                # Reasoning may spend the cap (a cut-off step), or the retry's cap: answer without it from now on.
+                provider.low_reasoning = True
+                if not cut:
                     checked = True  # one retry for both checks together
                 # The seam has no "add a user message", so restart with the results inline.
                 if not calls:  # nothing fetched yet: start again from the plain question, tools offered

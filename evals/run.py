@@ -42,8 +42,10 @@ COLUMNS = {"tool": "right tool", "variable": "right variable", "place": "right p
            "verdict": "verdict", "wording": "verdict wording", "numbers": "no invented numbers",
            "source_named": "source named", "must_say": "must-say"}
 VERDICT_WORDS = {
-    "rising": ("rising", "going up", "increasing", "risen", "upward", "warming", "getting hotter", "getting warmer"),
-    "falling": ("falling", "going down", "decreasing", "dropping", "declining", "downward", "cooling"),
+    "rising": ("rising", "going up", "increasing", "risen", "upward", "warming", "getting hotter", "getting warmer",
+               "rises"),
+    "falling": ("falling", "going down", "decreasing", "dropping", "declining", "downward", "cooling", "falls",
+                "losing"),
     "no_clear_change": ("no clear change", "no change is plausible", "rule out no change", "not show a clear change",
                         "n't show a clear change", "no clear", "not clear", "can't tell", "cannot tell"),
 }
