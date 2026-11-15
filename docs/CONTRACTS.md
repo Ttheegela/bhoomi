@@ -108,7 +108,7 @@ The page calls these two routes on its own origin. Outside agents use the MCP to
 }
 ```
 
-- At most 5 results, in the upstream order. `admin1`, `country` and `country_code` can be `null`. Text fields are cut to 100 characters and are untrusted text: show them as text, never as HTML.
+- At most 5 results: places whose name equals the typed text first, then the largest population first (the upstream service is asked for 10 and orders by place type, which can put the largest place past the fifth). `admin1`, `country` and `country_code` can be `null`. Text fields are cut to 100 characters and are untrusted text: show them as text, never as HTML.
 - No match: `"results": []` with status 200. Every 200 answer carries `source`.
 - `q` is trimmed and single-spaced; fewer than 2 or more than 80 characters is a 400. A missing `q` is a 422. An upstream failure is a 502. The data rate limit applies (429 with `Retry-After`). Never a 500.
 
