@@ -23,13 +23,15 @@ The result files carry the runner's own date in their names and title (2026-11-1
 
 - Both miss the same case, `delhi-sea-level-inland`, on the "right tool" check: each looked for a tide gauge near Delhi,
   found none, and declined with no numbers. That is a correct answer. The case already carries the field that accepts
-  such a lookup (#76, in this commit), but the runner only reads it since #78, merged later the same night; these
-  results were not scored again.
+  such a lookup (#76, in this commit), but the runner only reads it since #78, which merged at 01:17 UTC, after this
+  run had started with the older runner; these results were not scored again.
 - No case passes for Haiku and fails for Flash, and neither model got a variable, a source or a verdict wrong.
 - Flash's slowest answers: `phoenix-air-temp` 46.2 s, `london-air-temp` 31.8 s, `mumbai-sea-level-psmsl` 24.4 s,
   `chennai-rain` 21.9 s. Haiku's slowest: `mumbai-sea-level-psmsl` 19.9 s.
-- The seconds are 3 to 5 s too high for both models: on the test machine the tracing export is blocked and each answer
-  waits for it. Compare the two rows with each other, not with the live site.
+- The seconds are too high for both models, by an estimated 3 to 5 s: on the test machine the tracing export is blocked
+  and each answer waits for it (the estimate comes from the timing runs described in
+  `../2026-11-14-shortlist-gemini/NOTES.md`; nothing in this folder measures it). Compare the two rows with each other,
+  not with the live site.
 - One run per model on 15 cases: enough to see a large difference in time and cost, too few to rank two models on
   correctness.
 
@@ -45,21 +47,26 @@ The result files carry the runner's own date in their names and title (2026-11-1
 | Is it getting hotter in Springfield? | 5.7 | 22 (120) | asks which Springfield |
 | Will it rain tomorrow? | 3.3 | 40 (120) | declines |
 
-Every number in these answers is in a tool result, and every period belongs to its source. For comparison, Haiku on the
-live site: New York 6 to 9 s, Delhi's hottest days 12 to 13 s.
+Checked by hand in the session that asked them, against the tool results returned with each answer (the answers are
+not kept here): every number in these answers is in a tool result, and every period belongs to its source. For
+comparison, a handful of Haiku answers timed by hand on the live site the same night and the night before, also not
+kept here: New York 6 to 9 s, Delhi's hottest days 12 to 13 s.
 
-What Flash did that Haiku does not:
+In these ten questions, Flash did what Haiku did not do in its own live answers on those two nights:
 
 1. New York, both times: it added "Both use the tide gauge at The Battery, 1 km away." The prompt says not to state what
    the sources share. The sentence is true, but no tool returned it as one fact. The scorer missed this wording; #80
    fixed the scorer.
 2. Delhi's hottest days, both times: the ERA5 trend is written "0.12 °C per decade". The tool's value is 0.125; the
-   Explore card shows +0.13, and Haiku writes 0.13. So the answer and the card differ by one digit on the main demo
-   question.
+   Explore card shows +0.13, and the Haiku answers seen wrote 0.13. So the answer and the card differ by one digit on
+   the main demo question.
 3. Mumbai, both times: the answer opens with the source that had no data and gives the verdict second.
-4. About 1.5 to 2 times slower than Haiku on questions with several sources, and about 5 times the cost.
+4. Time and cost. In the 15 cases Flash's mean time was about 1.5 times Haiku's (17.6 s against 12.0 s), mostly from a
+   few slow answers (Phoenix 46 s, London 32 s); on several cases Flash was the faster of the two. Live, Delhi's
+   hottest days took 21.6 and 27.0 s against Haiku's 12 to 13 s, and New York took about the same as Haiku. The cost
+   per question was about 5 times Haiku's.
 
-What Flash did as well or better: the same pass count; shorter answers that needed no "please shorten" retry.
+What Flash did as well: the same pass count, and no wrong variable, source or verdict.
 
 ## Reported separately (not measured in this folder)
 
