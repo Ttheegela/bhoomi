@@ -3,6 +3,8 @@
 #                    messages and 4,000 characters in total (the same limits as POST /api/ask).
 #   min_places       optional: the detect_trend calls must cover at least this many places more than 100 km apart.
 #   allow_stats      optional, true or false: the answer may use statistics words (p-value, slope, ...); default false.
+#   multi_measure    optional, true or false: several measurements are expected, each with its own verdict, so the
+#                    single-verdict wording check is skipped (as for several places); default false.
 # Loaded after cases.toml by `uv run python -m evals.run`; ids must be unique across both files.
 
 # A follow-up that names only a new place: the agent must keep the earlier measurement (sea level) and run a new
@@ -147,7 +149,7 @@ must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL"]
 
 [[case]]
 id = "princeton-hotter-when-older"
-question = "Has it been getting hotter in Princeton? Will summers be worse when I'm older?"
+question = "Has it been getting hotter in Princeton, New Jersey? Will summers be worse when I'm older?"
 expect_tool = "detect_trend"
 expect_place = [40.35, -74.66]
 max_km = 50
@@ -195,5 +197,6 @@ question = "For Atlantic City, New Jersey, what do NASA and NOAA records show ab
 expect_tool = "detect_trend"
 expect_place = [39.36, -74.42]
 max_km = 40
+multi_measure = true
 must_say = ["sea level", "temperature"]
 must_not_say = ["[GUIDANCE", "[OFFICIAL"]
