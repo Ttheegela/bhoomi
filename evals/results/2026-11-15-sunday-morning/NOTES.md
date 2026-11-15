@@ -8,7 +8,7 @@ Why: the pitch and project page quote a golden-question score, and the agent cha
 - Command (from the repository root; keys come only from the env file):
 
   ```
-  uv run --env-file ~/.config/trend-detective/dev.env python -m evals.run \
+  uv run --env-file ~/.config/bhoomi/dev.env python -m evals.run \
     --models openrouter:anthropic/claude-haiku-5.5 --openrouter-budget 1.0 --out <dir>
   ```
 

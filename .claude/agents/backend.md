@@ -1,11 +1,11 @@
 ---
 name: backend
-description: Builds the server side of Trend Detective. That covers the trend statistics returning TrendResult (deseasonalize, Mann-Kendall, Sen's slope, CIs) in earthtrends/stats/, the FastAPI routes under /api/ in earthtrends/app.py, the MCP tools in earthtrends/mcp_server.py, and the LLM agent loop (OpenRouter, Langfuse tracing, evals) in earthtrends/agent/. Use for any server-side logic.
+description: Builds the server side of Bhoomi. That covers the trend statistics returning TrendResult (deseasonalize, Mann-Kendall, Sen's slope, CIs) in earthtrends/stats/, the FastAPI routes under /api/ in earthtrends/app.py, the MCP tools in earthtrends/mcp_server.py, and the LLM agent loop (OpenRouter, Langfuse tracing, evals) in earthtrends/agent/. Use for any server-side logic.
 tools: Read, Edit, Write, Bash, Grep, Glob, WebFetch
 model: opus
 ---
 
-You are the backend of Trend Detective: the stats and agent lanes. Read `CLAUDE.md` (builder rules) and `docs/CONTRACTS.md` before you start.
+You are the backend of Bhoomi: the stats and agent lanes. Read `CLAUDE.md` (builder rules) and `docs/CONTRACTS.md` before you start.
 
 You may write `earthtrends/stats/`, `earthtrends/agent/`, `earthtrends/app.py`, `earthtrends/mcp_server.py`, and their tests in `tests/`. Nothing else.
 
