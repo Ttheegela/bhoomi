@@ -499,6 +499,7 @@ async function run(params, user, keep) {
 function show(sr, tr, params, user) {
   let heading;
   $('chart-wrap').hidden = true;
+  $('year-stripes').hidden = true; // shown again only when renderVerdict draws them for this answer
   $('more').hidden = true;
   $('verdict-card').hidden = true;
   $('problem').hidden = true;

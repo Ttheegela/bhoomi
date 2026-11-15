@@ -210,3 +210,4 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Year stripes: one stripe per year, seasons removed, with the first and last year of the period, a key ("lower year", "higher year"; true in light and dark mode), a caption, the tag "our calculation" and the source link. The stripes are hidden from screen readers; the key and caption are real text.
 - Both mounts are optional: if either fails to draw, it is hidden and the answer card and chart are untouched.
 - Desktop: the left column is sticky; checked, left as on `main` (a column taller than the window un-sticks at the end of its row). No inner scroll area.
+- Known limit: below about 360 px wide the picture and its labels scale down together (about 12 px at 320 px); the words that carry the answer are in the card, not in the picture.
