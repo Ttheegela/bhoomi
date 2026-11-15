@@ -1,6 +1,6 @@
 # Trend page design (issue #6)
 
-Build: `web/index.html`, `web/style.css`, `web/app.js`. No build step, no libraries, no CDN, no web fonts. Chart is hand-written SVG. Same-origin calls to `/api/...`. No NASA logos or branding; dataset names are plain text.
+Build: `web/index.html`, `web/style.css`, `web/app.js`. No build step, no libraries, no CDN, self-hosted web fonts only (Space Grotesk, Inter). Chart is hand-written SVG. Same-origin calls to `/api/...`. No NASA logos or branding; dataset names are plain text.
 
 ## 1. Flow and first load
 1. Page opens already showing a real answer: New York (40.71, -74.01), Sea level, source from the API. Fetch `/api/variables`, then `/api/series` and `/api/trend` in parallel.
@@ -32,8 +32,8 @@ Is it really changing here?      [Question line]
 ```
 - Desktop verdict column is sticky (top 16 px) beside the chart. Below 900 px all stacked.
 - Header AI label: bordered text "Built with AI assistance", always visible in the header (not hidden at 375). Footer repeats it with the line "Data come from the sources named next to each number. Only public data."
-- Controls: the "Show trend" button lives inside the coordinates section (a closed `<details>`); chips and the measurement select run at once.
-- Verdict card order: heading, the big number, the "our calculation" line, the source link line ("Raw data: {source.name} ↗"), sentence 1, the grey lean line (no clear change only), then the explanatory paragraphs and the p-value. Source links are block-level lines, 48 px tall, never inside a sentence.
+- Controls: the "Show trend" button lives inside the coordinates section (a closed `<details>`); chips and the measurement select run at once. A chip can carry a small ▲ ▼ ≈ after its label (see the last section). The two help lines ("Good for" and the source) run together in one grey paragraph under the selects.
+- Verdict card order: heading, the number row (the big number with its unit, "per decade" under it, and the sparkline on the right), the "our calculation" line, the source link line ("Raw data: {source.name} ↗"), sentence 1, the grey lean line (no clear change only), then the explanatory paragraphs and the p-value. Source links are block-level lines, 48 px tall, never inside a sentence.
 - Ask slot: `<section id="ask" hidden aria-label="Ask a question"></section>` after "How to read this". Empty now.
 
 ## 3. Words on screen
@@ -70,7 +70,7 @@ Container `figure`, width 100%, SVG `viewBox` scales with it. Two stacked panels
 - Panel A "Raw monthly values" (units on y axis): thin line.
 - Panel B "Seasons removed, with trend" (y label "Change from the usual for that month ({units})"): deseasonalized line, trend line, uncertainty fan. Deseasonalized = value − its calendar month's mean over all non-null values.
 - Sizes: viewBox width 340 at <= 599 px (panel A 126 tall, B 206), 640 at 600-899 px (A 166, B 246), 720 at >= 900 px (A 156, B 276); height = A + B + a gap of font size + 8 + the axis area (at least 40); each panel header is 3.25 x the font size. Min text in SVG 12 px on screen (scale font with the viewBox).
-- Marks (distinct without colour): raw = 1 px solid line, grey `--chart-faint`. Seasons-removed monthly line = faint, 1 px, `--chart-faint`; yearly averages of it (years with at least 6 valid months) = dots in `--ink`. Trend = solid line, about 3.5 px, `--ink`, drawn over the dots. Fan = flat fill `--ink` at 22% opacity, no outline, plus 1.5 px dotted edges (2 3) so it reads in high contrast mode.
+- Marks (distinct without colour): raw = 1 px solid line, grey `--chart-faint`. Seasons-removed monthly line = faint, 1 px, `--chart-faint`; yearly averages of it (years with at least 6 valid months) = dots in `--ink`. Trend = solid line, about 3.5 px, the verdict colour `--v-bg` (`--ink` with no verdict), drawn over the dots. Fan = flat fill in `--v-bg` at 22% opacity, no outline, plus 1.5 px dotted edges (2 3) so it reads in high contrast mode.
 - Trend line: t in decades since first month; intercept = median(deseasonalized − slope_per_decade × t); y = intercept + slope × t. Fan: two lines through the pivot (median t, trend value there) with slopes `ci_low` and `ci_high`, filled between them across the whole x range. The browser draws only; printed numbers come from the API.
 - Axes: x ticks by screen spacing: the smallest step from 1, 2, 5, 10, 20, 25, 50 years whose ticks are at least 56 screen px apart (a span of 2 years or more always shows at least two labels); labels "1980", "1990". y: 4 to 5 "nice" ticks, labels with up to 2 decimals, light 1 px grid `--hairline`. Panel B draws a heavier zero line. X axis title: "Year". Y axis in panel A: "{name} ({units})".
 - Nulls: break the line (no interpolation, no dots). Say in the legend note: "Gaps in the line are months with no data."
@@ -81,7 +81,7 @@ Container `figure`, width 100%, SVG `viewBox` scales with it. Two stacked panels
 
 ## 6. Tokens
 Light: `--bg #FFFFFF`, `--surface #F4F4F4`, `--ink #111111` (18:1), `--ink-2 #4A4A4A` (8.9:1), `--line #767676` (4.5:1, control borders, icons), `--hairline #D6D6D6` (decorative only), `--chart-faint #767676`, `--focus #111111`.
-Dark: `--bg #0D0D0D`, `--surface #1A1A1A`, `--ink #F2F2F2`, `--ink-2 #BDBDBD`, `--line #8C8C8C`, `--hairline #333333`, `--chart-faint #8C8C8C`, `--focus #FFFFFF`. Selected via `@media (prefers-color-scheme: dark)`; set `color-scheme: light dark`. SVG uses `currentColor` / the tokens, never hard-coded colours. Verdict card for rising/falling/no clear change: `--surface` fill, 2 px `--ink` border, headline row inverted (`--bg` text on `--ink`).
+Dark: `--bg #0D0D0D`, `--surface #1A1A1A`, `--ink #F2F2F2`, `--ink-2 #BDBDBD`, `--line #8C8C8C`, `--hairline #333333`, `--chart-faint #8C8C8C`, `--focus #FFFFFF`. Selected via `@media (prefers-color-scheme: dark)`; set `color-scheme: light dark`. SVG uses `currentColor` / the tokens, never hard-coded colours. Verdict card for rising/falling/no clear change: `--surface` fill, 2 px `--ink` border, headline row in the verdict colour with its text token (`--v-bg` / `--v-tx`; `--bg` on `--ink` with no verdict). The data colours are listed in the last section.
 Type: `system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`; numbers `font-variant-numeric: tabular-nums`. Sizes px (phone/desktop): small 14, body 16, lead 18, h2 22/24, verdict headline 28/32 weight 700, h1 24/28 weight 700. Line height 1.5 body, 1.2 headings. Max line length 70 ch.
 Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Controls min height 44 px; chips 44 px tall, 12 px gap. Borders 1 px (controls), 2 px (verdict card). Focus: 3 px solid `--focus`, offset 2 px, never removed. No gradients. No shadows, except that the selected tab's 3 px underline is drawn as an inset `box-shadow`.
 
@@ -118,7 +118,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 3. The verdict sentence holds the number and the uncertainty in plain words, for example "rose by about 42.5 mm per decade; the shaded band shows where the true trend likely sits". Never "X% chance it's real" or "95% sure". Never claim more than the data show.
 4. Contrast meets WCAG AA in light and dark. Text is at least 4.5:1. Borders, icons and chart lines are at least 3:1. Recompute from the tokens after any token change, and measure muted text on the surface and the inverted verdict header in both themes.
 5. Labels are sentence case, grey, 14 px (12 px minimum), regular weight. No ALL CAPS, no small caps, no letter-spacing.
-6. Colour appears only inside the data and always with a legend. Today there is none; everything is monochrome.
+6. Colour appears only inside the data and always with a legend. Today there is none; colour is for the data only (banner, trend line and band, year stripes, sparkline); everything else is black, white and grey.
 7. At 375 px nothing sticky covers content. Tap targets (chips, buttons, inputs, select, summary, skip link, source links) are at least 48 px. The verdict number, range and source are on screen without scrolling on a first load.
 8. The chart has an accessible name that states place, variable, period, verdict, slope and range. Decorative marks are `aria-hidden`. Icon-only controls have a screen-reader name.
 9. Chart: x tick labels at least 56 screen px apart; axis titles never touch a tick label; the trend line stays visible on a series of 1,400 points.
@@ -131,7 +131,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Every number names its data source with a link.
 - No NASA logos or branding.
 - Only public data.
-- Monochrome tokens (black, white, greys; no gradients).
+- Tokens: black, white, greys, plus the data colours of the refresh; no gradients.
 - Structure: tabs Explore, Ask, Use in your AI (his words, 2026-11-14, picked from visual options).
 - Theme: follow the device setting (light or dark); no theme switch.
 - Ask box: a chat thread with follow-up questions.
@@ -150,19 +150,19 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 
 ### Chosen by the agent (swappable)
 - Single-page flow: place chips, then measurement, then verdict and chart.
-- Hand-written SVG chart and no JS libraries or web fonts.
+- Hand-written SVG chart and no JS libraries or CDN fonts.
 - Two stacked chart panels (raw, then seasons removed with trend and band).
 - Tab icon `web/favicon.svg`: a rising line, then a dot, white on a black rounded square (plain presentation attributes, no embedded style, so a strict Content-Security-Policy cannot block it; reads on light and dark tabs); no text, no NASA imagery. Link previews use title and description only (no og:image).
 - Wrong address: `web/404.html` ("We can't find that page.", a link to the start page, the AI label), served with status 404 for any path outside /api/ and /mcp.
 - Trend line drawn solid, about 3.5 px, over a faint 1 px monthly line, with yearly averages as dots (from Sairam's PR #28).
-- Shaded band as a 22% ink fill with dotted edges.
-- Verdict shown as a word plus a shape (▲ ▼ ≈), in an inverted headline bar.
+- Shaded band as a 22% fill in the verdict colour with dotted edges.
+- Verdict shown as a word plus a shape (▲ ▼ ≈), in a headline bar in the verdict colour.
 - "No clear change" styled at the same size and weight as the other verdicts.
 - Readout line under the chart instead of a tooltip.
 - Keyboard chart control: arrows, shift-arrows, Home, End and Esc.
 - Chart x ticks chosen by screen spacing (at least 56 px).
 - Chip order (New York, Princeton, Delhi, Visakhapatnam, Mumbai, Chennai, London, Seattle); which measurement each chip opens (table in section 1 item 6); Delhi at 28.58 (matches the eval case and the Safdarjung station). A chip is pressed only while both its place and its measurement are shown.
-- Phone first screen (375 x 812): example places in one sideways-scrolling row (5 px padding so the focus ring shows, a chip cut off at the right edge); measurement and data source side by side in one row (equal columns, so "NASA POWER" and its arrow fit at 360 px) with short names in the closed selects; "Good for" and the source help line as full-width grey lines under that row; header top padding 8 px; section gaps and tab bar margins 8 px; the grey "no clear change" lean line under sentence 1. Expected ends at 375 x 812: heading 561.0, source link 660.6, sentence 1 780.6 at worst (see the round 2 report).
+- Phone first screen (375 x 812): example places in one sideways-scrolling row (5 px padding so the focus ring shows, a chip cut off at the right edge); measurement and data source side by side in one row (equal columns, so "NASA POWER" and its arrow fit at 360 px) with short names in the closed selects; "Good for" and the source help line as full-width grey lines under that row; header top padding 8 px; section gaps and tab bar margins 8 px; the grey "no clear change" lean line under sentence 1. Expected ends at 375 x 812: heading 561.0, source link 660.6, sentence 1 780.6 at worst (see the round 2 report; the last section has the newer values).
 - Both the measurement and source lists use short names at every width, open or closed ("Air temperature", "Hottest day", "Precipitation", "Sea level"; "NASA POWER", "ERA5", "GHCN-Daily", "CO-OPS", "PSMSL"); the full names appear in the answer. Below 360 px the two selects stack.
 - Desktop: measurement select (400 px) and source select (220 px) side by side, left-aligned; help lines under them.
 - The source control shows the result's source; only a hand-chosen non-default source is written to the link or sent.
@@ -203,7 +203,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - The picture (`web/scene.js`) shows direction only, never size. Rising and falling both move the level by one small fixed distance from the middle; "no clear change" rests inside a shaded band. The caption says so: "Picture shows direction only, not size." (for "no clear change" a second sentence follows about the band).
 - Motion plays once (the level travels, the stripes fade in) and never loops. "Play again" replays it; it is not shown for "no clear change" (nothing travels) or when the reader asks for reduced motion.
 - The picture never formats a number. Slope and range are the strings the answer card prints (`fmtVal`), passed in by `app.js` and used unchanged. Years are the first four characters of `period.start` and `period.end`, never taken from the yearly averages.
-- Ink tokens only until the palette is chosen. The stripe shading lives in one function (`shade` in `scene.js`).
+- The stripes take the verdict's five-step ramp (`--v-1` to `--v-5`, low year to high year); the trend picture `#scene` stays ink. The stripe shading lives in one function (`shade` in `scene.js`).
 - Labels are 14 px, regular weight. The picture is drawn 268 units wide and shown at most that wide, so its text is 14 px. The head row never stacks: the title (up to two lines) on the left, "Play again" on the right, centred vertically at every width, to keep the block short.
 - No drawing that suggests more than the data say: no skyline, no well (the satellites measure all water stored on land, not groundwater in a well).
 - Where each sits: the picture is in the answer card after the p-value line and before the facts table (`#scene`); the year stripes are under the chart and its legend (`#year-stripes` in `#chart-wrap`).
@@ -211,3 +211,70 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Both mounts are optional: if either fails to draw, it is hidden and the answer card and chart are untouched.
 - Desktop: the left column is sticky; checked, left as on `main` (a column taller than the window un-sticks at the end of its row). No inner scroll area.
 - Known limit: below about 360 px wide the picture and its labels scale down together (about 12 px at 320 px); the words that carry the answer are in the card, not in the picture.
+
+## 12. Colour for the data, fonts, number row, sparkline, chip arrows
+Colour is for the data only. Words and shapes (▲ ▼ ≈) still carry every meaning.
+
+### Tokens
+Per verdict: `--up-*` rising, `--dn-*` falling, `--nc-*` no clear change. `-bg` is the banner fill, the trend line, the band and the sparkline line; `-tx` is the banner text; `-1` to `-5` are the stripe ramp, low year to high year. `--font-head` is the Space Grotesk stack. The existing tokens are unchanged.
+| Token | Light | Dark |
+|---|---|---|
+| `--up-bg` / `--up-tx` | #D4620A / #111111 | #F2A04E / #111111 |
+| `--up-1` to `--up-5` | #F2D0B5 #EBB48B #E39960 #DC7D35 #D4620A | #644526 #885C30 #AB723A #CF8944 #F2A04E |
+| `--dn-bg` / `--dn-tx` | #1B3F73 / #FFFFFF | #2F6FC4 / #FFFFFF |
+| `--dn-1` to `--dn-5` | #BBC5D5 #93A4BC #6B82A4 #43618C #1B3F73 | #314863 #3F6086 #4E78AA #5C90CD #6BA8F0 |
+| `--nc-bg` / `--nc-tx` | #6B6B6B / #FFFFFF | #BDBDBD / #111111 |
+| `--nc-1` to `--nc-5` | #D3D3D3 #B9B9B9 #9F9F9F #858585 #6B6B6B | #505050 #6B6B6B #868686 #A2A2A2 #BDBDBD |
+The dark falling ramp ends lighter (#6BA8F0) than its banner (#2F6FC4) on purpose: a ramp running down from the banner colour cannot keep a visible step between stops. The no-hex rule still holds: these values live only in the token table, and print (below) uses the keywords `white` and `black`.
+
+### The verdict marker
+`renderVerdict` sets `data-verdict` to `rising`, `falling` or `none` (`no_clear_change`) on `#verdict-card` and `#chart-wrap`. CSS maps it to `--v-bg --v-tx --v-1` to `--v-5`. `show()` removes both attributes before each answer, so with no `data-verdict` (a failed trend) everything falls back to ink.
+
+### What takes colour
+- Takes the verdict colour: the banner (`.verdict-head`, `--v-bg` with `--v-tx`; the 2 px ink card border stays), the trend line, its band and dotted edges and their legend swatches (`.s-trend`, `.s-fan` at 22%, `.s-edge`), the year stripes with their key, and the sparkline.
+- Stays ink or grey: the raw monthly line, the seasons-removed line, the yearly dots, the no-change line, axes, grid, the trend picture `#scene`, the chips, and everything else.
+
+### Number row and first phone screen
+- One merged help line: `<p id="pick-help" class="help span2"><span id="variable-help"></span> <span id="source-help"></span></p>`. The two ids stay (now spans), `aria-describedby` is unchanged. It saves 21 px.
+- Phone only (up to 599 px): `.card-label` padding 8 16 4, `.verdict-head` padding 8 16, `.card-body` padding-top 4, `.numrow` margin-bottom 0. Saves 16 px. Desktop: `.numrow` margin-bottom 4, other paddings unchanged.
+- `.numrow` (flex, wrap, gap 8 12) holds `#verdict-big` and `#spark`. The number is 48 px Space Grotesk 700, line-height 1.1; its unit (the text after the first whitespace of `fmtVal`) is 24 px beside it; "per decade" is 16 px grey on its own line, line-height 1.3. If the number is wider than about 190 px the row wraps and the sparkline takes its own 40 px row.
+- Measured at 375 x 812, scrolled to the top: bottoms of heading / source line / sentence 1, in px. The limit is 804.
+| Case | Before | After |
+|---|---|---|
+| New York sea level (CO-OPS) | 561 / 681.6 / 777.6 | 532 / 678.6 / 774.6 |
+| Delhi hottest day (POWER) | 561 / 681.6 / 777.6 | 532 / 678.6 / 774.6 |
+| Delhi hottest day (weather station) | 540 / 660.6 / 780.6 | 532 / 678.6 / 798.6 |
+| Visakhapatnam air temperature (POWER) | 561 / 681.6 / 801.6 | 532 / 678.6 / 798.6 |
+| Mumbai sea level (PSMSL) | 561 / 681.6 / 777.6 | 532 / 678.6 / 774.6 |
+Worst case 798.6, so 5.4 px spare. Light and dark are identical. Page width stays 375 at 375 and 1280 at 1280. Do not change a size, padding, margin, line-height or wording above sentence 1 without measuring again.
+
+### Sparkline
+- `renderSpark(t, series, word)`, mount `#spark` in `.numrow`; 96 x 40 px, no axes, no text, no numbers.
+- It uses only the chart's helpers (`deseasonalize`, `yearlyAverages`, `trendIntercept`, `median`, `monthIndex`) and the same trend and band lines (`slope_per_decade`, `ci_low`, `ci_high`); x runs from the first to the last month, y from the lowest to the highest of the yearly averages and the band ends, 4 px inside the box. No statistics of its own.
+- Layers: band (`.sp-band`, `--v-bg` at 22%), yearly averages as a 1 px `--chart-faint` line, trend line 3 px `--v-bg`.
+- Text alternative: `role="img"`, `aria-label` "Small picture of the trend, {rising | falling | no clear change}: the line and its range from {first year} to {last year}. Shows direction only, no scale."
+- Fewer than 3 yearly averages, or any exception: `#spark` is hidden and the answer card is untouched. `show()` also hides it at the start of every answer (as it does `#year-stripes`), so a failed request never leaves an old sparkline.
+
+### Chip arrows
+- An arrow is the verdict of an answer loaded in this visit, for one place and the current measurement and source. The key is measurement id + "|" + source id (empty when the source select is hidden).
+- Set: after `renderVerdict` succeeds, `noteGlyph(trend, params)` finds the preset within 0.005 degrees of the answer's place (typed coordinates that match no preset set nothing); if the key differs from the stored one, all arrows are dropped first. Never set when the trend failed or there is no data.
+- Cleared, all at once: the Measurement select changes; the Data source select changes; a chip is clicked whose measurement or source differs from the stored key.
+- Look: `<span class="chip-g" aria-hidden="true">` with the ▲ ▼ ≈ shape, 14 x 14, after the label, 6 px left margin, `currentColor` (also in the pressed chip). Chips stay monochrome and 48 px tall.
+- Screen readers: the chip gets `aria-label` "{place}, {rising | falling | no clear change}" (for example "Princeton, NJ, rising"), removed with the arrow. `aria-pressed` is untouched.
+
+### Fonts
+Self-hosted in `web/fonts/` with their SIL Open Font License texts: Inter (body and the rest) and Space Grotesk (`h1`, `h2`, the banner, the number and its unit, `.chart-head`). `@font-face` in `web/style.css`, `font-display: swap`, variable weight. No `@import`, no link tag, no CDN; `font-src` falls under `default-src 'self'`. Space Grotesk's "1" has a flag ("31.8").
+
+### Stripes and browsers without `color-mix()`
+`shade(k)` returns `color-mix(in srgb, var(--v-{j+2}) {u}%, var(--v-{j+1}))` with `j = min(3, floor(4k))`, `u = round(100(4k-j))`, set as `style.fill`, so it follows the theme with no redraw; the key swatches use k = 0 and k = 1. If `CSS.supports('color', 'color-mix(in srgb, red, blue)')` is false, `paint` in `scene.js` draws the stripes and key swatches in `--ink` at `fill-opacity` `0.06 + 0.88 k` instead, so the year order never flattens into one colour.
+
+### Print and forced colours
+- Print: banner `white` with `black` text and a 2 px black rule; trend, band and sparkline `black`. Print is the one place fixed black and white are used (the tokens follow the screen's theme; paper is always white). Stripes keep their colours; the ramps change in lightness one way, so they print as ordered greys.
+- Forced colours: banner `Canvas` / `CanvasText` with a 2 px `CanvasText` rule; trend, band and sparkline `CanvasText`; `.sc-stripes` and `.sc-sw` use `forced-color-adjust: none` so the year order survives. Words, shapes, legend and key text are unchanged.
+
+### Checks the palette passed (73 checks, 0 failed)
+- Banner text against banner at least 4.5: 4.99, 10.47, 5.33 light; 8.91, 5.01, 10.05 dark.
+- Banner against card at least 3: lowest 3.44. Line against page at least 3: lowest 3.78.
+- Rising against falling banner under deuteranopia and protanopia (Machado 2009, linear RGB): dE 89 to 113 and dL* 18 to 33 (rule: dE at least 20 and dL* at least 15).
+- Every ramp: L* changes one way, steps at least 6.4, in normal vision, in both simulations and in greyscale.
+- Lowest stripe against the dark page #0D0D0D: 2.24 / 2.07 / 2.41 (rising / falling / no change); against white in light mode: 1.45 / 1.74 / 1.50.

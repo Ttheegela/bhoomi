@@ -192,8 +192,19 @@
   /* ---------- year stripes (under the chart) ---------- */
 
   // The one place the stripe shading is decided: k runs from 0 (lowest year) to 1 (highest).
-  // Ink at a fill opacity, so the palette can replace this with one small change.
-  function shade(k) { return (0.06 + 0.88 * k).toFixed(3); }
+  // Option A: k (0 lowest year .. 1 highest) picks a colour on the verdict's five-stop ramp (--v-1 .. --v-5,
+  // set by data-verdict on #chart-wrap). color-mix keeps it live when the theme changes. Ink if no verdict.
+  function shade(k) {
+    const j = Math.min(3, Math.floor(k * 4)), u = Math.round((k * 4 - j) * 100);
+    return `color-mix(in srgb, var(--v-${j + 2}, var(--ink)) ${u}%, var(--v-${j + 1}, var(--ink)))`;
+  }
+  // A browser without color-mix() would drop the fill and draw every stripe alike: use ink at a fill opacity instead.
+  const MIX = !!(window.CSS && CSS.supports && CSS.supports('color', 'color-mix(in srgb, red, blue)'));
+  function paint(rect, k) {
+    if (MIX) { rect.style.fill = shade(k); return; }
+    rect.style.fill = 'var(--ink)';
+    rect.setAttribute('fill-opacity', (0.06 + 0.88 * k).toFixed(3));
+  }
 
   // mount: #stripes-art. years: [{year, mean}] (drawing only). period: t.period (the printed years).
   window.renderStripes = function renderStripes(mount, years, period) {
@@ -205,13 +216,16 @@
     const sv = s('svg', { viewBox: '0 0 300 28', class: 'sc-stripes', 'aria-hidden': 'true', focusable: 'false', preserveAspectRatio: 'none' });
     years.forEach((y, i) => {
       const k = hi > lo ? (y.mean - lo) / (hi - lo) : 0.5;
-      const r = s('rect', { x: (i * sw).toFixed(2), y: 0, width: (sw + 0.6).toFixed(2), height: 28, class: 'sc-stripe', 'fill-opacity': shade(k) });
+      const r = s('rect', { x: (i * sw).toFixed(2), y: 0, width: (sw + 0.6).toFixed(2), height: 28, class: 'sc-stripe' });
+      paint(r, k);
       r.style.animationDelay = `${Math.round((i / n) * 900)}ms`;
       sv.append(r);
     });
     const swatch = (k) => {
       const q = s('svg', { width: 20, height: 14, class: 'sc-sw', 'aria-hidden': 'true', focusable: 'false' });
-      q.append(s('rect', { width: 20, height: 14, rx: 2, class: 'sc-stripe-key', 'fill-opacity': shade(k) }));
+      const kr = s('rect', { width: 20, height: 14, rx: 2, class: 'sc-stripe-key' });
+      paint(kr, k);
+      q.append(kr);
       return q;
     };
     mount.append(

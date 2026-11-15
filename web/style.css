@@ -1,3 +1,6 @@
+/* Brand fonts, self-hosted (no CDN, no web-font link): Space Grotesk for headings, Inter for the rest. */
+@font-face { font-family: "Inter"; src: url("fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Space Grotesk"; src: url("fonts/space-grotesk-latin-wght-normal.woff2") format("woff2"); font-weight: 300 700; font-display: swap; }
 /* Trend Detective. Tokens from web/DESIGN.md section 6. No colours outside the tokens. */
 :root {
   color-scheme: light dark;
@@ -6,11 +9,25 @@
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
   --pad: 16px; --gap: 24px;
   --fs-h1: 24px; --fs-h2: 22px; --fs-verdict: 28px;
+  /* data colours (option A): banner, trend line, band and stripe ramp, per verdict. Light values: */
+  --up-bg: #D4620A; --up-tx: #111111;
+  --up-1: #F2D0B5; --up-2: #EBB48B; --up-3: #E39960; --up-4: #DC7D35; --up-5: #D4620A;
+  --dn-bg: #1B3F73; --dn-tx: #FFFFFF;
+  --dn-1: #BBC5D5; --dn-2: #93A4BC; --dn-3: #6B82A4; --dn-4: #43618C; --dn-5: #1B3F73;
+  --nc-bg: #6B6B6B; --nc-tx: #FFFFFF;
+  --nc-1: #D3D3D3; --nc-2: #B9B9B9; --nc-3: #9F9F9F; --nc-4: #858585; --nc-5: #6B6B6B;
+  --font-head: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0D0D0D; --surface: #1A1A1A; --ink: #F2F2F2; --ink-2: #BDBDBD;
     --line: #8C8C8C; --hairline: #333333; --chart-faint: #8C8C8C; --focus: #FFFFFF;
+    --up-bg: #F2A04E; --up-tx: #111111;
+    --up-1: #644526; --up-2: #885C30; --up-3: #AB723A; --up-4: #CF8944; --up-5: #F2A04E;
+    --dn-bg: #2F6FC4; --dn-tx: #FFFFFF;
+    --dn-1: #314863; --dn-2: #3F6086; --dn-3: #4E78AA; --dn-4: #5C90CD; --dn-5: #6BA8F0;
+    --nc-bg: #BDBDBD; --nc-tx: #111111;
+    --nc-1: #505050; --nc-2: #6B6B6B; --nc-3: #868686; --nc-4: #A2A2A2; --nc-5: #BDBDBD;
   }
 }
 @media (min-width: 900px) {
@@ -22,11 +39,11 @@
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 16px/1.5 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 .wrap { max-width: 960px; margin: 0 auto; padding: 0 var(--pad); }
-h1, h2 { line-height: 1.2; margin: 0; }
+h1, h2 { line-height: 1.2; margin: 0; font-family: var(--font-head); }
 h1 { font-size: var(--fs-h1); font-weight: 700; }
 h2 { font-size: var(--fs-h2); }
 p { margin: 0 0 var(--s3); max-width: 70ch; }
@@ -93,8 +110,8 @@ input[aria-invalid="true"] { border-width: 2px; border-color: var(--ink); }
 .card { background: var(--surface); border: 2px solid var(--ink); border-radius: 8px; overflow: hidden; }
 .card-label { margin: 0; padding: var(--s3) var(--s4) var(--s2); font-size: 14px; font-weight: 400;
   font-variant: normal; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
-.verdict-head { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); background: var(--ink); color: var(--bg);
-  font-size: var(--fs-verdict); font-weight: 700; }
+.verdict-head { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); background: var(--v-bg, var(--ink)); color: var(--v-tx, var(--bg));
+  font-family: var(--font-head); font-size: var(--fs-verdict); font-weight: 700; }
 .verdict-head svg { flex: none; width: .8em; height: .8em; fill: currentColor; }
 .card-body { padding: var(--s3) var(--s4) var(--s4); }
 .card-body p:last-child { margin-bottom: 0; }
@@ -123,9 +140,9 @@ figcaption span { display: block; max-width: 70ch; }
 .s-raw { stroke: var(--chart-faint); stroke-width: 1; fill: none; }
 .s-des { stroke: var(--chart-faint); stroke-width: 1; fill: none; }
 .s-year { fill: var(--ink); stroke: none; }
-.s-trend { stroke: var(--ink); stroke-width: 3.5; fill: none; }
-.s-fan { fill: var(--ink); fill-opacity: .22; stroke: none; }
-.s-edge { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 2 3; fill: none; }
+.s-trend { stroke: var(--v-bg, var(--ink)); stroke-width: 3.5; fill: none; }
+.s-fan { fill: var(--v-bg, var(--ink)); fill-opacity: .22; stroke: none; }
+.s-edge { stroke: var(--v-bg, var(--ink)); stroke-width: 1.5; stroke-dasharray: 2 3; fill: none; }
 .c-grid { stroke: var(--hairline); stroke-width: 1; }
 .c-zero { stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 6 4; }
 .c-halo { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; stroke-linecap: round; }
@@ -268,8 +285,8 @@ textarea { width: 100%; min-height: 48px; padding: var(--s3); font: inherit; col
 .big { margin: 0 0 var(--s1); line-height: 1.1; }
 #verdict-calc { margin-bottom: 0; } /* sits directly under the number */
 .src-label { color: var(--ink-2); display: inline-block; text-decoration: none; } /* inline-block: the link's underline does not run under the label */
-.big-n { font-size: 36px; font-weight: 700; }
-.big-u { font-size: 16px; color: var(--ink-2); }
+.big-n { font-family: var(--font-head); font-size: 48px; font-weight: 700; }
+.big-u { display: block; font-size: 16px; line-height: 1.3; color: var(--ink-2); }
 .facts { display: block; margin: var(--s4) 0 0; }
 .facts > div { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); min-height: 48px; border-top: 1px solid var(--hairline); }
 .facts dt { font-weight: 400; color: var(--ink-2); }
@@ -280,18 +297,20 @@ textarea { width: 100%; min-height: 48px; padding: var(--s3); font: inherit; col
 .caveats ul { margin: 0; padding-left: var(--s5); }
 .caveats li { margin-bottom: var(--s2); }
 .caveats li:last-child { margin-bottom: 0; }
-.chart-head { font-size: 18px; font-weight: 700; margin: 0 0 var(--s1); }
+.chart-head { font-family: var(--font-head); font-size: 18px; font-weight: 700; margin: 0 0 var(--s1); }
 #chart-fig > .source { margin-bottom: var(--s2); }
 #chart-fig > #chart-source { margin: 0 0 var(--s1); }
 @media (min-width: 900px) {
-  .big-n { font-size: 44px; }
   #variable { max-width: 480px; }
 }
 
 /* phone: keep the verdict heading, source link and sentence 1 on the first screen */
 @media (max-width: 599px) {
   .tabbar { margin: var(--s2) 0; }
-  .card-body { display: flex; flex-direction: column; padding-top: var(--s2); }
+  .card-body { display: flex; flex-direction: column; padding-top: var(--s1); }
+  .card-label { padding: var(--s2) var(--s4) var(--s1); }
+  .verdict-head { padding: var(--s2) var(--s4); }
+  .numrow { margin-bottom: 0; }
 }
 
 /* round 2: first phone screen, wrapping text, spacing */
@@ -325,8 +344,6 @@ pre::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; bord
 @media (min-width: 360px) and (max-width: 899px) {
   .field-var, #source-field { grid-row: 1; }
   #source-field { grid-column: 2; }
-  #variable-help { grid-row: 2; }
-  #source-help { grid-row: 3; }
 }
 /* below 360 px the two selects stack, each full width (the longest short name, "Air temperature", clips in half a row) */
 @media (max-width: 359px) {
@@ -408,7 +425,7 @@ pre::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; bord
 .stripes { margin-top: var(--s4); }
 .sc-label { margin: 0 0 var(--s1); font-size: 14px; font-weight: 400; color: var(--ink-2); }
 .sc-stripes { display: block; width: 100%; height: 28px; border-radius: 4px; }
-.sc-stripe, .sc-stripe-key { fill: var(--ink); }
+.sc-stripe, .sc-stripe-key { fill: var(--v-3, var(--ink)); } /* the real fill is set inline from the ramp */
 .sc-stripe { animation: sc-in 500ms ease-out both; }
 @keyframes sc-in { from { opacity: 0; } to { opacity: 1; } }
 .sc-ends { display: flex; justify-content: space-between; font-size: 14px; color: var(--ink-2); margin-top: 2px; }
@@ -416,3 +433,35 @@ pre::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; bord
 .sc-key li { display: flex; align-items: center; gap: var(--s2); }
 .sc-sw { flex: none; outline: 1px solid var(--line); border-radius: 2px; }
 .stripes .source { margin: var(--s1) 0 0; }
+
+/* ---- UI refresh (option A): colour for the data only ---- */
+[data-verdict="rising"]  { --v-bg: var(--up-bg); --v-tx: var(--up-tx); --v-1: var(--up-1); --v-2: var(--up-2); --v-3: var(--up-3); --v-4: var(--up-4); --v-5: var(--up-5); }
+[data-verdict="falling"] { --v-bg: var(--dn-bg); --v-tx: var(--dn-tx); --v-1: var(--dn-1); --v-2: var(--dn-2); --v-3: var(--dn-3); --v-4: var(--dn-4); --v-5: var(--dn-5); }
+[data-verdict="none"]    { --v-bg: var(--nc-bg); --v-tx: var(--nc-tx); --v-1: var(--nc-1); --v-2: var(--nc-2); --v-3: var(--nc-3); --v-4: var(--nc-4); --v-5: var(--nc-5); }
+
+/* answer card: number row (number and unit left, sparkline right) */
+.numrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); margin: 0; }
+@media (min-width: 600px) { .numrow { margin-bottom: var(--s1); } }
+.numrow .big { margin: 0; flex: 1 1 auto; min-width: 0; }
+.big-m { font-family: var(--font-head); font-size: 24px; font-weight: 700; }
+.spark { flex: 0 0 96px; width: 96px; height: 40px; }
+.spark svg { display: block; width: 96px; height: 40px; overflow: hidden; }
+.sp-band { fill: var(--v-bg, var(--ink)); fill-opacity: .22; stroke: none; }
+.sp-years { fill: none; stroke: var(--chart-faint); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.sp-trend { fill: none; stroke: var(--v-bg, var(--ink)); stroke-width: 3; stroke-linecap: round; }
+/* merged help line under the two selects */
+#pick-help { margin-top: var(--s2); }
+/* chip glyph: direction of the answer loaded in this visit for the current measurement and source */
+.chip-g { display: inline-block; width: 14px; height: 14px; margin-left: 6px; vertical-align: -1px; }
+.chip-g svg { display: block; width: 14px; height: 14px; fill: currentColor; }
+/* print and forced colours: meaning survives without colour */
+@media print {
+  .verdict-head { background: white; color: black; border-bottom: 2px solid black; }
+  .s-trend, .s-edge, .sp-trend { stroke: black; } .s-fan, .sp-band { fill: black; }
+  /* stripes keep their colours: the ramps change in lightness one way, so they print as ordered greys */
+}
+@media (forced-colors: active) {
+  .verdict-head { background: Canvas; color: CanvasText; border-bottom: 2px solid CanvasText; }
+  .s-trend, .s-edge, .sp-trend { stroke: CanvasText; } .s-fan, .sp-band { fill: CanvasText; }
+  .sc-stripes, .sc-sw { forced-color-adjust: none; } /* the ramp is the only thing that orders the years; the key words stay */
+}

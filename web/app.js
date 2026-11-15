@@ -368,6 +368,31 @@ function markChips() {
     }
   });
 }
+// Chip glyphs: the direction of an answer loaded in this visit, for the CURRENT measurement and source only.
+// Any change of measurement or source clears them all (a glyph left behind would be a wrong statement).
+const glyphs = { key: '', map: {} };
+const GLYPH_WORD = { rising: 'rising', falling: 'falling', none: 'no clear change' };
+function paintGlyphs() {
+  document.querySelectorAll('.chip').forEach((b) => {
+    const g = glyphs.map[b.dataset.i], old = b.querySelector('.chip-g');
+    if (old) old.remove();
+    const label = PRESETS[+b.dataset.i].label;
+    if (!g) { b.removeAttribute('aria-label'); return; }
+    const w = el('span', { class: 'chip-g', 'aria-hidden': 'true' });
+    w.append(shapeSvg(g === 'rising' ? 'up' : g === 'falling' ? 'down' : 'flat'));
+    b.append(w);
+    b.setAttribute('aria-label', `${label}, ${GLYPH_WORD[g]}`);
+  });
+}
+function clearGlyphs() { glyphs.key = ''; glyphs.map = {}; paintGlyphs(); }
+function noteGlyph(t, params) {
+  if (!t || !params) return;
+  const key = $('variable').value + '|' + ($('source-field').hidden ? '' : $('source').value);
+  if (key !== glyphs.key) { glyphs.key = key; glyphs.map = {}; }
+  const i = PRESETS.findIndex((p) => Math.abs(p.lat - params.lat) <= 0.005 && Math.abs(p.lon - params.lon) <= 0.005);
+  if (i >= 0) glyphs.map[i] = t.verdict === 'rising' || t.verdict === 'falling' ? t.verdict : 'none';
+  paintGlyphs();
+}
 function openCoords() { $('coords').open = true; }
 function applyPreset(i) {
   const p = PRESETS[i];
@@ -375,6 +400,7 @@ function applyPreset(i) {
   $('lat').value = p.lat; $('lon').value = p.lon;
   if (varById(p.variable)) $('variable').value = p.variable;
   syncVariableUI();
+  if ($('variable').value + '|' + ($('source-field').hidden ? '' : $('source').value) !== glyphs.key) clearGlyphs();
   submit(true);
 }
 // Both selects use short names at every width, open or closed (full names clip in the closed select).
@@ -503,6 +529,8 @@ function show(sr, tr, params, user) {
   $('more').hidden = true;
   $('verdict-card').hidden = true;
   $('problem').hidden = true;
+  $('spark').hidden = true; // like the stripes: shown again only when renderVerdict draws it for this answer
+  delete $('verdict-card').dataset.verdict; delete $('chart-wrap').dataset.verdict;
   state.series = null; state.trend = null;
 
   if (!sr.ok) {
@@ -524,6 +552,7 @@ function show(sr, tr, params, user) {
       renderTable(s, !!state.trend);
       if (state.trend) {
         heading = renderVerdict(state.trend, s);
+        noteGlyph(state.trend, params);
         renderMore(state.trend);
       } else {
         heading = showProblem(problemFor(tr, params));
@@ -601,6 +630,31 @@ function shapeSvg(kind) {
   return s;
 }
 
+// 96 x 40 sparkline beside the big number: yearly averages (faint), the trend line and its band, from the same
+// series and the same maths as the chart. No axes, no numbers. Decorative picture with a text alternative.
+function renderSpark(t, series, word) {
+  const box = $('spark');
+  clear(box);
+  const ms = series.times.map(monthIndex), des = deseasonalize(series.times, series.values);
+  const yrs = yearlyAverages(ms, des);
+  if (yrs.length < 3) { box.hidden = true; return; }
+  const m0 = ms[0], m1 = ms[ms.length - 1], W = 96, H = 40, pad = 4;
+  const ts = ms.map((m) => (m - m0) / 120), tEnd = (m1 - m0) / 120;
+  const tm = median(ts.filter((_, i) => des[i] != null)), yp = trendIntercept(ts, des, t.slope_per_decade) + t.slope_per_decade * tm;
+  const at = (slope, x) => yp + slope * (x - tm);
+  const ends = [at(t.ci_low, 0), at(t.ci_low, tEnd), at(t.ci_high, 0), at(t.ci_high, tEnd)];
+  const vals = yrs.map((y) => y.mean).concat(ends);
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi > lo ? hi - lo : 1;
+  const X = (m) => (m1 === m0 ? 0 : (m - m0) / (m1 - m0) * W), Y = (v) => pad + (hi - v) / span * (H - 2 * pad);
+  const f = (n) => n.toFixed(1);
+  const s = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Small picture of the trend, ${word.toLowerCase()}: the line and its range from ${t.period.start.slice(0, 4)} to ${t.period.end.slice(0, 4)}. Shows direction only, no scale.` });
+  s.append(svg('polygon', { points: `0,${f(Y(ends[0]))} ${W},${f(Y(ends[1]))} ${W},${f(Y(ends[3]))} 0,${f(Y(ends[2]))}`, class: 'sp-band' }));
+  s.append(svg('polyline', { points: yrs.map((y) => `${f(X(y.x))},${f(Y(y.mean))}`).join(' '), class: 'sp-years' }));
+  s.append(svg('line', { x1: 0, y1: f(Y(at(t.slope_per_decade, 0))), x2: W, y2: f(Y(at(t.slope_per_decade, tEnd))), class: 'sp-trend' }));
+  box.append(s);
+  box.hidden = false;
+}
+
 function fact(label, node) { return el('div', {}, el('dt', {}, label), el('dd', {}, node)); }
 
 function renderVerdict(t, series) {
@@ -608,9 +662,15 @@ function renderVerdict(t, series) {
   const h = $('verdict-heading');
   clear(h);
   h.append(shapeSvg(c.shape), c.head);
+  const vk = t.verdict === 'rising' ? 'rising' : t.verdict === 'falling' ? 'falling' : 'none';
+  $('verdict-card').dataset.verdict = vk;
+  $('chart-wrap').dataset.verdict = vk; // the legend, chart lines and year stripes read it
   const big = $('verdict-big');
   clear(big);
-  big.append(el('span', { class: 'big-n' }, fmtVal(t.slope_per_decade, t.units)), ' ', el('span', { class: 'big-u' }, 'per decade'));
+  const bn = fmtVal(t.slope_per_decade, t.units), sp = bn.search(/\s/); // number at 48 px, its unit smaller beside it
+  big.append(el('span', { class: 'big-n' }, sp > 0 ? bn.slice(0, sp) : bn));
+  if (sp > 0) big.append(el('span', { class: 'big-m' }, ' ' + bn.slice(sp + 1)));
+  big.append(' ', el('span', { class: 'big-u' }, 'per decade'));
   // The picture and the stripes are extra: if one fails, hide it and keep the answer. The scene is handed
   // the same strings the card prints (slope and range) and never formats a number itself.
   try {
@@ -629,6 +689,7 @@ function renderVerdict(t, series) {
   } catch (e) {
     $('year-stripes').hidden = true;
   }
+  try { renderSpark(t, series, c.head); } catch (e) { $('spark').hidden = true; }
   $('verdict-lean').textContent = c.lean || '';
   $('verdict-lean').hidden = !c.lean;
   $('verdict-p1').textContent = c.p1;
@@ -946,10 +1007,11 @@ async function init() {
 
 buildChips();
 $('controls').addEventListener('submit', (e) => { e.preventDefault(); if ($('go').getAttribute('aria-disabled') !== 'true') submit(true); });
-$('variable').addEventListener('change', () => { syncVariableUI(); submit(true); });
+$('variable').addEventListener('change', () => { clearGlyphs(); syncVariableUI(); submit(true); });
 $('source').addEventListener('change', () => {
   const v = varById($('variable').value);
   state.userSource = v && $('source').value !== v.sources[0] ? $('source').value : null;
+  clearGlyphs();
   sourceHelp();
   submit(true);
 });
