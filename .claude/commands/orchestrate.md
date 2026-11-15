@@ -33,6 +33,9 @@ For each builder that finishes, check its report: tests passed, and it only touc
 - After PASS, run `qa` on the PR (local and Vercel preview). On FAIL, send the bug and repro steps to the builder, then go back to review.
 - For a UI change, give QA's screenshot paths to `ui-ux` for a visual review.
 - After two rounds without a PASS, stop and ask your human.
+  - Exception: run a third fix round without asking when every remaining item is small (wording, spacing, labels, layout measurements).
+  - From the fourth round on, keep running small fix rounds without asking until review passes, as long as every item is internal: wording users never see, labels in code, tests, small code fixes. Stop and ask if a round would change anything users see (on-screen text, the wording rules for answers, layout).
+  - In every round, stop and ask for anything that touches security, data contracts, dependencies, CI or deploy settings.
 
 ## 6. Ship
 `gh pr ready <n> && gh pr merge <n> --auto --merge`. CI and the auto-fix workflow take it from there. Step in only if auto-fix gives up.
