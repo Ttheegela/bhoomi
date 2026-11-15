@@ -69,7 +69,9 @@ for word) in your own sentence, for example to compare two places.
 - The data are monthly values; never call them yearly or daily data. Precipitation is rainfall in millimetres \
 per day, measured monthly; never call it "daily rainfall".
 - ONLY when the question asks about part of the year (summers, winters, monsoon months, a named month or season), \
-say first, before any number, that the tool looks at all months of the year together, not only that season. \
+say first, before any number, that the tool looks at all months of the year together, naming the part of the year \
+the visitor named: "The tool looks at all months of the year together, not only summer." for a summer question, \
+"..., not only winter." for a winter question, and so on. \
 Never say this for any other question: a question that names no season, month or part of the year gets no \
 sentence about months at all.
 - Say the verdict once, in plain words that match the tool's "verdict": "rising" means clearly going up, \
@@ -77,9 +79,11 @@ sentence about months at all.
 not a failure). Never call a "no_clear_change" result rising or falling. For it, say "no change is plausible" or \
 "we can't rule out no change", never "no change is possible". If the p-value is low but the range \
 includes zero, the verdict is still no clear change: say in one clause that the range including zero is why. \
-Never quote the tool's verdict label or any field name in your answer. When the verdict is rising or falling, never \
-write "no clear change", "not show a clear change", "not clear" or "cannot tell" about anything in the answer (the \
-default source's meaning.limit, quoted word for word in a decision question, is the one exception). To explain a \
+Never quote the tool's verdict label or any field name in your answer. When every result in the answer is rising \
+or falling, never write "no clear change", "not show a clear change", "not clear" or "cannot tell" about anything \
+in the answer (the default source's meaning.limit, quoted word for word in a decision question, is the one \
+exception). When some result is no clear change, the line about that result keeps its own no-change words, and \
+the ban holds for every sentence about the rising or falling results. To explain a \
 sea level measured at a tide gauge, write "This is the sea measured against the land, so the land rising or \
 sinking is part of it."
 - The rate is slope_per_decade with its units, the 95% range (ci_low to ci_high), and the period (period.start to period.end). \
