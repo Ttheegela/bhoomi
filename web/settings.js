@@ -215,9 +215,14 @@
   function privacySection() {
     const frag = document.createDocumentFragment();
     frag.append(h('ul', { class: 'st-facts' },
-      ...['Your pinned places and these settings stay in this browser (localStorage). They are never sent anywhere.',
-        'A question you type in Ask AI, and the earlier messages of that chat, are sent to an AI model provider so it can be answered. Don\'t include personal details.',
-        'Questions and answers are recorded by a quality-checking service (Langfuse). Nothing else about you is kept.'].map((t) => h('li', null, t))));
+      ...['No account. We never ask you to sign in.',
+        'Your pinned places and these settings stay in this browser (localStorage). They are never sent anywhere.',
+        'Place names you type in the search box go to our server, and from there to Open-Meteo\'s place search.',
+        'The map loads its tiles from OpenFreeMap, which sees your network address, like any website you visit.',
+        'A question you ask the assistant, and the earlier messages of that chat, are passed to our AI model provider so it can be answered. Don\'t include personal details.',
+        'The assistant runs on ElevenLabs; if you talk to it, your voice and the conversation are processed by ElevenLabs.',
+        'Questions and answers are recorded by a quality-checking service (Langfuse). Nothing else about you is kept.',
+        'Our server counts requests from each network address for a short time, to stop overuse.'].map((t) => h('li', null, t))));
     const btn = h('button', { type: 'button', class: 'btn' }, 'Forget my places and settings');
     btn.addEventListener('click', forgetAll);
     frag.append(btn);
