@@ -23,20 +23,10 @@ def load(name):
     return json.loads((FX / name).read_text())
 
 
-def coops_long():
-    """The fixture's real rows (1911 to 2021, with gaps, too few valid months for the 30-year rule) topped up with
-    synthetic monthly rows from 1990 to last December, so the gauge meets the minimum-record rule."""
-    d = load("coops_monthly.json")
-    have = {(int(r["year"]), int(r["month"])) for r in d["data"]}
-    extra = [{"year": str(y), "month": str(m), "MSL": f"{0.05 + 0.0001 * (y - 1990):.4f}"}
-             for y in range(1990, date.today().year) for m in range(1, 13) if (y, m) not in have]
-    return {**d, "data": d["data"] + extra}
-
-
 @pytest.fixture
-def offline(monkeypatch):
+def offline(monkeypatch, coops_long):
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: load("power_monthly.json"))
-    monkeypatch.setattr(coops, "fetch", lambda sid: coops_long())
+    monkeypatch.setattr(coops, "fetch", lambda sid: coops_long)
     monkeypatch.setattr(coops, "stations", lambda: load("coops_stations.json")["stations"])
 
 
@@ -134,6 +124,7 @@ def test_mcp_tools(mcp_client, offline, monkeypatch):
 
     for fetch in (connect_error, html_page):
         monkeypatch.setattr(coops, "fetch", fetch)
+        coops._record.cache_clear()  # the gauge's record from the first call is cached; this call must reach the failing fetch
         res = mcp_call(mcp_client, "tools/call", {"name": "detect_trend", "arguments": args})
         assert res["isError"] and "The data source did not answer" in res["content"][0]["text"]
 

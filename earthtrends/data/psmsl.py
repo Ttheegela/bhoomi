@@ -10,7 +10,7 @@ from math import isfinite
 import httpx
 
 from .coops import haversine_km
-from .upstream import LIMIT, MAX_STALE_YEARS, MIN_YEARS, NAME, readable, rule, text, why_not  # noqa: F401 (the shared rule is re-exported)
+from .upstream import LIMIT, NAME, readable, rule, text, why_not
 
 BASE = "https://psmsl.org/data/obtaining/rlr.monthly.data"
 SOURCE = {"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/"}

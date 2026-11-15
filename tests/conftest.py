@@ -1,7 +1,12 @@
+import json
+from datetime import date
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
 from earthtrends import data
+from earthtrends.data import coops
 from earthtrends.app import app
 
 
@@ -10,8 +15,10 @@ def empty_cache():
     """Every test in the suite starts and ends with no cached series, so patched fetchers are really called
     and an entry cached by one test cannot answer a later one."""
     data._cache.clear()
+    coops._record.cache_clear()
     yield
     data._cache.clear()
+    coops._record.cache_clear()
 
 
 # The MCP session manager's lifespan can only start once per app instance, so the whole
@@ -20,3 +27,14 @@ def empty_cache():
 def mcp_client():
     with TestClient(app, base_url="http://127.0.0.1:8000") as c:
         yield c
+
+
+@pytest.fixture
+def coops_long():
+    """The fixture's real rows (1911 to 2021, with gaps, too few valid months for the 30-year rule) topped up with
+    synthetic monthly rows from 1990 to last December, so the gauge meets the minimum-record rule."""
+    d = json.loads((Path(__file__).parent / "fixtures" / "coops_monthly.json").read_text())
+    have = {(int(r["year"]), int(r["month"])) for r in d["data"]}
+    extra = [{"year": str(y), "month": str(m), "MSL": f"{0.05 + 0.0001 * (y - 1990):.4f}"}
+             for y in range(1990, date.today().year) for m in range(1, 13) if (y, m) not in have]
+    return {**d, "data": d["data"] + extra}

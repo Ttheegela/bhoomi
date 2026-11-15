@@ -53,7 +53,8 @@ def why_not(times: list[str], values: list[float | None]) -> str | None:
     if not valid:
         return "its file has no valid values"
     if len(valid) < MIN_YEARS * 12:
-        return f"it has only {len(valid) // 12} years of valid monthly values ({valid[0]} to {valid[-1]})"
+        n = f"{len(valid)} months" if len(valid) < 24 else f"{len(valid) // 12} years"
+        return f"it has only {n} of valid monthly values ({valid[0]} to {valid[-1]})"
     if valid[-1] < f"{date.today().year - 1 - MAX_STALE_YEARS}-12":
         return f"its record ends in {valid[-1]}"
     return None

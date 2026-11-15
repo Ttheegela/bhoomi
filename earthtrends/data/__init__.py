@@ -134,7 +134,7 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
         raise ValueError("start must not be after end.")
 
     lat, lon = round(lat, 2) + 0.0, round(lon, 2) + 0.0  # + 0.0 turns -0.0 into 0.0
-    note = None  # per request, never stored in the cache: the caller may also ask for source="psmsl"
+    note, coops_error = None, None  # per request, never stored in the cache: the caller may also ask for source="psmsl"
     r = None
     if variable == "sea_level" and auto and source == "coops":
         gauges = coops.stations()  # outside the try: a CO-OPS failure must reach the caller, not switch the source
@@ -144,11 +144,19 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
             source, note = "psmsl", "NOAA CO-OPS has no tide gauge within 100 km of this point, so the nearest PSMSL gauge was used."
         else:
             try:
-                r = _cached_full(entry, variable, source, lat, lon)  # the one CO-OPS fetch; here a ValueError means none qualifies
-            except ValueError:
-                source, note = "psmsl", "No NOAA CO-OPS tide gauge within 100 km of this point has a long enough record, so the nearest PSMSL gauge was used."
+                r = _cached_full(entry, variable, source, lat, lon)  # the one CO-OPS lookup; each gauge's record is cached by id
+            except coops.NoUsableGauge as e:
+                source, coops_error = "psmsl", e
+                note = ("No NOAA CO-OPS tide gauge within 100 km of this point has a long enough record, so the nearest PSMSL gauge was used."
+                        if e.n is None else
+                        f"None of the {e.n} nearest NOAA CO-OPS tide gauges within 100 km of this point has a long enough record, so the nearest PSMSL gauge was used.")
     if r is None:
-        r = _cached_full(entry, variable, source, lat, lon)
+        try:
+            r = _cached_full(entry, variable, source, lat, lon)
+        except ValueError:
+            if coops_error:  # PSMSL has nothing either: CO-OPS's sentence names the gauges and why each was not used
+                raise coops_error from None
+            raise
     if note:
         r["notes"] = r["notes"] + [note]
 

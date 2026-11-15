@@ -102,6 +102,27 @@ def fetch(station_id: str) -> dict:
     return r.json()
 
 
+class NoUsableGauge(ValueError):
+    """Gauges lie within MAX_KM but none of those tried qualifies. `n` is how many were tried when more were left untried, else None."""
+    def __init__(self, message: str, n: int | None):
+        super().__init__(message)
+        self.n = n
+
+
+@lru_cache(maxsize=256)  # ponytail: no expiry; the record stays until the instance restarts (monthly data)
+def _record(station_id: str) -> tuple[tuple[str, ...], tuple[float | None, ...], str | None]:
+    """One gauge's monthly record and, if it fails the shared rule, why. A provider failure raises, so it is not cached."""
+    try:
+        reply = fetch(station_id)
+    except (ValueError, RecursionError) as e:  # fetch raises these only while reading the JSON: the provider's failure, not "no data"
+        raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.") from e
+    try:
+        times, values = parse(reply)
+    except ValueError:  # this gauge has no usable monthly values; httpx errors are not caught here
+        return (), (), "no monthly values"
+    return tuple(times), tuple(values), why_not(times, values)
+
+
 def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str]]:
     """Nearest gauge within MAX_KM that meets the shared minimum-record rule -> (times, values, place, notes)."""
     gauges = stations()
@@ -110,23 +131,19 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
     close = [(km, s) for km, _, s in near if km <= MAX_KM]
     if not close:
         nearest(lat, lon, gauges)  # raises the "no gauge within 100 km" error
+    tried = close[:MAX_TRIES]
     skipped = []
-    for km, s in close[:MAX_TRIES]:
+    for km, s in tried:
         if time.monotonic() >= deadline:
             raise httpx.TimeoutException("NOAA CO-OPS is slow right now. Try again in a minute.")
-        try:
-            reply = fetch(s["id"])
-        except json.JSONDecodeError as e:  # a maintenance page: the provider's failure (a ValueError would be read as "this gauge has no data")
-            raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.") from e
-        try:
-            times, values = parse(reply, s["name"])
-            why = why_not(times, values)
-        except ValueError as e:  # this gauge has no usable monthly values; httpx errors are not caught here
-            why = text(e, LIMIT)
+        times, values, why = _record(s["id"])
         if why is None:
             notes = [f"Tide gauge {s['name']} ({s['id']}), {km:.0f} km from the point you asked about.",
                      "Sea level relative to the land at the gauge, so land sinking or rising is included.", RULE]
-            return times, values, {"name": s["name"], "lat": float(s["lat"]), "lon": float(s["lng"])}, notes
+            return list(times), list(values), {"name": s["name"], "lat": float(s["lat"]), "lon": float(s["lng"])}, notes
         skipped.append(f"{s['name']}, {km:.0f} km away: {why}")
-    raise ValueError(text(f"There is no usable NOAA tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
-                          f"Gauges found but not used: {'; '.join(skipped)}.", LIMIT))
+    more = len(close) > len(tried)  # do not claim "no usable gauge" about gauges that were never looked at
+    head = (f"None of the {len(tried)} nearest NOAA tide gauges within {MAX_KM} km of this place has a long enough record"
+            if more else f"There is no usable NOAA tide gauge within {MAX_KM} km of this place")
+    raise NoUsableGauge(text(f"{head}, so sea level can't be measured here. Gauges found but not used: {'; '.join(skipped)}.", LIMIT),
+                        len(tried) if more else None)
