@@ -343,30 +343,22 @@ def _where(c: dict):
         return None
 
 
-def _at_place(text: str, pos: int, ok: list[dict]) -> list[dict]:
-    """With results for several places, only those of the place named in the sentence at `pos` (else its line)."""
+def _candidates(text: str, pos: int, ok: list[dict]) -> tuple[list[dict], bool]:
+    """The results a range at `pos` may speak for, and whether a source was named. With results for several places,
+    only the place named in the range's sentence (else its line) counts. Then the sources named in the sentence; if
+    none, those named in the line; if none, every result left. Used by the check and by the replacement."""
+    sent, line = _chunks(text, pos)
     if len({_where(c) for c in ok}) > 1:
-        for chunk in _chunks(text, pos):
+        for chunk in (sent, line):
             here = {_where(c) for c in ok if _says(_forms((c["result"].get("place") or {}).get("name")), chunk)}
             if here:
-                return [c for c in ok if _where(c) in here]
-    return ok
-
-
-def _candidates(text: str, pos: int, ok: list[dict]) -> list[dict]:
-    """The results a range at `pos` may speak for, for the doubtful check: those at its place, then the sources
-    named in its sentence; if none, those named in its line; if none, every result at the place."""
-    ok = _at_place(text, pos, ok)
-    for chunk in _chunks(text, pos):
+                ok = [c for c in ok if _where(c) in here]
+                break
+    for chunk in (sent, line):
         named = [c for c in ok if _names(c["result"].get("source") or {}, chunk)]
         if named:
-            return named
-    return ok
-
-
-# Words that name a variable, to keep a replacement on the right variable when results span several.
-_VAR_WORDS = {"precip": ("rain", "precipitation"), "air_temp_max": ("hottest",), "air_temp": ("temperature", "warm"),
-              "sea_level": ("sea level",), "water_storage": ("water storage", "land water")}
+            return named, True
+    return ok, False
 
 
 def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
@@ -404,7 +396,7 @@ def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
         s, e = next(((a, b) for a, b in sents if a <= m.start() < b), (m.start(), m.end()))
         if sum(s <= r.start() < e for r in ranges) != 1:
             continue
-        cands = _candidates(text, m.start(), ok)
+        cands, _ = _candidates(text, m.start(), ok)
         periods = {(c["result"]["period"]["start"], c["result"]["period"]["end"]) for c in cands}
         if not fit(m, cands) or (len(periods) > 1 and PLURAL.search(text, s, e)):
             out.append((m, False))
@@ -428,17 +420,13 @@ def _rank(r: dict) -> int:
 
 
 def _right_period(text: str, m: re.Match, calls: list[dict]) -> dict:
-    """The period that replaces a certainly wrong range: among every result at the range's place (with several
-    variables, those named in its sentence, else its line), the period closest to the range as written (months
-    apart at both ends; ties in catalog order). Source names don't narrow it: a name can be missed or be another's."""
-    ok = _at_place(text, m.start(), [c for c in ok_calls(calls) if _period(c["result"])])
-    if len({c["result"].get("variable") for c in ok}) > 1:
-        for chunk in _chunks(text, m.start()):
-            vs = {v for v, ws in _VAR_WORDS.items() if any(w in chunk.lower() for w in ws)}
-            if here := [c for c in ok if c["result"].get("variable") in vs]:
-                ok = here
-                break
-    rs = [c["result"] for c in ok]
+    """The period that replaces a wrong range. Candidates as for the check. A source named: of its candidates' periods,
+    the closest to the range as written (months apart at both ends; ties in catalog order). No source named: the
+    default source's (first in the catalog) among the candidates."""
+    cands, named = _candidates(text, m.start(), [c for c in ok_calls(calls) if _period(c["result"])])
+    rs = [c["result"] for c in cands]
+    if not named:
+        return min(rs, key=_rank)["period"]
 
     def apart(r):
         d = 0

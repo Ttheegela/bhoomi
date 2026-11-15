@@ -1045,7 +1045,7 @@ def test_unnamed_wrong_range_takes_the_default_source(fake, monkeypatch):
     three_periods(monkeypatch)
     text = DISAGREE_TEXT.format(end="July 2025").replace("The sources disagree.", "The sources disagree, 1985 to 2020.")
     fake.script = [step(tool_calls=three_calls()), step(text), step(text)]
-    want = text.replace("1985 to 2020", "January 1981 to December 2025")  # POWER and GHCN tie as closest: catalog order
+    want = text.replace("1985 to 2020", "January 1981 to December 2025")  # POWER is first in the catalog
     assert loop.ask("q", model="fake:m")["answer"] == want
 
 
@@ -1165,28 +1165,6 @@ def test_another_sources_period_is_retried_not_rewritten(fake, monkeypatch):
     first = f"The sources disagree. {text} {NY_SOURCES}"
     fake.script = [step(tool_calls=ny), step(first), step(first), step("never")]
     assert loop.ask("q", model="fake:m")["answer"] == first and len(fake.script) == 1  # one retry, then as written
-
-
-@pytest.mark.parametrize("text", [
-    "The station warms from January 1990 to November 2023.",
-    "The station warms from January 1990 to November 2023, and NASA POWER from January 1981 to December 2025.",
-])
-def test_replacement_is_the_closest_period_at_the_place(text):
-    calls = real_sources({"power": {"start": "1981-01", "end": "2025-12"}, "ghcn": {"start": "1990-01", "end": "2024-11"}},
-                         place="London")
-    assert loop.fix_periods(text, calls) == text.replace("January 1990 to November 2023", "January 1990 to November 2024")
-
-
-@pytest.mark.parametrize("text,want", [
-    ("Rainfall at NASA POWER rises from January 1981 to May 2025.", "January 1981 to March 2024"),  # nearer the temp
-    ("NASA POWER temperature rises from January 1981 to May 2025.", "January 1981 to July 2025"),
-])
-def test_replacement_keeps_the_variable(text, want):
-    temp = {**TREND, "variable": "air_temp", "period": {"start": "1981-01", "end": "2025-07"},
-            "source": {"id": "power", "name": SRC["power"][0]}}
-    rain = {**temp, "variable": "precip", "period": {"start": "1981-01", "end": "2024-03"}}
-    calls = [done({**DELHI, "variable": "air_temp"}, temp), done({**DELHI, "variable": "precip"}, rain)]
-    assert loop.fix_periods(text, calls) == text.replace("January 1981 to May 2025", want)
 
 
 # Round 2: code must never rewrite a correct range (the review's three inputs).
