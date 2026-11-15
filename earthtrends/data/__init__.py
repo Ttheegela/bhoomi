@@ -6,8 +6,9 @@ import time
 
 from . import coops, era5, ghcn, grace, monthly, power, psmsl
 from .catalog import CATALOG
+from .places import search_places
 
-__all__ = ["list_variables", "get_series"]
+__all__ = ["list_variables", "get_series", "search_places"]
 
 # Fetched series are kept so one upstream fetch serves many requests (the free providers rate-limit us).
 # The FULL series is cached; start/end are applied after reading, so two periods share one fetch.
