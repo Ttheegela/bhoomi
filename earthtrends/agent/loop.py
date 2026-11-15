@@ -331,8 +331,9 @@ UNDER_001 = re.compile(r"\b(?:below|less than) 0\.001(?!\d)", re.I)
 
 
 def stated_numbers(text: str) -> list[tuple[str, str]]:
-    """(sign, digits) for each number an answer states. Left out: list numbering, the prompt's fixed phrases, and
-    whole numbers under 10 with no unit after them (words like "2 sources")."""
+    """(sign, digits) for each number an answer states. Left out: web addresses, list numbering, the prompt's fixed
+    phrases, and whole numbers under 10 with no unit after them (words like "2 sources")."""
+    text = re.sub(r"https?://[^\s)\]>\"']+", " ", text)  # digits in an address ("data_tools/17") are no number
     text = re.sub(r"(?m)^\s*\d+[.)]\s", " ", text)
     text = ALLOWED.sub(" ", text)
     text = re.sub(r"(?<=\d),(?=\d{3}\b)", "", text)
