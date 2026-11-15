@@ -51,6 +51,16 @@ def test_nearest_station():
         coops.nearest(0, -30, st)
 
 
+def test_nearest_station_names_gauge_only_when_close():
+    st = load("coops_stations.json")["stations"]
+    with pytest.raises(ValueError, match=r"the nearest is .*km away\.$") as near:
+        coops.nearest(39.36, -72.0, st)  # about 200 km off the coast
+    assert str(near.value).startswith("No tide gauge within 100 km of (39.36, -72.0); ")
+    with pytest.raises(ValueError) as far:
+        coops.nearest(28.61, 77.21, st)  # Delhi
+    assert str(far.value) == "No tide gauge within 100 km of (28.61, 77.21)."
+
+
 def test_sea_level_series(offline):
     s = data.get_series("sea_level", 39.36, -74.42, start="2020")
     assert s["place"]["name"] == "Atlantic City" and "8534720" in s["notes"][0]
@@ -471,7 +481,7 @@ def test_coops_row_without_a_name_is_named_by_its_id(monkeypatch):
     try:
         assert [s["name"] for s in coops.stations()] == ["8518750", "8000001"]
         with pytest.raises(ValueError, match=r"the nearest is 8000001, \d+ km away"):
-            coops.nearest(10.0, 30.0, [s for s in coops.stations() if s["id"] == "8000001"])
+            coops.nearest(10.0, 12.0, [s for s in coops.stations() if s["id"] == "8000001"])
     finally:
         coops.stations.cache_clear()
 
