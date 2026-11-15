@@ -18,3 +18,19 @@ def text(value, limit: int) -> str:
 def fit(prefix: str, value, suffix: str = "") -> str:
     """prefix + provider text + suffix, with the provider text cut so the whole is at most LIMIT characters."""
     return prefix + text(value, LIMIT - len(prefix) - len(suffix)) + suffix
+
+
+def readable(name: str) -> str:
+    """An all-capitals provider name -> title case ("NEW YORK (THE BATTERY)" -> "New York (The Battery)"); a name with any lowercase letter is returned unchanged.
+    A final ", IN" style two-letter code keeps its capitals. Call it after text(), so the length limit is unchanged."""
+    if any(c.islower() for c in name):
+        return name
+    # ponytail: roman numerals are kept up to IX; initials come out as "Dc", "Usa"; a truncated provider name stays truncated; use a lookup table if that matters
+    head, code = (m.group(1), m.group(2)) if (m := re.fullmatch(r"(.*), ([^\W\d_]{2})", name)) else (name, "")
+    out, start = [], True
+    for c in head:
+        cased = c.upper() if start else c.lower()
+        out.append(cased if len(cased) == 1 else c)  # "İ" lowercases to two characters: keep it, so the length never grows
+        start = c in " (/-."
+    head = re.sub(r"\b(?:Ii|Iii|Iv|Vi|Vii|Viii|Ix)\b", lambda m: m.group().upper(), "".join(out))
+    return head + (f", {code}" if code else "")

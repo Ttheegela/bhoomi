@@ -188,12 +188,12 @@ def test_ghcn_station_rule():
     st, km, types = ghcn.ranked(28.567, 77.117, found, "air_temp_max")[0]  # Palam is on top of the point but its TMAX starts in 2009
     assert st["id"] == "IN022021900" and 5 < km < 15 and types == ("TMAX",)
     assert ghcn.ranked(28.58, 77.21, found, "air_temp")[0][2] == ("TAVG",)
-    with pytest.raises(ValueError, match=r"has 30 years of daily high temperature data since 1981\. The nearest is NEW DELHI SAFDARJUN, IN, \d+ km away"):
+    with pytest.raises(ValueError, match=r"has 30 years of daily high temperature data since 1981\. The nearest is New Delhi Safdarjun, IN, \d+ km away"):
         ghcn.ranked(29.2, 77.2, found, "air_temp_max")[0]
     with pytest.raises(ValueError, match=r"^No weather station within 50 km has 30 years of rainfall data since 1981\.$"):
         ghcn.ranked(0, -30, [], "precip")[0]
     palam_only = [s for s in found if s["id"] == "IN022023000"]
-    with pytest.raises(ValueError, match=r"The nearest weather station, NEW DELHI PALAM, IN \(0 km away\), does not have 30 years of .* and no other station within 50 km does either\."):
+    with pytest.raises(ValueError, match=r"The nearest weather station, New Delhi Palam, IN \(0 km away\), does not have 30 years of .* and no other station within 50 km does either\."):
         ghcn.ranked(28.567, 77.117, palam_only, "air_temp_max")[0]
 
 
@@ -206,7 +206,7 @@ def test_ghcn_station_rule_thin_record():
 def test_ghcn_checks_the_rows(offline2, monkeypatch):
     # the search says 1944-2025, but the rows only cover 2022 on: not enough, and the error names the station
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: [{"DATE": f"2022-{m:02d}-{d:02d}", "TMAX": "30"} for m in range(1, 13) for d in range(1, 29)])
-    with pytest.raises(ValueError, match=r"The nearest weather station, NEW DELHI SAFDARJUN, IN \(1 km away\)"):
+    with pytest.raises(ValueError, match=r"The nearest weather station, New Delhi Safdarjun, IN \(1 km away\)"):
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
 
 
@@ -360,7 +360,7 @@ def test_era5_series(offline2):
 def test_ghcn_series(offline2):
     s = data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="1991", source="ghcn")
     assert s["freq"] == "monthly" and s["source"]["id"] == "ghcn" and len(s["times"]) == len(s["values"]) == 24
-    assert s["place"] == {"name": "NEW DELHI SAFDARJUN, IN", "lat": 28.583, "lon": 77.2}
+    assert s["place"] == {"name": "New Delhi Safdarjun, IN", "lat": 28.583, "lon": 77.2}
     assert "IN022021900" in s["notes"][0] and "km from the point" in s["notes"][0]
     assert any("fewer than 20 valid days" in n for n in s["notes"])
 
@@ -548,7 +548,7 @@ def test_psmsl_fallback_note(offline, psmsl_offline):
 
 def test_psmsl_parse_stations():
     st = psmsl.parse_stations(raw("psmsl_filelist.txt") + "\nbroken line\n")
-    assert len(st) == 8 and st[3] == {"id": 43, "name": "MUMBAI / BOMBAY (APOLLO BANDAR)", "lat": 18.916667, "lon": 72.833333}
+    assert len(st) == 8 and st[3] == {"id": 43, "name": "Mumbai / Bombay (Apollo Bandar)", "lat": 18.916667, "lon": 72.833333}
     with pytest.raises(httpx.HTTPError):
         psmsl.parse_stations("<html></html>")
     assert [s["id"] for s in psmsl.parse_stations("1" * 400 + "; 10.0; 20.0; Long id; 1; 1; N\n7; 10.0; 20.0; Ok; 1; 1; N")] == [7]  # id capped by skipping
@@ -557,7 +557,7 @@ def test_psmsl_parse_stations():
 def test_psmsl_skips_short_gauge_for_next_one(psmsl_offline):
     # Princes Dock (212, 1916-1920) is nearer to this point than Apollo Bandar (43) but cannot support a trend test
     s = data.get_series("sea_level", 18.95, 72.83, source="psmsl")
-    assert s["place"]["name"].startswith("MUMBAI") and "PSMSL id 43" in s["notes"][0]
+    assert s["place"]["name"].startswith("Mumbai") and "PSMSL id 43" in s["notes"][0]
     assert s["times"][0] == "1878-01" and s["units"] == "mm" and s["freq"] == "monthly"
     assert s["source"]["id"] == "psmsl" and s["source"]["url"] == "https://psmsl.org/"
     assert any("revised local reference" in n for n in s["notes"]) and any("30 years" in n for n in s["notes"])
@@ -594,7 +594,7 @@ def test_psmsl_no_gauge_nearby_is_value_error(psmsl_offline):
 def test_sea_level_fallback(offline, psmsl_offline):
     assert data.get_series("sea_level", 39.36, -74.42)["source"]["id"] == "coops"  # CO-OPS has a gauge
     s = data.get_series("sea_level", 19.08, 72.88)  # none in CO-OPS: PSMSL
-    assert s["source"]["id"] == "psmsl" and "APOLLO" in s["place"]["name"]
+    assert s["source"]["id"] == "psmsl" and "Apollo" in s["place"]["name"]
     with pytest.raises(ValueError, match="no tide gauge within 100 km"):
         data.get_series("sea_level", 28.58, 77.21)  # neither: error, no value
     with pytest.raises(ValueError, match="No tide gauge within 100 km"):
@@ -1070,3 +1070,27 @@ def test_ghcn_station_sentence_at_the_edge_of_range():
     full = {"id": "FULL", "name": "FULL", "lat": lat, "lon": 0.0, "types": {"PRCP": ("1950-01-01", "2026-01-01", 100.0)}}
     assert 50 < ghcn.haversine_km(0, 0, full["lat"], 0) < 50.5
     assert [s["id"] for s, _, _ in ghcn.ranked(0, 0, [full], "precip")] == ["FULL"]
+
+
+def test_readable_names():
+    r = upstream.readable
+    for raw_name, want in [("NEW DELHI SAFDARJUN, IN", "New Delhi Safdarjun, IN"), ("NEW YORK (THE BATTERY)", "New York (The Battery)"),
+                           ("MUMBAI / BOMBAY (APOLLO BANDAR)", "Mumbai / Bombay (Apollo Bandar)"), ("ST. JOHN'S", "St. John's"),
+                           ("ABERDEEN I", "Aberdeen I"), ("The Battery", "The Battery"), ("", ""), ("1234 -/ 56", "1234 -/ 56"),
+                           ("SÃO TOMÉ", "São Tomé"), ("WINSTON-SALEM", "Winston-Salem"),
+                           ("ABERDEEN II", "Aberdeen II"), ("NEWCASTLE III", "Newcastle III"), ("GALVESTON II, PIER 21, TX", "Galveston II, Pier 21, TX"),
+                           ("BARENTSBURG II (SPITSBERGEN)", "Barentsburg II (Spitsbergen)"), ("VIGO", "Vigo"), ("XIAMEN", "Xiamen"), ("IVIGTUT", "Ivigtut")]:
+        assert r(raw_name) == want
+    cut = upstream.text("A" * 200, upstream.NAME)
+    assert r(cut) == "A" + "a" * (upstream.NAME - 2) + "…" and len(r(cut)) == upstream.NAME
+
+
+def test_station_names_are_readable_in_series_and_sentences(offline2, psmsl_offline):
+    assert data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="1991", source="ghcn")["place"]["name"] == "New Delhi Safdarjun, IN"
+    s = data.get_series("sea_level", 18.95, 72.83, source="psmsl")
+    assert s["place"]["name"] == "Mumbai / Bombay (Apollo Bandar)" and "Mumbai / Bombay (Apollo Bandar) (PSMSL id 43)" in s["notes"][0]
+
+
+def test_readable_never_lengthens_a_name():
+    assert len(upstream.readable(upstream.text("X" + "İ" * 200, upstream.NAME))) <= upstream.NAME
+    assert len(upstream.readable("İSTANBUL")) == len("İSTANBUL") and upstream.readable("İSTANBUL").startswith("İ")
