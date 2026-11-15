@@ -55,3 +55,7 @@ def test_mcp_version_falls_back_when_not_installed(monkeypatch):
         assert importlib.import_module("earthtrends.mcp_server").VERSION == "unknown"
     finally:
         sys.modules["earthtrends.mcp_server"] = original  # the app keeps using the original module
+        import earthtrends
+        monkeypatch.setattr(earthtrends, "mcp_server", original)
+    from earthtrends import mcp_server
+    assert mcp_server is original

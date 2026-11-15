@@ -1056,3 +1056,7 @@ def test_ghcn_station_sentence_at_the_edge_of_range():
     m = str(ghcn._no_station("precip", (50.3, st)))  # prints "50 km": must not follow "within 50 km"
     assert m.startswith("The nearest weather station, EDGE (50 km away), does not have")
     assert str(ghcn._no_station("precip", (50.6, st))).startswith("No weather station within 50 km has")
+    lat = 50.3 / 111.195  # a full record, 50.3 km north of (0, 0): shown as "50 km", so it must be checked and used
+    full = {"id": "FULL", "name": "FULL", "lat": lat, "lon": 0.0, "types": {"PRCP": ("1950-01-01", "2026-01-01", 100.0)}}
+    assert 50 < ghcn.haversine_km(0, 0, full["lat"], 0) < 50.5
+    assert [s["id"] for s, _, _ in ghcn.ranked(0, 0, [full], "precip")] == ["FULL"]

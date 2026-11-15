@@ -120,7 +120,7 @@ def ranked(lat: float, lon: float, candidates: list[dict], variable: str) -> lis
     seen = sorted(((haversine_km(lat, lon, s["lat"], s["lon"]), s) for s in candidates), key=lambda t: t[0])
     out = []
     for km, s in seen:
-        if km > MAX_KM:
+        if round(km) > MAX_KM:  # the same rounding the message prints, so a station shown as "50 km" was checked
             break
         for group in NEED[variable]:
             if all(t in s["types"] and _years(s["types"][t]) >= MIN_YEARS for t in group):
