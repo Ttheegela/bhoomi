@@ -39,6 +39,8 @@ const SOURCE_HELP = {
 };
 // Names in the source select (every width); SOURCE_LABELS are the full names used in text elsewhere.
 const SOURCE_SHORT = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'GHCN-Daily', coops: 'CO-OPS', psmsl: 'PSMSL', grace: 'GRACE' };
+// Short names for the first screen; the full dataset name stays in "How we calculated this".
+const SOURCE_PLAIN = { coops: 'NOAA tide gauge', psmsl: 'tide gauge (PSMSL)', ghcn: 'NOAA weather station', power: 'NASA POWER', era5: 'ERA5', grace: 'NASA GRACE satellites' };
 const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'NASA GSFC GRACE mascons', psmsl: 'PSMSL tide gauges' };
 
 /* ---------- pure helpers (no DOM; exported for a node check) ---------- */
@@ -550,7 +552,7 @@ function plainError(r) {
 function dropErrors(win, key) {
   const e = store[win];
   if (!e) return;
-  e.pins.forEach((p) => { const k = resKey(win, p); if (results[k] && results[k].status === 'error' && (!key || pinKeyOf(p.lat, p.lon) === key)) delete results[k]; });
+  e.pins.forEach((p) => { const k = resKey(win, p); if (results[k] && results[k].status === 'error' && !(key && results[k].none) && (!key || pinKeyOf(p.lat, p.lon) === key)) delete results[k]; });
 }
 function enqueue(win, p) {
   const k = resKey(win, p);
@@ -577,9 +579,9 @@ function pump() {
       }
       const s = sr.ok ? sr.body : null;
       const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
-      if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); }
-      else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; }
-      else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; }
+      if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); res.none = sr.status === 400; } // none: a real "no record here", not asked again on every click
+      else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; res.none = true; }
+      else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; res.none = tr.status === 400; }
       else { res.status = 'ok'; res.series = s; res.trend = tr.body; }
       flight--;
       landed(job.win, job.p, res);
@@ -600,7 +602,7 @@ function landed(win, p, res) {
   const e = store[win];
   if (pinKeyOf(p.lat, p.lon) === e.selected && res.status === 'ok') {
     const g = res.trend.guidance;
-    TD.announce(`${p.label}: ${g && g.risk_label ? g.risk_label + '. ' + (g.why || '') : (res.trend.meaning && res.trend.meaning.headline) || 'Loaded.'}`);
+    TD.announce(`${p.label}: ${g && g.risk_label ? g.risk_label + '. ' + whyOf(g) : (res.trend.meaning && res.trend.meaning.headline) || 'Loaded.'}`);
   }
 }
 
@@ -654,7 +656,7 @@ const fmt = {
   rate(t) {
     const g = t && t.guidance, r = g && g.rate;
     if (!r || typeof r.value !== 'number') return '';
-    if (!imperial()) return String(r.text || '');
+    if (!imperial() || r.unit === '%') return String(r.text || ''); // a percentage reads the same in both unit settings
     const c = convert(r.value, r.unit);
     return `${signed(c.v)} ${c.unit}`;
   },
@@ -669,6 +671,18 @@ const fmt = {
   years(t) { return t && t.period ? `${t.period.start.slice(0, 4)}–${t.period.end.slice(0, 4)}` : ''; },
   unit(t) { const g = t && t.guidance; return convert(0, (g && g.display && g.display.unit) || (t && t.units) || '').unit; },
 };
+// The "why" sentence; a rate note (Rain: "about 60 mm more a year") goes in brackets before its final full stop.
+function noteText(n) {
+  if (!n || typeof n.text !== 'string') return '';
+  if (!imperial() || typeof n.value !== 'number') return n.text;
+  const c = convert(Math.abs(n.value), n.unit);
+  return `about ${fmtNum(c.v, false)} ${c.unit} ${n.value < 0 || /\bless\b/.test(n.text) ? 'less' : 'more'} a year`;
+}
+function whyOf(g) {
+  if (!g || !g.why) return '';
+  const note = noteText(g.rate && g.rate.note);
+  return note ? `${g.why.replace(/\.\s*$/, '')} (${note}).` : g.why;
+}
 const perOf = (t) => (t && t.guidance && t.guidance.rate && t.guidance.rate.per) || '';
 const riskShort = (g) => (g && g.risk_label ? g.risk_label.replace(/ risk$/, '') : '');
 const riskClass = (g) => (g && ['high', 'moderate', 'low', 'unknown'].includes(g.risk) ? g.risk : 'unknown');
@@ -761,9 +775,10 @@ function renderRec() {
   const risk = riskClass(g), years = fmt.years(t), pl = t.place && t.place.name;
   const station = pl && t.source && ['coops', 'ghcn', 'psmsl'].includes(t.source.id) ? pl : '';
   const srcLine = el('div', { class: 'src' });
-  if (isHttps(t.source)) srcLine.append(el('a', { href: t.source.url, class: 'srclink', target: '_blank', rel: 'noopener' }, `${shownName(t.source)} ↗`)); else srcLine.append(t.source ? shownName(t.source) : 'unknown source');
+  const short = t.source && SOURCE_PLAIN[t.source.id];
+  const srcText = (short ? short.charAt(0).toUpperCase() + short.slice(1) : shownName(t.source)) + (short && station ? ` at ${station}` : '');
+  if (isHttps(t.source)) srcLine.append(el('a', { href: t.source.url, class: 'srclink', target: '_blank', rel: 'noopener' }, `${srcText}\u00a0↗`)); else srcLine.append(srcText);
   srcLine.append(` · ${years}`);
-  if (station) srcLine.append(` · measured at ${station}`);
   box.append(el('div', { class: 'where' }, el('div', {}, h2(pin.label), srcLine), g && g.risk_label ? el('span', { class: `risk ${risk}` }, g.risk_label) : ''));
 
   // big number
@@ -773,7 +788,7 @@ function renderRec() {
   else if (g) big.append('No clear change', ' ', el('small', {}, years));
   else big.append(verdictWord(t));
   box.append(big);
-  box.append(el('p', { class: 'say' }, g && g.why ? g.why : [m && m.headline, m && m.comparison].filter(Boolean).join(' ') || verdictCopy(t, nameOf(t.variable), placeOf(t)).p1));
+  box.append(el('p', { class: 'say' }, g && g.why ? whyOf(g) : [m && m.headline, m && m.comparison].filter(Boolean).join(' ') || verdictCopy(t, nameOf(t.variable), placeOf(t)).p1));
   if (g && g.recommendation) box.append(el('div', { class: `advice ${risk}` }, el('b', {}, 'Our recommendation'), g.recommendation));
 
   // two facts
@@ -983,6 +998,7 @@ function addPin(win, spec) {
   const key = pinKeyOf(lat, lon);
   // a place within 0.25 degrees of a pinned one is that pin: select it, keep its label, say nothing
   const near = e.pins.find((p) => Math.abs(p.lat - lat) <= 0.25 && Math.abs(((p.lon - lon + 540) % 360) - 180) <= 0.25);
+  if (near && near.preset && !spec.link && cleanPlace(spec.label)) { near.label = cleanPlace(spec.label); near.preset = false; } // a typed place keeps its name
   if (near) { e.selected = pinKeyOf(near.lat, near.lon); saveStore(); if (win === curWin) { ensureLoaded(win); changed(); } return { ok: true }; }
   const label = cleanPlace(spec.label) || coordText(lat, lon);
   let replaced = null;
@@ -1169,6 +1185,7 @@ window.TD = {
     const i = e.pins.findIndex((p) => pinKeyOf(p.lat, p.lon) === key);
     if (i < 0) return;
     const [gone] = e.pins.splice(i, 1);
+    delete results[resKey(curWin, gone)]; // a retry timer or a late reply for it is then dropped
     if (e.selected === key) e.selected = e.pins.length ? pinKeyOf(e.pins[0].lat, e.pins[0].lon) : null;
     saveStore();
     changed();
