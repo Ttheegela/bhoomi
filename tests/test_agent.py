@@ -1412,6 +1412,11 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "if no source returned a result, give the no-data answer, say that past data alone cannot settle it, and still end with the marker",
     "you add none of your own",
     "Never give a number about the future",
+    "look up only the measurements it names",
+    "is a sea-level question: look up sea level only",
+    "(a) the question compares two or more places for safety or risk in general",
+    "When the verdict is rising or falling, never write \"no clear change\"",
+    "This is the sea measured against the land, so the land rising or sinking is part of it.",
     "write as if for a ten-year-old",
     "write [GUIDANCE] on its own",
     "at most six calls",
@@ -1493,7 +1498,7 @@ def test_prompt_rules(phrase):
                                     "a decade is ten years", "every ten years", "explaining what a decade is more than once",
                                     "the p-value phrase second", "millimetres every ten years", "comparison of slopes",
                                     "verdict, numbers and p-value", 'A question about a region or "which places"',
-                                    'Broad questions (a region or "which places"', "you cannot advise", "judge investments"])
+                                    'Broad questions (a region or "which places"', "you cannot advise", "judge investments", "past data cannot tell what will happen"])
 def test_prompt_rules_removed(phrase):
     assert phrase not in prompts.SYSTEM
 
