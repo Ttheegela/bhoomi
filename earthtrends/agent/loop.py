@@ -38,6 +38,8 @@ PERIOD_ASK = ("Your first answer to this question gave a period that is in no to
               "is: {periods}. Give the same answer again, following every rule, with each period exactly as given here.")
 NUMBER_ASK = ("Your first answer to this question stated a number, but no data lookup returned a result this turn. "
               "Give the same answer again with no number at all.")
+INVENTED_ASK = ("Your first answer stated numbers that are in no tool result: {numbers}. Use only the tool's numbers, "
+                "each with the tool's own sign.")
 NO_NUMBERS = ("I can only give numbers that come from a data lookup, and I did not look anything up for that. "
               "Ask about a place and a measurement and I will check.")
 NO_TOOL = " Do not call a tool: these are the tool results you already got:\n"
@@ -61,6 +63,11 @@ TOOLS = [
      }}},
 ]
 TREND_ARGS = ("variable", "lat", "lon", "start", "end", "source")
+# A tool call written out as text, not a mention: a tool's name, then only quotes, colons, ">" or space, then "{" or
+# "(" (optionally both) and a quote, ")" or an argument name. "detect_trend\n{"variable": ...}", "detect_trend({...",
+# "detect_trend(variable=...)" match; "a tool called detect_trend" and "detect_trend (the trend check)" do not.
+TOOL_NAME = re.compile(r"\b(?:" + "|".join(re.escape(t["name"]) for t in TOOLS) + r")\b[\"'`>:\s]*[{(]\s*(?:[{(]\s*)?"
+                       r"(?:[\"')]|(?:" + "|".join(TREND_ARGS) + r")\b)")
 HISTORY_MSGS = 6  # earlier chat messages sent with a question: the same limits as web/ask.js
 HISTORY_CHARS = 4000
 
@@ -367,6 +374,58 @@ def stated_numbers(text: str) -> list[tuple[str, str]]:
     return out
 
 
+UNDER_01 = re.compile(r"\bbelow 0\.01(?!\d)", re.I)  # with UNDER_001: allowed only when a p-value is under the line
+
+
+def _pool(x, out: list[float]) -> list[float]:
+    """Every number in the tool results: numeric fields as they are, plus numbers written inside text fields (the
+    "meaning" strings included: check() leaves them out of the results the model got without numbers).
+    A rising or falling slope also goes in without its sign: the prompt drops it after a direction word ("falls by
+    0.40"). A no-clear-change slope keeps its sign, since no word carries it."""
+    if isinstance(x, bool):
+        pass
+    elif isinstance(x, (int, float)):
+        out.append(float(x))
+    elif isinstance(x, str):
+        out += [float(s) * (-1 if sign else 1) for sign, s in NUM.findall(x)]
+    elif isinstance(x, dict):
+        for k, v in x.items():
+            _pool(v, out)
+            if (k == "slope_per_decade" and isinstance(v, (int, float)) and not isinstance(v, bool)
+                    and x.get("verdict") in ("rising", "falling")):
+                out.append(abs(float(v)))
+    elif isinstance(x, list):
+        for v in x:
+            _pool(v, out)
+    return out
+
+
+def invented_numbers(answer: str, results: list) -> list[str]:
+    """Answer numbers that no tool-result number rounds to at the answer's precision, sign included. Only the
+    slope may appear without its sign (see _pool); a range end must keep its minus. The loop's check and the eval
+    scorer share it."""
+    pool = _pool(results, [])
+    ps = [r["p_value"] for r in results if isinstance(r, dict) and isinstance(r.get("p_value"), (int, float))]
+    for phrase, line in ((UNDER_001, 0.001), (UNDER_01, 0.01)):
+        if any(p < line for p in ps):
+            answer = phrase.sub(" ", answer)
+    bad = []
+    for sign, s in stated_numbers(answer):
+        v = -float(s) if sign else float(s)
+        half = 0.5 * 10 ** -(len(s.split(".")[1]) if "." in s else 0) + 1e-9
+        if not any(abs(x - v) <= half for x in pool):
+            bad.append(sign + s)
+    return bad
+
+
+def model_results(calls: list[dict]) -> list:
+    """The results as the model saw them, for invented_numbers: every call without an error, with "meaning" left out
+    of the agreeing sources it got without numbers. The eval scorer builds the same list."""
+    hid = hidden_calls(calls)
+    return [{k: v for k, v in c["result"].items() if k != "meaning"} if i in hid else c["result"]
+            for i, c in enumerate(calls) if c.get("error") is None and c.get("result") is not None]
+
+
 # ---- periods: every range the answer gives must be the period of a returned result ----
 
 _MON = ("jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?"
@@ -458,6 +517,20 @@ def _candidates(text: str, pos: int, ok: list[dict]) -> tuple[list[dict], bool]:
     return ok, False
 
 
+def period_ranges(text: str) -> list[re.Match]:
+    """The ranges the period check treats as periods: "between" goes with "and", and no "95% range" or "page" just
+    before (so "95% range 1650 to 2010" is no period)."""
+    return [m for m in PERIOD_RANGE.finditer(text)
+            if (m["sep"].lower() == "and") == bool(m["btw"]) and not _NOT_A_PERIOD.search(text, 0, m.start())]
+
+
+def without_periods(text: str) -> str:
+    """The text with each of its period ranges blanked: those belong to the period check."""
+    for m in reversed(period_ranges(text)):
+        text = text[:m.start()] + " " + text[m.end():]
+    return text
+
+
 def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
     """(range, certain) for each wrong period range in `text`. A range passes if it is the window the user asked for
     (a call's start and end, by year) or written in a result's own caveat ("its 2004 to 2009 average": the tool's
@@ -471,8 +544,7 @@ def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
     caveats = [c.lower() for x in ok for c in x["result"].get("caveats") or [] if isinstance(c, str)]
     asked = [(str(a["start"])[:4], str(a["end"])[:4]) for a in (c.get("arguments") or {} for c in calls)
              if isinstance(a, dict) and a.get("start") and a.get("end")]
-    ranges = [m for m in PERIOD_RANGE.finditer(text)
-              if (m["sep"].lower() == "and") == bool(m["btw"]) and not _NOT_A_PERIOD.search(text, 0, m.start())]
+    ranges = period_ranges(text)
     sents = [(u.start(), u.end()) for u in _UNIT.finditer(text)]
 
     def fit(m, cs):
@@ -500,10 +572,10 @@ def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
     return out
 
 
-def wrong_periods(text: str, calls: list[dict]) -> list[re.Match]:
-    """The period ranges in `text` that are wrong (see _check). No result with a period: nothing to check. The eval
-    scorer imports this."""
-    return [m for m, _ in _check(text, calls)]
+def wrong_periods(text: str, calls: list[dict], certain_only: bool = False) -> list[re.Match]:
+    """The period ranges in `text` that are wrong (see _check); with certain_only, only those that fit no result's
+    period at all. No result with a period: nothing to check. The eval scorer imports this."""
+    return [m for m, certain in _check(text, calls) if certain or not certain_only]
 
 
 def _in_words(p: dict, sep: str = "to") -> str:
@@ -574,6 +646,38 @@ def best(kept: list[str], calls: list[dict]) -> str | None:
     flags = [len(_check(t, calls)) for t in fixed]  # left after fixing: the doubtful ones
     n = [words(t) for t in fixed]
     return fixed[min(range(len(fixed)), key=lambda i: (0, flags[i], -i) if n[i] <= limit else (1, flags[i], n[i]))]
+
+
+EXAMPLES = "These are examples, not a ranking."
+PLACE_KM = 50  # lookups this far apart are different places
+# The broad-question rule's own opener, not any "can't rank" ("I can't rank which home is safer").
+CANNOT_RANK = re.compile(r"\b(?:cannot|can not|can['’]t)\s+rank\s+a\s+whole\s+region\b", re.I)
+_SENT_END = re.compile(r"[.!?](?=\s|$)")  # a decimal point is followed by a digit, so "9.36" is no sentence end
+# ponytail: an abbreviation with a space after it ("U.S. ") inside the opener would count as its end; the opener is
+# the prompt's fixed sentence, which has none.
+
+
+def add_examples(text: str, calls: list[dict]) -> str:
+    """EXAMPLES once, right after the sentence that says it cannot rank a whole region, when all hold: that phrase
+    is in the text, the text has no "not a ranking" yet, and this turn's lookups cover two or more places. Any other
+    text comes back unchanged."""
+    m = CANNOT_RANK.search(text)
+    if not m or "not a ranking" in text.lower():
+        return text
+    pts = []
+    for c in calls:
+        a = c.get("arguments") or {}
+        try:
+            p = (float(a["lat"]), float(a["lon"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if c.get("name") == "detect_trend" and all(coops.haversine_km(*p, *q) > PLACE_KM for q in pts):
+            pts.append(p)
+    if len(pts) < 2:
+        return text
+    end = _SENT_END.search(text, m.end())
+    at = end.end() if end else len(text.rstrip())
+    return f"{text[:at]} {EXAMPLES}{text[at:]}"
 
 
 FOUND_HEAD = "Here is what I found."
@@ -660,20 +764,30 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
             if not step["tool_calls"]:
                 # Cut off at the output cap: never show partial text. The token check covers providers without "stop".
                 cut = step.get("stop") == "length" or step["usage"]["completion_tokens"] >= MAX_TOKENS
-                text, limit, long, wrong, nums = step["text"], word_limit(calls), False, False, False
+                text, limit, long, wrong, nums, invented = step["text"], word_limit(calls), False, False, False, []
                 if not cut:
                     if not (text or "").strip():
                         break  # empty text (e.g. reasoning spent the cap): falls through to kept or GAVE_UP
+                    if TOOL_NAME.search(text):  # a tool call written out as text is no answer, and never kept
+                        if calls or checked or i == MAX_CALLS - 1:
+                            break  # same fall-through as empty text: kept, found_answer or GAVE_UP
+                        checked = True  # nothing fetched yet: the failed-check restart, once, tools offered
+                        provider.start(system, question, TOOLS, history=history)
+                        continue
                     text = compose(text, calls)  # before the checks: they hold for what the user sees
                     long, wrong = words(text) > limit, bool(wrong_periods(text, calls))
                     # No result to take a number from: any number but the fixed phrases is made up.
                     nums = not ok_calls(calls) and bool(stated_numbers(UNDER_001.sub(" ", text)))
-                    if not (long or wrong or nums):
+                    # With results: every number must be one of theirs. Period ranges are left to the period check
+                    # above, which can retry or fix them.
+                    invented = (invented_numbers(without_periods(text), model_results(calls))
+                                if ok_calls(calls) else [])
+                    if not (long or wrong or nums or invented):
                         answer = text
                         break
                     if nums:
                         numbered = True  # never kept: it ends as NO_NUMBERS unless a retry comes back clean
-                    else:
+                    elif not invented:  # a wrong number is never kept, so best() can't return it
                         kept.append(text)  # complete but failing a check: kept, so a check never ends in GAVE_UP
                 # No call left; or a complete answer already had its one check retry; or a cut-off one when a
                 # complete answer is in hand. A cut-off step is retried until the call limit or the budget ends it.
@@ -691,7 +805,8 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                 else:
                     asks = ([LONG_ASK.format(limit=limit, target=SHORTER[limit])] if long else []) + (
                         [PERIOD_ASK.format(periods=periods_note(calls))] if wrong else []) + (
-                        [NUMBER_ASK] if nums else [])
+                        [NUMBER_ASK] if nums else []) + (
+                        [INVENTED_ASK.format(numbers=", ".join(invented))] if invented else [])
                     again = "\n\n" + " ".join(asks) + (NO_TOOL if calls else " Do not call a tool.")
                 # No tools: no refetch. No history either: the retry rewrites from this turn's results only, so an
                 # earlier answer's numbers and periods are not in front of it. The no-number retry keeps it: there
@@ -755,6 +870,7 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                                                  else NO_NUMBERS if numbered else GAVE_UP)
         if answer not in (GAVE_UP, NO_NUMBERS):
             answer = guidance.fill(answer, ok_calls(calls))  # the tool's own guidance, word for word
+            answer = add_examples(answer, calls)
         # After every check, so it is outside the word limit; on every path, so the marker never reaches the user.
         answer = resources.fill(answer, [c["result"] for c in ok_calls(calls)])
     finally:

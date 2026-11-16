@@ -100,13 +100,13 @@ def test_scorer_accepts_inserted_guidance_numbers_and_link():
 @pytest.fixture
 def fake(monkeypatch):
     class Fake:
-        script, results = [], []
+        script, results, starts = [], [], []
 
         def __init__(self, model):
             pass
 
         def start(self, system, question, tools, history=()):
-            pass
+            Fake.starts.append((question, tools))
 
         def step(self):
             return Fake.script.pop(0)
@@ -195,4 +195,215 @@ def test_no_results_still_gives_up(fake, monkeypatch):
     monkeypatch.setattr(tools, "detect_trend", none)
     fake.script = [step(calls=[call(str(i), variable="sea_level", lat=1, lon=2)]) for i in range(10)]
     assert loop.ask("q", model="fake:m")["answer"] == loop.GAVE_UP
+
+
+# ---- "These are examples, not a ranking." put in by code ----
+
+TOKYO = {"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 35.65, "lon": 139.77}}
+MANILA = {"name": "detect_trend", "arguments": {"variable": "sea_level", "lat": 14.58, "lon": 120.97}}
+
+
+@pytest.mark.parametrize("opener", ["I cannot rank a whole region from past data at single places.",
+                                    "I can't rank a whole region from past data at single places.",
+                                    "I can’t rank a whole region from past data at single places."])
+def test_cannot_rank_answer_gets_the_sentence_once(opener):
+    text = f"{opener}\n\nTokyo: rising.\n\nManila: rising."
+    out = loop.add_examples(text, [TOKYO, MANILA])
+    assert out == f"{opener} {loop.EXAMPLES}\n\nTokyo: rising.\n\nManila: rising."
+
+
+@pytest.mark.parametrize("text", ["New York and Seattle: both rising. Source: NOAA.",
+                                  "I can't rank which home is safer from this data. Both coasts are rising."])
+def test_two_places_without_the_broad_opener_unchanged(text):
+    assert loop.add_examples(text, [TOKYO, MANILA]) == text
+
+
+def test_sentence_goes_right_after_the_opener_and_the_marker_stays_last():
+    text = ("I cannot rank a whole region from past data at single places. Tokyo: rising. Manila: rising. "
+            "[OFFICIAL RESOURCES]")
+    out = loop.add_examples(text, [TOKYO, MANILA])
+    assert out == ("I cannot rank a whole region from past data at single places. These are examples, not a "
+                   "ranking. Tokyo: rising. Manila: rising. [OFFICIAL RESOURCES]")
+    assert out.endswith("[OFFICIAL RESOURCES]")
+
+
+def test_opener_in_the_second_paragraph():
+    text = ("Sea level is rising in many places.\n\nI can't rank a whole region from 9.36 years of data alone. "
+            "Tokyo: rising.")
+    out = loop.add_examples(text, [TOKYO, MANILA])
+    assert out == ("Sea level is rising in many places.\n\nI can't rank a whole region from 9.36 years of data alone. "
+                   "These are examples, not a ranking. Tokyo: rising.")
+
+
+def test_opener_with_no_sentence_end_goes_at_the_end():
+    assert loop.add_examples("I can't rank a whole region", [TOKYO, MANILA]) == (
+        "I can't rank a whole region These are examples, not a ranking.")
+
+
+def test_not_a_ranking_already_there_is_not_doubled():
+    text = "I can't rank a whole region. These are examples I chose, not a ranking. Tokyo: rising."
+    assert loop.add_examples(text, [TOKYO, MANILA]) == text
+
+
+def test_one_place_unchanged():
+    one = [TOKYO, {**TOKYO, "arguments": {**TOKYO["arguments"], "lat": 35.66, "source": "psmsl"}}]  # same city
+    text = "I can't rank a whole region. Tokyo: rising."
+    assert loop.add_examples(text, one) == text
+
+
+def test_loop_adds_examples_sentence(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    fake.script = [step(calls=[call("a", **TOKYO["arguments"]), call("b", **MANILA["arguments"])]),
+                   step("I can't rank a whole region from past data at single places.\n\nTokyo and Manila: rising.")]
+    assert loop.ask("Which Asian cities?", model="fake:m")["answer"].count(loop.EXAMPLES) == 1
+
+
+# ---- a tool call written out as text is never the answer ----
+
+LEAK = ("I'll run the three checks again instead of reusing the earlier results, since only fresh tool results can "
+        "support this answer.\n\ndetect_trend\n"
+        '{"variable": "air_temp_max", "lat": 28.61, "lon": 77.21, "source": "power"}')
+
+
+def _clean(answer):
+    return "detect_trend" not in answer and '{"variable"' not in answer
+
+
+def test_leak_on_the_retry_returns_the_earlier_complete_answer(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    long = " ".join(["word"] * 130) + "."
+    fake.script = [step(calls=[call("a", **GI_ARGS)]), step(long), step(LEAK)]
+    r = loop.ask("Is sea level rising at Grand Isle?", model="fake:m")
+    assert r["answer"] == loop.best([loop.compose(long, r["tool_calls"])], r["tool_calls"]) and _clean(r["answer"])
+    assert fake.script == []  # the leak was the retry's reply
+
+
+def test_leak_as_first_text_returns_the_found_answer(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    fake.script = [step(calls=[call("a", **GI_ARGS)]), step(LEAK)]
+    r = loop.ask("Is sea level rising at Grand Isle?", model="fake:m")
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and _clean(r["answer"])
+
+
+def test_leak_with_no_results_gives_up(fake):
+    fake.script = [step(LEAK), step(LEAK)]  # the one restart leaks again
+    assert loop.ask("Is sea level rising at Grand Isle?", model="fake:m")["answer"] == loop.GAVE_UP
+    assert fake.script == []  # two model calls: the first answer and the one restart, no third
+
+
+@pytest.mark.parametrize("text", [LEAK, 'detect_trend({"variable": "air_temp_max", "lat": 28.61, "lon": 77.21})',
+                                  'detect_trend(variable="air_temp_max", lat=28.61, lon=77.21)',
+                                  "Calling `detect_trend`: {'variable': 'precip'}", "list_variables()"])
+def test_written_out_tool_calls_match(text):
+    assert loop.TOOL_NAME.search(text)
+
+
+@pytest.mark.parametrize("text", ["I use a tool called detect_trend to check the records.",
+                                  "detect_trend (the trend check) looks at all months together.",
+                                  "The list_variables tool lists what we measure."])
+def test_mentions_do_not_match(text):
+    assert not loop.TOOL_NAME.search(text)
+
+
+def test_answer_that_mentions_a_tool_is_returned(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    text = (f"I use a tool called detect_trend to check this. Sea level at Grand Isle has clearly been rising. "
+            f"Source: NOAA CO-OPS tide gauges, {SRC['url']}.")
+    fake.script = [step(calls=[call("a", **GI_ARGS)]), step(text)]
+    assert loop.ask("Is sea level rising at Grand Isle?", model="fake:m")["answer"] == text
+
+
+def test_leak_before_any_call_restarts_once_with_tools(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    text = f"Yes. Sea level at Grand Isle has clearly been rising. Source: NOAA CO-OPS tide gauges, {SRC['url']}."
+    fake.script = [step(LEAK), step(calls=[call("a", **GI_ARGS)]), step(text)]
+    r = loop.ask("Is sea level rising at Grand Isle?", model="fake:m")
+    assert r["answer"] == text and len(r["tool_calls"]) == 1 and fake.script == []
+
+
+def test_normal_answer_is_untouched(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: {**GI, "guidance": None})
+    text = f"Yes. Sea level at Grand Isle has clearly been rising. Source: NOAA CO-OPS tide gauges, {SRC['url']}."
+    fake.script = [step(calls=[call("a", **GI_ARGS)]), step(text)]
+    assert loop.ask("Is sea level rising at Grand Isle?", model="fake:m")["answer"] == text
+
+
+# ---- with results, every number must be one of theirs ----
+
+POWER = {"id": "power", "name": "NASA POWER", "url": "https://power.larc.nasa.gov/"}
+FLAT = {"variable": "air_temp_max", "units": "degC", "place": {"name": "Delhi"}, "verdict": "no_clear_change",
+        "slope_per_decade": 0.125, "ci_low": -0.0151, "ci_high": 0.266, "p_value": 0.08,
+        "period": {"start": "1981-01", "end": "2025-12"}, "source": POWER, "caveats": [],
+        "meaning": {"headline": "The hottest days here show no clear change.", "confidence": "Not clear",
+                    "comparison": "", "limit": "It cannot tell the future."}}
+DELHI = {"variable": "air_temp_max", "lat": 28.61, "lon": 77.21}
+WRONG_SIGN = ("No clear change: -0.13 °C per decade (95% range -0.02 to 0.27). "
+              "Source: NASA POWER, https://power.larc.nasa.gov/.")
+RIGHT_SIGN = WRONG_SIGN.replace("-0.13", "0.13")
+
+
+def test_wrong_sign_gets_one_retry_naming_the_number(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    fake.script = [step(calls=[call("a", **DELHI)]), step(WRONG_SIGN), step(RIGHT_SIGN)]
+    r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
+    assert r["answer"] == RIGHT_SIGN and fake.script == []
+    retry, offered = fake.starts[-1]
+    assert loop.INVENTED_ASK.format(numbers="-0.13") in retry and offered == []  # no tools on the retry
+
+
+def test_wrong_twice_gives_the_found_answer(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    fake.script = [step(calls=[call("a", **DELHI)]), step(WRONG_SIGN), step(WRONG_SIGN)]
+    r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and "-0.13" not in r["answer"]
+    assert loop.invented_numbers(r["answer"], loop.model_results(r["tool_calls"])) == []
+
+
+def test_right_numbers_pass_with_no_retry(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    fake.script = [step(calls=[call("a", **DELHI)]), step(RIGHT_SIGN), step("never")]
+    r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
+    assert r["answer"] == RIGHT_SIGN and len(fake.script) == 1
+
+
+def test_direction_word_drops_the_slope_sign_but_not_a_range_end():
+    falling = {**FLAT, "verdict": "falling", "slope_per_decade": -0.2512, "ci_low": -0.41, "ci_high": -0.09}
+    res = loop.model_results([{"name": "detect_trend", "arguments": DELHI, "result": falling, "error": None}])
+    assert loop.invented_numbers("Clearly falling by 0.25 °C per decade (95% range -0.41 to -0.09).", res) == []
+    assert loop.invented_numbers("Clearly falling by 0.25 °C per decade (95% range 0.41 to -0.09).", res) == ["0.41"]
+
+
+def test_a_number_in_the_question_does_not_make_it_pass(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    fake.script = [step(calls=[call("a", **DELHI)]), step(WRONG_SIGN), step(RIGHT_SIGN)]
+    r = loop.ask("Is it true Delhi's hottest days changed by -0.13 °C per decade?", model="fake:m")
+    assert r["answer"] == RIGHT_SIGN and fake.script == []  # the retry was taken
+
+
+def test_a_year_repeated_from_the_question_is_retried(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    text = RIGHT_SIGN + " Past records cannot say what happens by 2050."
+    fake.script = [step(calls=[call("a", **DELHI)]), step(text), step(RIGHT_SIGN)]
+    r = loop.ask("Will Delhi's hottest days be worse by 2050?", model="fake:m")
+    assert r["answer"] == RIGHT_SIGN and loop.INVENTED_ASK.format(numbers="2050") in fake.starts[-1][0]
+
+
+def test_only_real_periods_are_left_to_the_period_check():
+    res = loop.model_results([{"name": "detect_trend", "arguments": DELHI, "result": FLAT, "error": None}])
+    made_up = "No clear change (95% range 1650 to 2010)."
+    assert loop.invented_numbers(loop.without_periods(made_up), res) == ["1650", "2010"]
+    real = "No clear change, January 1981 to December 2025."
+    assert loop.without_periods(real) != real and loop.invented_numbers(loop.without_periods(real), res) == []
+
+
+def test_wrong_number_long_answer_is_not_kept(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda **kw: FLAT)
+    long = WRONG_SIGN + " " + " ".join(["word"] * 130) + "."
+    fake.script = [step(calls=[call("a", **DELHI)]), step(long), step(LEAK)]
+    r = loop.ask("Are Delhi's hottest days getting hotter?", model="fake:m")
+    assert r["answer"] == loop.found_answer(r["tool_calls"]) and "-0.13" not in r["answer"]
+
+
+def test_scorer_uses_the_loops_number_check():
+    assert run.invented_numbers is loop.invented_numbers and run._pool is loop._pool
 

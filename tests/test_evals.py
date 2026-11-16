@@ -1135,3 +1135,33 @@ def test_multi_measure_skips_the_single_verdict_wording_only():
     assert "wording" not in multi and multi["numbers"] and multi["must_say"]
     assert agent_case("atlantic-city-many-measurements")["multi_measure"] is True
     assert "multi_measure" not in agent_case("grand-isle-invest")
+
+
+def _power(variable, units):
+    return {**AC, "variable": variable, "units": units, "slope_per_decade": 0.3, "ci_low": 0.2, "ci_high": 0.4,
+            "period": {"start": "1981-01", "end": "2025-12"},
+            "source": {"id": "power", "name": "NASA POWER", "url": "https://power.larc.nasa.gov/"}}
+
+
+def test_multi_measure_one_period_for_both_measurements_passes_wording():
+    calls = [{"name": "detect_trend", "arguments": ARGS, "result": AC, "error": None}] + [
+        {"name": "detect_trend", "arguments": {**ARGS, "variable": v}, "result": _power(v, u), "error": None}
+        for v, u in (("air_temp", "degC"), ("precip", "mm/day"))]
+    answer = ("Sea level is clearly rising, 42.54 mm per decade (95% range 41.11 to 43.96), September 1911 to "
+              "October 2026, NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/). Air temperature and rain "
+              "are clearly rising, 0.30 per decade (95% range 0.20 to 0.40), NASA POWER (https://power.larc.nasa.gov/). "
+              "Both periods run January 1981 to December 2025.")
+    case = {"id": "m", "question": "q", "expect_tool": "detect_trend", "must_say": [], "multi_measure": True}
+    out = run.check(case, fake_run(answer, calls))
+    assert out.get("wording", True) and out["numbers"] and out["source_named"] and out["links"], out
+    assert run.check({**case, "multi_measure": False}, fake_run(answer, calls))["wording"] is False  # the old flag
+    wrong = answer.replace("January 1981 to December 2025", "January 1970 to December 2025")
+    assert run.check(case, fake_run(wrong, calls))["wording"] is False  # a period no result has still fails
+
+
+def test_single_measurement_two_sources_same_gauge_still_fails():
+    psmsl = {**AC, "source": {"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"}}
+    calls = [{"name": "detect_trend", "arguments": {**ARGS, "source": s}, "result": r, "error": None}
+             for s, r in (("coops", AC), ("psmsl", psmsl))]
+    answer = ANSWER + " Both use the same gauge. PSMSL (https://psmsl.org/)."
+    assert run.check(CASE, fake_run(answer, calls))["wording"] is False

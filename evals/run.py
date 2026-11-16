@@ -22,9 +22,10 @@ from urllib.parse import urlparse
 import httpx
 
 from earthtrends.agent import providers, resources, tracing
-from earthtrends.agent.loop import (GAVE_UP, MAX_CALLS, NUM, agree_plan, agree_sentence, ask, hidden_calls,
+from earthtrends.agent.loop import (GAVE_UP, MAX_CALLS, NUM, agree_plan, agree_sentence, ask,
                                     history_error, tried_sources, wrong_periods)
-from earthtrends.agent.loop import stated_numbers as _numbers  # one implementation, shared with the loop's check
+from earthtrends.agent.loop import _pool, invented_numbers, model_results  # one implementation, shared with the loop's check
+from earthtrends.agent.loop import stated_numbers as _numbers  # noqa: F401 (the scorer tests use it)
 from earthtrends.data import list_variables
 from earthtrends.data.coops import haversine_km
 
@@ -75,9 +76,6 @@ SHARED = re.compile(r"\b(?:both|the two)(?:\s+(?:sources|records|datasets|data s
                     r"(?:use[sd]?|using|share[sd]?|rel(?:y|ies) on|comes? from|draws? on|are from)\s+"
                     r"(?:(?:the\s+same|the|one|a\s+single)\s+(?-i:(?:[A-Z][\w'-]*\s+)*)|(?-i:(?:[A-Z][\w'-]*\s+)+))"
                     r"(?:tide\s+)?(?:gauge|station)\b(?!s?\s+each\b)", re.I)  # "one gauge each": its own
-# Fixed p-value phrases allowed only when a result's p-value is really under that line.
-UNDER_001 = re.compile(r"\b(?:below|less than) 0\.001(?!\d)", re.I)
-UNDER_01 = re.compile(r"\bbelow 0\.01(?!\d)", re.I)
 
 
 # ---------- cases ----------
@@ -127,46 +125,6 @@ def not_runnable(case: dict, catalog: list[dict]) -> str | None:
 
 # ---------- checks (all code, no model) ----------
 
-def _pool(x, out: list[float]) -> list[float]:
-    """Every number in the tool results: numeric fields as they are, plus numbers written inside text fields (the
-    "meaning" strings included: check() leaves them out of the results the model got without numbers).
-    A rising or falling slope also goes in without its sign: the prompt drops it after a direction word ("falls by
-    0.40"). A no-clear-change slope keeps its sign, since no word carries it."""
-    if isinstance(x, bool):
-        pass
-    elif isinstance(x, (int, float)):
-        out.append(float(x))
-    elif isinstance(x, str):
-        out += [float(s) * (-1 if sign else 1) for sign, s in NUM.findall(x)]
-    elif isinstance(x, dict):
-        for k, v in x.items():
-            _pool(v, out)
-            if (k == "slope_per_decade" and isinstance(v, (int, float)) and not isinstance(v, bool)
-                    and x.get("verdict") in ("rising", "falling")):
-                out.append(abs(float(v)))
-    elif isinstance(x, list):
-        for v in x:
-            _pool(v, out)
-    return out
-
-
-def invented_numbers(answer: str, results: list) -> list[str]:
-    """Answer numbers that no tool-result number rounds to at the answer's precision, sign included. Only the
-    slope may appear without its sign (see _pool); a range end must keep its minus."""
-    pool = _pool(results, [])
-    ps = [r["p_value"] for r in results if isinstance(r, dict) and isinstance(r.get("p_value"), (int, float))]
-    for phrase, line in ((UNDER_001, 0.001), (UNDER_01, 0.01)):
-        if any(p < line for p in ps):
-            answer = phrase.sub(" ", answer)
-    bad = []
-    for sign, s in _numbers(answer):
-        v = -float(s) if sign else float(s)
-        half = 0.5 * 10 ** -(len(s.split(".")[1]) if "." in s else 0) + 1e-9
-        if not any(abs(x - v) <= half for x in pool):
-            bad.append(sign + s)
-    return bad
-
-
 WHOLE_WORDS = {"rises", "falls", "losing", "wetter", "cooler", "drier", "less hot"}  # short words that sit inside
 # others ("closing", "rainfalls", "less hotels")
 
@@ -191,9 +149,7 @@ def check(case: dict, run: dict) -> dict[str, bool]:
     calls (one per source), tool/variable/place must hold for every call."""
     answer = run.get("answer") or ""
     calls = [c for c in run.get("tool_calls", []) if c["name"] == "detect_trend"]
-    hid = hidden_calls(run.get("tool_calls", []))  # the loop's own rule: these reached the model without "meaning"
-    results = [{k: v for k, v in c["result"].items() if k != "meaning"} if i in hid else c["result"]
-               for i, c in enumerate(run.get("tool_calls", [])) if c.get("error") is None and c.get("result") is not None]
+    results = model_results(run.get("tool_calls", []))  # the loop's own list: hidden ones without "meaning"
     by_src = {_src(c["result"]): c["result"] for c in calls if c.get("error") is None and c.get("result")}
     defaults = {v["id"]: v["sources"][0] for v in list_variables()}
     # A call's source: what its result says it used, else what it asked for (the variable's default if left out).
@@ -259,7 +215,10 @@ def check(case: dict, run: dict) -> dict[str, bool]:
                 subj = [s[:s.index("agree")] if "agree" in s[:s.index("over its own record")] else s for s in own]
                 out["wording"] = out["wording"] and all(
                     any(_short_named(r.get("source") or {}, s) for r in agreeing) for s in subj)
-        if wrong_periods(answer, run.get("tool_calls", [])):  # a period range that is no result's period
+        # A period range that is no result's period. For multi_measure only a range that fits no result at all: one
+        # period said for "both" measurements is true when they share it.
+        multi = bool(case.get("multi_measure"))
+        if wrong_periods(answer, run.get("tool_calls", []), certain_only=multi):
             out["wording"] = False
         out["numbers"] = not invented_numbers(answer, results)
         if by_src:

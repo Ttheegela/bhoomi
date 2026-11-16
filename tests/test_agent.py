@@ -1011,7 +1011,7 @@ def test_year_only_wrong_range_is_replaced_in_words(fake, monkeypatch):
 
 
 def test_gap_caveat_is_left_alone(fake, monkeypatch):
-    with_period(monkeypatch)
+    with_period(monkeypatch, {**VIZ, "caveats": ["Some months are missing, including mid-2017 to mid-2018."]})
     text = "Rising, 1981 to 2025. Some months are missing, including mid-2017 to mid-2018."
     fake.script = [step(tool_calls=[call()]), step(text), step("never")]
     assert loop.ask("q", model="fake:m")["answer"] == text and len(fake.script) == 1
@@ -1338,7 +1338,7 @@ def test_negative_zero_loses_its_sign(text, want):
     ("The degCelsius and xdegC words stay.", "The degCelsius and xdegC words stay."),
 ])
 def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
-    result = {**TREND, "units": "degC"}
+    result = {**TREND, "units": "degC", "slope_per_decade": 0.25, "ci_low": 0.1}  # the numbers the texts state
     monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: result)
     fake.script = [step(tool_calls=[call()]), step(text), step("never")]
     r = loop.ask("q", model="fake:m")
@@ -1362,7 +1362,7 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     'write "less than 0.01"',
     "From 0.045 up to 0.055, use three decimals",
     '0.0549 is "0.055"), so it never prints as "0.05"',
-    "the range ends always keep their minus sign",
+    "The range ends always keep their minus sign",
     "Say the verdict once",
     "Never quote the tool's verdict label or any field name",
     "month and year in words",
@@ -1414,7 +1414,12 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "Never give a number about the future",
     "look up only the measurements it names",
     "Describe each source's gauge or station in its own clause with that source's name",
-    "never write that \"both\" or \"the two\" sources use, share or come from a gauge or station, even when the names match",
+    "never write \"the same gauge\" or \"the same station\", and never that \"both\" or \"the two\" sources use, share or come from a gauge or station",
+    "\"NOAA's gauge is at The Battery, <its distance from its caveat>. PSMSL's gauge is at The Battery, <its distance>.\"",
+    "even when the names match (the tool does not say they are the same instrument)",
+    "Its rate is the tool's, sign included (a minus only if the tool's rate is negative; never add or drop one), with no direction verb.",
+    "Right: \"The rate is -0.73 mm per decade (95% range -2.18 to 0.64).\" and \"The rate is 0.37 mm per decade (95% range -0.26 to 1.04).\"; wrong: \"went down by 0.73\", \"fell\", \"rose\".",
+    "You check public NASA and NOAA records to tell people whether something is really changing at a place.",
     "is a sea-level question: look up sea level only",
     "(a) the question compares two or more places for safety or risk in general",
     "When every result in the answer is rising or falling, never write \"no clear change\"",
