@@ -53,14 +53,12 @@ def _comparison(r: dict) -> str:
     if (slope > 0) != (verdict == "rising"):  # a direction word that contradicts the number: say nothing
         return ""
     size, word = abs(Decimal(repr(float(slope)))), WORDS[var][verdict == "falling"]
-    if var == "sea_level":
-        if size >= 10:
-            return f"About {about(size.scaleb(-1))} cm {word} every 10 years."
-        return f"About {about(size)} mm {word} every 10 years."
+    if var == "sea_level":  # mm a year, the world's unit, as in headline_rate
+        return f"About {about(size.scaleb(-1))} mm {word} each year."
     if var == "precip":
         return f"About {about(size * Decimal('365.25'))} mm {word} rain a year, every 10 years."
-    if var == "water_storage":
-        return f"About {about(size)} cm {word} water every 10 years, as a layer spread over the region."
+    if var == "water_storage":  # cm of water a year, as in headline_rate
+        return f"About {about(size.scaleb(-1))} cm {word} water each year, as a layer spread over the region."
     return f"About {about(size)} °C {word} every 10 years."
 
 

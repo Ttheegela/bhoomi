@@ -11,9 +11,6 @@ GUIDE = {"risk": "high", "risk_label": "High risk",
          "display": {"unit": "cm", "factor": 0.1},
          "recommendation": "For a long-term home or investment near the shore here, we'd advise against it unless "
                            "the site sits well above flood level.",
-         "outlook_label": "If the past trend continues",
-         "outlook": [{"year": 2035, "low": 6.0, "high": 7.0, "unit": "cm", "text": "+6 to +7 cm by 2035"},
-                     {"year": 2050, "low": 18.2, "high": 21.4, "unit": "cm", "text": "+18 to +21 cm by 2050"}],
          "future_link": {"label": "Future flood map (NOAA)", "url": "https://coast.noaa.gov/slr/"},
          "disclaimer": "This guidance isn't perfect. It is based only on past records, and the future is not "
                        "certain. Not professional financial or legal advice."}
@@ -27,7 +24,7 @@ GI = {"variable": "sea_level", "units": "mm", "place": {"name": "Grand Isle", "l
 GI_ARGS = {"variable": "sea_level", "lat": 29.26, "lon": -89.96}
 EXPECT = ("Sea level: High risk. The sea here is rising about 2.4 times faster than the world average. For a "
           "long-term home or investment near the shore here, we'd advise against it unless the site sits well above "
-          "flood level. If the past trend continues: +18 to +21 cm by 2050. This guidance isn't perfect. It is based "
+          "flood level. This guidance isn't perfect. It is based "
           "only on past records, and the future is not certain. Not professional financial or legal advice. "
           "Future flood map (NOAA) (https://coast.noaa.gov/slr/).")
 
@@ -46,9 +43,18 @@ def clean(monkeypatch):
 
 def test_block_is_the_tools_strings_word_for_word():
     assert guidance.block([ok(GI, GI_ARGS)]) == EXPECT
-    for s in (GUIDE["why"], GUIDE["recommendation"], GUIDE["disclaimer"], "+18 to +21 cm by 2050"):
+    for s in (GUIDE["why"], GUIDE["recommendation"], GUIDE["disclaimer"]):
         assert s in EXPECT
-    assert "2035" not in EXPECT  # only the 2050 outlook
+    # an old result that still carries a past-trend outlook adds nothing about the future (spec D1)
+    old = {**GUIDE, "outlook_label": "If the past trend continues",
+           "outlook": [{"year": 2050, "low": 18.2, "high": 21.4, "unit": "cm", "text": "+18 to +21 cm by 2050"}]}
+    assert guidance.block([ok({**GI, "guidance": old}, GI_ARGS)]) == EXPECT
+
+
+def test_hottest_day_adds_no_guidance():
+    flat = {**GUIDE, "risk": None, "risk_label": None, "why": None, "recommendation": None, "future_link": None}
+    hot = {**GI, "variable": "air_temp_max", "units": "degC", "guidance": flat}
+    assert guidance.block([ok(hot, {**GI_ARGS, "variable": "air_temp_max"})]) == ""
 
 
 @pytest.mark.parametrize("text,want", [

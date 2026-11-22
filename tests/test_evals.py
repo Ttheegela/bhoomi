@@ -121,18 +121,18 @@ def test_small_numbers_with_a_unit_are_checked():
 def test_meaning_numbers_count_only_for_results_sent_in_full():
     from earthtrends.stats.meaning import meaning_for
     r = {**AC, "meaning": meaning_for(AC)}
-    assert r["meaning"]["comparison"] == "About 4 cm higher every 10 years."  # the model now gets this string
-    assert run.invented_numbers("About 4 cm higher every 10 years.", [r]) == []
+    assert r["meaning"]["comparison"] == "About 4 mm higher each year."  # the model now gets this string
+    assert run.invented_numbers("About 4 mm higher each year.", [r]) == []
     assert run.invented_numbers("up 4 cm", [AC]) == ["4"]
     # an agreeing non-default source reaches the model without "meaning": its comparison is no pool number
     lead = {**CO_OPS, "meaning": meaning_for(CO_OPS)}
     other = {**PSMSL, "slope_per_decade": 52.0, "meaning": meaning_for({**PSMSL, "slope_per_decade": 52.0})}
-    assert other["meaning"]["comparison"] == "About 5 cm higher every 10 years."
+    assert other["meaning"]["comparison"] == "About 5 mm higher each year."
     calls = multi([lead, other])
     base = NY_HEAD + agree_sentence(other, lead) + NY_TAIL
     assert run.check(NY_CASE, fake_run(base, calls))["numbers"]
-    assert run.check(NY_CASE, fake_run(base + " About 5 cm higher every 10 years.", calls))["numbers"] is False
-    assert run.check(NY_CASE, fake_run(base + " About 3 cm higher every 10 years.", calls))["numbers"]  # the lead's
+    assert run.check(NY_CASE, fake_run(base + " About 5 mm higher each year.", calls))["numbers"] is False
+    assert run.check(NY_CASE, fake_run(base + " About 3 mm higher each year.", calls))["numbers"]  # the lead's
 
 
 @pytest.mark.parametrize("minus", ["-", "\u2212"])

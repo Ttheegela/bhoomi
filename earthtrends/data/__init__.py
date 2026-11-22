@@ -4,7 +4,7 @@ import copy
 import threading
 import time
 
-from . import coops, era5, ghcn, grace, monthly, power, psmsl
+from . import coops, era5, ghcn, grace, monthly, power, psmsl, upstream
 from .catalog import CATALOG
 from .places import search_places
 
@@ -39,17 +39,21 @@ def _bound(s: str | None, name: str, last: bool = False) -> str | None:
 
 
 def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float) -> dict:
-    """One upstream fetch for the whole period, no trimming."""
+    """One upstream fetch for the whole period, no trimming. `source` gets the full source block, `retrieved` = today (UTC),
+    except where the module keeps its own fetch date (a CO-OPS gauge's cached record, the GRACE file)."""
+    today = upstream.utc_today()
+    flags = None  # None: no value is preliminary
     if source == "power":
         param = power.PARAMS[variable]
-        times, values = power.parse(power.fetch(param, lat, lon), param)
+        resp = power.fetch(param, lat, lon)
+        times, values = power.parse(resp, param)
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
-        src, notes = power.SOURCE, ["Grid cell about 50 km wide, not a single station."] + ([power.NOTES[variable]] if variable in power.NOTES else [])
+        src, notes = power.source(resp, param, lat, lon, today), ["Grid cell about 50 km wide, not a single station."] + ([power.NOTES[variable]] if variable in power.NOTES else [])
     elif source == "era5":
         param = era5.PARAMS[variable]
         times, values = monthly.daily_to_monthly(*era5.parse(era5.fetch(param, lat, lon), param), era5.HOW[variable])
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
-        src = era5.SOURCE
+        src, flags = era5.source(variable, lat, lon, today), era5.flags(times, today)
         notes = ["Grid cell about 25 km wide, not a single station.",
                  f"Monthly values are built from daily ones; a month with fewer than {monthly.MIN_DAYS} valid days is left empty."]
         notes += [era5.NOTES[variable]] if variable in era5.NOTES else []
@@ -57,23 +61,20 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
         st, km, types, days, vals = ghcn.load(lat, lon, variable)
         times, values = monthly.daily_to_monthly(days, vals, ghcn.HOW[variable])
         place = {"name": st["name"], "lat": st["lat"], "lon": st["lon"]}
-        src = ghcn.SOURCE
+        src = ghcn.source(st["id"], types, today)
         notes = [f"Weather station {st['name']} ({st['id']}), {km:.0f} km from the point you asked about.",
                  f"Station records have gaps: a month with fewer than {monthly.MIN_DAYS} valid days is left empty."]
         if types == ("TMAX", "TMIN"):
             notes.append("This station has no daily average temperature, so each day is the mean of its highest and lowest reading.")
         notes += [ghcn.NOTES[variable]] if variable in ghcn.NOTES else []
     elif source == "psmsl":
-        times, values, place, notes = psmsl.series(lat, lon)
-        src = psmsl.SOURCE
+        times, values, place, notes, src = psmsl.series(lat, lon)
     elif source == "grace":
-        times, values, place, notes = grace.series(lat, lon)
-        src = grace.SOURCE
+        times, values, place, notes, src = grace.series(lat, lon)
     else:
-        times, values, place, notes = coops.series(lat, lon)
-        src = coops.SOURCE
+        times, values, place, notes, src = coops.series(lat, lon)
     return {"variable": variable, "units": entry["units"], "freq": "monthly", "place": place,
-            "times": times, "values": values, "source": dict(src), "notes": notes}
+            "times": times, "values": values, "flags": flags or [None] * len(values), "source": src, "notes": notes}
 
 
 def _cached_full(entry: dict, variable: str, source: str, lat: float, lon: float) -> dict:
@@ -160,9 +161,9 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
     if note:
         r["notes"] = r["notes"] + [note]
 
-    times, values = r["times"], r["values"]
+    times, values, flags = r["times"], r["values"], r["flags"]
     keep = [i for i, t in enumerate(times) if (not lo or t >= lo) and (not hi or t <= hi)]
-    r["times"], r["values"] = [times[i] for i in keep], [values[i] for i in keep]
+    r["times"], r["values"], r["flags"] = [times[i] for i in keep], [values[i] for i in keep], [flags[i] for i in keep]
     if not any(v is not None for v in r["values"]):
         raise ValueError(f"No {ghcn.PLAIN_NAME.get(variable, entry['name'].lower())} data for that place and period.")
     if source == "ghcn":
