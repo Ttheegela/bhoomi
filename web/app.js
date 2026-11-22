@@ -398,16 +398,17 @@ function renderRec() {
   }
   if (pin.status === 'error') {
     box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."));
-    // "no record here" from a source picked by hand: offer the measurement's default once. Never NOAA CO-OPS: it covers
-    // US coasts only, so after PSMSL (worldwide) found no gauge it is a dead end; the default for sea level already falls
-    // back to PSMSL, so a failure there offers nothing either (QA B7).
+    // "no record here" from a source picked by hand: offer the measurement's default only when the page already holds a
+    // working answer for this place from it (a US coast where CO-OPS worked, then PSMSL picked by hand); anything else
+    // would be a dead end (QA B7, review)
     const v = varById(curWin), def = v && Array.isArray(v.sources) ? v.sources[0] : null, prev = results[`${curWin}||${pin.key}`];
-    if (pin.none && sourceFor(curWin) && def && def !== 'coops' && !(prev && prev.none)) { // not when the default already found nothing here
+    const offer = pin.none && sourceFor(curWin) && def && prev && prev.status === 'ok';
+    if (offer) {
       const b = el('button', { type: 'button', class: 'btn' }, `Try ${SOURCE_SEG[def] || sourceShort(def)} instead`);
-      b.addEventListener('click', () => { wsrc[curWin] = null; ensureLoaded(curWin); renderControls(); changed(); renderFoot(); });
+      b.addEventListener('click', () => pickSource(def));
       box.append(el('div', { class: 'acts' }, b));
     }
-    box.append(el('p', { class: 'say' }, pin.none && curWin === 'sea_level'
+    box.append(el('p', { class: 'say' }, pin.none && curWin === 'sea_level' && !offer
       ? "Without a usable tide gauge nearby, our records can't tell you about this coast. For property here, check local flood maps and whether the land is sinking."
       : 'Try another place.'));
     return;
@@ -433,6 +434,7 @@ function renderRec() {
       box2.append(b);
     }
     box.append(box2);
+    if (note.next) box.append(el('div', { class: 'model' }, el('p', {}, note.next))); // a plain next step under the strong line
   }
   const r3 = el('div', {}, el('p', { class: 'rl' }, 'What experts project'), el('p', { class: 'rt' }, C.r3));
   const fl = g.future_link;

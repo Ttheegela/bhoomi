@@ -179,12 +179,16 @@
   }
   // The NASA POWER grid against the nearest weather station (QA B10). other: this place's POWER answer the page
   // already has (or null); nothing is fetched for it.
-  var MODEL_LINE = 'This comes from a weather model grid about 50 km wide. A weather station nearby can tell a different story.';
+  // The grid size comes from explain.data.where ("a grid cell about 50 km wide").
   function modelNote(t, other) {
-    var id = (t.source || {}).id;
-    if (id === 'power' && (t.variable === 'air_temp' || t.variable === 'air_temp_max')) return { line: MODEL_LINE, offer: 'ghcn' };
-    if (id === 'ghcn' && other && (other.source || {}).id === 'power' && other.verdict && other.verdict !== t.verdict) return { line: 'The weather station and the model disagree here.', strong: true };
-    return null;
+    var id = (t.source || {}).id, size = /\babout \d[\d,.]* km\b/.exec(str(((t.explain || {}).data || {}).where));
+    if (id === 'power' && (t.variable === 'air_temp' || t.variable === 'air_temp_max')) {
+      return { line: 'This comes from a weather model grid' + (size ? ' ' + size[0] + ' wide' : '') + '. A weather station nearby can tell a different story.', offer: 'ghcn' };
+    }
+    if (id !== 'ghcn' || !other || (other.source || {}).id !== 'power' || !other.verdict) return null;
+    if (other.verdict === t.verdict) return { line: 'The weather station and the model agree here.' };
+    return { line: 'The weather station and the model disagree here.', strong: true,
+      next: 'For the heat you feel day to day, the station is closer to the ground; the model covers a wider area.' };
   }
 
   // Rain's trend runs on yearly values (trend.yearly, in fit.units): the chart plots those. An answer without them, or
@@ -419,6 +423,7 @@
       var wm = worldParts(t, false);
       s6.short = worldLine(t, imp);
       s6.words = [imp ? metric(w.text) : str(w.text)];
+      if (str(w.why_none)) s6.words.push(w.why_none); // a world figure that did not rise: no ratio, and why
       // the owner's domain review: say how the two figures are measured, in plain words
       if (isSea) s6.words.push('Satellites measure the height of the sea surface itself. The tide gauge measures the sea against the land, so if the land here is sinking, that adds to the local number.');
       if (t.variable === 'air_temp') s6.words.push('The world figure is built from weather stations on land.'
@@ -732,10 +737,10 @@
       g.append(sv('path', { d: d, 'vector-effect': 'non-scaling-stroke' }));
       return g;
     };
-    var au = a.kind === 'percent' ? '% of the yearly average rate' : f.unit(a.units);
+    var au = a.kind === 'percent' ? '% above or below the usual rain' : f.unit(a.units) + ' compared with ' + yrsOf(t.baseline); // the chart's words
     return h('div', { class: 'fig', 'aria-hidden': 'true' },
       h('p', { class: 'fig-l' }, 'As measured (' + f.unit(s.units) + '), last 10 years'), strip(s.values.slice(from)),
-      h('p', { class: 'fig-l' }, 'Seasons removed (' + au + ' compared with ' + yrsOf(t.baseline) + ')'), strip(a.values.slice(from)));
+      h('p', { class: 'fig-l' }, 'Seasons removed (' + au + ')'), strip(a.values.slice(from)));
   }
 
   function wordsNode(item, t, s, ctx) {

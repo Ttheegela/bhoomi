@@ -222,6 +222,13 @@ var KS = load('kolkata_sea_level_fitted'); assert.strictEqual(KS.trend.source.id
 assert.strictEqual(steps(KS.trend, KS.series, ctx(KS, 'Kolkata'))[5].words[1], SEA6);
 // no "land rebound" anywhere; "isostatic" only inside the API's world-method line, which stays as given
 all(B, bc).forEach(function (x) { assert.ok(!/land rebound/i.test(x), x); assert.ok(!/isostatic/i.test(x) || x === bS[5].work[3], x); });
+// contract: a world figure that did not rise (available, why_none set) prints why_none in step 6, with no ratio
+var BF = copy(B); BF.trend.world.why_none = 'The world figure did not rise over these years, so there is no ratio.';
+BF.trend.world.ratio = BF.trend.world.ratio_low = BF.trend.world.ratio_high = null;
+var bfS = steps(BF.trend, BF.series, bc)[5];
+assert.deepStrictEqual(bfS.words, [BF.trend.world.text, BF.trend.world.why_none, SEA6]);
+assert.ok(!/×/.test(bfS.short) && !/ ÷ /.test(bfS.work[0]), bfS.short + ' | ' + bfS.work[0]);
+clean(BF, bc);
 // step 6, air temperature: the world figure is station-based; a model source says the two are measured differently
 var AIR6 = 'The world figure is built from weather stations on land.', MOD6 = ' The number here comes from a weather model, so the two are measured in different ways.';
 assert.strictEqual(P.trend.source.id, 'power');
@@ -319,9 +326,15 @@ assert.deepStrictEqual(modelNote(P.trend, null), { line: ML, offer: 'ghcn' });
 assert.strictEqual(modelNote(C.trend, null), null); // rain: not asked for
 var HS = copy(H); HS.trend.source = { id: 'ghcn', name: 'NOAA NCEI GHCN-Daily' };
 HS.trend.verdict = 'falling';
-assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model disagree here.', strong: true });
+assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model disagree here.', strong: true,
+  next: 'For the heat you feel day to day, the station is closer to the ground; the model covers a wider area.' });
 HS.trend.verdict = H.trend.verdict;
-assert.strictEqual(modelNote(HS.trend, H.trend), null); // they agree
+assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model agree here.' }); // they agree
+// the grid size is read from explain.data.where, never written in
+var HW = copy(H); HW.trend.explain.data.where = 'a grid cell about 55 km wide';
+assert.strictEqual(modelNote(HW.trend, null).line, 'This comes from a weather model grid about 55 km wide. A weather station nearby can tell a different story.');
+HW.trend.explain.data.where = null;
+assert.strictEqual(modelNote(HW.trend, null).line, 'This comes from a weather model grid. A weather station nearby can tell a different story.');
 assert.strictEqual(modelNote(HS.trend, null), null); // no POWER answer on the page: nothing to compare
 var HE = copy(H); HE.trend.source = { id: 'era5' };
 assert.strictEqual(modelNote(HE.trend, null), null);
@@ -435,6 +448,19 @@ def test_steps_3_to_6_start_open():
     m = re.search(r"var OPEN_STEPS = \[([\d, ]+)\];", PURE)
     assert m and m[1] == "3, 4, 5, 6", m and m[1]
     assert "var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 : !!keep[i];" in SRC
+
+
+def test_review_fixes_outside_the_pure_block():
+    """Review: the step 2 strip says what the chart says; the compare caption prints why_none with a world figure; a
+    failed hand-picked sea-level source offers the default only when this place already has a working answer from it."""
+    assert "'% above or below the usual rain'" in SRC and "yearly average rate" not in SRC
+    cmp = (ROOT / "web" / "compare.js").read_text(encoding="utf-8")
+    assert "(sw.why_none ? ' ' + sw.why_none : '')" in cmp
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert "def !== 'coops'" not in app
+    assert "const offer = pin.none && sourceFor(curWin) && def && prev && prev.status === 'ok';" in app
+    assert "b.addEventListener('click', () => pickSource(def));" in app
+    assert "pin.none && curWin === 'sea_level' && !offer" in app
 
 
 def test_how_clears_the_sticky_top_bar():
