@@ -112,7 +112,7 @@ For rainfall the big number is the share of this place's 1995–2014 average rai
 - For sea level, the full-record rate stays in `slope_per_decade`, with its own years and no ratio.
 - Without the world reference series (the data lane's module is missing or fails), `world.available` is false and `why_none` reads "The world reference series is not available."
 - When `world.available` is false, every number in `world` is null and `why_none` is one plain sentence.
-- `world.source` is the reference's `name`, `dataset_id`, `record_url`, `retrieved` and `method`. For sea level the method keeps the data lane's note that the NASA-SSH figure is not corrected for glacial isostatic adjustment (about 0.3 mm a year).
+- `world.source` is the reference's `name`, `dataset_id`, `record_url`, `retrieved` and `method`. For sea level the method keeps the data lane's note that the world figure (NASA GSFC GMSL v5.2, ending April 2025) is corrected for glacial isostatic adjustment, which adds about 0.24 mm a year.
 - `guidance.ratio` is `world.ratio`. `guidance.reference` is `{"text": world.text, "source": {"name": world.source.name, "url": world.source.record_url}}`. Both are null when `world.available` is false.
 
 `world.text` as shown:

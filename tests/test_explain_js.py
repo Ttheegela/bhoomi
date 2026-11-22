@@ -216,7 +216,7 @@ var bw = B.trend.world, biS = steps(B.trend, B.series, ctx(B, 'New York, NY', tr
 assert.ok(/ \(in metric\)\.$/.test(biS[5].words[0]), biS[5].words[0]);
 assert.strictEqual(biS[5].work[0].indexOf(fmtNum(bw.local_rate, false) + ' ÷ ' + fmtNum(bw.world_rate, false) + ' = ' + fixed(bw.ratio, 1) + '×'), 0, biS[5].work[0]);
 assert.strictEqual(bS[5].work[0].indexOf(fmtNum(bw.local_rate, false) + ' ÷ '), 0);
-assert.ok(/not corrected for the slow sinking of the ocean floor/.test(bw.source.method));
+assert.ok(/is corrected for the slow sinking of the ocean floor/.test(bw.source.method));
 assert.strictEqual(bS[5].work[3], 'The world figure: ' + lc1(stop(bw.source.method)));
 assert.strictEqual(pS[5].work.length, 2); // air temperature: no world-method line
 // QA N6: the inches working rounds the rate like the metric one, and still adds up
