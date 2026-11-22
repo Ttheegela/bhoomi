@@ -12,6 +12,7 @@
   var STATION = { coops: 1, ghcn: 1, psmsl: 1 };
   var MEASURE = { sea_level: 'sea level', air_temp: 'air temperature', air_temp_max: 'the hottest day of the month', precip: 'rain', water_storage: 'water storage' };
   var LEVELS = { air_temp: 1, air_temp_max: 1, precip: 1 }; // measurements whose own levels mean something to a visitor
+  var OPEN_STEPS = [3, 4, 5, 6]; // steps that start open on a new answer, at every width
   var NO_FUTURE = 'We never stretch the past trend into the future. Future values on this page come only from published expert projections.';
 
   function isNum(x) { return typeof x === 'number' && isFinite(x); }
@@ -418,6 +419,10 @@
       var wm = worldParts(t, false);
       s6.short = worldLine(t, imp);
       s6.words = [imp ? metric(w.text) : str(w.text)];
+      // the owner's domain review: say how the two figures are measured, in plain words
+      if (isSea) s6.words.push('Satellites measure the height of the sea surface itself. The tide gauge measures the sea against the land, so if the land here is sinking, that adds to the local number.');
+      if (t.variable === 'air_temp') s6.words.push('The world figure is built from weather stations on land.'
+        + (src.id === 'power' || src.id === 'era5' ? ' The number here comes from a weather model, so the two are measured in different ways.' : ''));
       s6.work = [(wp.ratio ? fmtNum(wm.a, false) + ' ÷ ' + fmtNum(wm.b, false) + ' = ' + wp.ratio + ' · ' + (rr ? rr + ' times (' + rk + ') · ' : '') : '')
         + M(w.window.start) + ' to ' + M(w.window.end) + ' · ' + stop(str(w.method)),
         '1× is the same as the world. ' + th.high + '× or more: high risk. ' + th.moderate + '× to ' + th.high + '×: moderate risk. Under ' + th.moderate + '×: low risk. '
@@ -750,7 +755,7 @@
     clear(ol);
     $('how-lead').textContent = 'For ' + ctx.label + '. Every number below is the one the card and the chart use.';
     steps(t, s, ctx).forEach(function (st, i) {
-      var open = fresh ? i === 3 || i === 4 : !!keep[i];
+      var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 : !!keep[i];
       var det = h('details', open ? { open: '' } : {}, h('summary', {},
         h('span', { class: 'step-n' }, String(i + 1)), h('span', { class: 'step-t' }, st.title), h('span', { class: 'step-s' }, st.short), h('span', { class: 'step-c', 'aria-hidden': 'true' })));
       var words = h('div', { class: 'words' }), side = h('div', { class: 'step-w' });

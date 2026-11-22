@@ -215,6 +215,21 @@ assert.strictEqual(bS[5].work[0].indexOf(fmtNum(bw.local_rate, false) + ' ÷ '),
 assert.ok(/not corrected for the slow sinking of the ocean floor/.test(bw.source.method));
 assert.strictEqual(bS[5].work[3], 'The world figure: ' + lc1(stop(bw.source.method)));
 assert.strictEqual(pS[5].work.length, 2); // air temperature: no world-method line
+// step 6, sea level: satellites vs a gauge against the land, in plain words (the owner's domain review)
+var SEA6 = 'Satellites measure the height of the sea surface itself. The tide gauge measures the sea against the land, so if the land here is sinking, that adds to the local number.';
+assert.deepStrictEqual(bS[5].words, [B.trend.world.text, SEA6]);
+var KS = load('kolkata_sea_level_fitted'); assert.strictEqual(KS.trend.source.id, 'psmsl');
+assert.strictEqual(steps(KS.trend, KS.series, ctx(KS, 'Kolkata'))[5].words[1], SEA6);
+// no "land rebound" anywhere; "isostatic" only inside the API's world-method line, which stays as given
+all(B, bc).forEach(function (x) { assert.ok(!/land rebound/i.test(x), x); assert.ok(!/isostatic/i.test(x) || x === bS[5].work[3], x); });
+// step 6, air temperature: the world figure is station-based; a model source says the two are measured differently
+var AIR6 = 'The world figure is built from weather stations on land.', MOD6 = ' The number here comes from a weather model, so the two are measured in different ways.';
+assert.strictEqual(P.trend.source.id, 'power');
+assert.deepStrictEqual(pS[5].words, [P.trend.world.text, AIR6 + MOD6]);
+var PE = copy(P); PE.trend.source.id = 'era5';
+assert.strictEqual(steps(PE.trend, PE.series, pc)[5].words[1], AIR6 + MOD6);
+var RG = load('riverside_no_baseline'); assert.strictEqual(RG.trend.source.id, 'ghcn');
+assert.deepStrictEqual(steps(RG.trend, RG.series, ctx(RG, 'Riverside'))[5].words, [RG.trend.world.text, AIR6]);
 assert.strictEqual(readout(B.trend, B.series, bc, B.series.times.length - 1).slice(-13), ' Preliminary.');
 clean(B, bc);
 // a fitted baseline, and a long record whose rounded headline rate would not add up: the sum still does
@@ -396,6 +411,9 @@ assert.strictEqual(cmpl.length, 6 + B.series.times.length + L.series.times.lengt
 assert.strictEqual(cT.ytitleNarrow, '% above or below the 1995–2014 average');
 assert.strictEqual(chartText(G.trend, G.series, gc).ytitleNarrow, 'cm of water compared with 2004–2009');
 
+// steps 3 to 6 start open: one baseline, the trend, is it real, compared with the world
+assert.deepStrictEqual(OPEN_STEPS.map(function (n) { return pS[n - 1].title; }), ['One baseline', 'The trend and its range', 'Is it real?', 'Compared with the world']);
+
 // formatting
 assert.strictEqual(fmtNum(0.4, true), '+0.40'); assert.strictEqual(fmtNum(-12.34, true), '−12.3');
 assert.strictEqual(given(false, 30.5059, 'mm', true), '+3.05059'); assert.strictEqual(given(false, -0.37, 'degC', false), '−0.37');
@@ -410,6 +428,13 @@ def test_explain_pure_logic():
     env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
     r = subprocess.run(["node", "-e", PURE + ASSERTS], capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
+
+
+def test_steps_3_to_6_start_open():
+    """The owner's choice: steps 3, 4, 5 and 6 start open on a new answer, 1, 2 and 7 to 9 closed, at every width."""
+    m = re.search(r"var OPEN_STEPS = \[([\d, ]+)\];", PURE)
+    assert m and m[1] == "3, 4, 5, 6", m and m[1]
+    assert "var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 : !!keep[i];" in SRC
 
 
 def test_how_clears_the_sticky_top_bar():
