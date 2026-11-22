@@ -52,7 +52,7 @@ p.disc      t.guidance.disclaimer                                 (only with a r
 - `{why}`: `t.guidance.why` with the rain note in brackets (today's `whyOf`); if null, `t.meaning.headline`.
 - Readouts (cells 14 px grey label, 26 px value in Inter 650 tabular, 14 px grey line under):
   - R1 label "Now, compared with {t.baseline.text}"; value `val(t.fit.level_end)`; line "Trend line, {M(t.fit.end)}". `baseline.method` `"fitted"`: add ". Baseline estimated from the fitted trend." Rain (`%`): line starts "Of the usual rain. ". `level_end` null: value "—", line "This record has too few years from 1995 to 2014 to make that average."
-  - R2 label "Rate per decade, {Y(t.fit.start)}–{Y(t.fit.end)}"; value `val(t.slope_per_decade)`; line "{range} {rng(t.ci_low, t.ci_high)}". No clear change and the range holds 0: add ", which includes no change". Short record: add ". Short record."
+  - R2 label "Rate, {Y(t.fit.start)}–{Y(t.fit.end)}"; value `t.headline_rate.text` with its `per` ("a year", "per decade") printed smaller after the number (sea level "+3.1 mm a year", air temperature "+0.31 °C per decade"); line "{range} {t.headline_rate.range_text}". No clear change and the range holds 0: add ", which includes no change". Short record: add ". Short record."
   - R3 label "What experts project"; text `t.projection.why` (14 px grey). Sea level: then a link line `t.guidance.future_link.label ↗`. PR2/PR3 replace this cell when `projection.available` is true.
   - Three equal columns with hairlines when the card is at least 520 px wide (container query on `#rec`); narrower, each readout is a row: label and line on the left, value on the right.
 - `.advice`: 3 px `--ink` left rule, no fill, no radius; label 14 px `--ink-2` weight 500, sentence case; text 16 px.
@@ -164,4 +164,5 @@ time,value_{units},anomaly_{anomaly.units},flag
 - [ ] No orange outside charts. Controls 44 px with `--control` borders. "Built with AI assistance" visible. At 375 px: readouts stacked, steps single column, no horizontal page scroll.
 
 ## 12. Left for later
-- PR2/PR3 fill R3, step 7 and the chart's future (projection band, "today" rule). PR4 replaces the compare chart and table and settles sea-level units (this PR keeps cm per decade on the card; step 6 shows the mm-a-year conversion).
+- PR2/PR3 fill R3, step 7 and the chart's future (projection band, "today" rule). PR4 replaces the compare chart and table.
+- Sea-level units (QA B5; the owner may change this): on screen, levels and changes are in cm (inches with the Units toggle), and rates are in mm a year, as NOAA reports them (`headline_rate`; never cm per decade). Every "The working" box uses the unit of the sentence it explains: step 4's over-the-record sum multiplies the mm-a-year rate and then gives the change in cm ("… = +322.3 mm, which is +32.2 cm"), the same cm as step 2. The data table and the CSV keep the source's mm, with the unit in the column header.

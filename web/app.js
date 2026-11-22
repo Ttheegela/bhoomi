@@ -88,7 +88,7 @@ const VARIABLE_ALIASES = { precipitation: 'precip', rain: 'precip', temperature:
 
 const WINDOWS = [
   { id: 'sea_level', slug: 'sea-level', name: 'Sea level', search: 'Search a coastal town or city',
-    question: 'Is the sea rising where you live, build or invest? Tide gauges have measured it for up to 125 years.', units: ['cm', 'inches'] },
+    question: 'Is the sea rising where you live, build or invest? Some tide gauges have measured it for more than a century.', units: ['cm', 'inches'] },
   { id: 'air_temp', slug: 'air-temperature', name: 'Air temperature', search: 'Search a town or city',
     question: 'Is the air getting warmer where you live? Our records start in 1981 and come from weather models and weather stations.', units: ['°C', '°F'] },
   { id: 'air_temp_max', slug: 'hottest-days', name: 'Hottest days', search: 'Search a town or city',
@@ -248,7 +248,7 @@ function pinList(win) {
   if (!e) return [];
   return e.pins.map((p) => {
     const key = pinKeyOf(p.lat, p.lon), r = results[resKey(win, p)] || { status: 'loading', trend: null, series: null, error: null };
-    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, trend: r.trend, series: r.series, link: !!p.link, started: r.t0 || 0 };
+    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, none: !!r.none, trend: r.trend, series: r.series, link: !!p.link, started: r.t0 || 0 };
   });
 }
 function selectedPin(win) { return pinList(win).find((p) => p.selected) || null; }
@@ -391,7 +391,18 @@ function renderRec() {
     return;
   }
   if (pin.status === 'error') {
-    box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."), el('p', { class: 'say' }, 'Try another place.'));
+    box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."));
+    // "no record here" from a source picked by hand: offer the measurement's default once (the default for sea level
+    // already tries the other gauge list, so a failure there offers nothing)
+    const v = varById(curWin), def = v && Array.isArray(v.sources) ? v.sources[0] : null, prev = results[`${curWin}||${pin.key}`];
+    if (pin.none && sourceFor(curWin) && def && !(prev && prev.none)) { // not when the default already found nothing here
+      const b = el('button', { type: 'button', class: 'btn' }, `Try ${SOURCE_SEG[def] || sourceShort(def)} instead`);
+      b.addEventListener('click', () => { wsrc[curWin] = null; ensureLoaded(curWin); renderControls(); changed(); renderFoot(); });
+      box.append(el('div', { class: 'acts' }, b));
+    }
+    box.append(el('p', { class: 'say' }, pin.none && curWin === 'sea_level'
+      ? "Without a usable tide gauge nearby, our records can't tell you about this coast. For property here, check local flood maps and whether the land is sinking."
+      : 'Try another place.'));
     return;
   }
 
@@ -407,7 +418,7 @@ function renderRec() {
   const fl = g.future_link;
   if (fl && typeof fl.url === 'string' && fl.url.startsWith('https://') && fl.label) r3.append(el('p', { class: 'rt' }, el('a', { href: fl.url, target: '_blank', rel: 'noopener' }, `${fl.label} ↗`)));
   box.append(el('div', { class: 'reads' },
-    el('div', {}, el('p', { class: 'rl' }, C.r1.label), el('p', { class: 'rv' }, C.r1.value), el('p', { class: 'rs' }, C.r1.line)),
+    C.r1 ? el('div', {}, el('p', { class: 'rl' }, C.r1.label), el('p', { class: 'rv' }, C.r1.value), el('p', { class: 'rs' }, C.r1.line)) : '',
     el('div', {}, el('p', { class: 'rl' }, C.r2.label), el('p', { class: 'rv' }, C.r2.value, C.r2.per ? ' ' : '', C.r2.per ? el('small', {}, C.r2.per) : ''), el('p', { class: 'rs' }, C.r2.line)),
     r3));
   if (g.recommendation) box.append(el('div', { class: 'advice' }, el('p', { class: 'al' }, 'Our recommendation'), el('p', {}, g.recommendation)));
