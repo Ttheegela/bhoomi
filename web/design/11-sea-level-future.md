@@ -5,7 +5,7 @@ Build brief: `docs/REWORK-SPEC.md` (D1, D2, D4, D7, D8; PR2 items 4 to 7). Data:
 The owner sees a picture first: a static mock at 1440 px, light theme (The Battery with real AR6 values and a synthetic observed line; a regional estimate; the check outside; low confidence selected). It lives outside the repo with the owner's notes. If the mock and this file differ, this file wins.
 
 ## 0. What PR2 removes or moves (sea level with `projection.available` only)
-1. Card R1 moves from the trend line's level (`fit.level_end`) to the 12-month average (`readouts.now`), so the card, the chart and "about 28 cm more than today" use one "now". The trend line's level stays in step 4.
+1. Card R1 moves from the trend line's level (`fit.level_end`) to the 12-month average (`readouts.now`), so the card, the chart and "about 29 cm more than today" use one "now". The trend line's level stays in step 4.
 2. Card R3 loses `projection.why` and its "Future flood map (NOAA) ↗" line. The 2050 readout replaces them; the link moves under the chart's readout line and into step 7.
 3. Place chart: yearly dots go (the 12-month average replaces them); the trend line's end dot and its right-margin label ("+6.5 cm, trend line, Oct 2026") go; the trend line is 3 px (was 3.5).
 4. Step 4's working loses "That is the first number on the card." (section 6).
@@ -102,7 +102,7 @@ scenario,name,confidence,year,p05_mm,p17_mm,p50_mm,p83_mm,p95_mm,rate_p50_mm_a_y
 - Type and controls: body 16; readout line 17; labels and help 14; on-chart labels 12 to 13; radios 52 px tall, checkbox row 44 px; every border on a control `--control`.
 
 ## 10. Checks for QA (1440 and 1920, light first; then dark and 375)
-- [ ] The Battery, intermediate: card "+8.0 cm" (the 12 months to October 2026), "+36 cm", "SSP2-4.5. Likely +27 to +46 cm. About 28 cm more than today."; the chart's Now dot and 2050 label say the same; `cm()` equals `readouts.now.text` and `by_2050.text`.
+- [ ] The Battery, intermediate: card "+6.6 cm" (the 12 months to October 2026), "+36 cm", "SSP2-4.5. Likely +27 to +46 cm. About 29 cm more than today."; the chart's Now dot and 2050 label say the same; `cm()` equals `readouts.now.text` and `by_2050.text`.
 - [ ] Every range on screen is named by its kind: "95% range" for the trend; "likely range (about 2 in 3 chance)" only for medium confidence; percentiles for low confidence and for 5th–95th. No odds for a scenario anywhere.
 - [ ] Projection lines start at their 2020 values, unshifted; nothing future is drawn from the observed line or its smoother; the 12-month average stops 6 months before the data.
 - [ ] Switching scenarios updates the card, the chart, the readout line, the table and step 7 together, and never moves the y-axis among medium scenarios. Keyboard: Tab into the radios, arrows change them; the checkbox toggles with Space.
