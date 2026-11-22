@@ -257,10 +257,10 @@ assert.ok(/\. Baseline estimated from the fitted trend\.$/.test(card(K.trend, fa
 var kw = steps(K.trend, K.series, kc)[2].work[0];
 assert.ok(kw.indexOf('The record spans ' + Math.round(K.trend.record.years) + ' years, at least 5 of the 20 years are counted, and it has data both before 1995 and after 2014, so we fit the trend and the seasons together') > 0, kw);
 sumAddsUp(K, kc, NB + 'mm');
-assert.strictEqual(K.trend.guidance.risk_label, 'Risk level unclear (low to high)');
-assert.strictEqual(card(K.trend, false).chip, 'Risk level unclear (low to high)');
+assert.strictEqual(K.trend.guidance.risk_label, 'Risk between low and high (wide range)');
+assert.strictEqual(card(K.trend, false).chip, 'Risk between low and high (wide range)');
 var kS6 = steps(K.trend, K.series, kc)[5].work[1];
-assert.ok(/ Here the 95% range spans every level, so the risk level is unclear\.$/.test(kS6) && !/\(low to high\)/.test(kS6), kS6);
+assert.ok(/ Here the 95% range spans every level, so the risk could be anywhere from low to high\.$/.test(kS6) && !/wide range/.test(kS6), kS6);
 clean(K, kc);
 
 // Chennai, rain: shares of the usual rain; monthly totals in mm; the annual total as given; rates a day
@@ -523,7 +523,7 @@ def test_narrow_readout_value_column_is_capped():
 
 
 def test_long_risk_chip_moves_under_the_heading():
-    """Item 7: "Risk level unclear (low to high)" is shown as given. On a phone it moves under the place name instead of
+    """Item 7: "Risk between low and high (wide range)" is shown as given. On a phone it moves under the place name instead of
     pushing past the card and squeezing the source line to one word a line."""
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
     assert re.search(r"\.rec \.where \{[^}]*flex-wrap: wrap;", css)

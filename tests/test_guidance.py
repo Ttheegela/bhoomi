@@ -283,7 +283,7 @@ def test_rate_note_is_null_for_the_others(var, verdict, slope):
 @pytest.mark.parametrize("ratio,ends,risk,label,key", [
     (1.5, (1.3, 1.8), "moderate", "Moderate to high risk", "moderate"),  # the Battery: 1.5, range 1.3 to 1.8
     (0.8, (0.6, 0.9), "low", "Low to moderate risk", "low"),
-    (1.2, (0.6, 1.6), "low", "Risk level unclear (low to high)", "low"),  # across both thresholds (QA B11)
+    (1.2, (0.6, 1.6), "low", "Risk between low and high (wide range)", "low"),  # across both thresholds (QA B11)
     (1.7, (1.5, 1.9), "high", "High risk", "high"),  # the whole range on one level
     (1.5, (None, None), "high", "High risk", "high"),  # no range given: the ratio alone
 ])
@@ -297,7 +297,7 @@ def test_a_ratio_range_across_a_threshold_names_both_levels(ratio, ends, risk, l
 
 @pytest.mark.parametrize("verdict,slope,lo,hi,risk,label,key", [
     # Chennai: 5.6% (0.4 to 10.7%)
-    ("rising", 0.168, 0.015, 0.364, "low", "Risk level unclear (low to high)", "low_wetter"),
+    ("rising", 0.168, 0.015, 0.364, "low", "Risk between low and high (wide range)", "low_wetter"),
     ("rising", 0.24, 0.18, 0.33, "moderate", "Moderate to high risk", "moderate_wetter"),  # 8% (6 to 11%)
     ("falling", -0.24, -0.33, -0.18, "moderate", "Moderate to high risk", "moderate_drier"),
     ("rising", 0.24, 0.18, 0.27, "moderate", "Moderate risk", "moderate_wetter"),  # 6 to 9%: one level
@@ -356,7 +356,7 @@ def test_why_names_the_world_window_when_it_starts_after_the_record(var, start, 
 def test_rain_low_advice_is_true_for_a_small_change_and_for_one_reaching_high():
     small = guidance_for(res("precip", "rising", 0.09, lo=0.06, hi=0.12), 3.0)  # 3% (2 to 4%): low throughout
     wide = guidance_for(res("precip", "rising", 0.168, lo=0.015, hi=0.364), 3.0)  # Chennai-like: 5.6% (0.5 to 12%)
-    assert (small["risk_label"], wide["risk_label"]) == ("Low risk", "Risk level unclear (low to high)")
+    assert (small["risk_label"], wide["risk_label"]) == ("Low risk", "Risk between low and high (wide range)")
     assert small["recommendation"] == wide["recommendation"] == RECOMMEND["precip"]["low_wetter"]
     for k in ("low_wetter", "low_drier"):
         text = RECOMMEND["precip"][k].lower()
@@ -365,7 +365,7 @@ def test_rain_low_advice_is_true_for_a_small_change_and_for_one_reaching_high():
         assert not any(w in text for w in ("small share", "perhaps", "only", "anywhere"))  # no size claim (QA B11)
 
 
-@pytest.mark.parametrize("lo,label", [(0.138, "Risk level unclear (low to high)"),  # 4.6%: the range covers every level
+@pytest.mark.parametrize("lo,label", [(0.138, "Risk between low and high (wide range)"),  # 4.6%: the range covers every level
                                       (0.15, "Moderate to high risk")])  # 5.0%: on the moderate threshold
 def test_a_big_rain_rise_is_never_called_a_small_share(lo, label):
     """QA B11, Mumbai: +11% a decade, range +5 to +17%, about 300 mm more a year. The advice stays the lower level's,
@@ -376,7 +376,7 @@ def test_a_big_rain_rise_is_never_called_a_small_share(lo, label):
 
 
 CONTRACT_LABELS = {"High risk", "Moderate risk", "Low risk", "Moderate to high risk", "Low to moderate risk",
-                   "Risk level unclear (low to high)", "No world comparison", "Not enough data",
+                   "Risk between low and high (wide range)", "No world comparison", "Not enough data",
                    "No clear change"}  # docs/CONTRACTS.md, guidance.risk_label
 
 
