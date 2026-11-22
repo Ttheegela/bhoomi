@@ -736,7 +736,7 @@ assert.ok(/^\+14 in$/.test(sp(bik.value)) && sp(bik.line).endsWith(' About 11 in
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_explain_pure_logic():
     env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
-    r = subprocess.run(["node", "-e", PURE + ASSERTS], capture_output=True, text=True, env=env)
+    r = subprocess.run(["node", "-"], input=PURE + ASSERTS, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
 
 
@@ -890,7 +890,7 @@ assert.ok(Math.min.apply(null, xs(fan.a.points)) < x2020 - 100 && edges.length =
 assert.ok(els.indexOf(fan) < els.indexOf(tcase[0]) && edges.every(function (e) { return els.indexOf(e) < els.indexOf(tcase[0]); }));
 """
     env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
-    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, env=env)
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
 
 
@@ -914,7 +914,7 @@ def test_page_cm_equals_the_server_cm():
 
     mm = list(range(-1200, 1201)) + [1036, 9999, 10360, 25000]
     js = PURE + "console.log(JSON.stringify(%s.map(function (x) { return cmv(x, false); })));" % mm
-    r = subprocess.run(["node", "-e", js], capture_output=True, text=True)
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     page = [x.replace(" ", " ") for x in json.loads(r.stdout)]
     assert page == [_cm(m) for m in mm]
