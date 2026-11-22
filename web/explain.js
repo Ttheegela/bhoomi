@@ -47,6 +47,11 @@
   function yrsOf(b) { return b && b.years ? b.years[0] + '–' + b.years[1] : '1995–2014'; }
   function recordUrl(src) { return src ? https(src.record_url) || https(src.url) : ''; }
   function clearV(t) { return t.verdict === 'rising' || t.verdict === 'falling'; }
+  // The fitted line goes on the chart only in the chart's own units (never a second unit on one axis).
+  function fitOnAxis(t, s, imp) {
+    var f = F(t, imp), fit = t.fit || {}, a = s.anomaly || {};
+    return (t.baseline || {}).method !== 'none' && !!a.values && isNum(fit.level_end) && f.unit(fit.units) === f.unit(a.units);
+  }
 
   // A value in units u, as shown: the series' own units go through guidance.display, then the Units setting.
   // level: an absolute level (°F adds 32); otherwise a difference or a rate.
@@ -157,6 +162,7 @@
   function chartText(t, s, ctx) {
     var imp = ctx.imperial, f = F(t, imp), b = t.baseline || {}, a = s.anomaly || {}, src = t.source || {}, fit = t.fit || {};
     var none = b.method === 'none' || !a.values, yrs = yrsOf(b), place = placeName(t, ctx.label), r = rate(t, imp), rk = t.range_kind || '95% range';
+    var drawn = fitOnAxis(t, s, imp);
     var seasons = !none && src.cadence !== 'annual' && !src.deseasoned_upstream;
     var sub = seasons ? 'Seasons removed: each month is compared with its own ' + own(b.text) + (a.kind === 'percent' ? ', as a share of the usual rain.' : '.') : '';
     if (t.variable === 'sea_level') sub += (sub ? ' ' : '') + 'Measured against the land, so land sinking adds to the rise.';
@@ -166,10 +172,10 @@
       : u + (t.variable === 'water_storage' ? ' of water' : '') + ' compared with ' + b.text;
     var summary = ctx.name + ' at ' + place + ', ' + M(t.period.start) + ' to ' + M(t.period.end) + (none ? ', as measured.' : ', compared with ' + b.text + '.');
     if (r) {
-      var line = none ? 'The trend' : 'The trend line';
+      var line = drawn ? 'The trend line' : 'The trend';
       summary += ' ' + (clearV(t) ? line + (t.verdict === 'rising' ? ' rises ' : ' falls ') + unsign(r.text) + ' (' + rk + ' ' + r.range + ')'
         : line + ' moves ' + r.text + ", which we can't tell apart from no change (" + rk + ' ' + r.range + '),')
-        + (isNum(fit.level_end) && !none ? ' and stands at ' + f.val(fit.level_end, fit.units) + ' in ' + M(fit.end) : '') + '.';
+        + (drawn ? ' and stands at ' + f.val(fit.level_end, fit.units) + ' in ' + M(fit.end) : '') + '.';
       summary = summary.replace(/,\.$/, '.');
     }
     var pre = [];
@@ -188,7 +194,7 @@
       latest: str(t.latest && t.latest.text), ytitle: ytitle, summary: summary, none: none, hasPre: pre.length > 0,
       noneNote: none ? 'This record has too few years from 1995 to 2014 for an average, so the chart shows the values as measured, with no trend line. The rate on the card still holds.' : '',
       legend: { monthly: none ? 'Monthly value, as measured' : 'Monthly value, seasons removed', range: rk + ' of the trend', zero: yrs + ' average (zero)', yrs: yrs },
-      endLabel: isNum(fit.level_end) && !none ? f.val(fit.level_end, fit.units) : '', endSub: fit.end ? 'trend line, ' + Mo(fit.end) : '',
+      drawn: drawn, endLabel: drawn ? f.val(fit.level_end, fit.units) : '', endSub: fit.end ? 'trend line, ' + Mo(fit.end) : '',
       cols: cols, caption: 'Records: ' + srcText(t) + '. ' + str(t.latest && t.latest.text) + '.',
     };
   }
@@ -222,7 +228,7 @@
     var dots = Object.keys(by).filter(function (y) { return by[y].length >= 9; })
       .map(function (y) { return { x: +y * 12 + 6, v: by[y].reduce(function (p, q) { return p + q; }, 0) / by[y].length }; });
     var out = { none: none, ms: ms, ys: ys, pre: pre, dots: dots, x0: ms[0], x1: ms[ms.length - 1] + 1, fit: null, band: null };
-    if (!none && isNum(fit.level_end) && isNum(fit.change) && isNum(fit.change_low) && isNum(fit.change_high)) {
+    if (fitOnAxis(t, s, imp) && isNum(fit.change) && isNum(fit.change_low) && isNum(fit.change_high)) {
       var mid = fit.level_end - fit.change / 2, c = function (x) { return f.num(x, fit.units); };
       out.fit = { x0: mi(fit.start) + 0.5, x1: mi(fit.end) + 0.5, y0: c(fit.level_end - fit.change), y1: c(fit.level_end),
         lo0: c(mid - fit.change_low / 2), lo1: c(mid + fit.change_low / 2), hi0: c(mid - fit.change_high / 2), hi1: c(mid + fit.change_high / 2) };
@@ -463,11 +469,11 @@
       key('', swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-month' }]]), T.legend.monthly));
     if (T.hasPre) lg.append(key('', swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-pre' }]]), 'Preliminary month (may still change)'));
     lg.append(h('span', { class: 'grp' }, 'Our calculation:'), key('', swatch([['circle', { cx: 14, cy: 6, r: 3.4, class: 's-year' }]]), 'Yearly average'));
-    if (!T.none) {
+    if (T.drawn) {
       lg.append(key('', swatch([['line', { x1: 2, y1: 6, x2: 26, y2: 6, class: 's-trend' }]]), 'Trend line'),
-        key('', swatch([['rect', { x: 1, y: 1, width: 26, height: 10, class: 's-fan' }], ['line', { x1: 1, y1: 1, x2: 27, y2: 1, class: 's-edge' }], ['line', { x1: 1, y1: 11, x2: 27, y2: 11, class: 's-edge' }]]), T.legend.range),
-        key('', swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 'c-zero' }]]), T.legend.zero));
+        key('', swatch([['rect', { x: 1, y: 1, width: 26, height: 10, class: 's-fan' }], ['line', { x1: 1, y1: 1, x2: 27, y2: 1, class: 's-edge' }], ['line', { x1: 1, y1: 11, x2: 27, y2: 11, class: 's-edge' }]]), T.legend.range));
     }
+    if (!T.none) lg.append(key('', swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 'c-zero' }]]), T.legend.zero));
     var ro = h('p', { class: 'readout', 'aria-live': 'polite' }, 'Hover, tap or use the arrow keys to read a month.');
     sec.append(lg, ro, h('p', { class: 'summary' }, T.summary), dataTable(T, s));
     sec.hidden = false;

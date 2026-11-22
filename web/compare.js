@@ -130,7 +130,7 @@
 
   function drawChart(slot, pins, o) {
     var P = window.TD, X = window.TDX, g = h('div', 'cmp-chart'), head = h('div', 'chead'), hd = h('div');
-    hd.appendChild(h('h3', 'cmp-h', 'How ' + (HEADS[o.window] || 'things') + ' has changed at your places'));
+    hd.appendChild(h('h3', 'cmp-h', 'How ' + (HEADS[o.window] || 'things') + (o.window === 'air_temp_max' ? ' have' : ' has') + ' changed at your places'));
     head.appendChild(hd);
     g.appendChild(head);
     var m = buildModel(pins, function (t, v, u) { return X.conv(t, o.imperial, v, u).v; });

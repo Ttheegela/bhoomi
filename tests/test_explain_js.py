@@ -91,6 +91,12 @@ assert.strictEqual(cl[4], '# Baseline: the 1995–2014 average (observed); anoma
 assert.strictEqual(cl[8], 'time,value_mm/day,anomaly_%,flag');
 assert.ok(/ ÷ .*the usual rate = /.test(steps(C.trend, C.series, cc)[1].work[0]));
 clean(C, cc);
+// a fit in other units than the chart's (rain's fit in mm/day on a % axis): no trend line drawn, no level on the chart
+var C2 = JSON.parse(JSON.stringify(C)); C2.trend.fit.units = 'mm/day';
+assert.strictEqual(chartModel(C2.trend, C2.series, false).fit, null);
+var c2T = chartText(C2.trend, C2.series, cc);
+assert.ok(!c2T.drawn && c2T.endLabel === '' && !/stands at|trend line/.test(c2T.summary));
+assert.ok(/mm a year$/.test(card(C2.trend, false).r1.value));
 
 // Delhi, hottest day: no chip, no world figure
 var H = load('delhi_hottest_day'), hc = ctx(H, 'Delhi'), hk = card(H.trend, false), hS = steps(H.trend, H.series, hc);

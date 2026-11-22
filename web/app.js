@@ -469,7 +469,7 @@ function renderFoot() {
   const src = SOURCES[sid];
   p.append('Data: ');
   if (src) srcLink(p, src, true); else p.append('public records');
-  p.append(". Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed against the 1995–2014 average).");
+  p.append(`. Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed against ${curWin === 'water_storage' ? "the provider's own reference period" : 'the 1995–2014 average'}).`);
   // the Open-Meteo attribution travels with its data
   const ul = $('footer-sources');
   let li = Array.prototype.find.call(ul.children, (x) => x.dataset.credit === 'era5');

@@ -132,7 +132,7 @@ span.srclink { color: var(--ink-2); }
 .reads p { margin: 0; max-width: none; }
 .reads .rl { font-size: 14px; color: var(--ink-2); line-height: 1.35; min-height: 38px; }
 .reads .rv { font-size: 26px; font-weight: 650; line-height: 1.2; margin: 6px 0 2px; }
-.reads .rv small { display: inline-block; font-size: 14px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+.reads .rv small { display: inline-block; font-size: 14px; font-weight: 500; line-height: 1.35; color: var(--ink-2); }
 .reads .rs, .reads .rt { font-size: 14px; color: var(--ink-2); line-height: 1.35; }
 .reads .rt { margin-top: 8px; }
 .reads .rt a { color: var(--ink); }
