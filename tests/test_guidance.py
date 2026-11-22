@@ -329,10 +329,30 @@ def test_too_little_rain_for_a_percentage_rule():
 
 
 def test_advice_describes_the_evidence_and_what_to_check():
-    words = json.dumps(RECOMMEND)
-    assert "advise against" not in words and "we'd" not in words
-    assert "flood maps" in RECOMMEND["sea_level"]["high"] and "storm floods" in RECOMMEND["sea_level"]["low"]
+    # the owner kept "advise against" for a high sea-level risk (2026-11-22); no other text advises against
+    others = [t for v, d in RECOMMEND.items() for k, t in d.items() if (v, k) != ("sea_level", "high")]
+    assert not any("advise against" in t or "we'd" in t for t in others)
     assert guidance.OWN_RULE["precip"].endswith("It covers total rain, not heavy downpours or floods.")
+
+
+SEA_HIGH = ("For a long-term home or investment near the shore here, we'd advise against it unless the site sits well "
+            "above flood level.")
+SEA_MODERATE = ("For a long-term home or investment near the shore here, check how high the site sits above flood "
+                "level before you commit.")
+SEA_LOW = ("Past records give no special reason to avoid the shore here. Check the site's flood level as you would on "
+           "any coast.")
+
+
+@pytest.mark.parametrize("ratio,ends,label,text", [
+    (1.7, (1.5, 2.0), "High risk", SEA_HIGH),  # the whole range at 1.5 or more
+    (1.5, (1.1, 2.0), "Moderate to high risk", SEA_MODERATE),  # the lower level's text
+    (0.6, (0.5, 0.7), "Low risk", SEA_LOW),  # the whole range under 0.75
+])
+def test_sea_level_advice_is_the_production_wording(ratio, ends, label, text):
+    r = res("sea_level", "rising", 49.0, ratio=ratio)
+    r["world"].update(ratio_low=ends[0], ratio_high=ends[1])
+    g = guidance_for(r)
+    assert (g["risk_label"], g["recommendation"]) == (label, text)
 
 
 def test_no_advice_states_a_future_from_the_past_trend():

@@ -44,14 +44,14 @@ HARMLESS = {"sea_level": "The sea here has been falling.", "air_temp": "It has b
 NO_WORLD = "There is no matching world figure to compare with."
 NO_RULE = "We can't give guidance for this record."
 RECOMMEND = {
-    "sea_level": {  # describe the evidence, then what to check: a past rate says nothing about a site's height
-        "high": "The sea here has been rising faster than the world average. Before you buy or build near the shore, "
-                "check the site's height above flood level and the official flood maps.",
-        # "at least": a range from moderate to high gets this, the lower level's, text (ratio 1.3 to 2.2, say)
-        "moderate": "The sea here has been rising at least about as fast as the world average. Before you buy or "
-                    "build near the shore, check the site's flood level as you would on any coast.",
-        "low": "Past sea-level records here give no special reason to avoid the shore, but they say nothing about "
-               "storm floods. Check the site's flood level as you would on any coast.",
+    "sea_level": {  # the production wording, kept by the owner on 2026-11-22 ("Keep 'advise against'")
+        "high": "For a long-term home or investment near the shore here, we'd advise against it unless the site sits "
+                "well above flood level.",
+        # a range from moderate to high gets this, the lower level's, text (ratio 1.1 to 2.0, say)
+        "moderate": "For a long-term home or investment near the shore here, check how high the site sits above "
+                    "flood level before you commit.",
+        "low": "Past records give no special reason to avoid the shore here. Check the site's flood level as you would "
+               "on any coast.",
         # rising with no world figure (NO_COMPARE): no level, so advice that needs none
         "no_world": "The sea here has been rising. Before you buy or build near the shore, check the site's height "
                     "above flood level and the official flood maps."},
