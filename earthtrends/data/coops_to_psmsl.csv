@@ -1,0 +1,304 @@
+coops_id,coops_name,coops_lat,coops_lon,psmsl_id,psmsl_name,ar6_id,km,rule,reason
+1611400,Nawiliwili,21.9544,-159.3561,756,"Nawiliwili Bay, Kauai Island",756,0.8,within_3km,
+1612340,Honolulu,21.303333,-157.86453,155,Honolulu,155,0.9,within_3km,
+1612401,Pearl Harbor,21.3675,-157.9639,155,Honolulu,155,11.6,override,same south shore of Oahu as Honolulu (record 1905-2025)
+1612480,Mokuoloe,21.433056,-157.79,823,Mokuoloe Island,823,0.3,within_3km,
+1615680,"Kahului, Kahului Harbor",20.894945,-156.469,521,"Kahului Harbor, Maui Island",521,1.3,within_3km,
+1617433,Kawaihae,20.0366,-155.8294,2128,"Kawaihae, Hawaii Island",2128,0.4,within_3km,
+1617760,"Hilo, Hilo Bay, Kuhio Bay",19.730278,-155.05556,300,"Hilo, Hawaii Island",300,0.5,within_3km,
+1619910,"Sand Island, Midway Islands",28.211666,-177.36,523,Midway Island,523,0.2,within_3km,
+1630000,"Apra Harbor, Guam",13.443389,144.65636,540,Apra Harbor,540,0.8,within_3km,
+1631428,"Pago Bay, Guam",13.428333,144.79889,540,Apra Harbor,540,16.2,override,"same small island as Apra Harbor, Guam (record 1948-2025)"
+1770000,"Pago Pago, American Samoa",-14.28,-170.69,539,Pago Pago,539,0.0,within_3km,
+1820000,"Kwajalein, Marshall Islands",8.731667,167.73611,513,Kwajalein,513,0.5,within_3km,
+1890000,"Wake Island, Pacific Ocean",19.290556,166.6175,595,Wake Island,595,0.3,within_3km,
+2695535,Bermuda Biological Station,32.370224,-64.695724,368,St. Georges / Esso Pier (Bermuda),368,0.4,within_3km,
+2695540,"Bermuda, St. Georges Island",32.3734,-64.7033,368,St. Georges / Esso Pier (Bermuda),368,0.5,within_3km,
+8311030,Ogdensburg,44.702778,-75.494446,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+8311062,Alexandria Bay,44.33111,-75.934525,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+8410140,Eastport,44.90461,-66.98289,332,Eastport,332,0.6,within_3km,
+8411060,Cutler Farris Wharf,44.6567,-67.21,1524,Cutler II,1524,7.4,within_15km_name,name shares CUTLER
+8413320,Bar Harbor,44.392193,-68.20428,525,"Bar Harbor, Frenchman Bay, ME",525,0.4,within_3km,
+8418150,Portland,43.658054,-70.24416,183,Portland (Maine),183,0.5,within_3km,
+8419870,Seavey Island,43.079723,-70.74111,288,Seavey Island,288,0.1,within_3km,
+8443970,Boston,42.35389,-71.05028,235,Boston,235,0.4,within_3km,
+8447386,Fall River,41.7043,-71.1641,,,1004802890,35.6,regional_estimate,"AR6 1-degree cell at 42, -71; nearest AR6 gauge Providence (State Pier) (PSMSL 430) is 22.8 km away"
+8447435,Chatham,41.6885,-69.9511,,,1004802900,34.9,regional_estimate,"AR6 1-degree cell at 42, -70; nearest AR6 gauge Sandwich Marina, Cape Cod Canal Entrance (PSMSL 775) is 46.4 km away"
+8447636,New Bedford Harbor,41.6212,-70.9137,,,1004802890,42.7,regional_estimate,"AR6 1-degree cell at 42, -71; nearest AR6 gauge Woods Hole (Ocean. Inst.) (PSMSL 367) is 23.2 km away"
+8447930,Woods Hole,41.523613,-70.67111,367,Woods Hole (Ocean. Inst.),367,0.4,within_3km,
+8449130,Nantucket Island,41.285,-70.0967,1111,Nantucket Island,1111,0.6,within_3km,
+8452660,Newport,41.504333,-71.32614,351,Newport,351,0.7,within_3km,
+8452944,Conimicut Light,41.7167,-71.3433,430,Providence (State Pier),430,11.4,override,"upper Narragansett Bay, like Providence (record 1938-2025)"
+8454000,Providence,41.807167,-71.400665,430,Providence (State Pier),430,0.3,within_3km,
+8461490,New London,41.371666,-72.09556,429,New London,429,1.4,within_3km,
+8465705,New Haven,41.2833,-72.9083,,,1004902870,32.4,regional_estimate,"AR6 1-degree cell at 41, -73; nearest AR6 gauge Bridgeport (PSMSL 1068) is 26.0 km away"
+8467150,Bridgeport,41.17582,-73.18397,1068,Bridgeport,1068,0.7,within_3km,
+8510560,Montauk,41.048332,-71.95944,519,Montauk,519,0.2,within_3km,
+8516945,Kings Point,40.8103,-73.7649,2322,"Kings Point, New York",2322,0.4,within_3km,
+8518750,The Battery,40.700554,-74.01417,12,New York (The Battery),12,0.4,within_3km,
+8518962,Turkey Point Hudson River NERRS,42.0139,-73.9392,,,1004802860,5.3,regional_estimate,"AR6 1-degree cell at 42, -74; nearest AR6 gauge Bridgeport (PSMSL 1068) is 113.1 km away"
+8518979,"Coxsackie, Hudson River",42.35264,-73.79486,,,1004802860,42.7,regional_estimate,"AR6 1-degree cell at 42, -74; nearest AR6 gauge Bridgeport (PSMSL 1068) is 141.0 km away"
+8531680,Sandy Hook,40.4669,-74.0094,366,Sandy Hook,366,0.3,within_3km,
+8534720,Atlantic City,39.356667,-74.41805,180,Atlantic City,180,0.8,within_3km,
+8536110,Cape May,38.9683,-74.96,1153,Cape May,1153,0.2,within_3km,
+8537121,Ship John Shoal,39.30539,-75.37668,,,1005102850,47.0,regional_estimate,"AR6 1-degree cell at 39, -75; nearest AR6 gauge Reedy Point (PSMSL 786) is 32.8 km away"
+8539094,"Burlington, Delaware River",40.0817,-74.8697,,,1005002850,14.3,regional_estimate,"AR6 1-degree cell at 40, -75; nearest AR6 gauge Philadelphia (Pier 9n) (PSMSL 135) is 28.5 km away"
+8540433,Marcus Hook,39.811806,-75.4095,,,1005002850,40.7,regional_estimate,"AR6 1-degree cell at 40, -75; nearest AR6 gauge Philadelphia (Pier 9n) (PSMSL 135) is 26.5 km away"
+8545240,Philadelphia,39.933056,-75.14198,135,Philadelphia (Pier 9n),135,0.4,within_3km,
+8546252,Bridesburg,39.979683,-75.079315,135,Philadelphia (Pier 9n),135,7.6,override,same tidal Delaware River reach in Philadelphia (record 1900-2025)
+8548989,Newbold,40.137333,-74.75183,,,1005002850,26.1,regional_estimate,"AR6 1-degree cell at 40, -75; nearest AR6 gauge Philadelphia (Pier 9n) (PSMSL 135) is 40.3 km away"
+8551762,Delaware City,39.582195,-75.588974,786,Reedy Point,786,3.0,within_3km,
+8551910,Reedy Point,39.558334,-75.571945,786,Reedy Point,786,0.2,within_3km,
+8555889,Brandywine Shoal Light,38.986668,-75.113335,1153,Cape May,1153,13.4,override,"mouth of Delaware Bay, like Cape May (record 1966-2025)"
+8557380,Lewes,38.782833,-75.11928,224,Lewes (Breakwater Harbor),224,0.3,within_3km,
+8570283,Ocean City Inlet,38.32833,-75.09167,2292,Ocean City Inlet,2292,0.2,within_3km,
+8571421,Bishops Head,38.22,-76.0383,,,1005202840,24.7,regional_estimate,"AR6 1-degree cell at 38, -76; nearest AR6 gauge Solomon's Island (Biol. Lab.) (PSMSL 412) is 37.6 km away"
+8571892,Cambridge,38.5725,-76.06167,1295,Cambridge II,1295,0.8,within_3km,
+8573364,Tolchester Beach,39.213444,-76.24455,2323,"Tolchester Beach, Maryland",2323,0.6,within_3km,
+8573927,Chesapeake City,39.52667,-75.81,,,1005002840,55.1,regional_estimate,"AR6 1-degree cell at 40, -76; nearest AR6 gauge Reedy Point (PSMSL 786) is 20.9 km away"
+8574680,Baltimore,39.266693,-76.57831,148,Baltimore,148,0.4,within_3km,
+8575512,Annapolis,38.983883,-76.480034,311,Annapolis (Naval Academy),311,0.4,within_3km,
+8577330,Solomons Island,38.3167,-76.4517,412,Solomon's Island (Biol. Lab.),412,0.4,within_3km,
+8594900,Washington,38.873333,-77.02167,360,Washington Dc,360,0.4,within_3km,
+8631044,Wachapreague,37.607777,-75.68584,,,1005202840,51.6,regional_estimate,"AR6 1-degree cell at 38, -76; nearest AR6 gauge Kiptopeke Beach (PSMSL 636) is 56.6 km away"
+8632200,Kiptopeke,37.1652,-75.9884,636,Kiptopeke Beach,636,0.6,within_3km,
+8635027,Dahlgren,38.31975,-77.0366,,,1005202830,35.7,regional_estimate,"AR6 1-degree cell at 38, -77; nearest AR6 gauge Solomon's Island (Biol. Lab.) (PSMSL 412) is 51.2 km away"
+8635750,Lewisetta,37.9961,-76.4644,2324,"Lewisetta, Virginia",2324,0.8,within_3km,
+8636580,Windmill Point,37.6155,-76.28978,,,1005202840,49.8,regional_estimate,"AR6 1-degree cell at 38, -76; nearest AR6 gauge Lewisetta, Virginia (PSMSL 2324) is 44.6 km away"
+8637689,Yorktown USCG Training Center,37.2265,-76.478806,597,Gloucester Point,597,3.2,override,across the York River from Gloucester Point (record 1950-2003)
+8638610,Sewells Point,36.94278,-76.32861,299,"Sewells Point, Hampton Roads",299,0.8,within_3km,
+8638901,"CBBT, Chesapeake Channel",37.0329,-76.0833,1635,Chesapeake Bay Br. Tun.,1635,7.4,within_15km_name,name shares CHESAPEAKE
+8639348,Money Point,36.778194,-76.301865,399,Portsmouth (Norfolk Navy Yard),399,4.8,override,"Elizabeth River, Norfolk harbour, like Portsmouth (record 1935-1987)"
+8651370,Duck,36.1833,-75.7467,1636,Duck Pier Outside,1636,0.5,within_3km,
+8652587,Oregon Inlet Marina,35.795696,-75.548195,2325,"Oregon Inlet Marina, North Carolina",2325,0.5,within_3km,
+8654467,USCG Station Hatteras,35.2086,-75.7042,2294,"Cape Hatteras, North Carolina",2294,6.0,within_15km_name,name shares HATTERAS
+8656483,"Beaufort, Duke Marine Lab",34.71733,-76.67066,2295,"Beaufort, North Carolina",2295,0.3,within_3km,
+8658120,Wilmington,34.2267,-77.9533,396,Wilmington,396,0.5,within_3km,
+8658163,Wrightsville Beach,34.213306,-77.7867,,,1005602820,30.8,regional_estimate,"AR6 1-degree cell at 34, -78; nearest AR6 gauge Wilmington (PSMSL 396) is 15.1 km away"
+8661070,Springmaid Pier,33.655,-78.9183,1444,Springmaid Pier,1444,0.6,within_3km,
+8665530,Charleston,32.780834,-79.923615,234,Charleston I,234,0.4,within_3km,
+8670870,Fort Pulaski,32.034695,-80.90303,395,Fort Pulaski,395,0.6,within_3km,
+8679598,Kings Bay MSF Pier,30.7781,-81.4914,112,Fernandina Beach,112,12.2,override,same St Marys River entrance as Fernandina Beach (record 1897-2025)
+8720030,Fernandina Beach,30.671356,-81.46584,112,Fernandina Beach,112,0.4,within_3km,
+8720218,Mayport (Bar Pilots Dock),30.398167,-81.42789,2326,"Mayport (Bar Pilots Dock), Florida",2326,0.3,within_3km,
+8720219,Dames Point,30.3867,-81.5583,2326,"Mayport (Bar Pilots Dock), Florida",2326,12.4,override,lower St Johns River; Mayport (Bar Pilots Dock) is the current Mayport gauge (record 2001-2025)
+8720226,"Southbank Riverwalk, St Johns River",30.32,-81.6583,,,1006002780,48.4,regional_estimate,"AR6 1-degree cell at 30, -82; nearest AR6 gauge Mayport (PSMSL 316) is 23.2 km away"
+8720357,I-295 Buckman Bridge,30.192417,-81.68889,,,1006002780,36.8,regional_estimate,"AR6 1-degree cell at 30, -82; nearest AR6 gauge Mayport (PSMSL 316) is 33.2 km away"
+8721604,"Trident Pier, Port Canaveral",28.4158,-80.5931,2123,"Trident Pier, Port Canaveral",2123,0.7,within_3km,
+8722670,"Lake Worth Pier, Atlantic Ocean",26.612778,-80.034164,1696,Lake Worth Pier,1696,0.5,within_3km,
+8722956,South Port Everglades,26.081667,-80.11667,,,1006402800,14.8,regional_estimate,"AR6 1-degree cell at 26, -80; nearest AR6 gauge Miami Beach (PSMSL 363) is 34.7 km away"
+8723214,Virginia Key,25.7314,-80.1618,1858,"Virginia Key, FL",1858,0.2,within_3km,
+8723970,"Vaca Key, Florida Bay",24.711,-81.1065,1701,Vaca Key,1701,0.4,within_3km,
+8724580,Key West,24.5557,-81.8079,188,Key West,188,0.7,within_3km,
+8725114,"Naples Bay, North",26.1367,-81.7883,1107,Naples,1107,2.3,within_3km,
+8725520,Fort Myers,26.647778,-81.87111,1106,Fort Myers,1106,0.3,within_3km,
+8726384,Port Manatee,27.6387,-82.5621,,,1006202770,58.9,regional_estimate,"AR6 1-degree cell at 28, -83; nearest AR6 gauge St. Petersburg (PSMSL 520) is 15.1 km away"
+8726520,St. Petersburg,27.7606,-82.6269,520,St. Petersburg,520,0.3,within_3km,
+8726607,Old Port Tampa,27.8578,-82.5528,520,St. Petersburg,520,13.3,override,"Tampa Bay, like St. Petersburg (record 1947-2025)"
+8726674,East Bay,27.9231,-82.4214,,,1006202780,42.3,regional_estimate,"AR6 1-degree cell at 28, -82; nearest AR6 gauge St. Petersburg (PSMSL 520) is 27.4 km away"
+8726724,Clearwater Beach,27.9783,-82.8317,1638,Clearwater Beach,1638,0.3,within_3km,
+8727520,Cedar Key,29.135,-83.0317,428,Cedar Key II,428,0.6,within_3km,
+8728690,Apalachicola,29.724445,-84.98055,1193,Apalachicola,1193,0.6,within_3km,
+8729108,Panama City,30.149723,-85.664444,1641,"Panama City, St.Andrews Bay, FL",1641,0.5,within_3km,
+8729210,Panama City Beach,30.21375,-85.878586,,,1006002740,26.5,regional_estimate,"AR6 1-degree cell at 30, -86; nearest AR6 gauge Panama City, St.Andrews Bay, FL (PSMSL 1641) is 21.3 km away"
+8729840,Pensacola,30.4044,-87.2112,246,Pensacola,246,0.5,within_3km,
+8735180,Dauphin Island,30.25,-88.075,1156,Dauphin Island,1156,0.5,within_3km,
+8735391,Dog River Bridge,30.5652,-88.088,,,1005902720,49.1,regional_estimate,"AR6 1-degree cell at 31, -88; nearest AR6 gauge Dauphin Island (PSMSL 1156) is 35.1 km away"
+8735523,East Fowl River Bridge,30.4437,-88.1139,,,1006002720,50.5,regional_estimate,"AR6 1-degree cell at 30, -88; nearest AR6 gauge Dauphin Island (PSMSL 1156) is 21.8 km away"
+8736897,Coast Guard Sector Mobile,30.6495,-88.05811,,,1005902720,39.4,regional_estimate,"AR6 1-degree cell at 31, -88; nearest AR6 gauge Dauphin Island (PSMSL 1156) is 44.5 km away"
+8737048,Mobile State Docks,30.70461,-88.03961,,,1005902720,33.1,regional_estimate,"AR6 1-degree cell at 31, -88; nearest AR6 gauge Dauphin Island (PSMSL 1156) is 50.7 km away"
+8737138,Chickasaw Creek,30.7819,-88.0736,,,1005902720,25.2,regional_estimate,"AR6 1-degree cell at 31, -88; nearest AR6 gauge Dauphin Island (PSMSL 1156) is 59.1 km away"
+8738043,West Fowl River Bridge,30.3766,-88.1586,,,1006002720,44.6,regional_estimate,"AR6 1-degree cell at 30, -88; nearest AR6 gauge Dauphin Island (PSMSL 1156) is 16.0 km away"
+8739803,Bayou La Batre Bridge,30.4057,-88.2477,,,1006002720,51.0,regional_estimate,"AR6 1-degree cell at 30, -88; nearest AR6 gauge Dauphin Island (PSMSL 1156) is 23.6 km away"
+8741533,Pascagoula NOAA Lab,30.367777,-88.56306,,,1006002710,58.6,regional_estimate,"AR6 1-degree cell at 30, -89; nearest AR6 gauge Dauphin Island (PSMSL 1156) is 48.2 km away"
+8747437,Bay Waveland Yacht Club,30.326342,-89.3258,2215,Bay Waveland Yacht Club II,2215,0.6,within_3km,
+8760721,Pilottown,29.179306,-89.258835,,,1006102710,32.1,regional_estimate,"AR6 1-degree cell at 29, -89; nearest AR6 gauge Grand Isle (PSMSL 526) is 68.6 km away"
+8760922,"Pilots Station East, S.W. Pass",28.9322,-89.4075,,,1006102710,40.4,regional_estimate,"AR6 1-degree cell at 29, -89; nearest AR6 gauge Grand Isle (PSMSL 526) is 64.9 km away"
+8761305,Shell Beach,29.86811,-89.67325,,,1006002700,34.7,regional_estimate,"AR6 1-degree cell at 30, -90; nearest AR6 gauge Bay Waveland Yacht Club II (PSMSL 2215) is 61.1 km away"
+8761724,Grand Isle,29.2633,-89.9567,526,Grand Isle,526,0.5,within_3km,
+8761927,New Canal Station,30.027222,-90.113335,,,1006002700,11.3,regional_estimate,"AR6 1-degree cell at 30, -90; nearest AR6 gauge Bay Waveland Yacht Club II (PSMSL 2215) is 82.5 km away"
+8761955,Carrollton,29.932888,-90.135475,,,1006002700,15.0,regional_estimate,"AR6 1-degree cell at 30, -90; nearest AR6 gauge Grand Isle (PSMSL 526) is 76.7 km away"
+8762075,"Port Fourchon, Belle Pass",29.1142,-90.1993,,,1006102700,23.2,regional_estimate,"AR6 1-degree cell at 29, -90; nearest AR6 gauge Grand Isle (PSMSL 526) is 28.3 km away"
+8762482,"West Bank 1, Bayou Gauche",29.78861,-90.42028,,,1006002700,46.8,regional_estimate,"AR6 1-degree cell at 30, -90; nearest AR6 gauge Grand Isle (PSMSL 526) is 73.7 km away"
+8764044,"Berwick, Atchafalaya River",29.6675,-91.23761,,,1006002690,43.5,regional_estimate,"AR6 1-degree cell at 30, -91; nearest AR6 gauge Eugene Island (PSMSL 440) is 36.2 km away"
+8764227,"LAWMA, Amerada Pass",29.4496,-91.3381,440,Eugene Island,440,10.2,override,"Atchafalaya Bay, like Eugene Island (record 1939-1974)"
+8764314,"Eugene Island, North of, Atchafalaya Bay",29.3675,-91.3839,440,Eugene Island,440,0.7,within_3km,
+8766072,Freshwater Canal Locks,29.551695,-92.30519,,,1006002680,57.9,regional_estimate,"AR6 1-degree cell at 30, -92; nearest AR6 gauge Eugene Island (PSMSL 440) is 90.9 km away"
+8767816,Lake Charles,30.223612,-93.221664,,,1006002670,32.8,regional_estimate,"AR6 1-degree cell at 30, -93; nearest AR6 gauge Sabine Pass North (PSMSL 1835) is 83.1 km away"
+8767961,Bulk Terminal,30.1903,-93.3007,,,1006002670,35.8,regional_estimate,"AR6 1-degree cell at 30, -93; nearest AR6 gauge Sabine Pass North (PSMSL 1835) is 75.0 km away"
+8768094,Calcasieu Pass,29.768167,-93.34289,,,1006002670,41.9,regional_estimate,"AR6 1-degree cell at 30, -93; nearest AR6 gauge Sabine Pass North (PSMSL 1835) is 51.1 km away"
+8770475,Port Arthur,29.8667,-93.93,,,1006002660,16.3,regional_estimate,"AR6 1-degree cell at 30, -94; nearest AR6 gauge Sabine Pass North (PSMSL 1835) is 16.3 km away"
+8770520,Rainbow Bridge,29.98,-93.8817,,,1006002660,11.6,regional_estimate,"AR6 1-degree cell at 30, -94; nearest AR6 gauge Sabine Pass North (PSMSL 1835) is 27.8 km away"
+8770613,"Morgans Point, Barbours Cut",29.681667,-94.985,,,1006002650,35.4,regional_estimate,"AR6 1-degree cell at 30, -95; nearest AR6 gauge Galveston II, Pier 21, TX (PSMSL 161) is 45.4 km away"
+8770777,Manchester,29.7263,-95.2658,,,1006002650,39.8,regional_estimate,"AR6 1-degree cell at 30, -95; nearest AR6 gauge Galveston II, Pier 21, TX (PSMSL 161) is 65.3 km away"
+8770808,High Island,29.5947,-94.3903,,,1006002660,58.7,regional_estimate,"AR6 1-degree cell at 30, -94; nearest AR6 gauge Galveston II, Pier 21, TX (PSMSL 161) is 50.0 km away"
+8770822,"Texas Point, Sabine Pass",29.6893,-93.8418,1835,Sabine Pass North,1835,5.3,within_15km_name,name shares SABINE
+8770971,Rollover Pass,29.515,-94.5133,,,1006002650,71.5,regional_estimate,"AR6 1-degree cell at 30, -95; nearest AR6 gauge Galveston II, Pier 21, TX (PSMSL 161) is 35.2 km away"
+8771013,"Eagle Point, Galveston Bay",29.481306,-94.91725,,,1006102650,54.1,regional_estimate,"AR6 1-degree cell at 29, -95; nearest AR6 gauge Galveston II, Pier 21, TX (PSMSL 161) is 22.7 km away"
+8771341,"Galveston Bay Entrance, North Jetty",29.357462,-94.724724,161,"Galveston II, Pier 21, TX",161,8.2,within_15km_name,name shares GALVESTON
+8771367,Sabine Offshore Light,29.469,-93.72,,,1006102660,58.8,regional_estimate,"AR6 1-degree cell at 29, -94; nearest AR6 gauge Sabine Pass North (PSMSL 1835) is 32.4 km away"
+8771450,Galveston Pier 21,29.31,-94.7933,161,"Galveston II, Pier 21, TX",161,0.3,within_3km,
+8771486,Galveston Railroad Bridge,29.3026,-94.8971,161,"Galveston II, Pier 21, TX",161,10.4,within_15km_name,name shares GALVESTON
+8771972,San Luis Pass,29.095,-95.1133,,,1006102650,15.3,regional_estimate,"AR6 1-degree cell at 29, -95; nearest AR6 gauge Freeport (PSMSL 725) is 25.0 km away"
+8772471,Freeport Harbor,28.9357,-95.2942,725,Freeport,725,2.2,within_3km,
+8772985,Sargent,28.771639,-95.61684,,,1006102640,45.1,regional_estimate,"AR6 1-degree cell at 29, -96; nearest AR6 gauge Freeport (PSMSL 725) is 35.9 km away"
+8773037,Seadrift,28.4069,-96.7124,,,1006202630,53.3,regional_estimate,"AR6 1-degree cell at 28, -97; nearest AR6 gauge Rockport (PSMSL 538) is 54.3 km away"
+8773146,Matagorda City,28.71,-95.9139,,,1006102640,33.3,regional_estimate,"AR6 1-degree cell at 29, -96; nearest AR6 gauge Freeport (PSMSL 725) is 64.6 km away"
+8773259,Port Lavaca,28.6406,-96.6098,,,1006102630,55.2,regional_estimate,"AR6 1-degree cell at 29, -97; nearest AR6 gauge Rockport (PSMSL 538) is 81.4 km away"
+8773701,Port O'Connor,28.4517,-96.3883,,,1006202640,63.0,regional_estimate,"AR6 1-degree cell at 28, -96; nearest AR6 gauge Rockport (PSMSL 538) is 80.7 km away"
+8773767,Matagorda Bay Entrance Channel,28.4269,-96.3301,,,1006202640,57.4,regional_estimate,"AR6 1-degree cell at 28, -96; nearest AR6 gauge Rockport (PSMSL 538) is 83.8 km away"
+8774230,Aransas Wildlife Refuge,28.2283,-96.795,,,1006202630,32.4,regional_estimate,"AR6 1-degree cell at 28, -97; nearest AR6 gauge Rockport (PSMSL 538) is 34.1 km away"
+8774513,Copano Bay,28.118305,-97.0217,538,Rockport,538,11.3,override,"Copano and Aransas bays, like Rockport (record 1948-2025)"
+8774770,Rockport,28.021667,-97.04667,538,Rockport,538,0.4,within_3km,
+8775132,La Quinta Channel North,27.8804,-97.2735,,,1006202630,30.0,regional_estimate,"AR6 1-degree cell at 28, -97; nearest AR6 gauge Rockport (PSMSL 538) is 26.9 km away"
+8775222,Viola Turning Basin,27.8461,-97.5207,,,1006202620,50.1,regional_estimate,"AR6 1-degree cell at 28, -98; nearest AR6 gauge Corpus Christi, Gulf Mexico, TX (PSMSL 1903) is 41.9 km away"
+8775237,Port Aransas,27.8397,-97.0725,,,1006202630,19.2,regional_estimate,"AR6 1-degree cell at 28, -97; nearest AR6 gauge Rockport (PSMSL 538) is 20.2 km away"
+8775241,"Aransas, Aransas Pass",27.8366,-97.0391,,,1006202630,18.6,regional_estimate,"AR6 1-degree cell at 28, -97; nearest AR6 gauge Rockport (PSMSL 538) is 20.4 km away"
+8775283,"Enbridge, Ingleside",27.818611,-97.20895,,,1006202630,28.8,regional_estimate,"AR6 1-degree cell at 28, -97; nearest AR6 gauge Corpus Christi, Gulf Mexico, TX (PSMSL 1903) is 26.6 km away"
+8775296,"USS Lexington, Corpus Christi Bay",27.8149,-97.3892,,,1006202630,43.4,regional_estimate,"AR6 1-degree cell at 28, -97; nearest AR6 gauge Corpus Christi, Gulf Mexico, TX (PSMSL 1903) is 31.0 km away"
+8775792,Packery Channel,27.6333,-97.2367,1903,"Corpus Christi, Gulf Mexico, TX",1903,6.2,override,"same Padre Island shore as Bob Hall Pier, Corpus Christi (record 1998-2021)"
+8775870,"Bob Hall Pier, Corpus Christi",27.58,-97.2167,1903,"Corpus Christi, Gulf Mexico, TX",1903,0.3,within_3km,
+8776139,S. Bird Island,27.484362,-97.31811,1903,"Corpus Christi, Gulf Mexico, TX",1903,14.4,override,"Padre Island, inside the barrier from Bob Hall Pier, Corpus Christi (record 1998-2021)"
+8776604,Baffin Bay,27.297,-97.40517,,,1006302630,51.9,regional_estimate,"AR6 1-degree cell at 27, -97; nearest AR6 gauge Corpus Christi, Gulf Mexico, TX (PSMSL 1903) is 36.4 km away"
+8777812,Rincon Del San Jose,26.801195,-97.47056,,,1006302630,51.6,regional_estimate,"AR6 1-degree cell at 27, -97; nearest AR6 gauge Port Mansfield (PSMSL 1038) is 28.4 km away"
+8778490,Port Mansfield,26.557638,-97.42572,1038,Port Mansfield,1038,1.0,within_3km,
+8779280,Realitos Peninsula,26.2624,-97.2853,,,1006402630,40.8,regional_estimate,"AR6 1-degree cell at 26, -97; nearest AR6 gauge Port Isabel (PSMSL 497) is 23.4 km away"
+8779748,South Padre Island CG Station,26.0731,-97.1675,919,Padre Island,919,1.8,within_3km,
+8779749,SPI Brazos Santiago,26.0675,-97.1548,919,Padre Island,919,0.6,within_3km,
+8779770,Port Isabel,26.061167,-97.21553,497,Port Isabel,497,0.5,within_3km,
+9014070,Algonac,42.621113,-82.526665,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9014080,St. Clair State Police,42.81222,-82.48556,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9014087,Dry Dock,42.94528,-82.44334,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9014090,Mouth of the Black River,42.9738,-82.4204,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9014098,Fort Gratiot,43.0069,-82.4225,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9034052,St Clair Shores,42.47322,-82.87925,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9044020,Gibraltar,42.090862,-83.186,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9044030,Wyandotte,42.202305,-83.1475,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9044036,Fort Wayne,42.298912,-83.092636,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9044049,Windmill Point,42.357777,-82.92995,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9052000,Cape Vincent,44.13028,-76.33222,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9052030,Oswego,43.46417,-76.51183,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9052058,Rochester,43.26903,-77.62575,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9052076,Olcott,43.33839,-78.72733,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063007,Ashland Ave,43.09992,-79.05991,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063009,American Falls,43.08106,-79.06136,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063012,Niagara Intake,43.07689,-79.01403,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063020,Buffalo,42.877445,-78.89047,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063028,Sturgeon Point,42.691307,-79.04733,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063038,"Erie, Lake Erie",42.15389,-80.075836,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063053,Fairport,41.75975,-81.28106,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063063,Cleveland,41.54086,-81.635475,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063079,Marblehead,41.54364,-82.73139,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063085,Toledo,41.693554,-83.472275,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9063090,Fermi Power Plant,41.96,-83.25667,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9075002,Lakeport,43.141693,-82.49331,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9075014,Harbor Beach,43.84639,-82.64306,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9075035,Essexville,43.6404,-83.8468,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9075065,Alpena,45.063,-83.4286,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9075080,Mackinaw City,45.77722,-84.72111,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9075099,De Tour Village,45.9925,-83.8982,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9076024,Rock Cut,46.264805,-84.19119,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9076027,West Neebish Island,46.28469,-84.20981,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9076033,Little Rapids,46.485832,-84.30167,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9076060,U.S. Slip,46.500805,-84.34036,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9076070,"S.W. Pier, St. Marys River",46.50111,-84.37261,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9087023,Ludington,43.94736,-86.4415,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9087031,Holland,42.773335,-86.212776,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9087044,Calumet Harbor,41.72972,-87.53833,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9087057,Milwaukee,43.001972,-87.88764,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9087068,"Kewaunee, Lake Michigan",44.46389,-87.50103,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9087072,Sturgeon Bay Canal,44.794693,-87.31392,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9087077,Green Bay East,44.539024,-88.00106,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9087088,Menominee,45.09589,-87.58994,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9087096,Port Inland,45.96989,-85.8715,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9099004,Point Iroquois,46.484444,-84.63084,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9099018,Marquette C.G.,46.545555,-87.37861,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9099044,Ontonagon,46.874443,-89.324165,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9099064,Duluth,46.77575,-92.092026,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9099090,"Grand Marais, Lake Superior",47.748554,-90.34128,,,,,none,"Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"
+9410170,San Diego,32.715557,-117.17667,158,San Diego (Quarantine Station),158,0.9,within_3km,
+9410230,La Jolla,32.86689,-117.25714,256,La Jolla (Scripps Pier),256,0.4,within_3km,
+9410660,Los Angeles,33.72,-118.272,245,Los Angeles,245,0.2,within_3km,
+9410678,Long Beach Fire Boat Pier,33.7478,-118.2158,245,Los Angeles,245,5.9,override,same San Pedro Bay port complex as Los Angeles (record 1923-2025)
+9410840,Santa Monica,34.0083,-118.5,377,Santa Monica (Municipal Pier),377,0.2,within_3km,
+9411340,Santa Barbara,34.40459,-119.6925,2126,"Santa Barbara, California",2126,0.6,within_3km,
+9412110,Port San Luis,35.168888,-120.754166,508,Port San Luis,508,1.3,within_3km,
+9413450,Monterey,36.60889,-121.89139,1352,Monterey,1352,1.0,within_3km,
+9414290,San Francisco,37.806305,-122.46589,10,San Francisco,10,0.5,within_3km,
+9414523,Redwood City,37.506813,-122.21191,2329,"Redwood City, California",2329,0.4,within_3km,
+9414750,Alameda,37.771954,-122.30026,437,Alameda (Naval Air Station),437,0.2,within_3km,
+9414863,Richmond,37.9283,-122.4,10,San Francisco,10,14.5,override,"central San Francisco Bay, like San Francisco (record 1854-2025)"
+9415020,Point Reyes,37.994167,-122.97361,1394,Point Reyes,1394,0.7,within_3km,
+9415102,Martinez-Amorco Pier,38.0346,-122.1252,2330,"Port Chicago, California",2330,7.7,override,"Carquinez Strait and Suisun Bay, like Port Chicago (record 1976-2025)"
+9415144,Port Chicago,38.056,-122.0395,2330,"Port Chicago, California",2330,0.7,within_3km,
+9416131,"Port of West Sacramento, Washington Lake",38.56225,-121.5463,,,1005102380,62.6,regional_estimate,"AR6 1-degree cell at 39, -122; nearest AR6 gauge Port Chicago, California (PSMSL 2330) is 71.4 km away"
+9416841,Arena Cove,38.914555,-123.71108,2125,"Arena Cove, California",2125,0.5,within_3km,
+9418767,North Spit,40.766907,-124.21735,1639,"N. Spit, Humboldt Bay",1639,0.4,within_3km,
+9419750,Crescent City,41.74561,-124.18439,378,Crescent City,378,0.7,within_3km,
+9431647,Port Orford,42.739,-124.4983,1640,Port Orford,1640,0.2,within_3km,
+9432780,Charleston,43.345,-124.322,1269,Charleston II,1269,0.6,within_3km,
+9435380,South Beach,44.625446,-124.044945,1196,South Beach,1196,0.7,within_3km,
+9437540,Garibaldi,45.55453,-123.918945,,,1004402360,49.9,regional_estimate,"AR6 1-degree cell at 46, -124; nearest AR6 gauge Astoria (Tongue Point) (PSMSL 265) is 73.8 km away"
+9439040,Astoria,46.207306,-123.7683,265,Astoria (Tongue Point),265,0.3,within_3km,
+9439099,Wauna,46.16,-123.405,,,1004402370,35.9,regional_estimate,"AR6 1-degree cell at 46, -123; nearest AR6 gauge Astoria (Tongue Point) (PSMSL 265) is 28.6 km away"
+9439201,St Helens,45.865,-122.797,,,1004402370,21.7,regional_estimate,"AR6 1-degree cell at 46, -123; nearest AR6 gauge Astoria (Tongue Point) (PSMSL 265) is 84.3 km away"
+9440083,Vancouver,45.631172,-122.69577,,,1004402370,47.3,regional_estimate,"AR6 1-degree cell at 46, -123; nearest AR6 gauge Astoria (Tongue Point) (PSMSL 265) is 105.1 km away"
+9440357,TEMCO Kalama Terminal,45.9867,-122.8367,,,1004402370,12.7,regional_estimate,"AR6 1-degree cell at 46, -123; nearest AR6 gauge Astoria (Tongue Point) (PSMSL 265) is 76.1 km away"
+9440422,Longview,46.1061,-122.9542,,,1004402370,12.3,regional_estimate,"AR6 1-degree cell at 46, -123; nearest AR6 gauge Astoria (Tongue Point) (PSMSL 265) is 63.9 km away"
+9440569,Skamokawa,46.270306,-123.4565,,,1004402370,46.3,regional_estimate,"AR6 1-degree cell at 46, -123; nearest AR6 gauge Astoria (Tongue Point) (PSMSL 265) is 25.0 km away"
+9440581,Cape Disappointment,46.28103,-124.04628,,,1004402360,31.5,regional_estimate,"AR6 1-degree cell at 46, -124; nearest AR6 gauge Astoria (Tongue Point) (PSMSL 265) is 22.7 km away"
+9440910,Toke Point,46.7075,-123.96694,1354,"Toke Point, Willipa Bay, WA",1354,0.4,within_3km,
+9441102,Westport,46.90431,-124.10508,,,1004302360,13.3,regional_estimate,"AR6 1-degree cell at 47, -124; nearest AR6 gauge Toke Point, Willipa Bay, WA (PSMSL 1354) is 23.9 km away"
+9442396,"La Push, Quillayute River",47.912838,-124.63574,,,1004202350,28.8,regional_estimate,"AR6 1-degree cell at 48, -125; nearest AR6 gauge Neah Bay (PSMSL 385) is 50.9 km away"
+9443090,Neah Bay,48.370724,-124.601585,385,Neah Bay,385,0.6,within_3km,
+9444090,Port Angeles,48.125,-123.44,2127,"Port Angeles, Washington",2127,0.6,within_3km,
+9444900,Port Townsend,48.11122,-122.759674,1325,Port Townsend,1325,0.1,within_3km,
+9445958,Bremerton,47.5617,-122.623,,,1004202370,56.3,regional_estimate,"AR6 1-degree cell at 48, -123; nearest AR6 gauge Seattle (PSMSL 127) is 21.7 km away"
+9446484,Tacoma,47.2667,-122.4133,,,1004302380,43.1,regional_estimate,"AR6 1-degree cell at 47, -122; nearest AR6 gauge Seattle (PSMSL 127) is 37.5 km away"
+9447130,Seattle,47.60264,-122.3393,127,Seattle,127,0.3,within_3km,
+9449424,Cherry Point,48.862717,-122.75858,1633,Cherry Point,1633,0.3,within_3km,
+9449880,Friday Harbor,48.545277,-123.0125,384,Friday Harbor (Ocean. Labs.),384,0.6,within_3km,
+9450460,Ketchikan,55.331944,-131.62611,225,Ketchikan,225,0.4,within_3km,
+9451054,Port Alexander,56.2467,-134.647,,,1003402250,35.1,regional_estimate,"AR6 1-degree cell at 56, -135; nearest AR6 gauge Sitka (PSMSL 426) is 98.9 km away"
+9451600,Sitka,57.051056,-135.34412,426,Sitka,426,0.3,within_3km,
+9452210,Juneau,58.2988,-134.4106,405,Juneau,405,0.1,within_3km,
+9452400,"Skagway, Taiya Inlet",59.4508,-135.328,495,Skagway,495,0.1,within_3km,
+9452634,Elfin Cove,58.19472,-136.34694,,,1003202240,29.7,regional_estimate,"AR6 1-degree cell at 58, -136; nearest AR6 gauge Juneau (PSMSL 405) is 113.9 km away"
+9453220,"Yakutat, Yakutat Bay",59.5485,-139.7334,445,Yakutat,445,0.3,within_3km,
+9454050,Cordova,60.5583,-145.753,566,Cordova,566,0.3,within_3km,
+9454240,Valdez,61.125,-146.362,1353,Valdez,1353,0.6,within_3km,
+9455090,Seward,60.1193,-149.42812,266,Seward,266,0.1,within_3km,
+9455500,Seldovia,59.4405,-151.7199,1070,Seldovia,1070,0.1,within_3km,
+9455760,Nikiski,60.6833,-151.398,1350,"Nikiski, Alaska",1350,0.4,within_3km,
+9455920,Anchorage,61.2375,-149.8904,1067,Anchorage,1067,0.3,within_3km,
+9457292,Kodiak Island,57.7317,-152.512,567,"Kodiak Island, Womens Bay",567,0.2,within_3km,
+9457804,Alitak,56.89739,-154.248,,,1003302060,18.9,regional_estimate,"AR6 1-degree cell at 57, -154; nearest AR6 gauge Kodiak Island, Womens Bay (PSMSL 567) is 139.5 km away"
+9459450,Sand Point,55.331722,-160.50433,1634,"Sand Point, Popof Is., AK",1634,1.0,within_3km,
+9459881,King Cove,55.05989,-162.32611,,,1003501980,21.8,regional_estimate,"AR6 1-degree cell at 55, -162; nearest AR6 gauge Sand Point, Popof Is., AK (PSMSL 1634) is 120.0 km away"
+9461380,Adak Island,51.860638,-176.63759,487,Adak Sweeper Cove,487,0.5,within_3km,
+9461710,Atka,52.231945,-174.1725,,,1003801860,28.4,regional_estimate,"AR6 1-degree cell at 52, -174; nearest AR6 gauge Adak Sweeper Cove (PSMSL 487) is 173.1 km away"
+9462450,Nikolski,52.94061,-168.8713,,,1003701910,10.9,regional_estimate,"AR6 1-degree cell at 53, -169; nearest AR6 gauge Unalaska (PSMSL 757) is 186.5 km away"
+9462620,Unalaska,53.879196,-166.5403,757,Unalaska,757,0.1,within_3km,
+9463502,Port Moller,55.985832,-160.57361,,,1003401990,26.6,regional_estimate,"AR6 1-degree cell at 56, -161; nearest AR6 gauge Sand Point, Popof Is., AK (PSMSL 1634) is 72.0 km away"
+9464212,"Village Cove, St Paul Island",57.1253,-170.2852,,,1003301900,22.2,regional_estimate,"AR6 1-degree cell at 57, -170; nearest AR6 gauge Unalaska (PSMSL 757) is 431.0 km away"
+9468333,Unalakleet,63.875,-160.788,,,1002601990,17.3,regional_estimate,"AR6 1-degree cell at 64, -161; nearest AR6 gauge Nome, Alaska (PSMSL 1800) is 235.2 km away"
+9468756,"Nome, Norton Sound",64.49461,-165.43964,1800,"Nome, Alaska",1800,0.8,within_3km,
+9491094,Red Dog Dock,67.575806,-164.06439,,,1002201960,47.2,regional_estimate,"AR6 1-degree cell at 68, -164; nearest AR6 gauge Ratmanova (PSMSL 617) is 293.8 km away"
+9497645,Prudhoe Bay,70.41139,-148.53166,1857,"Prudhoe Bay, Alaska",1857,1.3,within_3km,
+9751364,"Christiansted Harbor, St Croix",17.747694,-64.69839,1447,"Lime Tree Bay, St Croix",1447,8.4,within_15km_name,name shares CROIX
+9751381,"Lameshur Bay, St John",18.31825,-64.72422,,,1007202950,45.8,regional_estimate,"AR6 1-degree cell at 18, -65; nearest AR6 gauge Charlotte Amalie (PSMSL 1393) is 20.8 km away"
+9751401,Limetree Bay,17.6947,-64.7538,1447,"Lime Tree Bay, St Croix",1447,0.7,within_3km,
+9751639,Charlotte Amalie,18.330584,-64.925804,1393,Charlotte Amalie,1393,1.2,within_3km,
+9752235,Culebra,18.300861,-65.302475,,,1007202950,46.3,regional_estimate,"AR6 1-degree cell at 18, -65; nearest AR6 gauge Charlotte Amalie (PSMSL 1393) is 40.6 km away"
+9752621,"Isabel Segunda, Vieques Island",18.152527,-65.4438,,,1007202950,49.9,regional_estimate,"AR6 1-degree cell at 18, -65; nearest AR6 gauge Charlotte Amalie (PSMSL 1393) is 59.1 km away"
+9752695,"Esperanza, Vieques Island",18.09386,-65.47136,,,1007202950,50.9,regional_estimate,"AR6 1-degree cell at 18, -65; nearest AR6 gauge Charlotte Amalie (PSMSL 1393) is 64.3 km away"
+9753216,Fajardo,18.335278,-65.63111,,,1007202940,53.9,regional_estimate,"AR6 1-degree cell at 18, -66; nearest AR6 gauge San Juan (PSMSL 1001) is 52.4 km away"
+9754229,Yabucoa Harbor,18.055084,-65.833,,,1007202940,18.7,regional_estimate,"AR6 1-degree cell at 18, -66; nearest AR6 gauge San Juan (PSMSL 1001) is 53.7 km away"
+9755371,"San Juan, La Puntilla, San Juan Bay",18.458944,-66.11642,1001,San Juan,1001,0.7,within_3km,
+9755968,"Salinas, Bahia de Jobos",17.949083,-66.225945,,,1007202940,24.6,regional_estimate,"AR6 1-degree cell at 18, -66; nearest AR6 gauge San Juan (PSMSL 1001) is 58.1 km away"
+9757811,Arecibo,18.480528,-66.70236,,,1007202930,62.0,regional_estimate,"AR6 1-degree cell at 18, -67; nearest AR6 gauge San Juan (PSMSL 1001) is 62.5 km away"
+9758066,"Guayanilla, Bahia de Guayanilla",18.005861,-66.76661,,,1007202930,24.7,regional_estimate,"AR6 1-degree cell at 18, -67; nearest AR6 gauge Magueyes Island (PSMSL 759) is 30.2 km away"
+9759110,Magueyes Island,17.970112,-67.04639,759,Magueyes Island,759,0.4,within_3km,
+9759394,Mayaguez,18.218834,-67.162445,,,1007202930,29.8,regional_estimate,"AR6 1-degree cell at 18, -67; nearest AR6 gauge Magueyes Island (PSMSL 759) is 30.1 km away"
+9759413,"Aguadilla, Crashboat Beach",18.456638,-67.16458,,,1007202930,53.7,regional_estimate,"AR6 1-degree cell at 18, -67; nearest AR6 gauge Magueyes Island (PSMSL 759) is 55.4 km away"
+9759938,Mona Island,18.089289,-67.93821,,,1007202920,11.9,regional_estimate,"AR6 1-degree cell at 18, -68; nearest AR6 gauge Magueyes Island (PSMSL 759) is 94.8 km away"
