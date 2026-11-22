@@ -110,5 +110,13 @@ scenario,name,confidence,year,p05_mm,p17_mm,p50_mm,p83_mm,p95_mm,rate_p50_mm_a_y
 - [ ] Regional estimate and check-outside flags appear under the readout line; step 7 opens itself when the check fails.
 - [ ] 375 px: radios in a 2 × 2 grid, chart labels names only, `#future` one column, the decade table scrolls in its own box, no page side-scroll.
 
+## 11a. As built, where the build differs (ui/pr2-page)
+- Step 7 words (3) name the four scenarios and say they are not predictions (task card): "The experts' scenarios are low (SSP1-2.6), intermediate (SSP2-4.5), high (SSP3-7.0) and very high (SSP5-8.5) emissions. They are possible paths for the world's emissions, not predictions. The experts give no odds for which one will happen. {p.caveat}"
+- Step 7 working: after the check line (inside or outside), "One 12-month “Now” can swing by about 3 cm from year to year at a gauge, so a single year can sit above or below the line." (owner's domain review). With the check null on a record off the 1995–2014 axis: "Check: not possible here. This record has no 1995–2014 average."
+- "Step 7 explains ↓" is a button drawn as a link (the address holds the route).
+- `#future` is built by `explain.js` right after `#place-chart`; `index.html` is unchanged.
+- Step 9 has two buttons: "Download CSV" (the record) and "Download the projections (CSV)" (section 7). The place CSV is unchanged; the projection rows are only in their own file.
+- The x-axis carries a small "//" break mark at 2100.
+
 ## 11. Left for later
 PR3 brings the same grammar to temperature, hottest day and rain (CMIP6). PR4 restyles the trend line and smoother for every window and redesigns the compare view.
