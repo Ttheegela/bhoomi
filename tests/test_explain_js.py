@@ -977,3 +977,72 @@ def test_driver_bars_and_scenario_marks_reach_3_to_1():
                 checked += 1
     assert checked == 2 * (4 + 1 + 4 + 4 + 4 + 4)
     assert "var lc = lcLines(narrow);" in SRC and "lc.forEach(function (x, j) {" in SRC  # the chart draws the 375 px split
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_open_all_steps_button():
+    """The owner: "add a open close button in the how we calculated section!" The real showHow() runs on a tiny fake
+    DOM (no browser, no network). One button over the steps reads "Open all steps" while any step is closed and
+    "Close all steps" when all nine are open; a step toggled by hand and a re-render update it; it is made once."""
+    dom = SRC.split("/* ---------- DOM ---------- */")[1].split("\n  window.TDX")[0]
+    js = PURE + dom + ASSERTS.split("var NB = ")[0] + r"""
+var ids = {}, Q = []; // Q: toggle events waiting to fire, as a browser fires them after the change
+function El(tag) { var a = this.a = {}; this.tagName = tag.toUpperCase(); this.kids = []; this.on = {}; this.parentNode = null;
+  this.classList = { add: function (c) { a['class'] = ((a['class'] || '') + ' ' + c).trim(); } }; }
+El.prototype.setAttribute = function (k, v) { this.a[k] = String(v); if (k === 'id') ids[v] = this; };
+El.prototype.getAttribute = function (k) { return k in this.a ? this.a[k] : null; };
+El.prototype.addEventListener = function (k, f) { (this.on[k] = this.on[k] || []).push(f); };
+El.prototype.append = function () { for (var i = 0; i < arguments.length; i++) { var n = arguments[i];
+  if (typeof n === 'object') { if (n.parentNode) n.parentNode.removeChild(n); n.parentNode = this; } this.kids.push(n); } };
+El.prototype.removeChild = function (n) { this.kids.splice(this.kids.indexOf(n), 1); if (typeof n === 'object') n.parentNode = null; };
+El.prototype.before = function (n) { var p = this.parentNode; p.kids.splice(p.kids.indexOf(this), 0, n); n.parentNode = p; };
+El.prototype.querySelectorAll = function (sel) {
+  assert.strictEqual(sel, ':scope > li > details');
+  var out = []; this.kids.forEach(function (li) { if (li.tagName === 'LI') li.kids.forEach(function (d) { if (d.tagName === 'DETAILS') out.push(d); }); }); return out; };
+Object.defineProperty(El.prototype, 'firstChild', { get: function () { return this.kids[0] || null; } });
+Object.defineProperty(El.prototype, 'textContent', { get: function () { return this.kids.map(function (k) { return typeof k === 'object' ? k.textContent : k; }).join(''); },
+  set: function (v) { this.kids = [String(v)]; } });
+Object.defineProperty(El.prototype, 'open', { get: function () { return 'open' in this.a; },
+  set: function (v) { if (!!v !== this.open) { if (v) this.a.open = ''; else delete this.a.open; Q.push(this); } } });
+var document = { getElementById: function (id) { return ids[id] || null; }, createElement: function (t) { return new El(t); }, createElementNS: function (ns, t) { return new El(t); } };
+function flush() { while (Q.length) (Q.shift().on.toggle || []).forEach(function (f) { f(); }); }
+function click(b) { b.on.click.forEach(function (f) { f(); }); }
+function mk(tag, id) { var n = new El(tag); n.setAttribute('id', id); return n; }
+
+var sec = mk('section', 'how'), ol = mk('ol', 'how-steps');
+sec.append(mk('h2', 'how-h'), mk('p', 'how-lead'), ol, mk('div', 'noise-slot'));
+var P = load('princeton_air_temp'), B = load('battery_sea_level');
+function cx(d, label) { return Object.assign(ctx(d, label), { today: 2026 * 12 + 10, sel: null }); }
+function opened() { return ol.querySelectorAll(':scope > li > details').map(function (d, i) { return d.open ? i + 1 : 0; }).filter(Boolean); }
+function says(label) { var b = ids['how-all']; assert.strictEqual(b.textContent, label); assert.strictEqual(b.a['aria-expanded'], String(label === 'Close all steps')); }
+var ALL = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+// a new answer: steps 3 to 6 open, and one native button right above step 1
+showHow(P, cx(P, 'Princeton, NJ'), true); flush();
+var btn = ids['how-all'];
+assert.ok(btn.tagName === 'BUTTON' && btn.a.type === 'button' && btn.a['class'] === 'btn' && btn.a['aria-controls'] === 'how-steps');
+assert.strictEqual(sec.kids.indexOf(btn) + 1, sec.kids.indexOf(ol));
+assert.deepStrictEqual(opened(), [3, 4, 5, 6]);
+says('Open all steps');
+// open all, then close all; the label is right at once and after the toggle events
+click(btn); assert.deepStrictEqual(opened(), ALL); says('Close all steps'); flush(); says('Close all steps');
+click(btn); assert.deepStrictEqual(opened(), []); says('Open all steps'); flush(); says('Open all steps');
+// one step closed by hand after "Open all steps" flips the label back; opened again, it flips forward
+click(btn); flush();
+ol.querySelectorAll(':scope > li > details')[0].open = false; flush(); says('Open all steps');
+ol.querySelectorAll(':scope > li > details')[0].open = true; flush(); says('Close all steps');
+// a re-render (another place or window) keeps the open steps and the same button, and the label follows
+showHow(B, cx(B, 'New York, NY'), false); flush();
+assert.strictEqual(ids['how-all'], btn);
+assert.strictEqual(sec.kids.filter(function (k) { return k.tagName === 'BUTTON'; }).length, 1);
+assert.deepStrictEqual(opened(), ALL); says('Close all steps');
+ol.querySelectorAll(':scope > li > details')[8].open = false; flush();
+showHow(P, cx(P, 'Princeton, NJ'), false); flush();
+assert.deepStrictEqual(opened(), [1, 2, 3, 4, 5, 6, 7, 8]); says('Open all steps');
+click(btn); flush(); says('Close all steps');
+showHow(P, cx(P, 'Princeton, NJ'), true); flush(); // a new answer goes back to the default
+assert.deepStrictEqual(opened(), [3, 4, 5, 6]); says('Open all steps');
+"""
+    env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr

@@ -1225,8 +1225,24 @@
     return h('div', { class: 'check' }, h('p', {}, item.text), csvButton(function () { return csvPlace(t, s, ctx); }));
   }
 
+  // "Open all steps" while any step is closed, "Close all steps" when every one is open
+  function syncAll(btn, ol) {
+    var all = Array.prototype.every.call(ol.querySelectorAll(':scope > li > details'), function (d) { return d.open; });
+    btn.textContent = all ? 'Close all steps' : 'Open all steps';
+    btn.setAttribute('aria-expanded', String(all));
+  }
+
   function showHow(pin, ctx, fresh) {
-    var sec = $('how'), ol = $('how-steps'), slot = $('noise-slot'), t = pin.trend, s = pin.series, keep = [];
+    var sec = $('how'), ol = $('how-steps'), slot = $('noise-slot'), t = pin.trend, s = pin.series, keep = [], all = $('how-all');
+    if (!all) { // made once and kept, so focus stays on it; the steps are rebuilt under it
+      all = h('button', { type: 'button', class: 'btn', id: 'how-all', 'aria-controls': 'how-steps' });
+      all.addEventListener('click', function () {
+        var open = all.getAttribute('aria-expanded') !== 'true';
+        Array.prototype.forEach.call(ol.querySelectorAll(':scope > li > details'), function (d) { d.open = open; });
+        syncAll(all, ol);
+      });
+      ol.before(all);
+    }
     if (!fresh) Array.prototype.forEach.call(ol.querySelectorAll(':scope > li > details'), function (d, i) { keep[i] = d.open; });
     sec.append(slot); // park "Real or noise?" while the steps are rebuilt
     clear(ol);
@@ -1235,6 +1251,7 @@
       var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 || !!st.open : !!keep[i]; // st.open: step 7 when the check falls outside
       var det = h('details', open ? { open: '' } : {}, h('summary', {},
         h('span', { class: 'step-n' }, String(i + 1)), h('span', { class: 'step-t' }, st.title), h('span', { class: 'step-s' }, st.short), h('span', { class: 'step-c', 'aria-hidden': 'true' })));
+      det.addEventListener('toggle', function () { syncAll(all, ol); }); // a step opened or closed by hand
       var words = h('div', { class: 'words' }), side = h('div', { class: 'step-w' });
       st.words.forEach(function (x) { var n = wordsNode(x, t, s, ctx); if (n) words.append(n); });
       if (st.link) words.append(h('p', { class: 'link' }, ext(st.link.text, st.link.href)));
@@ -1261,6 +1278,7 @@
       det.append(body);
       ol.append(h('li', {}, det));
     });
+    syncAll(all, ol);
     sec.hidden = false;
   }
 
