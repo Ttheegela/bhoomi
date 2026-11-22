@@ -80,6 +80,7 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
 - `baseline`: the Baseline object. Every level the page, the agent, the CSV or "How we calculated this" shows is against it.
 - `record`: `{"years": 44.9, "coverage": 0.98, "status": "ok", "trimmed_from": null}`. `years`: span of the fitted data; `coverage`: valid share of expected months in that span. `status` `"ok"`, or `"short"` for a 20–29 year record (shown, labelled "short record"). When coverage over the whole series is under 80%, the fit starts at the earliest month from which coverage to the last month is at least 80%; `trimmed_from` is then the series' first valid month (otherwise `null`), and a caveat says where the trend starts. If no such window reaches 20 years (GRACE: 10), there is no trend: a 400 with a plain message, as for any other bad input. The baseline always uses the whole series.
 - `range_kind`: `"95% range"`, the name of `ci_low`…`ci_high` wherever they are shown.
+- `headline_rate`: the trend rate in the unit people read, with its 95% range, so no page or agent converts it: `{"value": 4.25, "low": 4.11, "high": 4.40, "unit": "mm", "per": "a year", "text": "+4.3 mm a year", "range_text": "+4.1 to +4.4 mm a year"}`. Sea level is always mm a year (the world's unit); air temperature and hottest day °C per decade; rainfall % of the 1995–2014 normal per decade; water storage cm of water a year. Every rate shown anywhere (card, sidebar, table, chart readout, "How we calculated this", agent) is this one. Levels (`fit`, `anomaly`) keep the series units and may be displayed in cm.
 - `fit`: the headline change, read from the fitted line, never from the last raw month: `{"start": "1981-01", "end": "2025-12", "years": 44.9, "change": 1.4, "change_low": 1.0, "change_high": 1.8, "level_end": 0.6, "units": "degC"}`. `change*` are slope × span; `level_end` is the fitted line's level at the last data month against the baseline (`null` without a baseline).
 - `latest`: `{"month": "2025-12", "text": "Data through December 2025"}`: the last valid value, preliminary included.
 - `world`: the like-for-like world comparison (D5).
@@ -99,7 +100,7 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
 }
 ```
 
-  - Air temperature: local Sen slope against the global land-only Sen slope over exactly the same months. Sea level: the gauge's Sen slope over 1993 to its last month against satellite global mean sea level over the same months, in mm a year; needs at least 20 of those years. The full-record rate stays in `slope_per_decade` with no ratio.
+  - Air temperature: local Sen slope against the global land-only Sen slope over exactly the same months. `method` also says when the two records are different kinds ("different datasets: a grid cell here, station-based for the world; same months, same method"). Sea level: the gauge's Sen slope over 1993 to its last month against satellite global mean sea level over the same months, in mm a year; needs at least 20 of those years. The full-record rate stays in `slope_per_decade` with no ratio.
   - `available: false` (with every number `null` and `why_none` one plain sentence) for hottest day ("There is no matching world figure for the hottest day of the month."), rainfall and water storage (own-place rules, printed in `text`), and a sea-level gauge with under 20 years since 1993.
 - `projection` (PR2/PR3): the expert projection for this place. Until then `{"available": false, "why": "…"}`. For water storage it stays so, with `why` "There is no standard expert projection for total water storage, so we don't show one."
 - `explain`: the extra numbers "How we calculated this" needs, from the same computation as everything above:
@@ -113,7 +114,7 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
 ```
 
   - `seasons` uses the baseline's calendar-month normals (`null` for `method` `"none"` or annual data). `real.widened`: true when the range was widened for months that are alike (autocorrelation).
-- `guidance` changes: `outlook` and `outlook_label` are removed (D1: no future from a past trend). `ratio` and `reference` come from `world` (`null` when `world.available` is false). Hottest day of the month has no risk level: `risk` and `risk_label` are `null`, and so are `why` and `recommendation`; the verdict alone answers. Every other key is unchanged and always present.
+- `guidance` changes: `outlook` and `outlook_label` are removed (D1: no future from a past trend). `ratio` and `reference` come from `world` (`null` when `world.available` is false). Hottest day of the month has no risk level: `risk` and `risk_label` are `null`, and so are `why` and `recommendation`; the verdict alone answers. A `no_clear_change` verdict is not evidence of low risk: `risk` is `null` and `risk_label` is "No clear change" (the recommendation and disclaimer stay). Every other key is unchanged and always present.
 
 ### World reference series — data lane, stats lane reads
 
@@ -212,7 +213,7 @@ time,value_degC,anomaly_degC,flag
   - `rate`: the change per 10 years in familiar units (`value`, `unit`, signed `text`, `per`, `note`), or `null` when there is no clear change. For rainfall it is the share of the place's usual rainfall, with the amount in `note`: `{"value": 4.8, "unit": "%", "text": "+4.8%", "per": "more rain every 10 years", "note": {"value": 60, "unit": "mm", "text": "about 60 mm more a year"}}` (falling: `"−4.8%"`, `"less rain every 10 years"`, a negative `note.value`, `"about 60 mm less a year"`). `note` is `null` for every other measurement. `display`: the familiar unit and the factor that turns values in `units` into it.
   - `recommendation`: one or two sentences for the risk level and measurement.
   - `outlook` and `outlook_label`: removed 2026-11-22 (Rework v2, D1).
-  - `future_link`: `{"label", "url"}` to an official projection tool (sea level only), or `null`.
+  - `future_link`: `{"label", "url"}` to an official projection tool (sea level only), or `null`. Every URL it carries must answer 200 when checked (the NASA AR6 projection tool URL answered 404 on 2026-11-22 and is removed).
   - `disclaimer`: one sentence, always present, shown wherever `recommendation` is shown.
   - All keys are always present. Show the strings as text; add no number of your own to them.
 
