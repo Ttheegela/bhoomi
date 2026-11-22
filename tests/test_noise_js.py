@@ -10,8 +10,8 @@ PURE = SRC.split("/* PURE START */")[1].split("/* PURE END */")[0]
 
 ASSERTS = r"""
 var assert = require('assert');
-function T(v, s, lo, hi, u) { return { verdict: v, slope_per_decade: s, ci_low: lo, ci_high: hi, units: u,
-  period: { start: '1981-01', end: '2025-12' } }; }
+function T(v, s, lo, hi, u, hr) { return { verdict: v, slope_per_decade: s, ci_low: lo, ci_high: hi, units: u,
+  headline_rate: hr ? { text: hr, range_text: 'r' } : null, period: { start: '1981-01', end: '2025-12' } }; }
 var R = 'rising', N = 'no_clear_change', F = 'falling';
 var nb = ' ', m = '−';
 
@@ -24,10 +24,10 @@ assert.strictEqual(buildSentence([
 
 // 2. New York sea level: same way, rates differ by more than 1.5
 assert.strictEqual(buildSentence([
-  { n: 10, t: T(R, 76.4, 23.4, 128.7, 'mm') }, { n: 20, t: T(R, 54.2, 35.4, 73.2, 'mm') },
-  { n: 30, t: T(R, 47.2, 36.4, 58.1, 'mm') }, { n: 0, t: T(R, 31.8, 30.6, 33.0, 'mm') }]),
-  'Every stretch points the same way: rising. Short stretches give a shakier rate, from +31.8' + nb + 'mm to +76.4' + nb +
-  'mm per decade; the full record is steadier.');
+  { n: 10, t: T(R, 76.4, 23.4, 128.7, 'mm', '+7.6 mm a year') }, { n: 20, t: T(R, 54.2, 35.4, 73.2, 'mm', '+5.4 mm a year') },
+  { n: 30, t: T(R, 47.2, 36.4, 58.1, 'mm', '+4.7 mm a year') }, { n: 0, t: T(R, 31.8, 30.6, 33.0, 'mm', '+3.2 mm a year') }]),
+  'Every stretch points the same way: rising. Short stretches give a shakier rate, from +3.2 mm a year to +7.6 mm a year; ' +
+  'the full record is steadier.');
 
 // 3. all within a factor of 1.5 (exactly 1.5 counts as within)
 assert.strictEqual(buildSentence([
@@ -41,8 +41,12 @@ assert.strictEqual(buildSentence([{ n: 10, t: T(N, 0.1, -1, 1, 'mm') }, { n: 0, 
 
 // negative rates: falling, differing, sorted by size, minus sign U+2212, degC shown as the degree sign
 assert.strictEqual(buildSentence([{ n: 10, t: T(F, -2.0, -3, -1, 'degC') }, { n: 0, t: T(F, -0.5, -0.7, -0.3, 'degC') }]),
-  'Every stretch points the same way: falling. Short stretches give a shakier rate, from ' + m + '0.50' + nb + '°C to ' + m +
+  'Every stretch points the same way: falling. Short stretches give a shakier rate, from ' + m + '0.50' + nb + '°C per decade to ' + m +
   '2.0' + nb + '°C per decade; the full record is steadier.');
+// the page's own rate (°F, inches) wins over headline_rate, which wins over the raw units
+assert.deepStrictEqual(rateText(T(R, 31.8, 30.6, 33.0, 'mm', '+3.2 mm a year')), { text: '+3.2 mm a year', range: 'r' });
+assert.strictEqual(rateText(T(R, 31.8, 30.6, 33.0, 'mm', '+3.2 mm a year'), function () { return { text: '+0.13 in a year', range: 'x' }; }).text, '+0.13 in a year');
+assert.strictEqual(rateText(T(R, 31.8, 30.6, 33.0, 'mm')).range, '+30.6 to +33.0');
 
 // a failed row means no "every stretch" claim: full record failed, or a middle row refused, between rising rows
 var ok1 = { n: 10, t: T(R, 0.4, 0.1, 0.7, 'mm') }, ok2 = { n: 20, t: T(R, 0.4, 0.2, 0.6, 'mm') }, okF = { n: 0, t: T(R, 0.4, 0.2, 0.6, 'mm') };

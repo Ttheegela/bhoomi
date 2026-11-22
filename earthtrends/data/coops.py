@@ -147,13 +147,19 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
     if not close:
         nearest(lat, lon, gauges)  # raises the "no gauge within 100 km" error
     tried = close[:MAX_TRIES]
-    skipped = []
-    for km, s in tried:
+    from earthtrends.stats.trend import trend_problem  # here, not at the top: the stats lane imports this package
+
+    skipped, thin = [], []  # thin: nearer gauges passed over because their recent readings cannot give a trend (D6)
+    for n, (km, s) in enumerate(tried):
         if time.monotonic() >= deadline:
             raise httpx.TimeoutException("NOAA CO-OPS is slow right now. Try again in a minute.")
         times, values, why, retrieved = _record(s["id"])
+        if why is None and trend_problem({"variable": "sea_level", "times": times, "values": values}):
+            why = "it has too few recent readings for a trend"
+            thin.append(f"{s['name']}, {'the nearest gauge' if n == 0 else f'{km:.0f} km away'}, has too few recent "
+                        "readings for a trend.")
         if why is None:
-            notes = [f"Tide gauge {s['name']} ({s['id']}), {km:.0f} km from the point you asked about.",
+            notes = [f"Tide gauge {s['name']} ({s['id']}), {km:.0f} km from the point you asked about.", *thin,
                      "Sea level relative to the land at the gauge, so land sinking or rising is included.", RULE]
             src = source_block(SOURCE, DATASET_ID, None, record_url(s["id"]), retrieved, METHOD)
             return list(times), list(values), {"name": s["name"], "lat": float(s["lat"]), "lon": float(s["lng"])}, notes, src

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from earthtrends.stats import compute_trend
-from earthtrends.stats.trend import SHORT_CAVEAT, _mk_sen
+from earthtrends.stats.trend import POWER_T_CAVEAT, SHORT_CAVEAT, _mk_sen
 
 PLACE = {"name": "Visakhapatnam", "lat": 17.69, "lon": 83.22}
 SOURCE = {"id": "power", "name": "NASA POWER (MERRA-2)", "url": "https://power.larc.nasa.gov/"}
@@ -14,7 +14,7 @@ NOTE = "Grid cell about 50 km wide, not a single station."
 CONTRACT_KEYS = {
     "variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
     "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "baseline", "record",
-    "range_kind", "headline_rate", "fit", "latest", "world", "projection", "explain", "caveats", "meaning", "guidance",
+    "range_kind", "headline_rate", "fit", "latest", "now", "world", "projection", "explain", "caveats", "meaning", "guidance",
 }
 
 
@@ -41,7 +41,7 @@ def test_known_slope_recovered_inside_ci():
     assert r["ci_low"] <= 0.3 <= r["ci_high"]
     assert r["deseasonalized"] is True and r["n"] == 480
     assert r["period"] == {"start": "1981-01", "end": "2020-12"}
-    assert r["caveats"] == [NOTE]  # 40 years: no short-record caveat
+    assert r["caveats"] == [NOTE, POWER_T_CAVEAT]  # 40 years: no short-record caveat
 
 
 def test_falling():
@@ -72,7 +72,7 @@ def test_ar1_noise_adjusted_no_clear_change():
 
 def test_hand_check_strictly_increasing():
     n = 12  # the test itself, on a record too short for compute_trend's minimum (30 annual values below)
-    slope, lo, hi, p, adjusted, _ = _mk_sen(np.arange(2000.0, 2000 + n), np.arange(1.0, n + 1))
+    slope, lo, hi, p, adjusted, _, _ = _mk_sen(np.arange(2000.0, 2000 + n), np.arange(1.0, n + 1), 1)
     s, var_s = n * (n - 1) / 2, n * (n - 1) * (2 * n + 5) / 18  # S = 66, no ties, residuals constant so no AR fix
     assert float(f"{p:.3g}") == float(f"{math.erfc((s - 1) / math.sqrt(var_s) / math.sqrt(2)):.3g}")
     assert adjusted is False
@@ -84,9 +84,9 @@ def annual(values, start=2000):
 
 
 def test_hand_check_ties_and_ci_ranks():
-    # S = 36; Var(S) = (10*9*25 - 3 tie pairs * 2*1*9) / 18 = 122; residual r1 <= 0 so no AR step.
+    # S = 36; Var(S) = (10*9*25 - 3 tie pairs * 2*1*9) / 18 = 122; the detrended lag-1 is not positive, so no correction.
     # C = 1.96*sqrt(122) = 21.65 -> CI ranks 12 and 34 of the 45 sorted slopes: 0.5 and 0.75 per year.
-    slope, lo, hi, p, adjusted, _ = _mk_sen(np.arange(10.0), np.array([1, 2, 2, 3, 1, 4, 5, 5, 6, 7.0]))
+    slope, lo, hi, p, adjusted, _, _ = _mk_sen(np.arange(10.0), np.array([1, 2, 2, 3, 1, 4, 5, 5, 6, 7.0]), 1)
     assert float(f"{p:.3g}") == float(f"{math.erfc((36 - 1) / math.sqrt(122) / math.sqrt(2)):.3g}") == 0.00153
     assert adjusted is False
     assert (round(slope * 10, 4), lo * 10, hi * 10) == (6.6667, 5.0, 7.5)

@@ -25,9 +25,17 @@
     var base = n ? 'Last ' + n + ' years' : 'Full record';
     return t ? base + ', ' + t.period.start.slice(0, 4) + ' to ' + t.period.end.slice(0, 4) : base;
   }
+  // The rate as the rest of the page prints it: rateOf(t) from the page (°F, inches), else headline_rate; the raw units
+  // per decade only for an answer without one.
+  function rateText(t, rateOf) {
+    var r = rateOf && rateOf(t), h = t.headline_rate;
+    if (r && r.text) return r;
+    if (h && typeof h.text === 'string') return { text: h.text, range: h.range_text };
+    return { text: fmtVal(t.slope_per_decade, t.units) + ' per decade', range: fmtNum(t.ci_low) + ' to ' + fmtNum(t.ci_high) };
+  }
   // rows: [{n, t}] shortest first, the full record last with n = 0.
   // "Every stretch" claims need every row valid; the mixed claim needs the shortest and the full record valid.
-  function buildSentence(rows) {
+  function buildSentence(rows, rateOf) {
     var ok = rows.filter(function (r) { return valid(r.t); });
     if (rows.length < 2 || !valid(rows[0].t) || !valid(rows[rows.length - 1].t) || rows[rows.length - 1].n !== 0) return '';
     var v0 = ok[0].t.verdict;
@@ -43,8 +51,7 @@
         return 'Every stretch gives the same answer: ' + WORDS[v0] + '. That is what a real change looks like.';
       }
       return 'Every stretch points the same way: ' + WORDS[v0] + '. Short stretches give a shakier rate, from ' +
-        fmtVal(lo.slope_per_decade, lo.units) + ' to ' + fmtVal(hi.slope_per_decade, hi.units) +
-        ' per decade; the full record is steadier.';
+        rateText(lo, rateOf).text + ' to ' + rateText(hi, rateOf).text + '; the full record is steadier.';
     }
     var s = ok[0], f = ok[ok.length - 1];
     if (f.n !== 0 || s.t.verdict === f.t.verdict) return '';
@@ -119,8 +126,8 @@
         svg.setAttribute('height', '36');
         li.appendChild(svg);
         bars.push([svg, r.t]);
-        li.appendChild(h('p', 'noise-num', fmtVal(r.t.slope_per_decade, r.t.units) + ' per decade. 95% range ' +
-          fmtNum(r.t.ci_low) + ' to ' + fmtNum(r.t.ci_high) + '.'));
+        var rt = rateText(r.t, rateOf);
+        li.appendChild(h('p', 'noise-num', rt.text + '. 95% range ' + rt.range + '.'));
         var b = h('button', 'linkbtn noise-show', 'Show this on the chart');
         b.type = 'button';
         b.addEventListener('click', function () { showOnChart(r); });
@@ -194,7 +201,7 @@
     busy = false;
     var okN = v.rows.filter(function (r) { return r.t; }).length;
     renderRows(true);
-    var s = buildSentence(v.rows);
+    var s = buildSentence(v.rows, rateOf);
     v.sentence.textContent = s;
     v.sentence.hidden = !s;
     v.legend.hidden = !okN;
@@ -229,10 +236,11 @@
     legend.appendChild(h('p', 'help', 'Each bar is the range of trends the data support (95% range). The dot is our best estimate. The dashed line is no change. All bars share one scale.'));
     legend.appendChild(h('p', 'help noise-tag', 'Our calculation.'));
     var src = trend.source;
-    if (src && typeof src.name === 'string' && typeof src.url === 'string' && /^https:\/\//.test(src.url)) {
+    var href = src && [src.record_url, src.url].filter(function (u) { return typeof u === 'string' && /^https:\/\//.test(u); })[0]; // this exact record first
+    if (src && typeof src.name === 'string' && href) {
       var line = h('p', 'srcline');
       var a = h('a', 'srclink', 'Raw data: ' + src.name + ' ↗');
-      a.href = src.url;
+      a.href = href;
       a.target = '_blank';
       a.rel = 'noopener';
       line.appendChild(a);
@@ -259,9 +267,13 @@
     return p;
   }
 
-  // inside a closed <details> every width is 0: draw the bars again when the section opens
-  var det = slot.closest('details');
-  if (det) det.addEventListener('toggle', function () { if (det.open && view && view.drawn) renderRows(true); });
+  // the rates in the Units setting, as the card prints them
+  function rateOf(t) { return window.TDX && window.TDPrefs ? window.TDX.rate(t, window.TDPrefs.get().units === 'imperial') : null; }
+  // inside a closed <details> every width is 0: draw the bars again when the step that holds the slot opens. The slot moves
+  // into step 5 when an answer renders, so listen on the document (toggle does not bubble; capture sees it).
+  document.addEventListener('toggle', function (e) {
+    if (e.target.open && e.target.contains(slot) && view && view.drawn) renderRows(true);
+  }, true);
 
   document.addEventListener('td:load-start', function () { gen++; hide(); });
   document.addEventListener('td:load-end', function (e) {

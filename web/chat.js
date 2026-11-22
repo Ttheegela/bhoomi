@@ -39,11 +39,8 @@ const CHAT_EMBED_SRI = 'sha384-BpmvKCW/TFrpO8oObmUgZzUCIMHI00QbpGA4/jfXcfTosbgtu
       const rate = fmt.rate ? fmt.rate(t) : '';
       if (g) {
         let a = windowName();
-        if (rate) a += ` ${rate}${g.rate && g.rate.per ? ' ' + g.rate.per : ''}`;
+        if (rate) a += ` ${rate}`; // the rate carries its own "a year" or "per decade"
         if (g.risk_label) a += `, ${g.risk_label}`;
-        const look = window.TDPrefs ? window.TDPrefs.get().lookAhead : null;
-        const o = fmt.outlook && look ? fmt.outlook(t, look) : '';
-        if (o) a += `, ${o} by ${look}${g.outlook_label ? ' ' + g.outlook_label.charAt(0).toLowerCase() + g.outlook_label.slice(1) : ''}`;
         parts.push(a + '.');
       } else if (t.meaning && t.meaning.comparison) parts.push(oneLine(t.meaning.comparison));
     } catch (e) { /* show what we have */ }

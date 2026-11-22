@@ -85,22 +85,43 @@ def test_years_count_with_9_months_and_the_baseline_needs_15(whole, part, method
 def test_fitted_baseline_recovers_the_1995_2014_mean():
     t = 1960 + (np.arange(66 * 12) + 0.5) / 12
     x = 15 + 0.02 * (t - 1960) + SEASON[np.arange(t.size) % 12] + 2 * np.cos(4 * np.pi * t)  # no noise
-    b = baseline(ts(blank(x, 1960, range(1993, 2013)), start=1960))  # only 2013 and 2014 left of the 20 years
+    b = baseline(ts(blank(x, 1960, range(1993, 2009)), start=1960))  # 2009-2014 left: 6 of the 20 years
     mid = 2004.5 + (np.arange(12) + 0.5) / 12  # the mean time of each calendar month over 1995-2014
     want = 15 + 0.02 * (mid - 1960) + SEASON + 2 * np.cos(4 * np.pi * mid)
-    assert (b["method"], b["label"], b["years_covered"], b["projection_axis"]) == ("fitted", FITTED, 2, True)
+    assert (b["method"], b["label"], b["years_covered"], b["projection_axis"]) == ("fitted", FITTED, 6, True)
     assert b["months"] == pytest.approx(list(want), abs=1e-3)
 
 
-@pytest.mark.parametrize("first,last,method", [
-    (1960, 2014, "fitted"),  # 1995-2014 inside the record: the fit never runs past the data
-    (1960, 2013, "none"),  # ends before 2014: a fitted 1995-2014 mean would extend the past trend (D1)
-    (1950, 1990, "none"),
-    (1996, 2030, "none"),  # starts after 1995
+@pytest.mark.parametrize("first,last,gone,method", [
+    (1960, 2015, range(1995, 2005), "fitted"),  # 10 years inside 1995-2014, data on both sides
+    (1960, 2025, range(1995, 2009), "fitted"),  # 6 good years inside, data on both sides
+    (1960, 2025, range(1995, 2010), "fitted"),  # 5 good years (2010-2014), the least that counts
+    (1960, 2025, range(1995, 2011), "none"),  # 4 good years
+    (1960, 2025, range(1990, 2019), "none"),  # data only before 1990 and after 2018: a fit across the gap is a guess
+    (1960, 2014, range(1995, 2005), "none"),  # nothing after 2014
+    (1960, 2013, range(1995, 2005), "none"),  # ends before 2014: a fitted 1995-2014 mean would extend the trend (D1)
+    (1950, 1990, (), "none"),
+    (1995, 2030, range(1995, 2005), "none"),  # nothing before 1995
 ])
-def test_fitted_baseline_needs_1995_2014_inside_the_record(first, last, method):
-    x = blank(synth(last - first + 1, start=first), first, range(1995, 2013))  # never 15 observed years
-    assert baseline(ts(x, start=first))["method"] == method
+def test_fitted_baseline_needs_real_data_in_and_around_1995_2014(first, last, gone, method):
+    x = blank(synth(last - first + 1, start=first), first, gone)  # never 15 observed years
+    b = baseline(ts(x, start=first))
+    assert b["method"] == method and (b["value"] is None) == (method == "none")
+
+
+@pytest.mark.parametrize("gone", [[1995], [1995, 1996, 1997], [2012, 2013, 2014], [1999, 2002]])
+def test_observed_baseline_with_missing_years_is_the_1995_2014_mean(gone):
+    # Missing years tilt a plain mean towards the years present (3 mm at 3 mm a year for the first three missing);
+    # each month's normal is moved along the trend to the mean year of all 20.
+    x = blank(synth(45, per_decade=30.0, sd=0.01, level=7000.0), 1981, gone)
+    b = baseline(ts(x, variable="sea_level"))
+    year, month = cal(1981, x.size)
+    full = synth(45, per_decade=30.0, sd=0.01, level=7000.0)
+    want = [full[(year >= 1995) & (year <= 2014) & (month == m)].mean() for m in range(1, 13)]
+    assert (b["method"], b["years_covered"]) == ("observed", 20 - len(gone))
+    assert b["months"] == pytest.approx(want, abs=0.02)
+    plain = [x[(year >= 1995) & (year <= 2014) & (month == m)] for m in range(1, 13)]
+    assert abs(np.nanmean(plain[0]) - want[0]) > 0.2  # without the shift the normal would be off
 
 
 def test_atlantic_city_cut_at_1990_has_no_fitted_baseline():
@@ -210,7 +231,8 @@ def test_minimum_coverage(gap, ok):
     x[100:100 + gap] = np.nan  # 1998-05 on
     s = ts(x, start=1990)
     if not ok:  # the only window with 80% starts after the gap (2004-06) and is too short
-        with pytest.raises(ValueError, match=r"15\.6 years \(2004-06 to 2019-12\) once its sparse earlier readings"):
+        with pytest.raises(ValueError, match=r"^Too few recent readings for a trend: the record runs from 1990-01 to "
+                                             r"2019-12, but only 2004-06 on \(15\.6 years\)"):
             compute_trend(s)
         return
     assert compute_trend(s)["record"] == {"years": 30.0, "coverage": 0.8, "status": "ok", "trimmed_from": None}
@@ -269,23 +291,52 @@ def ar1(n, phi=0.6, seed=0):
 
 
 def test_ar1_noise_gets_a_wider_range_than_white_noise_for_the_same_trend():
-    red, white = ar1(480)
     line = 0.03 * np.arange(480) / 12  # 0.3 per decade
-    a, w = compute_trend(ts(line + red)), compute_trend(ts(line + white))
-    assert a["autocorrelation_adjusted"] and a["explain"]["real"]["widened"]
-    assert a["ci_high"] - a["ci_low"] > 1.5 * (w["ci_high"] - w["ci_low"])
+    ratios = []
+    for seed in range(6):
+        red, white = ar1(480, seed=seed)
+        a, w = compute_trend(ts(line + red)), compute_trend(ts(line + white))
+        assert a["autocorrelation_adjusted"] and a["explain"]["real"]["widened"]
+        ratios.append((a["ci_high"] - a["ci_low"]) / (w["ci_high"] - w["ci_low"]))
+    assert min(ratios) > 1.2 and np.mean(ratios) > 1.5, ratios
+
+
+def test_widening_factor_over_many_series():
+    # The rule the Monte Carlo picked (95-99% coverage on AR(1) and white noise): about 1.1 for white noise and about
+    # 4.4 for AR(1) 0.6, for 480 months. One white series can reach about 2, so only the medians are bounded.
+    white = [trend._widen(np.random.default_rng(s).normal(size=480)) for s in range(200)]
+    red = [trend._widen(ar1(480, seed=s)[0]) for s in range(200)]
+    assert all(f >= 1 for f in white + red)
+    assert np.median(white) < 1.3 and 3.5 < np.median(red) < 5.5, (np.median(white), np.median(red))
+    yearly = ar1(40, seed=2)[0]  # yearly values (rain totals): the lag-1 AR(1) factor alone
+    assert trend._widen(yearly, 1) == max(trend._ar1_factor(40, trend._lag1(yearly)), 1.0) > 1
+
+
+def test_values_that_alternate_never_narrow_the_range():
+    e = np.tile([1.0, -1.0], 240)  # lag-1 of -1: the AR(1) form gives no factor below 1
+    assert trend._widen(e) == 1.0 and trend._widen(e, 1) == 1.0
+    r = compute_trend(ts(np.random.default_rng(1).normal(15, 1, 480)))
+    assert r["verdict"] == "no_clear_change"
+
+
+def test_widened_is_said_only_for_a_factor_of_1_2_or_more(monkeypatch):
+    s = ts(synth(45))
+    for f, widened in ((1.0, False), (1.19, False), (1.2, True), (3.0, True)):
+        monkeypatch.setattr(trend, "_widen", lambda e, per_year=12, f=f: f)
+        r = compute_trend(s)
+        assert (r["autocorrelation_adjusted"], r["explain"]["real"]["widened"]) == (f > 1, widened)
 
 
 def test_sen_range_uses_the_inflated_variance_not_white_noise_ranks():
     red, _ = ar1(480, seed=1)
     t = 1981 + (np.arange(480) + 0.5) / 12
     x = 0.03 * (t - 1981) + red
-    _, lo, hi, _, adjusted, _ = trend._mk_sen(t, x)
+    slope, lo, hi, _, adjusted, widened, _ = trend._mk_sen(t, x, 12)
     i, j = np.triu_indices(480, 1)
     slopes = np.sort((x[j] - x[i]) / (t[j] - t[i]))
-    c = 1.96 * math.sqrt(480 * 479 * 965 / 18)  # white-noise Var(S), no ties
-    lo0, hi0 = slopes[round((slopes.size - c) / 2) - 1], slopes[round((slopes.size + c) / 2 + 1) - 1]
-    assert adjusted and lo < lo0 and hi > hi0
+    c = 1.96 * math.sqrt(480 * 479 * 965 / 18 * trend._widen(x - slope * t, 12))  # no ties
+    assert adjusted and widened
+    assert (lo, hi) == (slopes[round((slopes.size - c) / 2) - 1], slopes[round((slopes.size + c) / 2 + 1) - 1])
 
 
 # ---- fit, latest, explain ----
@@ -295,8 +346,9 @@ def test_headline_change_is_read_from_the_fitted_line():
     f, d = r["fit"], r["slope_per_decade"]
     assert (f["start"], f["end"], f["years"], f["units"]) == ("1981-01", "2025-12", 45.0, "degC") == (
         r["period"]["start"], r["period"]["end"], r["record"]["years"], r["units"])
-    assert (f["change"], f["change_low"], f["change_high"]) == tuple(
-        round(v * 45.0 / 10, 4) for v in (d, r["ci_low"], r["ci_high"]))
+    # slope x span, from the unrounded slope and span (so within the rounding of the shown slope)
+    assert (f["change"], f["change_low"], f["change_high"]) == pytest.approx(
+        tuple(v * 45.0 / 10 for v in (d, r["ci_low"], r["ci_high"])), abs=5e-4)
     assert f["level_end"] == pytest.approx(0.03 * (2025 + 11.5 / 12 - 2004.5 - 0.5 / 12 - 5.5 / 12), abs=0.15)
     assert r["range_kind"] == "95% range" and r["latest"] == {"month": "2025-12", "text": "Data through December 2025"}
     e = r["explain"]
@@ -413,6 +465,23 @@ def test_temperature_world_method_names_the_method_then_the_kinds_of_record(refs
 
 
 # ---- headline_rate: the rate in the reader's unit ----
+
+def test_headline_rate_and_fit_use_the_unrounded_slope_and_span():
+    # an annual straight line: Sen's slope is exactly 4.436e-5 a year, shown as 0.0004 per decade (4 decimals)
+    years = np.arange(1981, 2021)
+    s = {"variable": "air_temp_max", "units": "degC", "freq": "annual", "place": {"name": "X"}, "source": POWER,
+         "times": [str(y) for y in years], "values": list(4.436e-5 * (years - 1981)), "notes": []}
+    r = compute_trend(s)
+    assert r["slope_per_decade"] == 0.0004 and r["headline_rate"]["value"] == 0.000444  # not 0.0004 rounded again
+    assert r["fit"]["change"] == round(4.436e-5 * 40, 4)  # slope x 40 years, rounded once to 4 decimals
+    # 291 months (2002-04 to 2026-06, like GRACE): the span is 24.25 years, shown as 24.2
+    g = compute_trend(ts(synth(25, start=2002, per_decade=-44, sd=1, level=0.0)[3:294], start=2002,
+                         variable="water_storage", source=GRACE) | {"times": [f"{2002 + (i + 3) // 12}-{(i + 3) % 12 + 1:02d}"
+                                                                             for i in range(291)]})
+    f = g["fit"]
+    assert f["years"] == 24.2 and f["change"] == pytest.approx(g["slope_per_decade"] / 10 * 24.25, abs=1e-3)
+    assert abs(f["change"] - g["slope_per_decade"] / 10 * 24.2) > 0.1  # the rounded span would be off by about 0.2
+
 
 def test_headline_rate_matches_the_contract_example():
     assert trend._headline_rate("sea_level", "mm", (42.5046, 41.0706, 43.9508), None) == {

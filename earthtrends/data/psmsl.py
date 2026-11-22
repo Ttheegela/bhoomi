@@ -119,11 +119,18 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
         km, _, s = near[0]
         raise ValueError(text(f"There is no tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
                               f"The nearest gauge is {s['name']}, {km:.0f} km away.", LIMIT))
-    skipped = []
-    for km, s in close[:MAX_TRIES]:
+    from earthtrends.stats.trend import trend_problem  # here, not at the top: the stats lane imports this package
+
+    skipped, thin = [], []  # thin: nearer gauges passed over because their recent readings cannot give a trend
+    for n, (km, s) in enumerate(close[:MAX_TRIES]):
         times, values, dropped = parse(fetch(s["id"], left=_check(deadline)))
-        if (why := why_not(times, values)) is None:
-            notes = [f"Tide gauge {s['name']} (PSMSL id {s['id']}), {km:.0f} km from the point you asked about.",
+        if (why := why_not(times, values)) is None and trend_problem({"variable": "sea_level", "times": times,
+                                                                      "values": values}):
+            why = "it has too few recent readings for a trend"
+            thin.append(f"{s['name']}, {'the nearest gauge' if n == 0 else f'{km:.0f} km away'}, has too few recent "
+                        "readings for a trend.")
+        if why is None:
+            notes = [f"Tide gauge {s['name']} (PSMSL id {s['id']}), {km:.0f} km from the point you asked about.", *thin,
                      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, "
                      "so only the change over time matters, not the height itself.",
                      "Sea level relative to the land at the gauge, so land sinking or rising is included.",

@@ -2,6 +2,8 @@
 
 The Explore tab is being rebuilt for a general audience. Its frame (structure, search box, the `window.TD` interface, link format, layout) is specified in `web/design/00-frame.md`; the other parts are in `web/design/` too. `web/design/08-layout.md` (the layout pass: one grid, the answer card, "How we calculated this") wins over the layout parts of the others. Where that folder and this file differ on Explore, `web/design/` wins; the rest of this file still holds.
 
+Rework PR1 (2026-11-22): `web/design/10-foundation.md` wins over everything else for the answer card, the place chart, the compare chart's baseline and future, the CSV downloads, "How we calculated this" (now the in-page section `#how`, no dialog) and the tokens it names. It replaces sections 3 and 5 of this file where they differ: one zero (the 1995–2014 average) instead of each calendar month's whole-record mean; one chart panel instead of two; the p-value sentence "If there were no real trend here, a trend at least this strong, up or down, would turn up by chance in {k} of 100 records like this one."; no future from a past trend; ink-and-grey risk chips and recommendation box.
+
 Build: `web/index.html`, `web/style.css`, `web/app.js`. No build step, no libraries, no CDN, self-hosted web fonts only (Space Grotesk, Inter). Chart is hand-written SVG. Same-origin calls to `/api/...`. No NASA logos or branding; dataset names are plain text.
 
 ## 1. Flow and first load

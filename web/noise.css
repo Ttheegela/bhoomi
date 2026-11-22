@@ -1,12 +1,16 @@
-/* Module 05: "Real or noise?" Classes prefixed noise-. Tokens only. No card box: it sits inside the collapsed "How we calculated this" section (or alone on an older frame).
+/* Module 05: "Real or noise?" Classes prefixed noise-. Tokens only. It sits in step 5 of "How we calculated this", full width
+   under the two columns after a hairline; idle, it reads as one line plus its button (web/design/10-foundation.md section 6).
    Rules start with #noise-slot so they beat the frame's p / h3 rules. */
-#noise-slot .noise-card { padding: 0; border: 0; }
+#noise-slot { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 2px; }
+#noise-slot .noise-card { padding: 0; border: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
 #noise-slot .noise-card p, #noise-slot .noise-card h3 { margin: 0; padding: 0; }
-#noise-slot .noise-card .noise-h { font-family: var(--font-head); font-size: 16px; line-height: 24px; font-weight: 700; margin: 0 0 var(--s2); }
-#noise-slot .noise-card .noise-lead { margin: 0 0 var(--s4); }
-#noise-slot .noise-card .noise-sentence { font-size: 18px; font-weight: 600; margin: 0 0 var(--s2); }
+#noise-slot .noise-card .noise-h { font-family: var(--font-head); font-size: 16px; line-height: 24px; font-weight: 700; flex: none; }
+#noise-slot .noise-card .noise-lead { flex: 1 1 320px; color: var(--ink-2); font-size: 15px; }
+#noise-slot .noise-card .noise-go { flex: none; }
+#noise-slot .noise-card > .noise-sentence, #noise-slot .noise-card > .help, #noise-slot .noise-card > .noise-list, #noise-slot .noise-card > .noise-legend { flex: 1 0 100%; order: 1; }
+#noise-slot .noise-card .noise-sentence { font-size: 18px; font-weight: 600; }
 .noise-go { width: auto; }
-#noise-slot .noise-card .noise-list { list-style: none; margin: var(--s4) 0 0; padding: 0; }
+#noise-slot .noise-card .noise-list { list-style: none; margin: var(--s2) 0 0; padding: 0; }
 .noise-row { padding: var(--s4) 0; border-top: 1px solid var(--hairline); }
 .noise-row.noise-wait { background: var(--surface); border: 1px solid var(--line); padding: var(--s4); margin-top: var(--s2); }
 .noise-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--s4); }

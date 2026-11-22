@@ -12,6 +12,7 @@ PROVIDER = "the provider's own reference period"
 YEAR_MONTHS = 9  # a year counts towards the baseline with at least this many valid months
 NEED_YEARS = 15  # of the 20 baseline years
 FIT_SPAN = 30  # short coverage: fit the whole record if it spans 30+ years and holds 1995-2014 inside it
+FIT_YEARS = 5  # ... and at least this many 1995-2014 years count, with data before 1995 and after 2014
 
 
 def num(v) -> float:
@@ -89,13 +90,22 @@ def baseline(series: dict) -> dict:
         out["years_covered"] = counted(*YEARS)
         if out["years_covered"] >= NEED_YEARS:
             whole = [y for y in range(YEARS[0], YEARS[1] + 1) if counted(y, y)]  # whole years only
-            normals = _means(month, x, use & np.isin(year, whole), n)
+            sel = use & np.isin(year, whole)
+            normals = _means(month, x, sel, n)
             if normals:
                 out["method"] = "observed"
+                if len(whole) < YEARS[1] - YEARS[0] + 1:  # missing years tilt a month's mean towards the years present
+                    line = fit(t[sel], x[sel], monthly)  # line plus harmonics over the counted years
+                    slope = float(line(np.ones(1))[0] - line(np.zeros(1))[0])  # the harmonics repeat every year
+                    mid = (YEARS[0] + YEARS[1]) / 2
+                    normals = [v + slope * (mid - float(year[sel & (month == m)].mean()))
+                               for m, v in enumerate(normals, 1)]
         idx = year * 12 + month if monthly else year
         span = (int(idx[use].max()) - int(idx[use].min()) + 1) / (12 if monthly else 1)
-        # the record must hold 1995-2014 inside it, so the fit never runs past the data (no past trend extended, D1)
-        if normals is None and span >= FIT_SPAN and first <= YEARS[0] and int(year[use].max()) >= YEARS[1]:
+        # the record must hold 1995-2014 inside it, so the fit never runs past the data (no past trend extended, D1),
+        # with real data in those years and on both sides of them, so the fit is not a guess across a long gap
+        if (normals is None and span >= FIT_SPAN and out["years_covered"] >= FIT_YEARS and first < YEARS[0]
+                and int(year[use].max()) > YEARS[1]):
             line = fit(t[use], x[use], monthly)
             yrs = np.arange(YEARS[0], YEARS[1] + 1, dtype=float)
             normals = [float(line(yrs + ((m - 0.5) / 12 if monthly else 0)).mean()) for m in range(1, n + 1)]
