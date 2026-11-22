@@ -529,7 +529,7 @@ def test_sea_level_needs_20_years_since_1993(refs, last, available):
                                 "with the world average."
         assert all(w[k] is None for k in ("local_rate", "world_rate", "ratio", "window", "source", "thresholds"))
         assert r["verdict"] == "rising" and r["guidance"]["ratio"] is None and r["guidance"]["reference"] is None
-        assert r["guidance"]["risk"] == "unknown" and r["guidance"]["why"] == w["why_none"]
+        assert r["guidance"]["risk"] is None and r["guidance"]["risk_label"] == "No world comparison" and r["guidance"]["why"] == w["why_none"]
 
 
 def raise_oserror(name):

@@ -173,6 +173,9 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
                 **{k: round(v * span, 4) + 0.0 for k, v in (("change", slope), ("change_low", lo),
                                                             ("change_high", hi))},
                 "level_end": level_end, "units": fit_units},
+        # rainfall: the yearly values the test was given, for the chart (rounded like `anomaly`)
+        **({"yearly": [{"year": int(y), "value": round(float(v), 4) + 0.0} for y, v in zip(tt, xx)]}
+           if var == "precip" else {}),
         "latest": {"month": last,
                    "text": f"Data through {calendar.month_name[int(last[5:7])]} {last[:4]}" if monthly
                    else f"Data through {last[:4]}"},

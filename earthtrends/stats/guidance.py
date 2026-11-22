@@ -11,6 +11,7 @@ DISCLAIMER = ("This guidance isn't perfect. It is based only on past records, an
               "Not professional financial or legal advice.")
 LABEL = {"high": "High risk", "moderate": "Moderate risk", "low": "Low risk", "unknown": "Not enough data"}
 NO_CLEAR = "No clear change"  # the label for a no_clear_change verdict: no risk level, it is not evidence of low risk
+NO_COMPARE = "No world comparison"  # a clear trend whose level needs a world figure that isn't there (QA B3: Mumbai)
 DISPLAY = {"sea_level": ("cm", "0.1"), "air_temp": ("°C", "1"), "air_temp_max": ("°C", "1"),
            "precip": ("mm a year", "365.25"), "water_storage": ("cm", "1")}  # levels; rates may differ (RATE)
 # Rates in headline_rate's units: sea level mm a year (the world's unit), water storage cm of water a year.
@@ -31,8 +32,9 @@ OWN_RULE = {
 }
 
 FASTER = {"sea_level": "The sea here is rising", "air_temp": "It is getting warmer here"}
-THAN = {"sea_level": "the world average over the same years",
-        "air_temp": "the average for all land areas over the same years"}
+# after "Since 1993, ": the world comparison starts later than the record (sea level: satellites from 1993)
+SINCE = {"sea_level": "the sea here has risen", "air_temp": "it has warmed here"}
+THAN = {"sea_level": "the world average", "air_temp": "the average for all land areas"}
 HARMLESS = {"sea_level": "The sea here has been falling.", "air_temp": "It has been getting cooler here.",
             "water_storage": "Water stored in this region has been rising."}
 NO_WORLD = "There is no matching world figure to compare with."
@@ -45,11 +47,16 @@ RECOMMEND = {
         "moderate": "The sea here has been rising at least about as fast as the world average. Before you buy or "
                     "build near the shore, check the site's flood level as you would on any coast.",
         "low": "Past sea-level records here give no special reason to avoid the shore, but they say nothing about "
-               "storm floods. Check the site's flood level as you would on any coast."},
+               "storm floods. Check the site's flood level as you would on any coast.",
+        # rising with no world figure (NO_COMPARE): no level, so advice that needs none
+        "no_world": "The sea here has been rising. Before you buy or build near the shore, check the site's height "
+                    "above flood level and the official flood maps."},
     "air_temp": {
         "high": "Plan for hotter years here. For a home, a farm or outdoor work, budget for cooling, shade and water.",
         "moderate": "It has been getting warmer here. Build cooling and shade into long-term plans.",
-        "low": "Past records give no special reason to change plans here because of heat."},
+        "low": "Past records give no special reason to change plans here because of heat.",
+        "no_world": "It has been getting warmer here. Before you plan a home, a farm or outdoor work, check how hot "
+                    "the summers get and how you would keep cool."},
     "precip": {
         "high_wetter": "Rain here has been increasing strongly. Before you build or plant, check drainage and the "
                        "flood history of the site.",
@@ -59,8 +66,12 @@ RECOMMEND = {
         "moderate_drier": "Rain here has been decreasing. Plan for less water than today if you farm or depend on "
                           "rainfall.",
         "low": "Past records show rain here holding steady enough that it gives no special reason to change plans.",
-        "low_clear": "Rain here has changed, but only by a small share of its usual amount. Past records give no "
-                     "special reason to change plans."},
+        # a clear change whose lower level is low: the whole range under 5%, or reaching up to 10% or more (Chennai)
+        "low_wetter": "Rain here has been increasing, though perhaps only by a small share of its usual amount. "
+                      "Before you build or plant, check drainage and the flood history of the site, as you would "
+                      "anywhere.",
+        "low_drier": "Rain here has been decreasing, though perhaps only by a small share of its usual amount. If you "
+                     "farm or depend on rainfall, check how secure your water supply is, as you would anywhere."},
     "water_storage": {
         "high": "Water stored in this region is falling fast. Before you rely on groundwater for a farm or a new well, "
                 "check local water levels and make sure of a secure supply.",
@@ -135,26 +146,36 @@ def _label(low: str, high: str) -> str:
     return LABEL[low] if low == high else f"{low.capitalize()} to {high} risk"
 
 
+def _since(period, window) -> str | None:
+    """The world window's first year when it starts in a later year than the record (sea level: 1993), else None.
+    ponytail: end years not compared; a world snapshot ending a year before the record still reads "Since 1993"."""
+    try:
+        ws, ps = int(str(window["start"])[:4]), int(str(period["start"])[:4])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return str(ws) if ws > ps else None
+
+
 def _risk(var: str, verdict: str, slopes: tuple, mean: Decimal, ratios: tuple,
-          why_none) -> tuple[str, str, str, str | None]:
-    """(lowest risk, highest risk, why, recommendation key or None) for a clear rising or falling verdict. slopes is
+          why_none, since: str | None = None) -> tuple[str | None, str | None, str, str]:
+    """(lowest risk, highest risk, why, recommendation key) for a clear rising or falling verdict; both risks None
+    when the level needs a world figure that isn't there (NO_COMPARE). slopes is
     (slope, low, high) per decade; ratios is (ratio, ratio_low, ratio_high), the ends None when not given. A 95% range
-    across a threshold gives both levels; the recommendation is the lower level's."""
+    across a threshold gives both levels; the recommendation is the lower level's. since: the world window's first
+    year when it is later than the record's (climate review L6), so `why` names the years its ratio is from."""
     up = verdict == "rising"
     slope = slopes[0]
     if var in FASTER:
         ratio = ratios[0]
         if not up:
             return "low", "low", HARMLESS[var], "low"
-        if ratio is None:  # no like-for-like world figure: no level
-            return "unknown", "unknown", why_none if isinstance(why_none, str) and why_none else NO_WORLD, None
+        if ratio is None:  # no like-for-like world figure: no level, and advice that needs none (QA B3)
+            return None, None, why_none if isinstance(why_none, str) and why_none else NO_WORLD, "no_world"
         low, high = _span([r for r in ratios if r is not None], (THRESHOLDS["moderate"], THRESHOLDS["high"]))
-        if ratio > Decimal("1.1"):
-            why = f"{FASTER[var]} about {ratio:f} times faster than {THAN[var]}."
-        elif ratio >= Decimal("0.9"):
-            why = f"{FASTER[var]} about as fast as {THAN[var]}."
-        else:
-            why = f"{FASTER[var]} more slowly than {THAN[var]}."
+        how = (f"about {ratio:f} times as fast as" if ratio > Decimal("1.1")
+               else "about as fast as" if ratio >= Decimal("0.9") else "more slowly than")
+        why = (f"Since {since}, {SINCE[var]} {how} {THAN[var]}." if since
+               else f"{FASTER[var]} {how} {THAN[var]} over the same years.")
         return low, high, why, low
     if var == "water_storage":
         if up:
@@ -168,7 +189,7 @@ def _risk(var: str, verdict: str, slopes: tuple, mean: Decimal, ratios: tuple,
     low, high = _span([share, *ends], RAIN_THRESHOLDS)
     way = "increasing" if up else "decreasing"
     why = f"Rain here has been {way} by about {share:f}% of its usual amount every 10 years."
-    return low, high, why, "low_clear" if low == "low" else f"{low}_{'wetter' if up else 'drier'}"
+    return low, high, why, f"{low}_{'wetter' if up else 'drier'}"
 
 
 def guidance_for(result: dict, mean: float | None = None) -> dict:
@@ -191,13 +212,14 @@ def guidance_for(result: dict, mean: float | None = None) -> dict:
          if shown else None,
          "rate": None, "display": {"unit": unit, "factor": float(Decimal(factor))}, "recommendation": "",
          "future_link": _future_link(result.get("place")) if var == "sea_level" else None, "disclaimer": DISCLAIMER}
-    _rules(g, result, var, Decimal(factor), _dec(mean), ratios, world.get("why_none"))
+    _rules(g, result, var, Decimal(factor), _dec(mean), ratios, world.get("why_none"),
+           _since(result.get("period"), world.get("window")))
     if var == "air_temp_max":
         g.update(risk=None, risk_label=None, why=None, recommendation=None)
     return g
 
 
-def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratios, why_none) -> None:
+def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratios, why_none, since=None) -> None:
     verdict = result.get("verdict")
     slope, lo, hi = (_dec(result.get(k)) for k in ("slope_per_decade", "ci_low", "ci_high"))
     years = _years(result.get("period"))
@@ -233,6 +255,5 @@ def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratios, why_none) 
     if var == "precip" and mean * Decimal("365.25") < RAIN_MIN_MM:  # a % of a tiny normal is no guide: no level
         g.update(risk=None, risk_label=None, why=SCARCE, recommendation=None)
         return
-    low, high, why, key = _risk(var, verdict, (slope, lo, hi), mean, ratios, why_none)
-    g.update(risk=low, risk_label=_label(low, high), why=why,
-             recommendation=RECOMMEND[var][key] if key else NO_RULE)
+    low, high, why, key = _risk(var, verdict, (slope, lo, hi), mean, ratios, why_none, since)
+    g.update(risk=low, risk_label=_label(low, high) if low else NO_COMPARE, why=why, recommendation=RECOMMEND[var][key])
