@@ -153,9 +153,9 @@ def _span(values, cuts) -> tuple[str, str]:
 
 def _label(low: str, high: str) -> str:
     """"Moderate risk", or for a 95% range across a threshold both levels: "Moderate to high risk". A range over
-    every level says so plainly (QA B11): "Risk level unclear (low to high)"."""
+    every level reads as one idea (owner's choice, contract v2): "Risk between low and high (wide range)"."""
     if (low, high) == ("low", "high"):
-        return "Risk level unclear (low to high)"
+        return "Risk between low and high (wide range)"
     return LABEL[low] if low == high else f"{low.capitalize()} to {high} risk"
 
 

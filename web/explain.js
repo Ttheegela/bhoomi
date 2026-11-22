@@ -441,7 +441,7 @@
 
     var wp = worldParts(t, imp), s6 = { title: 'Compared with the world' };
     if (wp) {
-      var th = w.thresholds || {}, lbl = str(g.risk_label), two = / to /.test(lbl), unclear = /^Risk level unclear\b/.test(lbl);
+      var th = w.thresholds || {}, lbl = str(g.risk_label), two = / to /.test(lbl), unclear = /^Risk between low and high\b/.test(lbl);
       // the ratio's 95% range, unless the API's sentence already gives it
       var rr = wp.ratio && isNum(w.ratio_low) && isNum(w.ratio_high) ? fixed(w.ratio_low, 1) + ' to ' + fixed(w.ratio_high, 1) : '';
       if (rr && str(w.text).indexOf(rr) >= 0) rr = '';
@@ -457,7 +457,7 @@
       s6.work = [(wp.ratio ? fmtNum(wm.a, false) + ' ÷ ' + fmtNum(wm.b, false) + ' = ' + wp.ratio + ' · ' + (rr ? rr + ' times (' + rk + ') · ' : '') : '')
         + M(w.window.start) + ' to ' + M(w.window.end) + ' · ' + stop(str(w.method)),
         '1× is the same as the world. ' + th.high + '× or more: high risk. ' + th.moderate + '× to ' + th.high + '×: moderate risk. Under ' + th.moderate + '×: low risk. '
-        + (unclear ? 'Here the ' + rk + ' spans every level, so the risk level is unclear.'
+        + (unclear ? 'Here the ' + rk + ' spans every level, so the risk could be anywhere from low to high.'
           : 'Here: ' + (lbl ? lbl.toLowerCase() : 'no risk level') + (two && rr ? ', because the ' + rk + ' spans more than one level.' : '.'))];
       if (isSea) s6.work.push('The full record, ' + Y(fit.start) + ' to ' + Y(fit.end) + ': ' + r.text + '. It gets no world ratio, because satellites only start in 1993.');
       if (isSea && w.source && str(w.source.method)) s6.work.push('The world figure: ' + lc1(stop(w.source.method))); // it names what the satellites don't correct for
