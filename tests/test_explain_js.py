@@ -473,7 +473,7 @@ assert.strictEqual(rngc(266, 464, false), '+27 to +46' + NB + 'cm'); assert.stri
 // The Battery, intermediate (the default): the card reads the server's readouts, word for word
 var BP = B.trend.projection, b2 = pc2(B, 'New York, NY'), bk2 = card(B.trend, false, null, TODAY), bfx = futOf(B.trend, null, false, TODAY);
 assert.strictEqual(modeOf(B.trend, B.series, bfx), 'both');
-assert.deepStrictEqual(bk2.r3f, { label: 'By 2050, intermediate emissions', value: '+36' + NB + 'cm', line: 'SSP2-4.5. Likely +27 to +46' + NB + 'cm. About 29' + NB + 'cm more than today.' });
+assert.deepStrictEqual(bk2.r3f, { label: 'By 2050, intermediate emissions', value: '+36' + NB + 'cm', line: 'SSP2-4.5, IPCC AR6. Likely +27 to +46' + NB + 'cm. About 29' + NB + 'cm more than today.' });
 assert.strictEqual(bk2.r1.value, BP.readouts.now.text); // "Now" is PR1's now readout, unchanged (readouts.now is the same object)
 assert.strictEqual(bk2.r1.label, 'Now, compared with the 1995–2014 average');
 ['battery_sea_level', 'lewes_sea_level_short', 'kolkata_sea_level_fitted', 'mumbai_sea_level_no_world'].map(load).forEach(function (d) {
@@ -486,12 +486,12 @@ assert.strictEqual(bk2.r1.label, 'Now, compared with the 1995–2014 average');
 // another scenario computes the same numbers from its arrays; whole mm before cm, like the server
 var b585 = card(B.trend, false, { ssp: 'ssp585', low: false }, TODAY).r3f, s585 = BP.scenarios[3];
 assert.strictEqual(b585.label, 'By 2050, very high emissions');
-assert.strictEqual(b585.line, 'SSP5-8.5. Likely ' + rngc(s585.p17[3], s585.p83[3]) + '. About ' + cmv(wholeMm(s585.p50[3] - B.trend.now.value), false, true) + ' more than today.');
+assert.strictEqual(b585.line, 'SSP5-8.5, IPCC AR6. Likely ' + rngc(s585.p17[3], s585.p83[3]) + '. About ' + cmv(wholeMm(s585.p50[3] - B.trend.now.value), false, true) + ' more than today.');
 // low confidence: percentiles, never "likely"; the chart's band and median dashed; High has no low version
 var blo = futOf(B.trend, { ssp: 'ssp585', low: true }, false, TODAY), bloC = pc2(B, 'New York, NY', false, { ssp: 'ssp585', low: true });
 assert.ok(blo.S.id === 'ssp585_low' && blo.low && blo.lc === ', low confidence' && blo.rk === '17th to 83rd percentile');
 var blk = card(B.trend, false, { ssp: 'ssp585', low: true }, TODAY).r3f;
-assert.ok(/^SSP5-8\.5, low confidence\. 17th to 83rd percentile \+\d+ to \+\d+\scm\. About /.test(blk.line), blk.line);
+assert.ok(/^SSP5-8\.5, low confidence, IPCC AR6\. 17th to 83rd percentile \+\d+ to \+\d+\scm\. About /.test(blk.line), blk.line);
 var bloT = futCard(B.trend, bloC), bloR = futRead(B.trend, blo, false);
 [blk.line, bloR.rest, bloT.tsub, bloT.cols.join(' '), decadeRead(blo, 2050, false), chartText(B.trend, B.series, bloC).fu.band, steps(B.trend, B.series, bloC)[6].words[1]]
   .forEach(function (x) { assert.ok(!/likely|2 in 3/i.test(x), x); });
@@ -507,7 +507,15 @@ assert.deepStrictEqual(spanOf({ ssp: 'ssp126' }), spanOf({ ssp: 'ssp585' }));
 assert.ok(Math.max.apply(null, spanOf({ ssp: 'ssp585', low: true })) > Math.max.apply(null, spanOf({ ssp: 'ssp585' })));
 var bm = futModel(bfx, id1);
 assert.deepStrictEqual(bm.years, [2020, 2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100]); // the chart stops at 2100
-assert.strictEqual(bm.others.length, 3); assert.strictEqual(futModel(blo, id1).others.length, 4); // low: every medium median stays
+assert.strictEqual(bm.others.length, 3);
+// low confidence on (QA): the other three medians only, never S's own medium twin ("Very high +100 cm" next to its +110 cm)
+var blm = futModel(blo, id1);
+assert.deepStrictEqual(blm.others.map(function (o) { return o.S.id; }), ['ssp126_medium', 'ssp245_medium', 'ssp370_medium']);
+assert.ok(blo.p.years.every(function (Y) { var o = decadeRead(blo, Y, false).split(' Others: ')[1]; return o && !/Very high/.test(o); }));
+assert.deepStrictEqual(futModel(b370, id1).others.map(function (o) { return o.S.id; }), ['ssp126_medium', 'ssp245_medium', 'ssp585_medium']); // High: no low version
+// item 3: at 375 px the low-confidence end label fits the 96 px right margin (84 px of 12 px text, about 6.5 px a character)
+assert.deepStrictEqual(lcLines(false), ['low confidence']);
+assert.ok(lcLines(true).join(' ') === 'low confidence' && lcLines(true).every(function (x) { return x.length * 6.5 <= 83; }), lcLines(true));
 assert.deepStrictEqual(bm.sel.p50, BP.scenarios[1].p50.slice(0, 9)); // as published, from 2020: nothing shifted or joined
 assert.ok(bm.others.every(function (o) { return o.S.confidence === 'medium' && o.S !== bfx.S; }));
 // the 12-month average: months i-6 to i+5 inside the record, 10 valid and not preliminary; it stops 6 months before the data
@@ -559,6 +567,32 @@ assert.deepStrictEqual(b7.links.map(function (l) { return l.href; }), ['https://
 var L7 = steps(L.trend, L.series, pc2(L, 'Lewes, DE'))[6];
 assert.ok(!L7.open && !/Check/.test(L7.short) && L7.work.some(function (x) { return /^Check: \+8\.4\scm is inside the experts' 2020 range for SSP2-4\.5 \(5th to 95th percentile \+4\.4 to \+18\scm\), so the record and the projection agree here\.$/.test(x); }), JSON.stringify(L7.work));
 assert.strictEqual(futRead(L.trend, futOf(L.trend, null, false, TODAY), false).outside, '');
+// QA (New Orleans): a check that rests on a fitted baseline (fewer than 15 of the 20 baseline years) says so next to it
+var isChk = function (x) { return /^Check: /.test(x.text || x); };
+var kf7 = steps(K.trend, K.series, pc2(K, 'Kolkata'))[6].work.filter(isChk)[0];
+assert.strictEqual(K.trend.baseline.method, 'fitted');
+assert.ok(/^Check: \S+\scm \(the baseline here is estimated from the trend\) is inside the experts' 2020 range for /.test(kf7), kf7);
+assert.ok(!/estimated from the trend/.test(L7.work.filter(isChk)[0]) && !/estimated from the trend/.test(bad[0].text)); // observed baselines: no note
+// the check's kinds (contract check.kind). null: the regenerated Mumbai has too few months in 2019-2021, and its latest
+// 12 months end in 2010, before AR6 starts
+var mbChk = steps(MB.trend, MB.series, pc2(MB, 'Mumbai'))[6].work.filter(isChk);
+assert.ok(MB.trend.projection.check.kind === null && MB.trend.projection.check.latest === null);
+assert.deepStrictEqual(mbChk, ["Check: not possible here. The record has fewer than 24 of the 36 months from 2019 to 2021, and its latest 12 months end before the experts' projections start in 2020."]);
+assert.strictEqual(futRead(MB.trend, futOf(MB.trend, null, false, TODAY), false).outside, '');
+// "latest 12 months" (QA B1: Mumbai with a record to December 2024): the server's check of `now` at its mid-year, as given
+var M12 = copy(MB), n12 = { value: 135.4, units: 'mm', kind: '12-month mean', start: '2024-01', end: '2024-12', n: 12, text: '+14 cm', label: 'the 12 months to December 2024' };
+M12.trend.now = n12; M12.trend.projection.readouts.now = n12;
+M12.trend.projection.check = { observed_2019_2021: null, ar6_2020_p05: 9, ar6_2020_p95: 79, kind: 'latest 12 months', latest: { value: 135, year: 2024.5, ar6_p05: 22, ar6_p95: 106 }, inside: false };
+var m7 = steps(M12.trend, M12.series, pc2(M12, 'Mumbai'))[6], mBad = m7.work.filter(function (x) { return x.bad; });
+assert.strictEqual(futRead(M12.trend, futOf(M12.trend, null, false, TODAY), false).outside, "Here the measured level for the latest 12 months is outside the experts' range for that year. ");
+assert.ok(m7.open && / · Check: outside the experts' range$/.test(m7.short), m7.short);
+assert.deepStrictEqual(mBad.map(function (x) { return x.text; }), ["Check: the latest 12 months (to December 2024) are +14" + NB + "cm, outside the experts' range for that year under SSP2-4.5 (5th to 95th percentile +2.2 to +11" + NB + "cm). Some tide gauges fall outside the experts' range, often because of earthquakes, land rising after the ice age, or a recent surge. Read the projection here with extra care."]);
+assert.ok(m7.work.every(function (x) { return !/^2020: |2019 to 2021|not possible/.test(x.text || x); }), JSON.stringify(m7.work)); // no 2020 gap: these months are not 2020
+assert.ok(m7.work.some(function (x) { return /^One 12-month “Now” can swing/.test(x); }));
+M12.trend.projection.check.inside = true;
+assert.deepStrictEqual(steps(M12.trend, M12.series, pc2(M12, 'Mumbai'))[6].work.filter(isChk), ["Check: the latest 12 months (to December 2024) are +14" + NB + "cm, inside the experts' range for that year under SSP2-4.5 (5th to 95th percentile +2.2 to +11" + NB + 'cm), so the record and the projection agree here.']);
+assert.strictEqual(futRead(M12.trend, futOf(M12.trend, null, false, TODAY), false).outside, '');
+clean(M12, pc2(M12, 'Mumbai'));
 // step 4: the trend line's level stays; the card's "Now" is explained in step 7
 var b4 = steps(B.trend, B.series, b2)[3].work;
 assert.ok(/ The card’s “Now” is the measured average of the last 12 months instead \(step 7\)\.$/.test(b4[1]) && b4.length === 2, JSON.stringify(b4));
@@ -602,7 +636,7 @@ var fcsv = csvFuture(B.trend, b2), fl = fcsv.text.split('\n'), nh = fl.indexOf('
 assert.strictEqual(fcsv.name, 'bhoomi-sea-level-new-york-ny-ipcc-ar6.csv');
 assert.deepStrictEqual(fl.slice(0, 8), ['# Bhoomi: Sea level projections for New York, NY', '# Source: IPCC AR6 sea level projections (Garner et al. 2021)',
   '# Dataset: doi:10.5281/zenodo.6382554; version: 20210809; licence: CC BY 4.0', '# Record: https://doi.org/10.5281/zenodo.6382554',
-  '# Location: New York (The Battery) (gauge, 0.4 km from the gauge)', '# Baseline: the 1995–2014 average; levels in mm as published, not shifted to meet the observations',
+  '# Projection location: tide gauge New York (The Battery), 0.4 km away', '# Baseline: the 1995–2014 average; levels in mm as published, not shifted to meet the observations',
   '# Ranges: p17-p83 is the likely range (about 2 in 3 chance) for medium confidence and the 17th to 83rd percentile for low confidence; p05-p95 is the 5th to 95th percentile',
   "# Rates: the experts' own rate of rise for each decade, mm a year"]);
 assert.ok(fl.slice(0, nh).every(function (l) { return /^# /.test(l) && l.indexOf('"') < 0; }));
@@ -617,7 +651,7 @@ var BN = copy(B); BN.trend.projection.scenarios[1].p95[13] = null;
 assert.ok(/^ssp245_medium,intermediate emissions,medium,2150,\d+,\d+,\d+,\d+,,[\d.]+$/.test(csvFuture(BN.trend, b2).text.split('\n')[nh + 1 + 14 + 13]));
 assert.strictEqual(futCard(BN.trend, b2).rows[13].cells[3], 'no value');
 // the regional estimate (New Orleans): labelled as such everywhere, with the note that local sinking may differ
-var RE = copy(B), REG = 'IPCC AR6 has no projection at a tide gauge close enough, so this is its estimate for the surrounding 1° area: the land motion in it is AR6\'s regional estimate, and local sinking here may differ.';
+var RE = copy(B), REG = 'IPCC AR6 has no projection at a tide gauge close enough, so this is its estimate for the surrounding 1° area: the land motion in it is AR6\'s regional estimate, and local sinking may differ and may be faster in places, so check the ground at the site.';
 RE.trend.projection.location = { kind: 'regional estimate', id: 1000000123, name: '1° area around 30°N, 90°W', km: 12.3, note: REG };
 var rec2 = pc2(RE, 'New Orleans, LA'), rfx = futOf(RE.trend, null, false, TODAY);
 assert.ok(/\. Regional estimate: local sinking may differ\.$/.test(card(RE.trend, false, null, TODAY).r3f.line));
@@ -626,8 +660,8 @@ assert.strictEqual(chartText(RE.trend, RE.series, rec2).fu.link.text, 'IPCC AR6 
 assert.strictEqual(chartText(RE.trend, RE.series, rec2).fu.tail, ' for the 1° area around 30°N, 90°W.');
 assert.strictEqual(futCard(RE.trend, rec2).sub, 'IPCC AR6 regional estimate for the 1° area around 30°N, 90°W (12.3 km from this gauge), compared with the 1995–2014 average. Source: ');
 assert.strictEqual(futCard(RE.trend, rec2).parts[5].name, 'Land rising or sinking here (regional estimate)');
-assert.ok(steps(RE.trend, RE.series, rec2)[6].words[0].indexOf("for the 1° area around 30°N, 90°W, because there is no AR6 tide gauge close enough. The land motion in it is AR6's regional estimate, and local sinking here may differ.") > 0);
-assert.strictEqual(csvFuture(RE.trend, rec2).text.split('\n')[4], '# Location: 1° area around 30°N, 90°W (regional estimate, 12.3 km from the gauge); ' + REG.replace(/"/g, "'"));
+assert.ok(steps(RE.trend, RE.series, rec2)[6].words[0].indexOf('(AR6, 2021) for the 1° area around 30°N, 90°W. ' + REG + ' They use the same 1995–2014 average') > 0); // the server's note, as given
+assert.strictEqual(csvFuture(RE.trend, rec2).text.split('\n')[4], '# Projection location: regional estimate for the 1° area around 30°N, 90°W; ' + REG.replace(/"/g, "'"));
 clean(RE, rec2);
 // an old record (Mumbai ends in 2010): "Latest" and "in 2010" for "Now" and "today"
 var MBk = card(MB.trend, false, null, TODAY), mfx = futOf(MB.trend, null, false, TODAY);
@@ -636,12 +670,11 @@ var MBY = copy(MB); MBY.trend.projection.readouts.more_than_today.text = 'about 
 assert.ok(/ About 18\scm more than in 2010\.$/.test(card(MBY.trend, false, null, TODAY).r3f.line), card(MBY.trend, false, null, TODAY).r3f.line);
 assert.ok(/ more than in 2010\.$/.test(card(MB.trend, false, { ssp: 'ssp585' }, TODAY).r3f.line)); // another scenario: computed, "in 2010"
 assert.ok(/^Latest: the 12 months to December 2010 average /.test(steps(MB.trend, MB.series, pc2(MB, 'Mumbai'))[6].work[0]));
-assert.strictEqual(steps(MB.trend, MB.series, pc2(MB, 'Mumbai'))[6].work.filter(function (x) { return /^Check: /.test(x); })[0], 'Check: not possible here. The record has fewer than 24 of the 36 months from 2019 to 2021.');
 assert.ok(!futOf(B.trend, null, false, 2025 * 12 + 7 + 24).old && futOf(B.trend, null, false, 2025 * 12 + 7 + 25).old);
 // now null: no Now dot or "more" sentence anywhere; step 7 says why
 var BNN = copy(B); BNN.trend.now = null; BNN.trend.projection.readouts.now = null; BNN.trend.projection.readouts.more_than_today = null;
 var nnk = card(BNN.trend, false, null, TODAY), nn7 = steps(BNN.trend, BNN.series, pc2(BNN, 'X'))[6];
-assert.ok(nnk.r1 === null && nnk.r3f.line === 'SSP2-4.5. Likely +27 to +46' + NB + 'cm.', nnk.r3f.line);
+assert.ok(nnk.r1 === null && nnk.r3f.line === 'SSP2-4.5, IPCC AR6. Likely +27 to +46' + NB + 'cm.', nnk.r3f.line);
 assert.strictEqual(nn7.work[0], 'Now: fewer than 10 of the last 12 months have data, so there is no 12-month average to compare.');
 clean(BNN, pc2(BNN, 'X'));
 // a record off the 1995-2014 axis: PR1's place chart, the projection on its own chart, no "more" sentence
@@ -661,7 +694,7 @@ assert.strictEqual(modeOf(G.trend, G.series, futOf(G.trend, null, false, TODAY))
 var BG = copy(B); BG.trend.projection.readouts.by_2050.text = '+37 cm (likely +28 to +47 cm)'; BG.trend.projection.readouts.more_than_today.text = 'about 30 cm more than today';
 var bgc = pc2(BG, 'X'), bgfx = futOf(BG.trend, null, false, TODAY), bgk = card(BG.trend, false, null, TODAY).r3f, bgR = futRead(BG.trend, bgfx, false), bg7 = steps(BG.trend, BG.series, bgc)[6];
 assert.strictEqual(bgk.value, '+37' + NB + 'cm');
-assert.strictEqual(bgk.line, 'SSP2-4.5. Likely +28 to +47' + NB + 'cm. About 30' + NB + 'cm more than today.');
+assert.strictEqual(bgk.line, 'SSP2-4.5, IPCC AR6. Likely +28 to +47' + NB + 'cm. About 30' + NB + 'cm more than today.');
 assert.strictEqual(bgR.b + bgR.rest, '+37' + NB + 'cm by 2050 under intermediate emissions (SSP2-4.5): likely range (about 2 in 3 chance) +28 to +47' + NB + 'cm. That is about 30' + NB + 'cm more than today.');
 assert.ok(bg7.short.indexOf('+37' + NB + 'cm by 2050') === 0 && bg7.words[1].indexOf(' is +37' + NB + 'cm. Their likely range (about 2 in 3 chance) is +28 to +47' + NB + 'cm, ') > 0, bg7.words[1]);
 assert.ok(bg7.work.indexOf('2050, SSP2-4.5: +37' + NB + 'cm − ' + B.trend.now.text + ' = about 30' + NB + 'cm more than today. Approximate: it takes a 12-month average from a projection.') >= 0);
@@ -823,3 +856,40 @@ def test_sea_level_fixtures_carry_the_current_advice():
         g = json.loads(f.read_text(encoding="utf-8"))["trend"]["guidance"]
         assert g["recommendation"] in RECOMMEND["sea_level"].values(), f.name
     assert "advise against" in RECOMMEND["sea_level"]["high"]
+
+
+def _contrast(a, b):
+    def lum(c):
+        r, g, b_ = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in (int(c[i:i + 2], 16) / 255 for i in (1, 3, 5))]
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b_
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_driver_bars_and_scenario_marks_reach_3_to_1():
+    """QA: the driver bars were drawn at 35% (1.64:1 on white, 2.24:1 in dark). Graphics need 3:1 against --surface
+    after any opacity, in both themes, for every scenario colour: the bars, the band edges, the medians."""
+    css = re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    tok = lambda body: dict(re.findall(r"--([\w-]+):\s*(#[0-9A-Fa-f]{6})", body))
+    light = tok(re.search(r":root \{([^}]*)\}", css)[1])
+    themes = [light, {**light, **tok(re.search(r':root\[data-theme="dark"\] \{([^}]*)\}', css)[1])}]
+    rules = re.findall(r"([^{}]+)\{([^}]*)\}", css)
+    body = lambda sel: " ".join(b for s, b in rules if s.strip() == sel)
+    checked = 0
+    for sels, paint in [((".d-bar",), "fill"), ((".d-bar", ".d-bar.tot"), "fill"), ((".f-edge",), "stroke"),
+                        ((".f-edge", ".f-edge.low"), "stroke"), ((".f-med",), "stroke"), ((".f-sel",), "stroke")]:
+        b = " ".join(body(s) for s in sels)  # the later rule wins, as in the cascade
+        assert b.strip(), sels
+        var = re.findall(r"(?:^|[;\s])%s:\s*var\(--([\w-]+)\)" % paint, b)[-1]
+        op = 1.0
+        for k in ("opacity", paint + "-opacity"):
+            v = re.findall(r"(?:^|[;\s])%s:\s*([\d.]+)" % k, b)
+            op *= float(v[-1]) if v else 1.0
+        for th in themes:
+            surf = th["surface"]
+            for c in [th["scen-%d" % k] for k in (1, 2, 3, 4)] if var == "k" else [th[var]]:
+                mix = "#" + "".join("%02x" % round(op * int(c[i:i + 2], 16) + (1 - op) * int(surf[i:i + 2], 16)) for i in (1, 3, 5))
+                assert _contrast(mix, surf) >= 3.0, (sels, c, surf, round(_contrast(mix, surf), 2))
+                checked += 1
+    assert checked == 2 * (4 + 1 + 4 + 4 + 4 + 4)
+    assert "var lc = lcLines(narrow);" in SRC and "lc.forEach(function (x, j) {" in SRC  # the chart draws the 375 px split
