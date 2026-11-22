@@ -308,8 +308,8 @@ const fmt = {
   // the rate every view prints: headline_rate ("+3.1 mm a year", "+0.31 °C per decade"), in the Units setting
   rate(t) { const r = t && window.TDX.rate(t, imperial()); return r ? r.text : ''; },
 };
-// the sidebar chip's short form: "Moderate to high", "Unclear" (for "Risk level unclear (low to high)")
-const riskShort = (g) => (g && g.risk_label ? (/^Risk level unclear\b/.test(g.risk_label) ? 'Unclear' : g.risk_label.replace(/ risk$/, '')) : '');
+// the sidebar chip's short form: "Moderate to high", "Low–high" (for "Risk between low and high (wide range)")
+const riskShort = (g) => (g && g.risk_label ? (/^Risk between low and high\b/.test(g.risk_label) ? 'Low–high' : g.risk_label.replace(/ risk$/, '')) : '');
 // High, Moderate, Low; anything else ("Not enough data", "No clear change") is drawn like Low
 const riskClass = (g) => (g && ['high', 'moderate', 'low'].includes(g.risk) ? g.risk : 'unknown');
 
