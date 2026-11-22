@@ -97,23 +97,37 @@ def parse(resp: dict, name: str = "this station") -> tuple[list[str], list[float
 
 
 def fetch(station_id: str) -> dict:
-    # ponytail: one request for the whole record (NOAA allows long monthly ranges); split if that changes
-    r = httpx.get(
-        f"{BASE}/api/prod/datagetter",
-        params={
-            "product": "monthly_mean", "station": station_id, "datum": "MSL", "units": "metric",
-            "time_zone": "gmt", "format": "json", "begin_date": "19000101", "end_date": date.today().strftime("%Y%m%d"),
-        },
-        timeout=30,
-    )
-    if r.status_code != 400 or "error" not in r.text:  # a 400 with an error body: parse() turns it into a ValueError
-        r.raise_for_status()
-    try:
-        return r.json()
-    except json.JSONDecodeError:  # not JSON (a maintenance page): already an outage to every caller, kept as it was
-        raise
-    except (ValueError, RecursionError) as e:  # a number past Python's integer-digit limit, or nesting too deep
-        raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.") from e
+    """The gauge's whole record, from its first month. NOAA serves at most 73,000 days of monthly means per request, so
+    requests of 199 calendar years (at most 72,686 days) go back from today, one more only while the last one's data
+    reaches its first January (today one request, back to 1828, covers every gauge). Joined oldest first: no gap, no overlap."""
+    end, replies = date.today(), []
+    while True:
+        begin = date(end.year - 198, 1, 1)
+        r = httpx.get(
+            f"{BASE}/api/prod/datagetter",
+            params={
+                "product": "monthly_mean", "station": station_id, "datum": "MSL", "units": "metric", "time_zone": "gmt",
+                "format": "json", "begin_date": begin.strftime("%Y%m%d"), "end_date": end.strftime("%Y%m%d"),
+            },
+            timeout=30,
+        )
+        if r.status_code != 400 or "error" not in r.text:  # a 400 with an error body: parse() turns it into a ValueError
+            r.raise_for_status()
+        try:
+            reply = r.json()
+        except json.JSONDecodeError:  # not JSON (a maintenance page): already an outage to every caller, kept as it was
+            raise
+        except (ValueError, RecursionError) as e:  # a number past Python's integer-digit limit, or nesting too deep
+            raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.") from e
+        rows = reply.get("data") if isinstance(reply, dict) else None
+        if replies and not isinstance(rows, list):  # an older request with no data ("No data was found"): the record starts later
+            break
+        replies.insert(0, reply)
+        if not (isinstance(rows, list) and any(isinstance(x, dict) and (x.get("year"), x.get("month")) == (str(begin.year), "1")
+                                                for x in rows)):
+            break
+        end = date(begin.year - 1, 12, 31)
+    return replies[0] if len(replies) == 1 else {**replies[-1], "data": [x for rep in replies for x in rep["data"]]}
 
 
 class NoUsableGauge(ValueError):
