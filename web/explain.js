@@ -182,7 +182,7 @@
     // R3 with an expert projection (design 11 §3): the chosen scenario's 2050 value, its range and how far that is above today
     var r3f = fx ? { label: 'By 2050, ' + fx.name, value: fx.t50, line: fx.code + fx.lc + ', IPCC AR6. ' + fx.rkShort + ' ' + fx.trng + '.'
       + (fx.more ? ' ' + cap(fx.more) + '.' : '') + (fx.regional ? ' Regional estimate: local sinking may differ.' : '')
-      + (fx.outside ? " The measured level here is outside the experts' range for recent years; step 7 explains." : '') } : null; // either check.kind
+      + (fx.outside ? ' Measured levels here are ' + (fx.side === 'above' ? 'already above' : fx.side) + " the experts' range for recent years (step 7)." : '') } : null;
     return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, why: why(t, imp),
       world: worldLine(t, imp, /^Since \d{4}\b/.test(str(g.why))), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f,
       chip: str(g.risk_label) === word ? '' : str(g.risk_label) }; // the headline already says "No clear change"
@@ -543,7 +543,10 @@
     var med = p.scenarios.filter(function (x) { return x.confidence === 'medium'; });
     // the server's fallback when 2019-2021 is too sparse (Mumbai): the latest 12 months against AR6's range at their mid-year
     var l12 = chk.kind === 'latest 12 months' && !!chk.latest && isNum(chk.latest.value);
-    return { p: p, S: S, S0: S0, ssp: ssp, noLow: !!(sel && sel.low) && !lowS, low: low, lc: low ? ', low confidence' : '', rk: str(S.range_kind),
+    // which side of the experts' range the server's check fell on (the card says "above" or "below")
+    var cv = l12 ? [chk.latest.value, chk.latest.ar6_p05, chk.latest.ar6_p95] : [chk.observed_2019_2021, chk.ar6_2020_p05, chk.ar6_2020_p95];
+    var side = cv[0] > cv[2] ? 'above' : cv[0] < cv[1] ? 'below' : 'outside';
+    return { side: side, p: p, S: S, S0: S0, ssp: ssp, noLow: !!(sel && sel.low) && !lowS, low: low, lc: low ? ', low confidence' : '', rk: str(S.range_kind),
       rkShort: low ? str(S.range_kind) : 'Likely', med: med,
       oth: med.filter(function (x) { return sspOf(x.id) !== sspOf(S.id); }), // the other three: never S's own medium twin
       l12: l12,
@@ -1019,7 +1022,10 @@
     var tl = F0 ? { x1: X(F0.x0), y1: Yp(F0.y0), x2: X(F0.x1), y2: Yp(F0.y1) } : null;
     var meds = !fm ? [] : fm.others.map(function (o) { return { d: pathOf(fxs, yy(o.p50)), cls: 'f-med k' + o.k, cs: 'c-case thin' }; })
       .concat([{ d: pathOf(fxs, yy(fm.sel.p50)), cls: 'f-sel' + sk + (fx.low ? ' low' : ''), cs: 'c-case' }]);
-    if (fut && tl) root.append(sv('line', Object.assign({ class: 'c-case' }, tl)));
+    // the trend line is cased only over the projections (2020 on): before them there is no band, and the casing would
+    // hide a 95% range thinner than itself (QA: The Battery, Grand Isle, Juneau) and stripe the 1995-2014 box
+    var cx = fm && tl ? Math.max(tl.x1, fxs[0]) : null;
+    if (cx != null && cx < tl.x2) root.append(sv('line', { class: 'c-case', x1: cx, y1: tl.y1 + (tl.y2 - tl.y1) * (cx - tl.x1) / (tl.x2 - tl.x1), x2: tl.x2, y2: tl.y2 }));
     meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cs })); });
     // monthly values (regular months; a gap or a preliminary month breaks the line), then preliminary months joined to the last regular one
     var d = '', dp = '', pen = false, lastReg = null;

@@ -273,8 +273,9 @@ thead th { position: sticky; top: 0; background: var(--surface); }
 .f-sel { fill: none; stroke: var(--k); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .f-sel.low { stroke-dasharray: 7 4; }
 .f-dot { fill: var(--k); stroke: var(--surface); stroke-width: 2; }
-/* casing under the trend line and the medians, 1.5 px each side (design 11 §9): solid, also under a dashed line */
-.c-case { fill: none; stroke: var(--surface); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+/* casing under the trend line (from 2020) and the medians, 1.5 px each side (design 11 §9): solid, also under a dashed
+   line; square ends, so nothing is cased before 2020 */
+.c-case { fill: none; stroke: var(--surface); stroke-width: 6; stroke-linejoin: round; }
 .c-case.thin { stroke-width: 4.25; }
 .f-lead { stroke: var(--k); stroke-width: 1; }
 .pc-lab { font-size: 13px; font-weight: 600; fill: var(--ink); paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }

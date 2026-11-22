@@ -462,7 +462,7 @@ assert.strictEqual(commas(1266), '1,266'); assert.strictEqual(slug('São Paulo, 
 
 // ---------- PR2: sea-level expert projections (web/design/11-sea-level-future.md) ----------
 var TODAY = 2026 * 12 + 10; // November 2026
-var OUT = " The measured level here is outside the experts' range for recent years; step 7 explains."; // R3 when check.inside is false (this synthetic Battery)
+var OUT = " Measured levels here are below the experts' range for recent years (step 7)."; // R3 when check.inside is false: this synthetic Battery's +2.9 cm is under +4.1 to +17 cm
 function pc2(d, label, imp, sel) { return Object.assign(ctx(d, label, imp), { today: TODAY, sel: sel || null }); }
 function sp(x) { return String(x).replace(/\u00a0/g, ' '); } // the server's texts use a plain space
 // cm(): 2 significant figures, half away from zero, a true minus: the server's sig2 (9 mm is +0.90 cm, 1036 mm is +100 cm)
@@ -591,10 +591,14 @@ var m7 = steps(M12.trend, M12.series, pc2(M12, 'Mumbai'))[6], mBad = m7.work.fil
 assert.strictEqual(futRead(M12.trend, futOf(M12.trend, null, false, TODAY), false).outside, "Here the measured level for the latest 12 months is outside the experts' range for that year. ");
 assert.ok(m7.open && / · Check: outside the experts' range$/.test(m7.short), m7.short);
 var MO = copy(MB); MO.trend.projection.check = { observed_2019_2021: null, ar6_2020_p05: 9, ar6_2020_p95: 79, kind: 'latest 12 months', latest: { value: 135, year: 2024.5, ar6_p05: 22, ar6_p95: 106 }, inside: false };
-assert.ok(/outside the experts' range/.test(card(MO.trend, false, null, TODAY).r3f.line), card(MO.trend, false, null, TODAY).r3f.line);
+assert.ok(/ Measured levels here are already above the experts' range for recent years \(step 7\)\.$/.test(card(MO.trend, false, null, TODAY).r3f.line), card(MO.trend, false, null, TODAY).r3f.line); // 135 mm over 22 to 106
+var MOB = copy(MO); MOB.trend.projection.check.latest.value = 10; // under the range: "below", from latest (not the 2019-2021 fields)
+assert.ok(/ Measured levels here are below the experts' range for recent years \(step 7\)\.$/.test(card(MOB.trend, false, null, TODAY).r3f.line), card(MOB.trend, false, null, TODAY).r3f.line);
+var BA = copy(B); BA.trend.projection.check.observed_2019_2021 = 200; // 2019-2021 over its 2020 range: "above"
+assert.ok(/ already above the experts' range for recent years \(step 7\)\.$/.test(card(BA.trend, false, null, TODAY).r3f.line), card(BA.trend, false, null, TODAY).r3f.line);
 MO.trend.projection.check.inside = true; // QA: the card says it only when the check is outside
-assert.ok(!/outside/.test(card(MO.trend, false, null, TODAY).r3f.line), card(MO.trend, false, null, TODAY).r3f.line);
-assert.ok(!/outside/.test(card(MB.trend, false, null, TODAY).r3f.line) && !/outside/.test(card(L.trend, false, null, TODAY).r3f.line)); // null; inside (Lewes)
+assert.ok(!/experts' range/.test(card(MO.trend, false, null, TODAY).r3f.line), card(MO.trend, false, null, TODAY).r3f.line);
+assert.ok(!/experts' range/.test(card(MB.trend, false, null, TODAY).r3f.line) && !/experts' range/.test(card(L.trend, false, null, TODAY).r3f.line)); // null; inside (Lewes)
 assert.deepStrictEqual(mBad.map(function (x) { return x.text; }), ["Check: the latest 12 months (to December 2024) are +14" + NB + "cm, outside the experts' range for that year under SSP2-4.5 (5th to 95th percentile +2.2 to +11" + NB + "cm). Some tide gauges fall outside the experts' range, often because of earthquakes, land rising after the ice age, or a recent surge. Read the projection here with extra care."]);
 assert.ok(m7.work.every(function (x) { return !/^2020: |2019 to 2021|not possible/.test(x.text || x); }), JSON.stringify(m7.work)); // no 2020 gap: these months are not 2020
 assert.ok(m7.work.some(function (x) { return /^One 12-month “Now” can swing/.test(x); }));
@@ -827,7 +831,7 @@ def test_future_chart_cases_the_trend_line_and_the_medians():
     draw = re.search(r"\n  function draw\(c\) \{(.*?)\n  \}\n", SRC, re.S)[1]
     at = lambda x: draw.index(x)
     trend = "root.append(sv('line', Object.assign({ class: 's-trend' }, tl)));"
-    case_t = at("if (fut && tl) root.append(sv('line', Object.assign({ class: 'c-case' }, tl)));")
+    case_t = at("if (cx != null && cx < tl.x2) root.append(sv('line', { class: 'c-case', x1: cx,")
     case_m = at("meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cs })); });")
     meds = at("meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cls })); });")
     fut_trend = at("if (tl) " + trend)
@@ -842,6 +846,52 @@ def test_future_chart_cases_the_trend_line_and_the_medians():
     assert re.search(r"\n\.c-case \{[^}]*stroke: var\(--surface\);", css)
     assert width(".c-case") == width(".pc-svg.fut .s-trend") + 3 == width(".f-sel") + 3
     assert width(".c-case.thin") == width(".f-med") + 3
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_trend_casing_starts_at_2020_and_spares_a_thin_range():
+    """QA (The Battery, Grand Isle, Juneau): a 95% range under 3 px each side was hidden by the 3 px trend casing, and
+    the casing striped the 1995-2014 box. The real draw() runs on a tiny fake DOM (no browser, no network): the
+    trend's casing starts at or after x(2020), every casing does, and the range and its edges start before 2020."""
+    grab = lambda pat: re.search(pat, SRC, re.S)[0]
+    dom = "\n".join([grab(r"\n  var SVGNS = [^\n]*\n"), grab(r"\n  function sv\(tag, attrs, text\) \{.*?\n  \}\n"),
+                     grab(r"\n  function clear\(n\) \{[^\n]*\n"), grab(r"\n  function pathOf\(xs, ys\) \{.*?\n  \}\n"),
+                     grab(r"\n  function draw\(c\) \{.*?\n  \}\n")])
+    js = PURE + dom + ASSERTS.split("var NB = ")[0] + r"""
+function El(tag) { this.tag = tag; this.a = {}; this.kids = []; this.classList = { toggle: function () {} }; this.clientWidth = 1100; }
+El.prototype.setAttribute = function (k, v) { this.a[k] = String(v); };
+El.prototype.append = function () { for (var i = 0; i < arguments.length; i++) this.kids.push(arguments[i]); };
+El.prototype.addEventListener = function () {};
+El.prototype.removeChild = function (n) { this.kids.splice(this.kids.indexOf(n), 1); };
+Object.defineProperty(El.prototype, 'firstChild', { get: function () { return this.kids[0] || null; } });
+var document = { createElementNS: function (ns, tag) { return new El(tag); } };
+var B = load('battery_sea_level'), f = B.trend.fit;
+f.change_low = f.change - 8; f.change_high = f.change + 8; // a range 4 mm each side at its ends: about 1 px
+var ctx = Object.assign(ctx(B, 'New York, NY'), { today: 2026 * 12 + 10, sel: null });
+var c = { box: new El('div'), pin: { trend: B.trend, series: B.series }, T: chartText(B.trend, B.series, ctx), ctx: ctx,
+  fx: futOf(B.trend, null, false, ctx.today), mode: 'both', ro: new El('p') };
+draw(c);
+var els = c.box.kids[0].kids, cls = function (e) { return e.a['class'] || ''; };
+var xs = function (pts) { return pts.split(' ').map(function (p) { return +p.split(',')[0]; }); };
+var ysOf = function (pts) { return pts.split(' ').map(function (p) { return +p.split(',')[1]; }); };
+var x2020 = Math.min.apply(null, xs(els.filter(function (e) { return /^f-band/.test(cls(e)); })[0].a.points)) - 0.05; // points are rounded to 0.1 px
+var fan = els.filter(function (e) { return cls(e) === 's-fan'; })[0], fy = ysOf(fan.a.points);
+assert.ok(Math.abs(fy[1] - fy[2]) / 2 < 3, 'the range must be under 3 px here: ' + fy); // [x0 lo0, x1 lo1, x1 hi1, x0 hi0]
+var trend = els.filter(function (e) { return cls(e) === 's-trend'; });
+var tcase = els.filter(function (e) { return e.tag === 'line' && cls(e) === 'c-case'; });
+assert.ok(trend.length === 1 && tcase.length === 1 && els.indexOf(tcase[0]) < els.indexOf(trend[0]));
+assert.ok(+tcase[0].a.x1 >= x2020 && +tcase[0].a.x2 === +trend[0].a.x2, JSON.stringify(tcase[0].a) + ' ' + x2020);
+var tl = trend[0].a, k = (+tcase[0].a.x1 - +tl.x1) / (+tl.x2 - +tl.x1); // the casing lies on the trend line
+assert.ok(Math.abs(+tl.y1 + (+tl.y2 - +tl.y1) * k - +tcase[0].a.y1) < 1e-6);
+els.filter(function (e) { return /c-case/.test(cls(e)) && e.tag === 'path'; }).forEach(function (e) {
+  assert.ok(+/^M([\d.]+)/.exec(e.a.d)[1] >= x2020, e.a.d.slice(0, 20)); });
+var edges = els.filter(function (e) { return cls(e) === 's-edge'; });
+assert.ok(Math.min.apply(null, xs(fan.a.points)) < x2020 - 100 && edges.length === 2 && edges.every(function (e) { return +e.a.x1 < x2020 - 100; }));
+assert.ok(els.indexOf(fan) < els.indexOf(tcase[0]) && edges.every(function (e) { return els.indexOf(e) < els.indexOf(tcase[0]); }));
+"""
+    env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
 
 
 def test_scenario_lines_draw_at_full_colour():
