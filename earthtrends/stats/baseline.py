@@ -13,6 +13,9 @@ YEAR_MONTHS = 9  # a year counts towards the baseline with at least this many va
 NEED_YEARS = 15  # of the 20 baseline years
 FIT_SPAN = 30  # short coverage: fit the whole record if it spans 30+ years and holds 1995-2014 inside it
 FIT_YEARS = 5  # ... and at least this many 1995-2014 years count, with data before 1995 and after 2014
+# A calendar month's mean length in days, January first: February 28.25, so the year is 365.25 days and the rain
+# normal's value x 365.25 is the sum of the twelve monthly normal totals.
+MONTH_DAYS = (31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 
 
 def num(v) -> float:
@@ -113,7 +116,9 @@ def baseline(series: dict) -> dict:
     if normals is None:
         return out
     months = [round(v, 4) + 0.0 for v in normals]
-    value = round(sum(months) / n, 4) + 0.0
+    # rainfall (mm/day): each month weighted by its days, so value is the 1995-2014 annual normal's mean daily rate
+    w = MONTH_DAYS if monthly and series.get("variable") == "precip" else (1,) * n
+    value = round(sum(m * d for m, d in zip(months, w)) / sum(w), 4) + 0.0
     out.update(value=value, months=months if monthly else None,
                annual_total_mm=round(value * 365.25, 1) if series.get("variable") == "precip" else None,
                projection_axis=first <= YEARS[1] and out["method"] != "provider")  # GRACE is off the 1995-2014 axis
