@@ -29,6 +29,12 @@ def test_file_list_matches_the_research_notes():
     assert [common[v, s] for v in b.VARS for s in b.SSPS] == [32, 34, 30, 34, 26, 27, 23, 27, 31, 32, 28, 33]
 
 
+def test_the_land_mask_is_the_one_the_lookup_fixture_was_cut_from():
+    fx = json.loads((Path(__file__).parent / "fixtures" / "atlas_land_mask_rows.json").read_text())
+    assert (fx["source"], fx["md5"]) == (b.MASK["url"], b.MASK["md5"]) and b.MASK["bytes"] == 20960
+    assert b.MASK["url"].startswith("https://raw.githubusercontent.com/IPCC-WG1/Atlas/main/reference-grids/")
+
+
 def test_month_spans_and_the_files_time_axis():
     hist, ssp = (next(r for r in b.rows() if r["var"] == "t" and r["exp"] == e) for e in ("historical", "ssp245"))
     assert (hist["start"], hist["months"], ssp["start"], ssp["months"]) == (1850, 1980, 2015, 1032)
@@ -151,10 +157,12 @@ def test_pack_writes_int16_arrays_and_a_manifest(monkeypatch, tmp_path):
     stats, checks = b.combine(means, rs)
     stats["t_change"][0, 0, 0, 0, 0] = np.nan
     stats["checks"] = np.array([t for t, _ in checks])
+    stats["land"] = np.array([[0.0, 0.25, 0.5], [0.75, 1.0, 1.0]])
     npz, js = b.pack(stats, "2026-11-23", rs, tmp_path)
     with np.load(npz) as z:
-        assert set(z.files) == {"lat", "lon", "scenarios", "windows", "percentiles"} | set(b.SCALES)
+        assert set(z.files) == {"lat", "lon", "scenarios", "windows", "percentiles", "land"} | set(b.SCALES)
         assert all(z[k].dtype == np.int16 for k in b.SCALES)
+        assert z["land"].dtype == np.uint8 and z["land"].tolist() == [[0, 25, 50], [75, 100, 100]]
         assert z["t_change"].shape == (4, 3, 3, 2, 3) and z["t_change"][0, 0, 0, 0, 0] == b.FILL
         np.testing.assert_allclose(z["t_change"][3, 2, 1] * 0.01, stats["t_change"][3, 2, 1], atol=0.005)
         assert z["scenarios"].tolist() == list(b.SSPS) and z["windows"].tolist() == [[2021, 2040], [2041, 2060], [2081, 2100]]
@@ -163,6 +171,8 @@ def test_pack_writes_int16_arrays_and_a_manifest(monkeypatch, tmp_path):
                                                                           [1995, 2014], "2026-11-23")
     assert m["range_name"] == "range across climate models (10th–90th percentile)" and m["percentiles"] == [10, 50, 90]
     assert len(m["sources"]) == 15 and len(m["models"]["pr"]["ssp370"]) == 12 and len(m["self_checks"]) == len(checks)
+    assert (m["land_mask"]["url"], m["land_mask"]["licence"], m["land_mask"]["md5"]) == (b.MASK["url"], "CC-BY-4.0",
+                                                                                         b.MASK["md5"])
     assert npz.stat().st_size < 50_000
     stats["pr_change"][0, 0, 0, 0, 0] = 4000.0  # +4000% does not fit int16 at 0.1%
     with pytest.raises(ValueError, match="int16"):

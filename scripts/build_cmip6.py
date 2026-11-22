@@ -7,11 +7,13 @@ Data: IPCC-WGI AR6 Interactive Atlas Dataset, Version 2 final, Instituto de Fís
   15 netCDF4 files, 50.2 GB, one member per model. scripts/cmip6_files.tsv lists each file's URL, bytes and md5 (from the
   repository's record), its members in file order, and each member's mean at 40.5N 74.5W over 1995-2014 (historical) or
   2041-2060 (SSPs) from the THREDDS mirror's OPeNDAP point series; the build fails unless it reproduces them.
+Land: the Atlas's own 1-degree land-sea mask (IPCC-WG1/Atlas, reference-grids/land_sea_mask_1degree.nc4, CC-BY 4.0,
+  20960 bytes), stored per cell so a coastal place takes its change from land (earthtrends/data/cmip6.py).
 
 Subcommands (WORK is a scratch folder: WORK/files, WORK/reduce, WORK/out):
   netcheck WORK                one HEAD request to digital.csic.es: can this node reach it?
-  download WORK [--jobs 4]     the 15 files, up to --jobs at once (1-5), resumable, md5-checked, then read-checked
-  check WORK [--workers N]     sizes, md5s, and that the reader reproduces every file's check means
+  download WORK [--jobs 4]     the 15 files and the mask, up to --jobs at once (1-5), resumable, md5-checked, read-checked
+  check WORK [--workers N]     sizes, md5s, the mask's grid, and that the reader reproduces every file's check means
   reduce WORK [--workers N]    each model's 20-year means (one task per file and chunk-row of members), then the changes
   pack WORK                    int16 npz + JSON manifest in WORK/out, and prints their paths and sizes
 --workers defaults to SLURM_CPUS_PER_TASK, else the CPU count.
@@ -73,6 +75,20 @@ MAX_TRIES = 8  # failures in a row without a new byte, per file
 SCALES = {"t_change": 0.01, "txx_change": 0.01, "pr_change": 0.1, "pr_mean_change": 0.1,
           "t_baseline": 0.01, "txx_baseline": 0.01, "pr_baseline": 0.01,
           "t_models": 1, "txx_models": 1, "pr_models": 1, "pr_wetter": 1}
+MASK = {"name": "land_sea_mask_1degree.nc4", "bytes": 20960, "md5": "e8f24d24b65ad643ea89adc81bc5eb13",
+        "url": "https://raw.githubusercontent.com/IPCC-WG1/Atlas/main/reference-grids/land_sea_mask_1degree.nc4"}
+LAND_MASK = {
+    "array": "land: [lat, lon] uint8, % of the cell that is land",
+    "rule": "a cell is land when at least 50% of it is land (the Atlas's threshold); a place in a cell that is not "
+            "takes the nearest land cell among the 8 around it (earthtrends/data/cmip6.py nearest_land_cell)",
+    "why": "models warm less over the ocean, and the place's observed baseline is land",
+    "source": "IPCC-WG1/Atlas reference grids: 1-degree land-sea mask (sftlf), the WFDE5 land-sea mask upscaled from "
+              "0.5 degree",
+    "url": MASK["url"], "repository": "https://github.com/IPCC-WG1/Atlas", "bytes": MASK["bytes"], "md5": MASK["md5"],
+    "licence": "CC-BY-4.0", "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+    "citation": "Iturbide, M., Fernández, J., Gutiérrez, J.M. et al. Implementation of FAIR principles in the IPCC: the "
+                "WGI AR6 Atlas repository. Scientific Data 9, 629 (2022). https://doi.org/10.1038/s41597-022-01739-y",
+}
 
 VARIABLES = {
     "t": {"app_variable": "air_temp", "units": "degC", "change": "difference of 20-year means",
@@ -95,6 +111,7 @@ ARRAYS = {
                  "agreeing on the sign is max(pr_wetter, pr_models - pr_wetter) / pr_models",
     "pr_mean_change": "[scenario, window, lat, lon] the Atlas's own figure: change of the multi-model mean as % of the "
                       "multi-model 1995-2014 mean (models with both runs)",
+    "land": "[lat, lon] uint8 % of the cell that is land (see land_mask)",
 }
 METHOD = [
     "Each model's mean of its monthly values (months weighted equally, as in the Atlas) over 1995-2014 in the historical "
@@ -110,7 +127,7 @@ NOTES = [
     "One member per model, as the Atlas provides; the model lists differ by variable and scenario (see models).",
     "txx is the hottest day of each month, matching the app's hottest day of the month; its change is not the change of "
     "the annual maximum.",
-    "Ocean cells are included: the files have no land mask. A place uses the cell that contains it.",
+    "Every cell is stored, ocean included (the Atlas files hold values everywhere); land says which cells are land.",
     "CAMS-CSM1-0 and IITM-ESM lack 2100 (IITM-ESM also 2099 in SSP3-7.0); their 2081-2100 means use the months present.",
 ]
 CITATIONS = [
@@ -206,16 +223,28 @@ def group_links(d, addr: int) -> dict[str, int]:
     return h5()._links(d, addr)
 
 
-def open_nc(path: Path, var: str) -> tuple[mmap.mmap, dict]:
-    """A file -> (its bytes, mapped; {name: dataset info} for var, time, lat and lon)."""
+def open_nc(path: Path, var: str, coords: tuple = ("time", "lat", "lon")) -> tuple[mmap.mmap, dict]:
+    """A file -> (its bytes, mapped; {name: dataset info} for var and its coordinates)."""
     with open(path, "rb") as f:
         d = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
     if d[:8] != b"\x89HDF\r\n\x1a\n" or d[8] not in (0, 2, 3):
         raise ValueError("not an HDF5 file with a version 0, 2 or 3 superblock")
     links = group_links(d, int.from_bytes(d[64:72] if d[8] == 0 else d[36:44], "little"))
-    if missing := {var, "time", "lat", "lon"} - set(links):
+    if missing := {var, *coords} - set(links):
         raise ValueError(f"no {sorted(missing)} in the file; it has {sorted(links)}")
-    return d, {k: h5()._dataset(d, links[k]) for k in (var, "time", "lat", "lon")}
+    return d, {k: h5()._dataset(d, links[k]) for k in (var, *coords)}
+
+
+def read_mask(path: Path) -> np.ndarray:
+    """The Atlas land-sea mask -> land fraction [lat, lon] on LAT, LON; fails unless its grid is the Atlas grid."""
+    d, ds = open_nc(path, "sftlf", ("lat", "lon"))
+    land = read_all(d, ds["sftlf"])
+    if not (np.allclose(read_all(d, ds["lat"]), LAT, rtol=0, atol=1e-6)
+            and np.allclose(read_all(d, ds["lon"]), LON, rtol=0, atol=1e-6)):
+        raise ValueError("the mask's grid is not the Atlas 1-degree grid")
+    if land.shape != (len(LAT), len(LON)) or not ((land >= 0) & (land <= 1)).all():
+        raise ValueError(f"the mask is {land.shape} with values outside 0-1")
+    return land
 
 
 def decode(raw: bytes, filters: list[int], shape: tuple, dt: np.dtype) -> np.ndarray:
@@ -366,6 +395,7 @@ def pack(stats: dict, accessed: str, rs: list[dict], out: Path) -> list[Path]:
     arrays = {"lat": LAT.astype(np.float32), "lon": LON.astype(np.float32), "scenarios": np.array(SSPS),
               "windows": np.array(WINDOWS, np.int16), "percentiles": np.array(PCT, np.int16)}
     arrays |= {k: to_int16(stats[k], s) for k, s in SCALES.items()}
+    arrays["land"] = np.rint(np.asarray(stats["land"]) * 100).astype(np.uint8)
     npz = out / "cmip6_atlas.npz"
     write_npz(npz, **arrays)
     manifest = {
@@ -382,6 +412,7 @@ def pack(stats: dict, accessed: str, rs: list[dict], out: Path) -> list[Path]:
         "variables": VARIABLES, "arrays": ARRAYS,
         "scaling": {**SCALES, "note": "value = stored int16 x scale; -32768 is no value"},
         "grid": {"lat": "-89.5 to 89.5 by 1 degree", "lon": "-179.5 to 179.5 by 1 degree", "cells": "centres"},
+        "land_mask": LAND_MASK,
         "models": {v: {s: stats[f"models_{v}_{s}"].tolist() for s in SSPS} for v in VARS},
         "method": METHOD, "notes": NOTES,
         "self_checks": [str(c) for c in stats["checks"]],
@@ -481,7 +512,10 @@ def inspect(path: Path, row: dict) -> tuple[str, list[str]]:
 
 def read_check(path: Path, row: dict) -> bool:
     try:
-        summary, problems = inspect(path, row)
+        if row["name"] == MASK["name"]:
+            summary, problems = f"Atlas grid, {(read_mask(path) >= 0.5).mean():.1%} of cells land", []
+        else:
+            summary, problems = inspect(path, row)
     except Exception as e:  # report and carry on: the other files still download
         summary, problems = "", [f"the reader cannot read it: {e!r}"]
     print(f"  {'FAIL' if problems else 'ok  '} read check {row['name']} {summary}"
@@ -601,6 +635,7 @@ def reduce_task(task) -> str:
 def reduce(work: Path, rs: list[dict], workers: int) -> int:
     red, tasks = work / "reduce", []
     red.mkdir(parents=True, exist_ok=True)
+    land = read_mask(work / "files" / MASK["name"])  # first, so a missing or wrong mask fails before the long part
     for r in rs:
         path = work / "files" / r["name"]
         _, ds = open_nc(path, r["var"])
@@ -622,7 +657,7 @@ def reduce(work: Path, rs: list[dict], workers: int) -> int:
     if not all(ok for _, ok in checks):
         print("self-check failed: nothing written")
         return 1
-    np.savez(red / "stats.npz", checks=np.array([t for t, _ in checks]), **stats)
+    np.savez(red / "stats.npz", checks=np.array([t for t, _ in checks]), land=land, **stats)
     print(f"wrote {red / 'stats.npz'}")
     return 0
 
@@ -638,11 +673,11 @@ def main(argv=None) -> int:
     if a.step == "netcheck":
         return netcheck(rs)
     if a.step == "download":
-        return download(work, rs, a.jobs)
+        return download(work, rs + [MASK], a.jobs)
     if a.step == "check":
         with Pool(a.workers) as pool:
-            ok = list(pool.imap_unordered(check_one, [(work, r) for r in rs]))
-        print(f"{sum(ok)} of {len(rs)} files pass")
+            ok = list(pool.imap_unordered(check_one, [(work, r) for r in rs + [MASK]]))
+        print(f"{sum(ok)} of {len(rs) + 1} files pass")
         return 0 if all(ok) else 1
     if a.step == "reduce":
         return reduce(work, rs, a.workers)
