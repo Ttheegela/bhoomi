@@ -1034,7 +1034,10 @@
     else md.dots.forEach(function (q) { root.append(sv('circle', { cx: X(q.x).toFixed(1), cy: Yp(q.v).toFixed(1), r: 3.4, class: 's-year' })); });
     var xr = ml + pw + 12;
     if (F0) {
-      root.append(sv('line', { x1: X(F0.x0), y1: Yp(F0.y0), x2: X(F0.x1), y2: Yp(F0.y1), class: 's-trend' }));
+      var tl = { x1: X(F0.x0), y1: Yp(F0.y0), x2: X(F0.x1), y2: Yp(F0.y1) };
+      // casing (design 11 §9): over the bands and its own range, the pixels next to the trend line are --surface
+      if (fut) root.append(sv('line', Object.assign({ class: 'c-case' }, tl)));
+      root.append(sv('line', Object.assign({ class: 's-trend' }, tl)));
       if (!fut) {
         root.append(sv('circle', { cx: X(F0.x1), cy: Yp(F0.y1), r: 5, class: 's-end' }));
         // the end label moves away from the zero label when they would touch; the zero label never moves
@@ -1057,8 +1060,11 @@
         root.append(sv('line', { x1: tx, x2: tx, y1: mt - 4, y2: mt + ph, class: 'c-today' }));
         root.append(sv('text', { x: tx, y: mt - 10, 'text-anchor': 'middle', class: 'pc-t' }, 'Today'));
       }
-      fm.others.forEach(function (o) { root.append(sv('path', { d: pathOf(fxs, yy(o.p50)), class: 'f-med k' + o.k })); });
-      root.append(sv('path', { d: pathOf(fxs, yy(fm.sel.p50)), class: 'f-sel' + sk + (fx.low ? ' low' : '') }));
+      // the medians on one casing layer, so they cut the band, the trend's range and the trend line but not each other
+      var meds = fm.others.map(function (o) { return { d: pathOf(fxs, yy(o.p50)), cls: 'f-med k' + o.k, cs: 'c-case thin' }; })
+        .concat([{ d: pathOf(fxs, yy(fm.sel.p50)), cls: 'f-sel' + sk + (fx.low ? ' low' : ''), cs: 'c-case' }]);
+      meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cs })); });
+      meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cls })); });
       var i50 = fm.years.indexOf(2050), v50 = i50 < 0 ? null : fm.sel.p50[i50];
       if (v50 != null) { // the card's 2050 number, on its line
         root.append(sv('circle', { cx: fxs[i50], cy: Yp(v50), r: 4.5, class: 'f-dot' + sk }));

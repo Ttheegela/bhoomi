@@ -819,6 +819,25 @@ def test_scenario_colours_never_colour_text():
     assert re.search(r"\.pc-r \{[^}]*fill: var\(--ink-2\);", css) and re.search(r"\.pc-lab \{[^}]*fill: var\(--ink\);", css)
 
 
+def test_future_chart_cases_the_trend_line_and_the_medians():
+    """QA6: over a band and the trend's own 95% range, the light orange fell to 2.48:1 and the dark falling blue to
+    2.29:1. In the sea-level future chart a --surface casing, 1.5 px each side, lies right under the trend line and
+    under the medians (one layer, so the medians never cut each other)."""
+    draw = re.search(r"\n  function draw\(c\) \{(.*?)\n  \}\n", SRC, re.S)[1]
+    case_t = draw.index("if (fut) root.append(sv('line', Object.assign({ class: 'c-case' }, tl)));")
+    assert draw.index("root.append(sv('line', Object.assign({ class: 's-trend' }, tl)));") > case_t
+    assert draw.index("class: 'f-band'") < draw.index("class: 's-fan'") < case_t  # the casing lies over the band and the range
+    assert "cls: 'f-med k' + o.k, cs: 'c-case thin' }" in draw and "cls: 'f-sel' + sk + (fx.low ? ' low' : ''), cs: 'c-case' }" in draw
+    cases = draw.index("meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cs })); });")
+    lines = draw.index("meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cls })); });")
+    assert case_t < cases < lines and "class: 'f-med" not in draw and "class: 'f-sel" not in draw  # every median goes through meds
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    width = lambda sel: float(re.search(r"(?:^|\n)%s \{[^}]*stroke-width: ([\d.]+);" % re.escape(sel), css)[1])
+    assert re.search(r"\n\.c-case \{[^}]*stroke: var\(--surface\);", css)
+    assert width(".c-case") == width(".pc-svg.fut .s-trend") + 3 == width(".f-sel") + 3
+    assert width(".c-case.thin") == width(".f-med") + 3
+
+
 def test_scenario_lines_draw_at_full_colour():
     """Design 11 §9: lines need 3:1, so no scenario line is faded (the low median at 75% was about 2.5:1 on white); the
     other medians are lighter by a thinner stroke than the chosen one."""

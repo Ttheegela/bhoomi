@@ -43,6 +43,22 @@ def test_every_median_reaches_3_to_1_inside_another_scenarios_band():
     assert not bad, bad
 
 
+def test_every_line_reaches_3_to_1_on_its_casing():
+    """QA6: in the future chart the trend line (rising, falling, no change) and the medians lie on a casing, so their
+    neighbours are the casing colour, whatever is under it (light orange on its range and a band was 2.48:1, the dark
+    falling blue on a dark band 2.29:1)."""
+    css = re.sub(r"/\*.*?\*/", "", (ROOT / "web" / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    case = re.search(r"\n\.c-case \{[^}]*stroke: var\(--([\w-]+)\);", css)[1]
+    bad, checked = [], 0
+    for name, th in _themes():
+        for line in ("up-bg", "dn-bg", "nc-bg", "scen-1", "scen-2", "scen-3", "scen-4"):
+            r = _contrast(th[line], th[case])
+            checked += 1
+            if r < 3.0:
+                bad.append((name, line, round(r, 2)))
+    assert not bad and checked == 14, bad
+
+
 def test_rising_trend_line_reaches_3_to_1_on_every_band():
     """QA6: the trend line runs to the record's end, so it crosses the band from 2020 (The Battery, Very high low
     confidence, 2020-2026). The rising orange #D4620A was 2.83:1 on Very high's light band and 2.99:1 on High's."""
