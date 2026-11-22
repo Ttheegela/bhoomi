@@ -81,7 +81,7 @@ def land_temp(csv: str, url: str, retrieved: str) -> dict:
               "method": LAND_METHOD, "cadence": "monthly", "deseasoned_upstream": True}
     notes = ["Land areas only: no ocean.",
              "Departures from the 1901-2000 average of each calendar month, the provider's base period.",
-             "NOAA says its most recent months are preliminary and may change after quality control.",
+             "NOAA says its most recent months may still be revised but does not say which; none is flagged here.",
              "NOAA data, free to use with this citation: Huang, B., X. Yin, M. J. Menne, R. Vose (2026), NOAA Global "
              "Surface Temperature Dataset (NOAAGlobalTemp), Version 6.1, NOAA NCEI, doi:10.25921/vvaa-wq11."]
     return timeseries("land_temp", "degC", "All land areas of the world", times, values, source, notes)
@@ -90,7 +90,7 @@ def land_temp(csv: str, url: str, retrieved: str) -> dict:
 def gmsl(reply: dict, retrieved: str) -> dict:
     times, values = parse_gmsl(reply)
     source = {"id": "nasa_ssh_gmsl", "name": "NASA-SSH global mean sea level (satellite altimetry)",
-              "url": "https://doi.org/10.5067/NSIND-GMSV1","dataset_id": "doi:10.5067/NSIND-GMSV1",
+              "url": "https://sealevel.nasa.gov/", "dataset_id": "doi:10.5067/NSIND-GMSV1",
               "version": "1", "record_url": GMSL_URL, "retrieved": retrieved,
               "method": GMSL_METHOD, "cadence": "monthly", "deseasoned_upstream": False}
     notes = ["Satellite measurement of the whole ocean's average height; it does not include land rising or sinking at any coast.",
