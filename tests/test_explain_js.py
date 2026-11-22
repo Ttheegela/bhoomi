@@ -90,13 +90,26 @@ var cl = csvPlace(C.trend, C.series, cc).text.split('\n');
 assert.strictEqual(cl[4], '# Baseline: the 1995–2014 average (observed); anomaly = the difference from the 1995–2014 mean of its calendar month, as a % of the 1995–2014 average rate');
 assert.strictEqual(cl[8], 'time,value_mm/day,anomaly_%,flag');
 assert.ok(/ ÷ .*the usual rate = /.test(steps(C.trend, C.series, cc)[1].work[0]));
-clean(C, cc);
+// rain levels: monthly totals in mm, the annual total as given, rates a day; nothing annualised through display.factor
+var cS = steps(C.trend, C.series, cc), cb = C.trend.explain.seasons;
+assert.strictEqual(cS[1].short, 'Wettest in November (' + cb.high.toFixed(1) + NB + 'mm), driest in March (' + cb.low.toFixed(1) + NB + 'mm)');
+assert.ok(/^Here the wettest month, November, usually gets /.test(cS[1].words[0]));
+assert.ok(/mm a day/.test(cS[1].work[0]) && !/a year/.test(cS[1].work[0]), cS[1].work[0]);
+assert.strictEqual(cS[2].short, 'Every level is compared with the 1995–2014 average here, about ' + Math.round(C.trend.baseline.annual_total_mm).toLocaleString('en-US') + NB + 'mm a year');
+all(C, cc).forEach(function (x) { if (/mm a year/.test(x)) assert.ok(/about [\d,]+ mm a year|mm (more|less) a year/.test(x), x); });
+assert.ok(/mm a day measured/.test(readout(C.trend, C.series, cc, 5)));
+assert.ok(/ of the 1995–2014 average per decade × 4\.50 decades = \+\d+\.\d%/.test(cS[3].work[0]), cS[3].work[0]);
+// headline_rate null (a place whose 1995-2014 rain average is zero): the verdict and the rate in mm a day
+var C3 = JSON.parse(JSON.stringify(C)); C3.trend.headline_rate = null;
+var c3k = card(C3.trend, false);
+assert.ok(/mm a day$/.test(c3k.r2.value) && c3k.r2.per === 'per decade', c3k.r2.value);
+clean(C3, cc);
 // a fit in other units than the chart's (rain's fit in mm/day on a % axis): no trend line drawn, no level on the chart
 var C2 = JSON.parse(JSON.stringify(C)); C2.trend.fit.units = 'mm/day';
 assert.strictEqual(chartModel(C2.trend, C2.series, false).fit, null);
 var c2T = chartText(C2.trend, C2.series, cc);
 assert.ok(!c2T.drawn && c2T.endLabel === '' && !/stands at|trend line/.test(c2T.summary));
-assert.ok(/mm a year$/.test(card(C2.trend, false).r1.value));
+assert.ok(/mm a day$/.test(card(C2.trend, false).r1.value));
 
 // Delhi, hottest day: no chip, no world figure
 var H = load('delhi_hottest_day'), hc = ctx(H, 'Delhi'), hk = card(H.trend, false), hS = steps(H.trend, H.series, hc);

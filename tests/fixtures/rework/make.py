@@ -214,7 +214,8 @@ def make(c):
     label = {"fitted": "baseline estimated from the fitted trend",
              "provider": "the provider's own reference mean, 2004 to 2009, for GRACE and GRACE-FO RL06 v2.0 mascons"}.get(method)
     baseline = {"text": text, "years": by, "method": method, "label": label, "years_covered": cover, "value": base_value,
-                "months": normals, "projection_axis": method != "none" and months[0][0] <= 2014}
+                "months": normals, "annual_total_mm": r(base_value * 365.25, 1) if pct and base_value else None,
+                "projection_axis": method in ("observed", "fitted") and months[0][0] <= 2014}
 
     def anom(i):
         if vals[i] is None or normals is None:
@@ -251,8 +252,8 @@ def make(c):
         loc = r(slope, 2)
         w.update(available=True, measure="average for all land areas", local_rate=loc, world_rate=0.29, unit="°C per decade",
                  window={"start": tm(i0), "end": tm(i1)},
-                 method=("Sen's slope of monthly anomalies; different datasets: " + ("a grid cell" if c["source"]["id"] == "power" else "a weather station")
-                         + " here, station-based for the world; same months, same method"),
+                 method=("Sen's slope of monthly anomalies, same months for both; different datasets: " + ("a grid cell" if c["source"]["id"] == "power" else "a weather station")
+                         + " here, station-based for the world"),
                  ratio=r(loc / 0.29, 1), thresholds={"moderate": 0.75, "high": 1.5}, source=LAND,
                  text=f"Over the same years, the average for all land areas warmed 0.29 °C per decade. Here: {loc:.2f} °C per decade.")
     elif c["world"] == "gmsl":
@@ -325,7 +326,7 @@ def make(c):
     per_year = var in ("sea_level", "water_storage")
     k = 0.1 if per_year else 1.0
     hu = {"sea_level": "mm", "water_storage": "cm", "precip": "%"}.get(var, "°C")
-    per = "a year" if per_year else "per decade"
+    per = "a year" if per_year else "of the 1995–2014 average per decade" if pct else "per decade"
     sep = "" if hu == "%" else " "
     headline_rate = {"value": r(slope * k, 4), "low": r(lo * k, 4), "high": r(hi * k, 4), "unit": hu, "per": per,
                      "text": f"{num(slope * k)}{sep}{hu} {per}", "range_text": f"{num(lo * k)} to {num(hi * k)}{sep}{hu} {per}"}
@@ -335,16 +336,20 @@ def make(c):
     present = [i for i in range(n) if vals[i] is not None]
     explain = {
         "data": {"n_months": len(present), "n_missing": n - len(present), "start": tm(0), "end": tm(last), "where": c["where"]},
-        "seasons": ({"high_month": hi_m, "high": normals[hi_m - 1], "low_month": lo_m, "low": normals[lo_m - 1],
-                     "swing": r(normals[hi_m - 1] - normals[lo_m - 1], 3), "units": c["units"]} if normals else None),
+        "seasons": (None if not normals else  # rain: monthly totals in mm a month
+                    {"high_month": hi_m, "high": r(normals[hi_m - 1] * 365.25 / 12, 1), "low_month": lo_m, "low": r(normals[lo_m - 1] * 365.25 / 12, 1),
+                     "swing": r((normals[hi_m - 1] - normals[lo_m - 1]) * 365.25 / 12, 1), "units": "mm a month"} if pct else
+                    {"high_month": hi_m, "high": normals[hi_m - 1], "low_month": lo_m, "low": normals[lo_m - 1],
+                     "swing": r(normals[hi_m - 1] - normals[lo_m - 1], 3), "units": c["units"]}),
         "real": {"p_value": r(p, 6), "in_100": "less than 1" if p < 0.01 else str(round(p * 100)), "rule": RULE, "widened": True}}
     series = {"variable": var, "units": c["units"], "freq": "monthly", "place": c["place"], "times": [tm(i) for i in range(n)],
               "values": vals, "source": c["source"], "notes": c["notes"], "flags": flags,
               "anomaly": {"kind": "percent" if pct else "difference", "units": "%" if pct else c["units"], "values": anomaly,
                           "baseline": baseline}}
+    ku = base_value / 100 if pct else 1  # slope_per_decade is in the series units (rain: mm/day); the % rate is headline_rate
     trend = {"variable": var, "units": c["units"], "place": c["place"], "period": {"start": tm(0), "end": tm(last)},
-             "n": len(ok), "deseasonalized": True, "method": "mann_kendall_sen", "slope_per_decade": r(slope, 4),
-             "ci_low": r(lo, 4), "ci_high": r(hi, 4), "p_value": r(p, 6), "autocorrelation_adjusted": True, "verdict": verdict,
+             "n": len(ok), "deseasonalized": True, "method": "mann_kendall_sen", "slope_per_decade": r(slope * ku, 4),
+             "ci_low": r(lo * ku, 4), "ci_high": r(hi * ku, 4), "p_value": r(p, 6), "autocorrelation_adjusted": True, "verdict": verdict,
              "source": c["source"], "caveats": c["caveats"], "baseline": baseline,
              "record": {"years": r(years, 1), "coverage": r(len(ok) / n, 2), "status": status, "trimmed_from": None}, "range_kind": "95% range",
              "headline_rate": headline_rate, "fit": fitd, "latest": {"month": tm(last), "text": f"Data through {MON[months[last][1] - 1]} {months[last][0]}"},

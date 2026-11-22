@@ -54,15 +54,15 @@
   }
 
   // A value in units u, as shown: the series' own units go through guidance.display, then the Units setting.
-  // level: an absolute level (°F adds 32); otherwise a difference or a rate.
+  // Rain's mm/day stays a rate a day: a monthly value is never annualised. level: an absolute level (°F adds 32).
   function conv(t, imp, x, u, level) {
     if (u === '%') return { v: x, unit: '%' };
     var g = t.guidance && t.guidance.display, v = x, unit = normU(u);
-    if (u === t.units && g && isNum(g.factor) && str(g.unit)) { v = x * g.factor; unit = normU(g.unit); }
+    if (u === 'mm/day') unit = 'mm a day';
+    else if (u === t.units && g && isNum(g.factor) && str(g.unit)) { v = x * g.factor; unit = normU(g.unit); }
     if (imp) {
       if (unit === 'cm') { v /= 2.54; unit = 'in'; }
-      else if (unit === 'mm') { v /= 25.4; unit = 'in'; }
-      else if (unit === 'mm a year') { v /= 25.4; unit = 'in a year'; }
+      else if (/^mm( |$)/.test(unit)) { v /= 25.4; unit = unit.replace(/^mm/, 'in'); }
       else if (unit === '°C') { v = v * 1.8 + (level ? 32 : 0); unit = '°F'; }
     }
     return { v: v, unit: unit };
@@ -86,7 +86,12 @@
   // The rate every view prints (headline_rate): its own text, or converted for the Units setting.
   function rate(t, imp) {
     var h = t.headline_rate;
-    if (!h || typeof h.text !== 'string') return null;
+    if (!h || typeof h.text !== 'string') { // null only for rain where the 1995-2014 average is zero: the rate in mm a day
+      if (!isNum(t.slope_per_decade) || !isNum(t.ci_low) || !isNum(t.ci_high)) return null;
+      var c = function (x) { return conv(t, imp, x, t.units).v; }, cu = conv(t, imp, 0, t.units).unit;
+      return { text: withUnit(fmtNum(c(t.slope_per_decade), true), cu) + ' per decade', range: fmtNum(c(t.ci_low), true) + ' to ' + withUnit(fmtNum(c(t.ci_high), true), cu) + ' per decade',
+        value: c(t.slope_per_decade), low: c(t.ci_low), high: c(t.ci_high), unit: cu, per: 'per decade' };
+    }
     var u = normU(h.unit), per = str(h.per), k = imp && RATE_K[u];
     if (k && isNum(h.value) && isNum(h.low) && isNum(h.high)) {
       var f = function (x) { return fmtNum(x * k[0], true); };
@@ -261,10 +266,16 @@
       s2.short = 'No ' + yrs + ' average for each month';
       s2.words = ["This record has too few years from 1995 to 2014 to make each month's average, so this page shows its values as measured."];
     } else {
-      var hi = MONTHS_LONG[sea.high_month - 1], lo = MONTHS_LONG[sea.low_month - 1], swing = f.amt(sea.swing, sea.units);
-      s2.short = 'Highest in ' + hi + ', lowest in ' + lo + ': a swing of ' + swing;
-      var p2 = 'Here ' + measure + ' is usually ' + (LEVELS[t.variable] ? f.lvl(sea.high, sea.units) + ' in ' + hi + ' and ' + f.lvl(sea.low, sea.units) + ' in ' + lo
-        : 'highest in ' + hi + ' and lowest in ' + lo) + ': a seasonal swing of ' + swing + '.';
+      var hi = MONTHS_LONG[sea.high_month - 1], lo = MONTHS_LONG[sea.low_month - 1], swing = f.amt(sea.swing, sea.units), p2;
+      if (/ a month$/.test(str(sea.units))) { // rain: monthly totals, "263.4 mm"
+        var mo = function (x) { var c = conv(t, imp, x, sea.units); return withUnit(fmtNum(c.v, false), c.unit.replace(/ a month$/, '')); };
+        s2.short = 'Wettest in ' + hi + ' (' + mo(sea.high) + '), driest in ' + lo + ' (' + mo(sea.low) + ')';
+        p2 = 'Here the wettest month, ' + hi + ', usually gets ' + mo(sea.high) + ' of rain, and the driest, ' + lo + ', ' + mo(sea.low) + '.';
+      } else {
+        s2.short = 'Highest in ' + hi + ', lowest in ' + lo + ': a swing of ' + swing;
+        p2 = 'Here ' + measure + ' is usually ' + (LEVELS[t.variable] ? f.lvl(sea.high, sea.units) + ' in ' + hi + ' and ' + f.lvl(sea.low, sea.units) + ' in ' + lo
+          : 'highest in ' + hi + ' and lowest in ' + lo) + ': a seasonal swing of ' + swing + '.';
+      }
       p2 += ' The change we look for is ' + f.val(fit.change, fit.units) + ' over ' + Math.round(fit.years) + ' years. So we compare each month with its own ' + own(b.text) + ' first'
         + (pct ? ', and write the difference as a share of the usual rain' : '') + '.';
       s2.words = [p2, { text: "Check it yourself: the CSV's anomaly column is " + (pct ? "each value's difference from its month's " + yrs + ' average, as a % of the ' + yrs + ' average rate.'
@@ -281,25 +292,28 @@
     }
     out.push(s2);
 
-    var s3 = { title: 'One baseline' }, showLvl = LEVELS[t.variable] && isNum(b.value);
+    // the level at this place: rain says its annual total as the API gives it ("about 1,239 mm a year"), never converted from a rate
+    var lvl3 = isNum(b.annual_total_mm) ? 'about ' + (imp ? fmtNum(b.annual_total_mm / 25.4, false) + NB + 'in' : commas(Math.round(b.annual_total_mm)) + NB + 'mm') + ' a year'
+      : LEVELS[t.variable] && t.variable !== 'precip' && isNum(b.value) ? f.lvl(b.value, s.units) : '';
+    var s3 = { title: 'One baseline' };
     if (b.method === 'provider') {
       s3.short = 'Every level is compared with ' + b.text;
       s3.words = ['Every level on this page is compared with ' + b.text + ': ' + stop(str(b.label)) + " Water storage has no expert projection, so it keeps the provider's own reference."];
     } else if (b.method === 'none') {
       s3.short = 'No 1995–2014 average for this record';
       s3.words = ['This record has too few years from 1995 to 2014 to make that average, so this page shows no levels for it, only the rate.'];
-      s3.work = [b.years_covered + ' of the 20 years have at least 9 months of data. We need at least 15, or a record of 30 years or more that starts before 2005.'];
+      s3.work = [b.years_covered + ' of the 20 years have at least 9 months of data. We need at least 15, or a record of 30 years or more that runs from 1995 or earlier to 2014 or later.'];
     } else {
-      s3.short = 'Every level is compared with ' + b.text + (showLvl ? ' here, ' + f.lvl(b.value, s.units) : '');
-      s3.words = ['Every level on this page is compared with ' + b.text + ' at this place' + (showLvl ? ', ' + f.lvl(b.value, s.units) : '') + ', so 0 means that average. '
+      s3.short = 'Every level is compared with ' + b.text + (lvl3 ? ' here, ' + lvl3 : '');
+      s3.words = ['Every level on this page is compared with ' + b.text + ' at this place' + (lvl3 ? ', ' + lvl3 : '') + ', so 0 means that average. '
         + 'The card, the chart, the table and the CSV all use it. Expert projections from the IPCC use the same years, so past and future can share one axis.'];
       s3.work = [b.method === 'fitted'
-        ? b.years_covered + ' of the 20 years have at least 9 months of data; we need 15. The record spans ' + Math.round(rec.years) + " years and starts before 2005, so we fit the trend and the seasons together and take the line's 1995–2014 average (" + b.label + ').'
+        ? b.years_covered + ' of the 20 years have at least 9 months of data; we need 15. The record spans ' + Math.round(rec.years) + " years and runs from 1995 or earlier to 2014 or later, so we fit the trend and the seasons together and take the line's 1995–2014 average (" + b.label + ').'
         : b.years_covered + ' of the 20 years from 1995 to 2014 have at least 9 months of data. We need at least 15.'];
     }
     out.push(s3);
 
-    var dec = r.per === 'per decade';
+    var dec = /per decade$/.test(r.per); // rain: "of the 1995–2014 average per decade"
     var s4 = { title: 'The trend and its range', short: r.text + ', ' + rk + ' ' + r.range };
     s4.words = [(clear
       ? 'From ' + Y(fit.start) + ' to ' + Y(fit.end) + ', ' + measure + ' here ' + (t.verdict === 'rising' ? 'rose' : 'fell') + ' by about ' + unsign(r.text) + (dec ? ' (every 10 years).' : '.')
