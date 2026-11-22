@@ -292,8 +292,8 @@ thead th { position: sticky; top: 0; background: var(--surface); }
 .drv tr.tot td { border-top: 2px solid var(--ink); font-weight: 650; }
 .dbar { display: block; margin-top: 2px; width: 260px; max-width: 100%; height: auto; }
 .d-zero { stroke: var(--ink-2); stroke-width: 1; }
-.d-bar { fill: var(--k); fill-opacity: .35; }
-.d-bar.tot { fill: var(--ink); fill-opacity: .25; }
+.d-bar { fill: var(--k); } /* full colour for 3:1 in both themes (at 35% it was 1.64:1 on white) */
+.d-bar.tot { fill: var(--ink-2); }
 .d-dot { fill: var(--k); stroke: var(--surface); stroke-width: 1.5; }
 .d-dot.tot { fill: var(--ink); }
 .dec-scroll { overflow-x: auto; container-type: inline-size; }

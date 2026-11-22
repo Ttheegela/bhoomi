@@ -180,7 +180,7 @@
     if (short) r2.line += '. Short record.';
     var g = t.guidance || {}, word = verdictWord(t);
     // R3 with an expert projection (design 11 §3): the chosen scenario's 2050 value, its range and how far that is above today
-    var r3f = fx ? { label: 'By 2050, ' + fx.name, value: fx.t50, line: fx.code + fx.lc + '. ' + fx.rkShort + ' ' + fx.trng + '.'
+    var r3f = fx ? { label: 'By 2050, ' + fx.name, value: fx.t50, line: fx.code + fx.lc + ', IPCC AR6. ' + fx.rkShort + ' ' + fx.trng + '.'
       + (fx.more ? ' ' + cap(fx.more) + '.' : '') + (fx.regional ? ' Regional estimate: local sinking may differ.' : '') } : null;
     return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, why: why(t, imp),
       world: worldLine(t, imp, /^Since \d{4}\b/.test(str(g.why))), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f,
@@ -539,8 +539,13 @@
     var nb = function (x) { return x.replace(/ cm\b/g, NB + 'cm'); };
     var loc = p.location || {}, chk = p.check || {}, ts = t.source || {};
     var gid = ts.id === 'psmsl' && /\/stations\/(\d+)\.php$/.exec(str(ts.record_url)); // a PSMSL record's id, from its station page
+    var med = p.scenarios.filter(function (x) { return x.confidence === 'medium'; });
+    // the server's fallback when 2019-2021 is too sparse (Mumbai): the latest 12 months against AR6's range at their mid-year
+    var l12 = chk.kind === 'latest 12 months' && !!chk.latest && isNum(chk.latest.value);
     return { p: p, S: S, S0: S0, ssp: ssp, noLow: !!(sel && sel.low) && !lowS, low: low, lc: low ? ', low confidence' : '', rk: str(S.range_kind),
-      rkShort: low ? str(S.range_kind) : 'Likely', med: p.scenarios.filter(function (x) { return x.confidence === 'medium'; }),
+      rkShort: low ? str(S.range_kind) : 'Likely', med: med,
+      oth: med.filter(function (x) { return sspOf(x.id) !== sspOf(S.id); }), // the other three: never S's own medium twin
+      l12: l12,
       name: str(S.name), Name: cap(str(S.name)), short: scenShort(S), code: str(S.code), p50: p50, lo: lo, hi: hi,
       t50: gv ? nb(gv[1]) : cmv(p50, imp), trng: gv ? nb(gv[2]) : rngc(lo, hi, imp),
       now: nw, old: old, nowWord: old ? 'Latest' : 'Now', more: more == null ? '' : srv && mt && str(mt.text) ? nb(mt.text)
@@ -572,12 +577,15 @@
     var span = [];
     fx.med.concat(fx.low ? [fx.S] : []).forEach(function (x) { line(x, 'p17').concat(line(x, 'p83')).forEach(function (v) { if (v != null) span.push(v); }); });
     return { years: ys, span: span,
-      others: fx.med.filter(function (x) { return x !== fx.S; }).map(function (x) { return { S: x, k: SCOL[sspOf(x.id)] || 1, p50: line(x, 'p50') }; }),
+      others: fx.oth.map(function (x) { return { S: x, k: SCOL[sspOf(x.id)] || 1, p50: line(x, 'p50') }; }),
       sel: { S: fx.S, k: SCOL[fx.ssp] || 2, p17: line(fx.S, 'p17'), p50: line(fx.S, 'p50'), p83: line(fx.S, 'p83') } };
   }
+  // the second line of a low-confidence end label: under 600 px the right margin holds 84 px of 12 px text, and
+  // "low confidence" is about 87 (QA at 375), so it takes two lines there
+  function lcLines(narrow) { return narrow ? ['low', 'confidence'] : ['low confidence']; }
   // a decade on the chart's readout
   function decadeRead(fx, Y, imp) {
-    var p = fx.p, o = fx.med.filter(function (x) { return x !== fx.S; });
+    var p = fx.p, o = fx.oth;
     return Y + ': ' + fx.name + ' (' + fx.code + ')' + fx.lc + ' ' + cmv(atY(p, fx.S, 'p50', Y), imp) + ', ' + fx.rk + ' ' + rngc(atY(p, fx.S, 'p17', Y), atY(p, fx.S, 'p83', Y), imp) + '.'
       + (o.length ? ' Others: ' + o.map(function (x) { return scenShort(x) + ' ' + cmv(atY(p, x, 'p50', Y), imp); }).join(', ') + '.' : '');
   }
@@ -587,7 +595,8 @@
     return { b: fx.t50 + ' by 2050', rest: ' under ' + fx.name + ' (' + fx.code + ')' + fx.lc + ': ' + fx.rk + ' ' + fx.trng + '.'
         + (!fx.axis ? " This record has no 1995–2014 average, so we can't say how far that is above today." : fx.more ? ' That is ' + fx.more + '.' : ''),
       sub: str(fx.p.caveat) + (fl && https(fl.url) && str(fl.label) ? ' For flood planning here: ' : ''), link: fl && https(fl.url) && str(fl.label) ? { text: fl.label + ' ↗', href: fl.url } : null,
-      regional: regional || '', outside: fx.outside ? "Here the measured level for 2019 to 2021 is outside the experts' 2020 range. " : '',
+      regional: regional || '', outside: !fx.outside ? '' : fx.l12 ? "Here the measured level for the latest 12 months is outside the experts' range for that year. "
+        : "Here the measured level for 2019 to 2021 is outside the experts' 2020 range. ",
       noLow: fx.noLow ? fx.short + ' (' + fx.code + ') has no low-confidence version, so this shows its medium-confidence projection.' : '' };
   }
   // the chart's summary: the four middle estimates for 2100 and the shaded range
@@ -604,26 +613,36 @@
   // step 7 "What comes next" with a projection (design 11 §6)
   function step7(t, fx, imp, flink) {
     var p = fx.p, c = fx.check, S0 = fx.S0, o = c.observed_2019_2021, b20 = atY(p, S0, 'p50', 2020), bt = str((t.baseline || {}).text), loc = fx.loc;
-    var where = fx.regional ? 'for the ' + str(loc.name) + ", because there is no AR6 tide gauge close enough. The land motion in it is AR6's regional estimate, and local sinking here may differ"
+    var where = fx.regional ? 'for the ' + str(loc.name) + (str(loc.note) ? '. ' + loc.note.replace(/\.$/, '') : '') // the server's note, as given
       : fx.same ? 'at this tide gauge' : 'at the tide gauge ' + str(loc.name) + ', ' + loc.km + ' km from this one';
     var sub = function (x) { return x.charAt(0) === MINUS ? '(' + x + ')' : x; }, work = [];
     if (fx.now) {
       work.push(fx.nowWord + ': the 12 months to ' + M(t.now.end) + ' average ' + fx.now.value + ' compared with ' + bt + '.');
       if (fx.more) work.push('2050, ' + fx.code + ': ' + fx.t50 + ' − ' + sub(fx.now.value) + ' = ' + fx.more + '. Approximate: it takes a 12-month average from a projection.');
     } else work.push('Now: fewer than 10 of the last 12 months have data, so there is no 12-month average to compare.');
-    var r20 = S0.code + ' (' + str(S0.outer_kind) + ' ' + rngc(c.ar6_2020_p05, c.ar6_2020_p95, imp) + ')';
-    if (isNum(o)) {
+    var rng = function (a, b) { return S0.code + ' (' + str(S0.outer_kind) + ' ' + rngc(a, b, imp) + ')'; };
+    var cause = ', often because of earthquakes, land rising after the ice age, or a recent surge. Read the projection here with extra care.';
+    // the measured level rests on a fitted baseline when fewer than 15 of the 20 baseline years count (QA: New Orleans)
+    var fb = (t.baseline || {}).method === 'fitted' ? ' (the baseline here is estimated from the trend)' : '';
+    if (isNum(o)) { // check.kind "2019-2021"
       if (isNum(b20)) work.push("2020: the experts' middle estimate is " + cmv(b20, imp) + '; the measured average for 2019 to 2021 is ' + cmv(o, imp)
         + '. We plot the projection as published, so the gap of ' + cmv(Math.abs(b20 - o), imp, true) + ' shows on the chart.');
-      work.push(c.inside ? 'Check: ' + cmv(o, imp) + " is inside the experts' 2020 range for " + r20 + ', so the record and the projection agree here.'
-        : { bad: true, text: 'Check: ' + cmv(o, imp) + " is outside the experts' 2020 range for " + r20 + ". Some tide gauges fall outside the experts' 2020 range, often because of earthquakes, land rising after the ice age, or a recent surge. Read the projection here with extra care." });
-      // the owner's domain review: one year's mean is noisy at a gauge
-      work.push('One 12-month “Now” can swing by about ' + (imp ? '1 inch' : '3 cm') + ' from year to year at a gauge, so a single year can sit above or below the line.');
-    } else work.push(fx.axis ? 'Check: not possible here. The record has fewer than 24 of the 36 months from 2019 to 2021.' : 'Check: not possible here. This record has no 1995–2014 average.');
+      var r20 = rng(c.ar6_2020_p05, c.ar6_2020_p95);
+      work.push(c.inside ? 'Check: ' + cmv(o, imp) + fb + " is inside the experts' 2020 range for " + r20 + ', so the record and the projection agree here.'
+        : { bad: true, text: 'Check: ' + cmv(o, imp) + fb + " is outside the experts' 2020 range for " + r20 + ". Some tide gauges fall outside the experts' 2020 range" + cause });
+    } else if (fx.l12) { // check.kind "latest 12 months": 2019-2021 is too sparse, so the server checks `now` at its mid-year
+      var L = c.latest, lead = 'Check: the latest 12 months' + (t.now && t.now.end ? ' (to ' + M(t.now.end) + ')' : '') + ' are ' + cmv(L.value, imp) + fb;
+      work.push(c.inside ? lead + ", inside the experts' range for that year under " + rng(L.ar6_p05, L.ar6_p95) + ', so the record and the projection agree here.'
+        : { bad: true, text: lead + ", outside the experts' range for that year under " + rng(L.ar6_p05, L.ar6_p95) + ". Some tide gauges fall outside the experts' range" + cause });
+    } else work.push(!fx.axis ? 'Check: not possible here. This record has no 1995–2014 average.'
+      : 'Check: not possible here. The record has fewer than 24 of the 36 months from 2019 to 2021' + (fx.now
+        ? ", and its latest 12 months end before the experts' projections start in 2020." : ', and fewer than 10 of its last 12 months have data.'));
+    // the owner's domain review: one year's mean is noisy at a gauge
+    if (isNum(o) || fx.l12) work.push('One 12-month “Now” can swing by about ' + (imp ? '1 inch' : '3 cm') + ' from year to year at a gauge, so a single year can sit above or below the line.');
     work.push('After 2100 the experts used a different set of model runs, so the table can jump between 2100 and 2110.');
     var names = andList(fx.med.map(function (x) { return scenShort(x).toLowerCase() + ' (' + x.code + ')'; })) + ' emissions';
     return { title: 'What comes next', open: fx.outside,
-      short: fx.t50 + ' by 2050 under ' + fx.name + ' (' + fx.code + ')' + fx.lc + ', from the IPCC' + (fx.outside ? " · Check: outside the experts' 2020 range" : ''),
+      short: fx.t50 + ' by 2050 under ' + fx.name + ' (' + fx.code + ')' + fx.lc + ', from the IPCC' + (fx.outside ? " · Check: outside the experts' " + (fx.l12 ? 'range' : '2020 range') : ''),
       words: ["For the future we use only published expert projections: the IPCC's sea level projections (AR6, 2021) " + where + '. They use the same 1995–2014 average as the rest of this page, so past and future share one axis.',
         'Under ' + fx.name + ' (' + fx.code + ')' + fx.lc + ", the experts' middle estimate for 2050 is " + fx.t50 + '. Their ' + fx.rk + ' is ' + fx.trng + ', and their '
           + str(fx.S.outer_kind) + ' is ' + rngc(atY(p, fx.S, 'p05', 2050), atY(p, fx.S, 'p95', 2050), imp) + '.'
@@ -661,7 +680,8 @@
     var p = projOf(t), src = p.source || {}, loc = p.location || {};
     var head = ['# Bhoomi: Sea level projections for ' + ctx.label, '# Source: ' + str(src.name),
       '# Dataset: ' + str(src.dataset_id) + '; version: ' + str(src.version) + '; licence: ' + str(src.licence), '# Record: ' + https(src.record_url),
-      '# Location: ' + str(loc.name) + ' (' + str(loc.kind) + ', ' + loc.km + ' km from the gauge)' + (str(loc.note) ? '; ' + loc.note : ''),
+      '# Projection location: ' + (loc.kind === 'regional estimate' ? 'regional estimate for the ' + str(loc.name) : 'tide gauge ' + str(loc.name) + ', ' + loc.km + ' km away')
+        + (str(loc.note) ? '; ' + loc.note : ''),
       '# Baseline: ' + str((p.baseline || {}).text) + '; levels in mm as published, not shifted to meet the observations',
       '# Ranges: p17-p83 is the likely range (about 2 in 3 chance) for medium confidence and the 17th to 83rd percentile for low confidence; p05-p95 is the 5th to 95th percentile',
       "# Rates: the experts' own rate of rise for each decade, mm a year"]
@@ -1057,12 +1077,13 @@
       }
       labs.forEach(function (l) { l.y = Yp(l.v) + 4; });
       labs.sort(function (a, b) { return a.y - b.y; });
-      labs.forEach(function (l, i) { var g = i && labs[i - 1].two ? 29 : 16; if (i && l.y - labs[i - 1].y < g) l.y = labs[i - 1].y + g; });
+      var lc = lcLines(narrow);
+      labs.forEach(function (l, i) { var g = i && labs[i - 1].two ? 16 + 13 * lc.length : 16; if (i && l.y - labs[i - 1].y < g) l.y = labs[i - 1].y + g; });
       if (labs.length) root.append(sv('text', { x: xr, y: labs[0].y - 18, class: 'pc-t' }, 'In 2100:'));
       labs.forEach(function (l) {
         root.append(sv('line', { x1: ml + pw + 1, y1: Yp(l.v), x2: xr - 3, y2: l.y - 4, class: 'f-lead k' + l.k }));
         root.append(sv('text', { x: xr, y: l.y, class: 'pc-r' + (l.on ? ' on' : '') }, l.txt));
-        if (l.two) root.append(sv('text', { x: xr, y: l.y + 13, class: 'pc-t' }, 'low confidence'));
+        if (l.two) lc.forEach(function (x, j) { root.append(sv('text', { x: xr, y: l.y + 13 * (j + 1), class: 'pc-t' }, x)); });
       });
       // the axis stops at 2100: AR6 values after it come from other model runs (the table has them)
       var bx = ml + pw, by = mt + ph;
