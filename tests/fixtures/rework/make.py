@@ -95,6 +95,17 @@ CASES = [
          span=(1948, 1, 2022, 12), slope=5.1, sd=60, phi=0.5, missing=0.005, gaps=[(1995, 1, 2001, 12), (2006, 1, 2008, 12)],
          notes=["Tide gauge DIAMOND HARBOUR (543), 40 km from the point you asked about."],
          normals=[6900, 6880, 6920, 6990, 7080, 7180, 7300, 7360, 7340, 7250, 7060, 6950]),
+    # QA B3: a long record that ends under 20 years after 1993, so there is no world figure (like Mumbai)
+    dict(file="mumbai_sea_level_no_world", variable="sea_level", units="mm", seed=31,
+         place={"name": "MUMBAI (BOMBAY)", "lat": 18.9167, "lon": 72.8333},
+         source={"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/",
+                 "dataset_id": "PSMSL Revised Local Reference (RLR) monthly mean sea level", "version": None,
+                 "record_url": "https://psmsl.org/data/obtaining/stations/43.php", "retrieved": "2026-11-22",
+                 "method": "Monthly mean sea level from the gauge's authority, checked by PSMSL and reduced to the gauge's Revised Local Reference datum.",
+                 "cadence": "monthly", "deseasoned_upstream": False},
+         span=(1878, 1, 2010, 12), slope=0.8, sd=40, phi=0.5, missing=0.005,
+         notes=["Tide gauge MUMBAI (BOMBAY) (PSMSL id 43), 4 km from the point you asked about."],
+         normals=[6950, 6940, 6950, 6980, 7030, 7150, 7200, 7180, 7120, 7050, 6990, 6960]),
 ]
 
 
