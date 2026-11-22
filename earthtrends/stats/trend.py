@@ -362,7 +362,7 @@ def _signed0(d: Decimal) -> str:
 
 def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict | None:
     """The trend rate in the unit people read, with its 95% range (contract `headline_rate`): value, low and high to
-    3 significant figures; text to 2; both ends of range_text to the same decimals, enough that they differ, except
+    3 significant figures; text to 2 (rainfall: the share as guidance judges it); both ends of range_text to the same decimals, enough that they differ, except
     that a rainfall end shown on or across one of guidance's RAIN_THRESHOLDS is shown as guidance judges it (2
     significant figures: 4.51 reads +4.5, not +5). None for rainfall without a 1995-2014 average above zero."""
     rain = var == "precip" and units == UNITS["precip"]
@@ -379,15 +379,17 @@ def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict 
     # enough decimals that the ends differ and neither non-zero end shows as 0 (a clear rise is never "0 to +11")
     while exp > -6 and (lo != hi and _at(lo, exp) == _at(hi, exp) or any(v and not _at(v, exp) for v in (lo, hi))):
         exp -= 1
-    ends = [_at(lo, exp), _at(hi, exp)]
-    if rain:  # text is already sig2, as judged; each range end too when it would read on or across a threshold
+    ends, mid = [_at(lo, exp), _at(hi, exp)], sig2(v) + 0
+    if rain:  # text is the share guidance judges (and shows as rate), off the 4-decimal slope, not the raw one:
+        # 0.049496 on 1.0 mm/day is +5.0%, not +4.9%. Each range end too when it would read on or across a threshold
+        mid = _rain_judged(per_decade[0], base_value).copy_sign(v) + 0
         for i, (shown, raw) in enumerate(zip(ends, per_decade[1:])):
             judged = _rain_judged(raw, base_value)
             if any(abs(shown) == c or (abs(shown) >= c) != (judged >= c) for c in RAIN_THRESHOLDS):
                 ends[i] = judged.copy_sign(shown)
     gap = "" if unit == "%" else " "
     return {"value": float(_sig(v, 3)), "low": float(_sig(lo, 3)), "high": float(_sig(hi, 3)), "unit": unit,
-            "per": per, "text": f"{_signed0(sig2(v) + 0)}{gap}{unit} {per}",
+            "per": per, "text": f"{_signed0(mid)}{gap}{unit} {per}",
             "range_text": f"{_signed0(ends[0])} to {_signed0(ends[1])}{gap}{unit} {per}"}
 
 

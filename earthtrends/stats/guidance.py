@@ -74,13 +74,7 @@ RECOMMEND = {
         # no clear change only (a clear change gets low_wetter or low_drier): not evidence that rain is steady
         "low": "The rain record here shows no clear change, but that is not proof that rain is steady. Before you "
                "build or plant, check drainage and how secure your water supply would be in dry years, as you would "
-               "anywhere.",
-        # a clear change whose lower level is low: the whole range under 5%, or reaching 10% or more (Chennai,
-        # Mumbai +11%). No size claim (QA B11: "a small share" understated Mumbai); the rate and `why` give the size.
-        "low_wetter": "Rain here has been increasing. Before you build or plant, check drainage and the flood history "
-                      "of the site.",
-        "low_drier": "Rain here has been decreasing. If you farm or depend on rainfall, check how secure your water "
-                     "supply would be in dry years."},
+               "anywhere."},
     "water_storage": {
         "high": "Water stored in this region is falling fast. Before you rely on groundwater for a farm or a new well, "
                 "check local water levels and make sure of a secure supply.",
@@ -88,6 +82,9 @@ RECOMMEND = {
                     "levels and supply.",
         "low": "Past records give no special reason to worry about water supply in this region."},
 }
+# a clear rain change whose lower level is low (the whole range under 5%, or reaching 10% or more: Chennai, Mumbai
+# +11%) gets the moderate text, one per direction. No size claim (QA B11: "a small share" understated Mumbai).
+RECOMMEND["precip"].update({f"low_{w}": RECOMMEND["precip"][f"moderate_{w}"] for w in ("wetter", "drier")})
 SHORT = "The record here is too short to guide a decision. Try a nearby place with a longer record."
 
 # Copied from earthtrends/agent/resources.py (US_BOXES): (lat min, lat max, lon min, lon max) for the US coasts,
