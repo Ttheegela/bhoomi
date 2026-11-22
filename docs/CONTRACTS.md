@@ -71,7 +71,7 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
 ```
 
 - `method`: `"observed"` (at least 15 of the 20 years have 9 or more valid months), `"fitted"` (coverage short, but the record spans 30 or more years, starts in 1995 or earlier and runs to 2014 or later, so the fit never runs past the data: trend plus harmonics fitted, then its 1995–2014 mean; `label` is "baseline estimated from the fitted trend"), `"provider"` (GRACE only: the provider's own reference period in `years`, with `label` naming it), or `"none"` (no baseline possible; `value` and `months` are `null`).
-- `value`: the baseline level in the series `units` (the mean of `months`). `months`: the twelve calendar-month normals, January first, or `null`.
+- `value`: the baseline level in the series `units` (the mean of `months`). `months`: the twelve calendar-month normals, January first, or `null`. `annual_total_mm`: for rainfall only, the 1995–2014 mean rate × 365.25 in mm a year (1 decimal), so pages say "about 1,160 mm a year" without converting; `null` for every other measurement or without a baseline.
 - `projection_axis`: false when the record starts after 2014, or `method` is `"none"` or `"provider"` (GRACE is not on the 1995–2014 axis). Such a record is shown on its own chart, never on the projection axis.
 
 ### TrendResult additions and changes — stats lane
@@ -113,7 +113,7 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
 }
 ```
 
-  - `seasons` uses the baseline's calendar-month normals (`null` for `method` `"none"` or annual data). `real.widened`: true when the range was widened for months that are alike (autocorrelation).
+  - `seasons` uses the baseline's calendar-month normals (`null` for `method` `"none"` or annual data). Rainfall seasons are in mm a month (`units` "mm a month"); rainfall `fit` is in % of the 1995–2014 annual normal, like `anomaly` and `headline_rate`. `real.widened`: true when the range was widened for months that are alike (autocorrelation).
 - `guidance` changes: `outlook` and `outlook_label` are removed (D1: no future from a past trend). `ratio` and `reference` come from `world` (`null` when `world.available` is false). Hottest day of the month has no risk level: `risk` and `risk_label` are `null`, and so are `why` and `recommendation`; the verdict alone answers. A `no_clear_change` verdict is not evidence of low risk: `risk` is `null` and `risk_label` is "No clear change" (the recommendation and disclaimer stay). Every other key is unchanged and always present.
 
 ### World reference series — data lane, stats lane reads
