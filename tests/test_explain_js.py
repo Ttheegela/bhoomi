@@ -1034,6 +1034,7 @@ ol.querySelectorAll(':scope > li > details')[0].open = true; flush(); says('Clos
 // a re-render (another place or window) keeps the open steps and the same button, and the label follows
 showHow(B, cx(B, 'New York, NY'), false); flush();
 assert.strictEqual(ids['how-all'], btn);
+assert.strictEqual(btn.on.click.length, 1); // one click listener, not one more per render
 assert.strictEqual(sec.kids.filter(function (k) { return k.tagName === 'BUTTON'; }).length, 1);
 assert.deepStrictEqual(opened(), ALL); says('Close all steps');
 ol.querySelectorAll(':scope > li > details')[8].open = false; flush();
