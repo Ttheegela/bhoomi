@@ -129,6 +129,8 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
 
 ### CSV download — UI lane builds it from the fields above
 
+Text cells (place names, notes) that start with `=`, `+`, `-`, `@`, a tab or a return get a leading `'` so spreadsheets never run them; a header line containing a comma or a quote is quoted as one cell.
+
 ```
 # Bhoomi: Air temperature at Princeton, New Jersey
 # Source: NASA POWER (MERRA-2)
