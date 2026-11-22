@@ -54,6 +54,7 @@ HEADLINE = {"sea_level": ("0.1", "mm", "a year"), "air_temp": ("1", "°C", "per 
 RAIN_PER = "of the 1995–2014 average per decade"
 WORLD_YEARS = 20  # years with at least YEAR_MONTHS shared months
 NO_REFERENCE = "The world reference series is not available."
+WORLD_FLAT = "The world figure did not rise over these years, so there is no ratio."  # a world rate of 0 or less
 NO_MATCH = {"air_temp_max": "There is no matching world figure for the hottest day of the month.",
             "precip": "Rainfall is compared with this place's own usual rainfall, not with a world figure.",
             "water_storage": "Water storage is judged on this region's own change, not against a world figure."}
@@ -141,7 +142,8 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
     have = np.flatnonzero(~np.isnan(x))  # the last valid value, preliminary included
     last = times[have[np.argmax(t[have])]]
     world = _world(var, monthly, used, t[ok], xa[ok], sid, verdict)
-    if pct and base["value"] * 365.25 < RAIN_MIN_MM:  # too little rain for a % rule (domain review F4)
+    # too little rain for a % rule (domain review F4), a normal of zero included; guidance reads world.why_none
+    if var == "precip" and base["value"] is not None and base["value"] * 365.25 < RAIN_MIN_MM:
         world.update(text=None, why_none=SCARCE)
     data = {"n_months": len(ok), "n_missing": int(idx[ok][-1] - idx[ok][0]) + 1 - len(ok), "start": used[0],
             "end": used[-1], "where": _where(series)}
@@ -415,7 +417,8 @@ def _world(var: str, monthly: bool, used: list, t, xa, source_id=None, verdict: 
     glob = sig2(Decimal(repr(float(np.median(_pair_slopes(tp, wv))) * cfg["per"])))
     start, end = used[pick[0]], used[pick[-1]]
     src = ref.get("source") or {}
-    clear = glob > 0 and verdict in ("rising", "falling")
+    moving = verdict in ("rising", "falling")
+    clear = glob > 0 and moving
     ratios = [float(q(v / glob, "0.1") + 0) if clear else None for v in (local, local_lo, local_hi)]  # judged as shown
     return {"available": True, "measure": cfg["measure"], "local_rate": float(local), "world_rate": float(glob),
             "unit": cfg["unit"], "window": {"start": start, "end": end},
@@ -426,7 +429,7 @@ def _world(var: str, monthly: bool, used: list, t, xa, source_id=None, verdict: 
             "source": {k: src.get(k) for k in ("name", "dataset_id", "record_url", "retrieved")},
             "text": cfg["text"].format(verb=cfg["verb"] if glob > 0 else "changed by", w=_plain(glob),
                                        l=_plain(local), start=start[:4], end=end[:4]),
-            "why_none": None}
+            "why_none": WORLD_FLAT if moving and not clear else None}
 
 
 def _where(series: dict) -> str | None:

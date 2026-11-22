@@ -252,7 +252,7 @@ def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratios, why_none, 
                      "note": {"value": float(-mm if down else mm), "unit": "mm", "text": f"about {mm:f} mm {more} a year"}}
     if var not in RECOMMEND:  # hottest day of the month: no risk level (D5)
         return
-    if var == "precip" and mean * Decimal("365.25") < RAIN_MIN_MM:  # a % of a tiny normal is no guide: no level
+    if var == "precip" and why_none == SCARCE:  # a % of a tiny normal is no guide: no level (trend.py decides)
         g.update(risk=None, risk_label=None, why=SCARCE, recommendation=None)
         return
     low, high, why, key = _risk(var, verdict, (slope, lo, hi), mean, ratios, why_none, since)
