@@ -124,14 +124,14 @@ From IPCC AR6 relative sea level at the tide gauge (`earthtrends/data/ar6_gauges
 "projection": {
   "available": true,
   "kind": "sea_level_ar6",
-  "source": {"name": "IPCC AR6 sea level projections (Garner et al. 2021)", "dataset_id": "doi:10.5281/zenodo.6382554", "version": "20210809", "record_url": "https://doi.org/10.5281/zenodo.6382554", "licence": "CC BY 4.0", "citation": "…", "acknowledgement": "…"},
+  "source": {"name": "IPCC AR6 sea level projections (Garner et al. 2021)", "dataset_id": "doi:10.5281/zenodo.6382554", "version": "20210809", "record_url": "https://doi.org/10.5281/zenodo.6382554", "licence": "CC BY 4.0", "citation": ["…", "…", "…"], "acknowledgement": "…"},
   "location": {"kind": "gauge", "id": 12, "name": "NEW YORK (THE BATTERY)", "km": 0.4, "note": null},
   "baseline": {"text": "the 1995–2014 average", "years": [1995, 2014]},
   "units": "mm",
   "years": [2020, 2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100, 2110, 2120, 2130, 2140, 2150],
   "default_scenario": "ssp245_medium",
   "scenarios": [
-    {"id": "ssp245_medium", "code": "SSP2-4.5", "name": "middle-of-the-road emissions", "confidence": "medium",
+    {"id": "ssp245_medium", "code": "SSP2-4.5", "name": "intermediate emissions", "confidence": "medium",
      "range_kind": "likely range (about 2 in 3 chance)", "outer_kind": "5th to 95th percentile",
      "p05": [], "p17": [], "p50": [], "p83": [], "p95": [],
      "rate": {"units": "mm a year", "p05": [], "p17": [], "p50": [], "p83": [], "p95": []}}
@@ -154,12 +154,12 @@ From IPCC AR6 relative sea level at the tide gauge (`earthtrends/data/ar6_gauges
 }
 ```
 
-- Scenarios: SSP1-2.6 ("very low emissions"), SSP2-4.5 ("middle-of-the-road emissions"), SSP3-7.0 ("high emissions"), SSP5-8.5 ("very high emissions") at medium confidence, plus SSP1-2.6, SSP2-4.5 and SSP5-8.5 at low confidence (ids end `_low`, `range_kind` "17th to 83rd percentile", never "likely"). Arrays follow `years`; `null` where AR6 has no value.
+- Scenarios, named as the IPCC names them: SSP1-2.6 ("low emissions"), SSP2-4.5 ("intermediate emissions"), SSP3-7.0 ("high emissions"), SSP5-8.5 ("very high emissions") at medium confidence, plus SSP1-2.6, SSP2-4.5 and SSP5-8.5 at low confidence (ids end `_low`, `range_kind` "17th to 83rd percentile", never "likely"). Arrays follow `years`; `null` where AR6 has no value.
 - `location.kind`: `"gauge"` (the AR6 PSMSL gauge: the PSMSL id itself, or the CO-OPS station's row in `coops_to_psmsl.csv`) or `"regional estimate"` (the AR6 1° cell; `note` says the land motion is AR6's regional estimate and local sinking may differ). A Great Lakes station, or a place with no AR6 location: `available` false with `why` "Sea level projections don't cover the Great Lakes." / "There is no expert projection for this tide gauge."
 - `readouts.now`: the mean of the 12 latest monthly anomalies (against the same 1995–2014 baseline as the chart), with its months; `null` if fewer than 10 of those 12 months have values. `by_2050`: the default scenario's 2050 median and range. `more_than_today`: `by_2050.p50` minus `now.value`, labelled approximate (different kinds of number: a 12-month mean and a 2050 projection). Rounded for text to 2 significant figures.
-- `check`: the observed 2019–2021 mean on the baseline against AR6's 2020 5th–95th percentile at this location (`inside` false is shown in "How we calculated this", never hidden).
+- `check`: the observed 2019–2021 mean on the baseline (needs at least 24 of the 36 months; otherwise `observed_2019_2021` and `inside` are `null`) against AR6's 2020 5th–95th percentile at this location (`inside` false is shown in "How we calculated this", never hidden: about 1 in 7 gauges fall outside, mostly for real reasons such as earthquakes, fast land uplift or a recent regional surge).
 - `drivers`: the default scenario's 2050 parts with their own 17th–83rd percentiles.
-- Every sea-level answer keeps `world`, `fit` and the rest of PR1 unchanged; `projection` only adds.
+- Every sea-level answer keeps `world`, `fit` and the rest of PR1 unchanged; `projection` only adds. `readouts.now` equals the TrendResult's `now` (the same 12-month mean). Charts break the axis at 2100: AR6 values after 2100 come from a different set of model runs.
 
 ### World reference series — data lane, stats lane reads
 
