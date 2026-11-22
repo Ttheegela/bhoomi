@@ -97,10 +97,22 @@ Click for the full answer.                                                      
 
 ## 9. The personas, in their words (what QA should see)
 - Investor, Sea level: "Jakarta": the map centres on Jakarta; pointing at its dot gives the card's rate. Two zoom-outs show Asia; dark red to wine dots stand out at Bangkok, Manila, Semarang, and the in-view line names the fastest. "Then Mumbai": the map flies there (section 8); Mumbai is pale orange, Okha a grey ring. Next: the card's recommendation, or pin both and compare.
-- Builder: "Lower Manhattan": The Battery's dot is under the pin; its hover equals the card; Sandy Hook and Bergen Point are a step darker. Next: the card's flood-level advice.
+- Builder: "Lower Manhattan": The Battery's dot is under the pin; its hover equals the card; Sandy Hook and Bergen Point are a step darker. Next: the card's 'Where to look next' links.
 - Planner, Water storage: "Delhi": the blocks round Delhi are dark blue, as the card says ▼ Falling; the hover equals the card; the key says read regions, not towns. Next: "How we calculated this", or Princeton (pale: no clear change).
 
-## 10. Decisions for the owner (pending; the pictures are named)
+## 10. Decisions for the owner: decided by Tarun, 2026-11-22: A, A, A, A
+
+His words: "for the map lets go with A,A,A,A".
+- Gauge colours: six steps split at 0.
+- No clear change: grey hollow ring; pale grey blocks on water storage.
+- Water colours: as the card, blue for less water and orange for more. He picked this over B.
+- The water layer sits on the Water storage tab's own map.
+
+Two follow-ons:
+- **Facts, not advice** (contract, 2026-11-22): §9's "Next: the card's flood-level advice" now reads "Next: the card's 'Where to look next' links". No hover or key text gives advice.
+- **Footprint:** the map's caveat says "about 400 km", the same as the page head (`grace-trends.json` `footprint_km` 444, the point answer's 4° box), not 300 km.
+
+The options as they were offered:
 1. **Gauge colours.** A (recommended): six steps split at 0 (`d1-a-six-steps`, `01`, `06`, `09`). B: four steps, one blue (`d1-b-four-steps`). C: a smooth scale (`d1-c-smooth`; breaks "no gradients", and the hover and colour can disagree slightly).
 2. **"No clear change".** A (recommended): grey hollow ring; water storage pale grey blocks (`d2-a-grey-ring`). B: ring in the colour it leans (`d2-b-lean-ring`). C: faded dot (`d2-c-faded-dot`; under 3:1 on purpose).
 3. **Water-storage colours.** A (recommended): blue for less water, orange for more, as the place chart (`d3-a-same-as-card`). B: brown for less, blue for more; the place chart's water colours would change to match (`d3-b-brown-and-blue`).
