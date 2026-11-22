@@ -28,9 +28,14 @@ GMSL_MIN = 3  # values a month needs (one about every 7 days, so a full month ha
 # NOAAGlobalTemp's land part is built from GHCN-Monthly (NCEI's Climate at a Glance background and NOAAGlobalTemp pages).
 LAND_METHOD = ("Monthly land-only average temperature anomaly from NOAAGlobalTemp v6.1, built from GHCN-Monthly weather "
                "stations; anomalies against the 1901–2000 average of each calendar month.")
+# NASA's user guide says the series "has NOT been adjusted for Glacial Isostatic Adjustment, to account for the slight
+# long-term depression of the sea floor" but gives no size; the 0.3 mm a year is the University of Colorado Sea Level
+# Research Group's ("the mean rate of sea level change due to GIA is independently estimated from models at -0.3 mm/yr").
 GMSL_METHOD = ("Global mean sea level from satellite altimetry (NASA-SSH: TOPEX/Poseidon, the Jason series, Sentinel-6), "
                "about every 7 days and averaged by us into calendar months; it includes the seasonal cycle and is not "
-               "adjusted for glacial isostatic adjustment (land rebound).")
+               "corrected for the slow sinking of the ocean floor since the last ice age (glacial isostatic adjustment, "
+               "about 0.3 mm a year, per the University of Colorado Sea Level Research Group); the commonly quoted "
+               "corrected figure is a little higher.")
 
 
 def _axis(by_month: dict[str, float | None]) -> tuple[list[str], list[float | None]]:

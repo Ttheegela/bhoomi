@@ -44,7 +44,8 @@ def test_reference_method_is_what_the_script_writes():
     land, gmsl = world.reference("land_temp")["source"]["method"], world.reference("gmsl")["source"]["method"]
     assert land == update_world.LAND_METHOD and "GHCN-Monthly weather stations" in land and "1901–2000" in land
     assert gmsl == update_world.GMSL_METHOD and "includes the seasonal cycle" in gmsl
-    assert "not adjusted for glacial isostatic adjustment (land rebound)" in gmsl
+    assert "not corrected for the slow sinking of the ocean floor since the last ice age (glacial isostatic adjustment" in gmsl
+    assert "land rebound" not in gmsl  # wrong for a global mean: the correction is for the ocean basins getting deeper
 
 
 def test_reference_text_is_what_the_script_writes():
