@@ -85,7 +85,7 @@ def test_the_baseline_never_depends_on_the_window(offline, variable, src):
 def test_rainfall_levels_in_percent_seasons_in_mm_a_month(offline):
     t = client.get("/api/trend", params={"variable": "precip", "lat": 39.36, "lon": -74.42}).json()
     b, f, sea = t["baseline"], t["fit"], t["explain"]["seasons"]
-    assert b["annual_total_mm"] == round(b["value"] * 365.25, 1) and b["value"] == pytest.approx(3.177, abs=1e-3)
+    assert b["annual_total_mm"] == round(b["value"] * 365.25, 1) and b["value"] == pytest.approx(3.180, abs=1e-3)  # day-weighted 1995-2014 normal
     pct = 100 / b["value"]  # % of the 1995-2014 annual mean rate, like anomaly and headline_rate
     assert f["units"] == "%" and f["years"] == t["record"]["years"]
     for k, v in (("change", t["slope_per_decade"]), ("change_low", t["ci_low"]), ("change_high", t["ci_high"])):

@@ -71,7 +71,7 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
 ```
 
 - `method`: `"observed"` (at least 15 of the 20 years have 9 or more valid months), `"fitted"` (coverage short, but the record spans 30 or more years, at least 5 of the 20 years count, and there are data before 1995 and after 2014, so the fit never runs past the data: trend plus harmonics fitted, then its 1995–2014 mean; `label` is "baseline estimated from the fitted trend"), `"provider"` (GRACE only: the provider's own reference period in `years`, with `label` naming it), or `"none"` (no baseline possible; `value` and `months` are `null`). An `"observed"` baseline with fewer than 20 counted years is trend-adjusted (domain review F6): each month's normal is shifted by slope × (2004.5 − that month's mean counted year), the slope a least-squares line plus harmonics over the counted 1995–2014 values.
-- `value`: the baseline level in the series `units` (the mean of `months`). `months`: the twelve calendar-month normals, January first, or `null`. `annual_total_mm`: for rainfall only, the 1995–2014 mean rate × 365.25 in mm a year (1 decimal), so pages say "about 1,160 mm a year" without converting; `null` for every other measurement or without a baseline.
+- `value`: the baseline level in the series `units` (the mean of `months`; for rainfall the day-weighted mean, February 28.25 days, so it is the 1995–2014 annual total / 365.25). `months`: the twelve calendar-month normals, January first, or `null`. `annual_total_mm`: for rainfall only, the 1995–2014 mean rate × 365.25 in mm a year (1 decimal), so pages say "about 1,160 mm a year" without converting; `null` for every other measurement or without a baseline.
 - `projection_axis`: false when the record starts after 2014, or `method` is `"none"` or `"provider"` (GRACE is not on the 1995–2014 axis). Such a record is shown on its own chart, never on the projection axis.
 
 ### TrendResult additions and changes — stats lane
@@ -95,7 +95,7 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
   "method": "Sen's slope of monthly anomalies, same months for both",
   "ratio": 1.1,
   "thresholds": {"moderate": 0.75, "high": 1.5},
-  "source": {"name": "NOAA NCEI Climate at a Glance, global land", "dataset_id": "…", "record_url": "…", "retrieved": "2026-11-22"},
+  "source": {"name": "NOAA NCEI Climate at a Glance, global land", "dataset_id": "…", "record_url": "…", "retrieved": "2026-11-22", "method": "…"},
   "text": "Over the same years, the average for all land areas warmed 0.29 °C per decade. Here: 0.31 °C per decade.",
   "why_none": null
 }
@@ -197,7 +197,7 @@ time,value_degC,anomaly_degC,flag
     "reference": {"text": "Over the same years, the average for all land areas warmed 0.29 °C per decade. Here: 0.31 °C per decade.", "source": {"name": "NOAA NCEI Climate at a Glance, global land", "url": "https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/"}},
     "rate": {"value": 0.21, "unit": "°C", "text": "+0.21 °C", "per": "every 10 years", "note": null},
     "display": {"unit": "°C", "factor": 1},
-    "recommendation": "It has been getting warmer here. Build cooling and shade into long-term plans.",
+    "recommendation": "It has been getting warmer here at least about as fast as the average for all land areas. Before you plan a home, a farm or outdoor work, check how hot the summers get and how you would keep cool.",
     "future_link": null,
     "disclaimer": "This guidance isn't perfect. It is based only on past records, and the future is not certain. Not professional financial or legal advice."
   }
