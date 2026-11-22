@@ -10,8 +10,8 @@ import numpy as np
 
 from earthtrends.data.world import reference as _reference  # the world snapshots (D5); tests replace it
 from earthtrends.stats.baseline import MONTH_DAYS, YEAR_MONTHS, baseline, columns, fit, normals_at, num
-from earthtrends.stats.guidance import (DISPLAY, OWN_RULE, RAIN_MIN_MM, SCARCE, THRESHOLDS, guidance_for, q, sig2,
-                                        signed)
+from earthtrends.stats.guidance import (DISPLAY, OWN_RULE, RAIN_MIN_MM, RAIN_THRESHOLDS, SCARCE, THRESHOLDS,
+                                        guidance_for, q, sig2, signed)
 from earthtrends.stats.meaning import UNITS, meaning_for
 
 MIN_DAYS_PER_MONTH = 20
@@ -362,9 +362,11 @@ def _signed0(d: Decimal) -> str:
 
 def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict | None:
     """The trend rate in the unit people read, with its 95% range (contract `headline_rate`): value, low and high to
-    3 significant figures; text to 2; both ends of range_text to the same decimals, enough that they differ.
-    None for rainfall without a 1995-2014 average above zero."""
-    if var == "precip" and units == UNITS["precip"]:
+    3 significant figures; text to 2; both ends of range_text to the same decimals, enough that they differ, except
+    that a rainfall end shown on or across one of guidance's RAIN_THRESHOLDS is shown as guidance judges it (2
+    significant figures: 4.51 reads +4.5, not +5). None for rainfall without a 1995-2014 average above zero."""
+    rain = var == "precip" and units == UNITS["precip"]
+    if rain:
         if not base_value or base_value <= 0:
             return None
         factor, unit, per = Decimal(100) / Decimal(repr(base_value)), "%", RAIN_PER
@@ -377,10 +379,22 @@ def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict 
     # enough decimals that the ends differ and neither non-zero end shows as 0 (a clear rise is never "0 to +11")
     while exp > -6 and (lo != hi and _at(lo, exp) == _at(hi, exp) or any(v and not _at(v, exp) for v in (lo, hi))):
         exp -= 1
+    ends = [_at(lo, exp), _at(hi, exp)]
+    if rain:  # text is already sig2, as judged; each range end too when it would read on or across a threshold
+        for i, (shown, raw) in enumerate(zip(ends, per_decade[1:])):
+            judged = _rain_judged(raw, base_value)
+            if any(abs(shown) == c or (abs(shown) >= c) != (judged >= c) for c in RAIN_THRESHOLDS):
+                ends[i] = judged.copy_sign(shown)
     gap = "" if unit == "%" else " "
     return {"value": float(_sig(v, 3)), "low": float(_sig(lo, 3)), "high": float(_sig(hi, 3)), "unit": unit,
             "per": per, "text": f"{_signed0(sig2(v) + 0)}{gap}{unit} {per}",
-            "range_text": f"{_signed0(_at(lo, exp))} to {_signed0(_at(hi, exp))}{gap}{unit} {per}"}
+            "range_text": f"{_signed0(ends[0])} to {_signed0(ends[1])}{gap}{unit} {per}"}
+
+
+def _rain_judged(per_decade, base_value) -> Decimal:
+    """The share (%, no sign) guidance._risk judges a rain end on: sig2 of the result's 4-decimal slope over the
+    1995-2014 average, worked out the same way, so a shown end and its level never disagree."""
+    return sig2(abs(Decimal(repr(round(float(per_decade), 4) + 0.0))) / Decimal(repr(float(base_value))) * 100)
 
 
 def _plain(d: Decimal) -> str:
