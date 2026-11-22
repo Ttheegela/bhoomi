@@ -72,12 +72,16 @@ def compute_trend(series: dict) -> dict:
     used = [times[k] for k in ok]
     if (dup := np.flatnonzero(np.diff(t[ok]) == 0)).size:
         raise ValueError(f"Duplicate times in series: {used[dup[0]]} appears more than once.")
-    n = len(ok)
-    if not n:
+    if not ok.size:
         raise ValueError("There are no values in this record to test.")
-    record = _record(series["variable"], idx[ok], 12 if monthly else 1, used, n)
+    k, record = _record(series["variable"], idx[ok], year[ok], 12 if monthly else 1, used)
+    if k:  # sparse early readings: the fit starts later; the baseline below still uses the whole series
+        ok, used = ok[k:], used[k:]
+        when = f"{calendar.month_name[int(used[0][5:7])]} {used[0][:4]}" if monthly else used[0][:4]
+        caveats.append(f"Readings before {when} are too sparse, so the trend starts there.")
     if record["status"] == "short":
         caveats.append(SHORT_CAVEAT)
+    n = len(ok)
 
     base = baseline(s)
     xa = _anomalies(cols, base, monthly)
@@ -142,19 +146,27 @@ def compute_trend(series: dict) -> dict:
     return result
 
 
-def _record(var: str, idx, per_year: int, used: list, n: int) -> dict:
-    """Spec D6: enough years, and at least 80% of the expected values in that span; else a ValueError."""
-    span = int(idx[-1] - idx[0]) + 1  # months (or years) from the first value to the last, both included
+def _record(var: str, idx, year, per_year: int, used: list) -> tuple[int, dict]:
+    """Spec D6 -> (k, record): fit from used[k] on, the earliest whole-year start from which at least 80% of the
+    expected values up to the last one are there; that window then needs enough years. Else a ValueError."""
+    n = len(idx)
+    for k in range(n):  # the first valid value of each year, earliest first; k = 0 is the whole record
+        span = int(idx[-1] - idx[k]) + 1  # months (or years) from the window's first value to the last, both included
+        if (not k or year[k] != year[k - 1]) and 5 * (n - k) >= 4 * span:
+            break
+    else:
+        whole = int(idx[-1] - idx[0]) + 1
+        raise ValueError(f"Too many months are missing here for a trend: only {math.floor(100 * n / whole)}% of the "
+                         f"months from {used[0]} to {used[-1]} have a value, and no stretch of the record up to its "
+                         "end reaches the 80% a trend needs.")
     years = span / per_year
     least, full = MIN_YEARS.get(var, MIN_YEARS_OTHER)
     if span < least * per_year:
-        raise ValueError(f"The record here is too short for a trend: {years:.1f} years ({used[0]} to {used[-1]}). "
+        raise ValueError(f"The record here is too short for a trend: {years:.1f} years ({used[k]} to {used[-1]})"
+                         f"{' once its sparse earlier readings are left out' if k else ''}. "
                          f"A trend needs at least {least} years of data.")
-    if 5 * n < 4 * span:
-        raise ValueError(f"Too many months are missing here for a trend: only {math.floor(100 * n / span)}% of the "
-                         f"months from {used[0]} to {used[-1]} have a value, and a trend needs at least 80%. "
-                         "Try a later start year.")
-    return {"years": round(years, 1), "coverage": round(n / span, 2), "status": "ok" if span >= full * per_year else "short"}
+    return k, {"years": round(years, 1), "coverage": round((n - k) / span, 2),
+               "status": "ok" if span >= full * per_year else "short", "trimmed_from": used[0] if k else None}
 
 
 def _anomalies(cols, base: dict, monthly: bool):

@@ -187,13 +187,43 @@ def test_minimum_years(years, status):
 @pytest.mark.parametrize("gap,ok", [(72, True), (73, False)])  # 288 of 360 months is 80%; 287 is 79.7%
 def test_minimum_coverage(gap, ok):
     x = synth(30, start=1990)
-    x[100:100 + gap] = np.nan
+    x[100:100 + gap] = np.nan  # 1998-05 on
     s = ts(x, start=1990)
-    if not ok:
-        with pytest.raises(ValueError, match="only 79% of the months from 1990-01 to 2019-12"):
+    if not ok:  # the only window with 80% starts after the gap (2004-06) and is too short
+        with pytest.raises(ValueError, match=r"15\.6 years \(2004-06 to 2019-12\) once its sparse earlier readings"):
             compute_trend(s)
         return
-    assert compute_trend(s)["record"] == {"years": 30.0, "coverage": 0.8, "status": "ok"}
+    assert compute_trend(s)["record"] == {"years": 30.0, "coverage": 0.8, "status": "ok", "trimmed_from": None}
+
+
+def test_sparse_early_years_are_trimmed_by_whole_years():
+    x = synth(116, start=1911, per_decade=20, sd=5, level=7000.0)  # 1911-01 to 2026-12
+    year, month = cal(1911, x.size)
+    x[(year == 1911) & (month < 9)] = np.nan  # like Atlantic City's start, 1911-09
+    x[(year > 1912) & (year < 1990)] = np.nan  # two sparse early years, then a 77-year gap
+    whole = ts(x, start=1911, variable="sea_level")
+    r = compute_trend(whole)
+    assert r["record"] == {"years": 37.0, "coverage": 1.0, "status": "ok", "trimmed_from": "1911-09"}
+    assert r["period"]["start"] == r["fit"]["start"] == r["explain"]["data"]["start"] == "1990-01"
+    assert (r["n"], r["explain"]["data"]["n_months"], r["explain"]["data"]["n_missing"]) == (444, 444, 0)
+    assert "Readings before January 1990 are too sparse, so the trend starts there." in r["caveats"]
+    assert r["baseline"] == baseline(whole)  # the baseline still comes from the whole series
+    dense = compute_trend(ts(x[(1990 - 1911) * 12:], start=1990, variable="sea_level"))
+    assert {k: dense[k] for k in ("slope_per_decade", "ci_low", "ci_high", "p_value", "period")} == {
+        k: r[k] for k in ("slope_per_decade", "ci_low", "ci_high", "p_value", "period")}
+
+
+def test_dense_from_the_start_is_not_trimmed():
+    r = compute_trend(ts(synth(45)))
+    assert r["record"]["trimmed_from"] is None and r["period"]["start"] == "1981-01"
+    assert not any("too sparse" in c for c in r["caveats"])
+
+
+def test_sparse_throughout_is_still_a_400():
+    x = synth(40)
+    x[1::2] = np.nan  # every other month, to the end
+    with pytest.raises(ValueError, match="no stretch of the record up to its end reaches the 80%"):
+        compute_trend(ts(x))
 
 
 @pytest.mark.parametrize("years,ok", [(9, False), (10, True)])

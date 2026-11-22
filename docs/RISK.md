@@ -14,9 +14,10 @@ Rework v2 (2026-11-22, `docs/REWORK-SPEC.md` D1, D5, D6) changed three things:
 
 ## Before guidance: the record must support a trend
 
-`compute_trend` gives no result at all (a 400 with a plain message) when the record is too short or too gappy (D6):
-- under 20 years from the first value to the last (land water storage: under 10 years);
-- or under 80% of the months in that span with a value.
+`compute_trend` checks the record first (D6):
+- **Coverage.** The fit window must have at least 80% of its months with a value. When the whole record falls short, the window starts at the first value of the earliest calendar year from which the record to its last value reaches 80%. Sparse early readings are then left out. `record.trimmed_from` names the record's first month, and the caveats say "Readings before {Month YYYY} are too sparse, so the trend starts there." `period`, `fit`, `record` and `explain.data` describe the window. The baseline still uses the whole series.
+- **Length.** The window then needs at least 20 years from its first value to its last (land water storage: 10 years).
+- If no window meets both rules, there is no result at all: a 400 with a plain message.
 
 A record of 20 to 29 years is shown with `record.status` "short" and the caveat "Short record: under 30 years of data, so this trend is less certain." Land water storage counts as "ok" from 10 years. Preliminary values (`flags`) are left out of the baseline and the fit.
 

@@ -26,10 +26,8 @@ def load(name):
 
 @pytest.fixture
 def offline(monkeypatch, coops_long):
-    # From 1990 on only: the fixture's two real years from 1911-12 would leave the record under 80% covered.
-    dense = {**coops_long, "data": [r for r in coops_long["data"] if int(r["year"]) >= 1990]}
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: load("power_monthly.json"))
-    monkeypatch.setattr(coops, "fetch", lambda sid: dense)
+    monkeypatch.setattr(coops, "fetch", lambda sid: coops_long)
     monkeypatch.setattr(coops, "stations", lambda: load("coops_stations.json")["stations"])
 
 
@@ -57,6 +55,8 @@ def test_series_and_trend_shapes(offline, variable, src):
     assert set(r.json()) == TREND_KEYS and r.json()["source"]["id"] == src
     assert r.json()["verdict"] in {"rising", "falling", "no_clear_change"}
     assert r.json()["baseline"] == s["anomaly"]["baseline"]  # one baseline for the chart and the card
+    # the gauge's two sparse years from 1911 are left out of the fit; the grid cell is dense from the start
+    assert (r.json()["record"]["trimmed_from"] or "")[:4] == ("1911" if src == "coops" else "")
     assert r.headers["cache-control"] == CACHE
 
 
