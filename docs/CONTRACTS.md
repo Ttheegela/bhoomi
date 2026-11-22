@@ -147,9 +147,9 @@ From IPCC AR6 relative sea level at the tide gauge (`earthtrends/data/ar6_gauges
      {"id": "land_motion", "name": "Land rising or sinking here", "p17": 0, "p50": 68, "p83": 0}],
      "note": "Each part's range is its own; the parts' ranges don't add up to the total's."},
   "readouts": {
-    "now": {"value": 80, "text": "+8.0 cm", "kind": "12-month mean", "start": "2025-11", "end": "2026-10", "label": "the 12 months to October 2026"},
+    "now": {"value": 65.6083, "units": "mm", "kind": "12-month mean", "start": "2025-11", "end": "2026-10", "n": 12, "text": "+6.6 cm", "label": "the 12 months to October 2026"},
     "by_2050": {"scenario": "ssp245_medium", "p50": 358, "low": 266, "high": 464, "range_kind": "likely range (about 2 in 3 chance)", "text": "+36 cm (likely +27 to +46 cm)"},
-    "more_than_today": {"value": 278, "text": "about 28 cm more than today", "approximate": true}},
+    "more_than_today": {"value": 292, "text": "about 29 cm more than today", "approximate": true}},
   "check": {"observed_2019_2021": 80, "ar6_2020_p05": 0, "ar6_2020_p95": 0, "inside": true},
   "caveat": "Faster ice-sheet loss could push this higher, outside this range.",
   "why": null
@@ -161,7 +161,7 @@ From IPCC AR6 relative sea level at the tide gauge (`earthtrends/data/ar6_gauges
 - `readouts.now`: the mean of the 12 latest monthly anomalies (against the same 1995–2014 baseline as the chart), with its months; `null` if fewer than 10 of those 12 months have values. `by_2050`: the default scenario's 2050 median and range. `more_than_today`: `by_2050.p50` minus `now.value`, labelled approximate (different kinds of number: a 12-month mean and a 2050 projection). Rounded for text to 2 significant figures.
 - `check`: the observed 2019–2021 mean on the baseline (needs at least 24 of the 36 months; otherwise `observed_2019_2021` and `inside` are `null`) against AR6's 2020 5th–95th percentile at this location (`inside` false is shown in "How we calculated this", never hidden: about 1 in 7 gauges fall outside, mostly for real reasons such as earthquakes, fast land uplift or a recent regional surge).
 - `drivers`: the default scenario's 2050 parts with their own 17th–83rd percentiles.
-- Every sea-level answer keeps `world`, `fit` and the rest of PR1 unchanged; `projection` only adds. `readouts.now` equals the TrendResult's `now` (the same 12-month mean). Charts break the axis at 2100: AR6 values after 2100 come from a different set of model runs.
+- Every sea-level answer keeps `world`, `fit` and the rest of PR1 unchanged; `projection` only adds. `readouts.now` equals the TrendResult's `now` (the same 12-month mean, same keys). Like the baseline, `now` and `projection` always come from the whole series, whatever `start` and `end` the request asks for: "now" means the latest 12 months, never the end of a window. `more_than_today.value` is whole mm. Charts break the axis at 2100: AR6 values after 2100 come from a different set of model runs.
 
 ### World reference series — data lane, stats lane reads
 
