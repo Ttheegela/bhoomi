@@ -225,7 +225,7 @@ Colour is for the data only. Words and shapes (▲ ▼ ≈) still carry every me
 Per verdict: `--up-*` rising, `--dn-*` falling, `--nc-*` no clear change. `-bg` is the banner fill, the trend line, the band and the sparkline line; `-tx` is the banner text; `-1` to `-5` are the stripe ramp, low year to high year. `--font-head` is the Space Grotesk stack. The existing tokens are unchanged.
 | Token | Light | Dark |
 |---|---|---|
-| `--up-bg` / `--up-tx` | #D4620A / #111111 | #F2A04E / #111111 |
+| `--up-bg` / `--up-tx` | #CC5C00 / #111111 (was #D4620A: darkened for 3:1 on the sea-level scenario bands, `11-sea-level-future.md` §9; `--up-5` in the ramp below is unchanged and still reads #D4620A) | #F2A04E / #111111 |
 | `--up-1` to `--up-5` | #F2D0B5 #EBB48B #E39960 #DC7D35 #D4620A | #644526 #885C30 #AB723A #CF8944 #F2A04E |
 | `--dn-bg` / `--dn-tx` | #1B3F73 / #FFFFFF | #2F6FC4 / #FFFFFF |
 | `--dn-1` to `--dn-5` | #BBC5D5 #93A4BC #6B82A4 #43618C #1B3F73 | #314863 #3F6086 #4E78AA #5C90CD #6BA8F0 |
