@@ -15,11 +15,27 @@ Rework v2 (2026-11-22, `docs/REWORK-SPEC.md` D1, D5, D6) changed three things:
 ## Before guidance: the record must support a trend
 
 `compute_trend` checks the record first (D6):
-- **Coverage.** The fit window must have at least 80% of its months with a value. When the whole record falls short, the window starts at the first value of the earliest calendar year from which the record to its last value reaches 80%. Sparse early readings are then left out. `record.trimmed_from` names the record's first month, and the caveats say "Readings before {Month YYYY} are too sparse, so the trend starts there." `period`, `fit`, `record` and `explain.data` describe the window. The baseline still uses the whole series, and it never depends on the request's `start` or `end` either: a windowed request reads the whole record for it.
+- **Coverage.** The fit window must have at least 80% of its months with a value. When the whole record falls short, the window starts at the first value of the earliest calendar year from which the record to its last value reaches 80%. The scan goes by whole calendar years, never from a month inside a year. Sparse early readings are then left out. `record.trimmed_from` names the record's first month, and the caveats say "Readings before {Month YYYY} are too sparse, so the trend starts there." `period`, `fit`, `record` and `explain.data` describe the window. The baseline still uses the whole series, and it never depends on the request's `start` or `end` either: a windowed request reads the whole record for it.
 - **Length.** The window then needs at least 20 years from its first value to its last (land water storage: 10 years).
 - If no window meets both rules, there is no result at all: a 400 with a plain message.
+  - A long record whose recent stretch is too thin says so: "Too few recent readings for a trend: the record runs from {first} to {last}, but only {start} on ({years} years) has a value in at least 80% of its months. A trend needs at least 20 such years."
+  - A record that is short overall says "The record here is too short for a trend: …".
+- **Tide gauges (PSMSL).** A gauge that fails this check is passed over for the next nearest within 100 km. The series and the trend take the same gauge, read once. Its caveats name the gauge passed over, for example "Sheerness, 61 km away, has too few recent readings for a trend."
 
 A record of 20 to 29 years is shown with `record.status` "short" and the caveat "Short record: under 30 years of data, so this trend is less certain." Land water storage counts as "ok" from 10 years. Preliminary values (`flags`) are left out of the baseline and the fit.
+
+## How the trend and its range are computed
+
+1. Each monthly value minus its calendar month's 1995–2014 normal.
+2. The Mann–Kendall test and Sen's slope (the median of all pairwise slopes) on those anomalies.
+3. The variance of the Mann–Kendall statistic is corrected for months that are alike, by Hamed & Rao (1998).
+   - The series is detrended with Sen's slope and ranked.
+   - The rank autocorrelation ρ(i) is computed at every lag i.
+   - Only the lags significant at 5% (|ρ(i)| > 1.96/√n) are kept.
+   - n/n* = 1 + 2/(n(n−1)(n−2)) × Σ (n−i)(n−i−1)(n−i−2) ρ(i) over those lags.
+   - The variance is multiplied by n/n* only when n/n* is above 1. As published the factor can fall below 1, but with every lag tested, chance lags in pure noise often push it there: for 480 months of white noise the median is 0.85. Applied, that would narrow the range and call noise a clear change.
+4. The p-value and the 95% range of Sen's slope (Gilbert's rank method) both use that same corrected variance. `autocorrelation_adjusted` and `explain.real.widened` are true when the correction widened them.
+5. `headline_rate` and `fit.change` are computed from the unrounded slope, range and span. Only the shown numbers are rounded.
 
 ## Rates and display units
 
