@@ -47,6 +47,20 @@ def test_reference_method_is_what_the_script_writes():
     assert "not adjusted for glacial isostatic adjustment (land rebound)" in gmsl
 
 
+def test_reference_text_is_what_the_script_writes():
+    """Notes and source block (all but record_url and retrieved) of each snapshot equal what update_world.py builds."""
+    built = {"land_temp": update_world.land_temp((FX / "world_cag_land.csv").read_text(), "x", "x"),
+             "gmsl": update_world.gmsl(json.loads((FX / "world_nasa_gmsl.json").read_text()), "x")}
+    for name, b in built.items():
+        s = world.reference(name)
+        assert s["notes"] == b["notes"], name
+        assert {**s["source"], "record_url": "x", "retrieved": "x"} == {**b["source"], "record_url": "x", "retrieved": "x"}, name
+    land, gmsl = world.reference("land_temp"), world.reference("gmsl")
+    # NOAA does not mark which recent months may change, so nothing is flagged and the note says so
+    assert set(land["flags"]) == {None} and "does not say which; none is flagged here" in " ".join(land["notes"])
+    assert gmsl["source"]["url"] == "https://sealevel.nasa.gov/" and gmsl["source"]["dataset_id"] == "doi:10.5067/NSIND-GMSV1"
+
+
 def test_reference_unknown_name_and_copies():
     with pytest.raises(ValueError, match="Unknown world series 'sea_level'"):
         world.reference("sea_level")
