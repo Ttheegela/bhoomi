@@ -1,5 +1,6 @@
 """Runs the pure text and CSV logic of web/explain.js (between the PURE markers) in node, against the rework fixtures
 (tests/fixtures/rework: synthetic values, everything else built by the stats lane's own code)."""
+import json
 import os
 import pathlib
 import re
@@ -309,6 +310,10 @@ assert.strictEqual(cl[10], 'time,value_mm/day,anomaly_%,flag');
 assert.strictEqual(cS[1].short, 'Wettest in ' + MONTHS_LONG[cb.high_month - 1] + ' (' + fmtNum(cb.high, false) + NB + 'mm), driest in ' + MONTHS_LONG[cb.low_month - 1] + ' (' + fmtNum(cb.low, false) + NB + 'mm)');
 assert.ok(/^Here the wettest month, /.test(cS[1].words[0]));
 assert.ok(/ ÷ .*the usual rate = /.test(cS[1].work[0]) && /mm a day/.test(cS[1].work[0]) && !/a year/.test(cS[1].work[0]), cS[1].work[0]);
+// step 6 without a world figure: why there is none, then the rain rule (world.text), so "+0.4 to +10.7%" can be read
+assert.ok(!C.trend.world.available && /^Our rule: /.test(C.trend.world.text) && C.trend.world.why_none);
+assert.deepStrictEqual(cS[5].words, [C.trend.world.why_none, C.trend.world.text]);
+assert.strictEqual(cS[5].short, C.trend.world.why_none);
 assert.strictEqual(cS[2].short, 'Every level is compared with the 1995–2014 average here, about ' + commas(Math.round(C.trend.baseline.annual_total_mm)) + NB + 'mm a year');
 assert.ok(/ of the 1995–2014 average per decade × 4\.50 decades = /.test(cS[3].work[0]), cS[3].work[0]);
 sumAddsUp(C, cc, '%');
@@ -332,6 +337,7 @@ assert.strictEqual(hk.chip, '');
 assert.strictEqual(hk.world, '');
 assert.strictEqual(hS[5].short, 'There is no matching world figure for the hottest day of the month.');
 assert.strictEqual(hS[5].work, undefined);
+assert.deepStrictEqual(hS[5].words, [H.trend.world.why_none]); // no rule (world.text null): why_none alone
 clean(H, hdc);
 
 // QA B10: NASA POWER air temperature and hottest day say what a grid is and offer the station; the station's answer says
@@ -373,6 +379,8 @@ var G = load('grace_water_storage'), gc = ctx(G, 'Punjab, India'), gT = chartTex
 assert.strictEqual(gT.ytitle, 'cm of water compared with ' + gb.text);
 assert.strictEqual(gS[2].short, 'Every level is compared with ' + gb.text);
 assert.strictEqual(gS[6].short, G.trend.projection.why);
+assert.ok(/^Our rule: /.test(G.trend.world.text) && G.trend.world.why_none);
+assert.deepStrictEqual(gS[5].words, [G.trend.world.why_none, G.trend.world.text]); // water storage's own rule
 assert.strictEqual(card(G.trend, false).r1.label, 'Now, compared with ' + gb.text);
 assert.ok(!/− −/.test(gS[1].work[0]) && / − \(−[\d.]+ cm\) \(the usual /.test(gS[1].work[0]), gS[1].work[0]);
 sumAddsUp(G, gc, NB + 'cm');
@@ -456,9 +464,9 @@ assert.strictEqual(commas(1266), '1,266'); assert.strictEqual(slug('São Paulo, 
 var TODAY = 2026 * 12 + 10; // November 2026
 function pc2(d, label, imp, sel) { return Object.assign(ctx(d, label, imp), { today: TODAY, sel: sel || null }); }
 function sp(x) { return String(x).replace(/\u00a0/g, ' '); } // the server's texts use a plain space
-// cm(): 2 significant figures, at most 1 decimal, half away from zero, a true minus
-assert.deepStrictEqual([358, 80, 9, 1036, -68, 0, 355, -355, 4, 1].map(function (x) { return cmv(x, false); }),
-  ['+36 cm', '+8.0 cm', '+0.9 cm', '+104 cm', '−6.8 cm', '0 cm', '+36 cm', '−36 cm', '+0.4 cm', '+0.1 cm'].map(function (x) { return x.replace(' ', NB); }));
+// cm(): 2 significant figures, half away from zero, a true minus: the server's sig2 (9 mm is +0.90 cm, 1036 mm is +100 cm)
+assert.deepStrictEqual([358, 80, 9, 1036, -68, 0, 355, -355, 4, 1, 999, 10360].map(function (x) { return cmv(x, false); }),
+  ['+36 cm', '+8.0 cm', '+0.90 cm', '+100 cm', '−6.8 cm', '0 cm', '+36 cm', '−36 cm', '+0.40 cm', '+0.10 cm', '+100 cm', '+1000 cm'].map(function (x) { return x.replace(' ', NB); }));
 assert.strictEqual(cmv(254, true), '+10' + NB + 'in'); assert.strictEqual(cmv(100, true), '+3.9' + NB + 'in'); assert.strictEqual(cmv(-292, false, true), '29' + NB + 'cm');
 assert.strictEqual(rngc(266, 464, false), '+27 to +46' + NB + 'cm'); assert.strictEqual(rngc(null, 464, false), 'no value');
 
@@ -521,7 +529,7 @@ assert.strictEqual(bT2.fu.tail, ' for New York (The Battery).');
 assert.strictEqual(bT2.fu.band, 'Likely range (about 2 in 3 chance), intermediate');
 assert.strictEqual(bT2.hint, 'Hover, tap or use the arrow keys to read a month, then each decade after the record ends.');
 assert.ok(bT2.summary.indexOf('Sea level at New York, NY (The Battery), January 1920 to ' + M(B.trend.period.end) + ', and IPCC projections to 2100, all compared with the 1995–2014 average. The trend line rises ') === 0, bT2.summary);
-assert.ok(bT2.summary.indexOf(' Now: ' + B.trend.now.text + ' (' + B.trend.now.label + '). Middle estimates for 2100: low emissions (SSP1-2.6) +67' + NB + 'cm, intermediate emissions (SSP2-4.5) +81' + NB + 'cm, high emissions (SSP3-7.0) +93' + NB + 'cm, very high emissions (SSP5-8.5) +104' + NB + 'cm. Shaded: the likely range (about 2 in 3 chance) for intermediate emissions, +62 to +108' + NB + 'cm in 2100.') > 0, bT2.summary);
+assert.ok(bT2.summary.indexOf(' Now: ' + B.trend.now.text + ' (' + B.trend.now.label + '). Middle estimates for 2100: low emissions (SSP1-2.6) +67' + NB + 'cm, intermediate emissions (SSP2-4.5) +81' + NB + 'cm, high emissions (SSP3-7.0) +93' + NB + 'cm, very high emissions (SSP5-8.5) +100' + NB + 'cm. Shaded: the likely range (about 2 in 3 chance) for intermediate emissions, +62 to +110' + NB + 'cm in 2100.') > 0, bT2.summary);
 assert.ok(/ Verdict: rising, very clear\.$/.test(bT2.summary));
 assert.strictEqual(decadeRead(bfx, 2050, false), '2050: intermediate emissions (SSP2-4.5) +36' + NB + 'cm, likely range (about 2 in 3 chance) +27 to +46' + NB + 'cm. Others: Low +35' + NB + 'cm, High +35' + NB + 'cm, Very high +39' + NB + 'cm.');
 // the readout line and the line under it
@@ -631,6 +639,31 @@ assert.ok(/^IPCC projections for X, 2020 to 2100, compared with the 1995–2014 
 assert.strictEqual(card(G.trend, false, null, TODAY).r3f, null);
 assert.strictEqual(steps(G.trend, G.series, pc2(G, 'Punjab'))[6].short, G.trend.projection.why);
 assert.strictEqual(modeOf(G.trend, G.series, futOf(G.trend, null, false, TODAY)), 'past');
+// the default scenario, in metric, prints by_2050.text and more_than_today.text as given (only the space before cm is a
+// no-break space); another scenario, or inches, computes them with cm()
+var BG = copy(B); BG.trend.projection.readouts.by_2050.text = '+37 cm (likely +28 to +47 cm)'; BG.trend.projection.readouts.more_than_today.text = 'about 30 cm more than today';
+var bgc = pc2(BG, 'X'), bgfx = futOf(BG.trend, null, false, TODAY), bgk = card(BG.trend, false, null, TODAY).r3f, bgR = futRead(BG.trend, bgfx, false), bg7 = steps(BG.trend, BG.series, bgc)[6];
+assert.strictEqual(bgk.value, '+37' + NB + 'cm');
+assert.strictEqual(bgk.line, 'SSP2-4.5. Likely +28 to +47' + NB + 'cm. About 30' + NB + 'cm more than today.');
+assert.strictEqual(bgR.b + bgR.rest, '+37' + NB + 'cm by 2050 under intermediate emissions (SSP2-4.5): likely range (about 2 in 3 chance) +28 to +47' + NB + 'cm. That is about 30' + NB + 'cm more than today.');
+assert.ok(bg7.short.indexOf('+37' + NB + 'cm by 2050') === 0 && bg7.words[1].indexOf(' is +37' + NB + 'cm. Their likely range (about 2 in 3 chance) is +28 to +47' + NB + 'cm, ') > 0, bg7.words[1]);
+assert.ok(bg7.work.indexOf('2050, SSP2-4.5: +37' + NB + 'cm − ' + B.trend.now.text + ' = about 30' + NB + 'cm more than today. Approximate: it takes a 12-month average from a projection.') >= 0);
+assert.strictEqual(card(BG.trend, false, { ssp: 'ssp585' }, TODAY).r3f.value, cmv(s585.p50[3])); // not the default: computed
+assert.strictEqual(card(BG.trend, true, null, TODAY).r3f.value, cmv(358, true)); // inches: computed
+var MG = copy(MB); MG.trend.projection.readouts.more_than_today.text = 'about 99 cm more than today'; // an old record: "in 2010"
+assert.ok(/ About 99\scm more than in 2010\.$/.test(card(MG.trend, false, null, TODAY).r3f.line));
+// QA (New Orleans): a fit trimmed of sparse early readings; the chart's title and summary start at the first year drawn,
+// the trend line says where it starts (legend and summary)
+var NO = copy(B); NO.trend.record.trimmed_from = '1920-01'; NO.trend.period.start = NO.trend.fit.start = '2005-01';
+var noT = chartText(NO.trend, NO.series, pc2(NO, 'New Orleans, LA'));
+assert.strictEqual(noT.title, 'Sea level at New Orleans, LA (The Battery), 1920 to 2100');
+assert.ok(noT.summary.indexOf('Sea level at New Orleans, LA (The Battery), January 1920 to ') === 0 && noT.summary.indexOf(' The trend line, from January 2005, rises ') > 0, noT.summary);
+assert.strictEqual(noT.legend.trend, 'Trend line, from 2005');
+assert.strictEqual(bT2.legend.trend, 'Trend line'); // not trimmed: no note
+var NX = copy(NO); NX.trend.baseline.projection_axis = false; // PR1's chart: the same title rule
+var nxT = chartText(NX.trend, NX.series, pc2(NX, 'X'));
+assert.ok(nxT.title === 'Sea level at X (The Battery), 1920 to 2025' && / The trend line, from January 2005, rises /.test(nxT.summary), nxT.title + ' | ' + nxT.summary);
+clean(NO, pc2(NO, 'X'));
 // inches: every projection number in inches
 var bik = card(B.trend, true, null, TODAY).r3f;
 assert.ok(/^\+14 in$/.test(sp(bik.value)) && / About 11 in more than today\.$/.test(sp(bik.line)), bik.value + ' | ' + bik.line);
@@ -725,3 +758,38 @@ def test_scenario_colours_never_colour_text():
         if ("var(--k)" in body or "var(--scen-" in body) and ":root" not in sel:
             assert not re.search(r"(^|[;\s])color:", body), sel
     assert re.search(r"\.pc-r \{[^}]*fill: var\(--ink-2\);", css) and re.search(r"\.pc-lab \{[^}]*fill: var\(--ink\);", css)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_page_cm_equals_the_server_cm():
+    """The page's cm() is the server's rule (2 significant figures, sig2): 9 mm is "+0.90 cm", 1036 mm "+100 cm"."""
+    from earthtrends.stats.projection import _cm
+
+    mm = list(range(-1200, 1201)) + [1036, 9999, 10360, 25000]
+    js = PURE + "console.log(JSON.stringify(%s.map(function (x) { return cmv(x, false); })));" % mm
+    r = subprocess.run(["node", "-e", js], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    page = [x.replace(" ", " ") for x in json.loads(r.stdout)]
+    assert page == [_cm(m) for m in mm]
+    assert page[mm.index(9)] == "+0.90 cm" and page[mm.index(1036)] == "+100 cm"
+
+
+def test_after_2100_note_wraps_at_the_visible_width():
+    """At 375 px the decade table scrolls sideways: its after-2100 note is one full-width row (colspan) whose text is as
+    wide as the visible box and stays at its left edge, so it is never cut off."""
+    assert "h('td', { colspan: String(C.cols.length) }, h('div', {}, C.brk))" in SRC
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.dec-scroll \{[^}]*overflow-x: auto;[^}]*container-type: inline-size;", css)
+    assert re.search(r"\.dec tr\.brk td \{ padding: 0;[^}]*white-space: normal;", css)
+    note = re.search(r"\.dec tr\.brk td > div \{([^}]*)\}", css)
+    assert note and all(x in note[1] for x in ("box-sizing: border-box", "width: 100cqw", "position: sticky", "left: 0"))
+
+
+def test_sea_level_fixtures_carry_the_current_advice():
+    """The fixtures' sea-level advice is the server's current wording ("advise against" for High), never an older text."""
+    from earthtrends.stats.guidance import RECOMMEND
+
+    for f in sorted((ROOT / "tests" / "fixtures" / "rework").glob("*sea_level*.json")):
+        g = json.loads(f.read_text(encoding="utf-8"))["trend"]["guidance"]
+        assert g["recommendation"] in RECOMMEND["sea_level"].values(), f.name
+    assert "advise against" in RECOMMEND["sea_level"]["high"]

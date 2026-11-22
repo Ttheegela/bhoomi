@@ -296,12 +296,14 @@ thead th { position: sticky; top: 0; background: var(--surface); }
 .d-bar.tot { fill: var(--ink); fill-opacity: .25; }
 .d-dot { fill: var(--k); stroke: var(--surface); stroke-width: 1.5; }
 .d-dot.tot { fill: var(--ink); }
-.dec-scroll { overflow-x: auto; }
+.dec-scroll { overflow-x: auto; container-type: inline-size; }
 .dec th, .dec td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .dec thead th { white-space: normal; position: static; }
 .dec th:first-child, .dec td:first-child, .dec tbody th { text-align: left; font-size: 15px; font-weight: 400; color: var(--ink); letter-spacing: 0; }
 .dec tr.hl > * { background: var(--bg); font-weight: 650; }
-.dec tr.brk td { text-align: left; white-space: normal; font-size: 13px; color: var(--ink-2); }
+.dec tr.brk td { padding: 0; text-align: left; white-space: normal; font-size: 13px; color: var(--ink-2); }
+/* the after-2100 note: as wide as the visible box, held at its left edge while the table scrolls */
+.dec tr.brk td > div { box-sizing: border-box; width: 100cqw; padding: 6px 8px; position: sticky; left: 0; }
 .caveat { font-size: 15px; margin: 10px 0 0; }
 .cite { margin-top: 10px; }
 .cite > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; list-style: none; }

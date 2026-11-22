@@ -180,7 +180,7 @@
     if (short) r2.line += '. Short record.';
     var g = t.guidance || {}, word = verdictWord(t);
     // R3 with an expert projection (design 11 §3): the chosen scenario's 2050 value, its range and how far that is above today
-    var r3f = fx ? { label: 'By 2050, ' + fx.name, value: cmv(fx.p50, imp), line: fx.code + fx.lc + '. ' + fx.rkShort + ' ' + rngc(fx.lo, fx.hi, imp) + '.'
+    var r3f = fx ? { label: 'By 2050, ' + fx.name, value: fx.t50, line: fx.code + fx.lc + '. ' + fx.rkShort + ' ' + fx.trng + '.'
       + (fx.more ? ' ' + cap(fx.more) + '.' : '') + (fx.regional ? ' Regional estimate: local sinking may differ.' : '') } : null;
     return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, why: why(t, imp),
       world: worldLine(t, imp, /^Since \d{4}\b/.test(str(g.why))), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f,
@@ -223,9 +223,11 @@
       : uw + ' compared with ' + b.text;
     // a chart under 600 px: at most about 40 characters, so the title is never cut (QA B9)
     var ytitleNarrow = none ? ytitle : a.kind === 'percent' ? '% above or below the ' + yrs + ' average' : uw + ' compared with ' + yrs;
-    var summary = ctx.name + ' at ' + place + ', ' + M(t.period.start) + ' to ' + M(t.period.end) + (none ? ', as measured.' : ', compared with ' + b.text + '.');
+    // the chart starts at its first month drawn; a fit trimmed of sparse early readings says where it starts (record.trimmed_from)
+    var first = yearly ? t.yearly[0].year + '-01' : s.times[0], from = (t.record || {}).trimmed_from && fit.start ? ', from ' + M(fit.start) + ',' : '';
+    var summary = ctx.name + ' at ' + place + ', ' + M(first) + ' to ' + M(t.period.end) + (none ? ', as measured.' : ', compared with ' + b.text + '.');
     if (r) {
-      var line = drawn ? 'The trend line' : 'The trend';
+      var line = (drawn ? 'The trend line' : 'The trend') + from;
       summary += ' ' + (clearV(t) ? line + (t.verdict === 'rising' ? ' rises ' : ' falls ') + unsign(r.text) + ' (' + rk + ' ' + r.range + ')'
         : line + ' moves ' + r.text + ", which we can't tell apart from no change (" + rk + ' ' + r.range + '),')
         + (drawn ? ' and stands at ' + f.val(fit.level_end, fit.units) + ' in ' + M(fit.end) : '') + '.';
@@ -249,20 +251,21 @@
       fu = { link: { text: (fx.regional ? 'IPCC AR6 regional estimate' : 'IPCC AR6 sea level projections') + ' ↗', href: https((p.source || {}).record_url) },
         tail: ' for ' + (fx.regional ? 'the ' : '') + str(lo.name) + '.', nowWord: fx.nowWord,
         band: cap(fx.rk) + ', ' + fx.short.toLowerCase() + fx.lc };
-      var trend = r ? (clearV(t) ? ' The trend line ' + (t.verdict === 'rising' ? 'rises ' : 'falls ') + unsign(r.text) + ' (' + rk + ' ' + r.range + ').'
-        : ' The trend line moves ' + r.text + ", which we can't tell apart from no change (" + rk + ' ' + r.range + ').') : '';
+      var trend = r ? (clearV(t) ? ' The trend line' + from + ' ' + (t.verdict === 'rising' ? 'rises ' : 'falls ') + unsign(r.text) + ' (' + rk + ' ' + r.range + ').'
+        : ' The trend line' + from + ' moves ' + r.text + ", which we can't tell apart from no change (" + rk + ' ' + r.range + ').') : '';
       var nw = fx.now;
-      summary = ctx.name + ' at ' + place + ', ' + M(t.period.start) + ' to ' + M(t.period.end) + ', and IPCC projections to 2100, all compared with ' + b.text + '.' + trend
+      summary = ctx.name + ' at ' + place + ', ' + M(first) + ' to ' + M(t.period.end) + ', and IPCC projections to 2100, all compared with ' + b.text + '.' + trend
         + (nw ? ' ' + fx.nowWord + ': ' + nw.value + ' (' + nw.label + ').' : '')
         + mids(fx, imp) + preTxt + verdict;
       ytitle = ytitleNarrow = (imp ? 'inches' : 'cm') + ' above ' + b.text;
     }
     return {
-      title: ctx.name + ' at ' + place + ', ' + Y(t.period.start) + ' to ' + (both ? '2100' : Y(t.period.end)), sub: sub, src: srcText(t), url: recordUrl(src),
+      title: ctx.name + ' at ' + place + ', ' + Y(first) + ' to ' + (both ? '2100' : Y(t.period.end)), sub: sub, src: srcText(t), url: recordUrl(src),
       latest: str(t.latest && t.latest.text), ytitle: ytitle, ytitleNarrow: ytitleNarrow, summary: summary, none: none, hasPre: pre.length > 0, yearly: yearly, fu: fu,
       hint: both ? 'Hover, tap or use the arrow keys to read a month, then each decade after the record ends.' : 'Hover, tap or use the arrow keys to read ' + (yearly ? 'a year.' : 'a month.'),
       noneNote: none ? 'This record has too few years from 1995 to 2014 for an average, so the chart shows the values as measured, with no trend line. The rate on the card still holds.' : '',
-      legend: { monthly: yearly ? "Each year's rain" : none ? 'Monthly value, as measured' : 'Monthly value, seasons removed', range: rk + ' of the trend', zero: yrs + ' average (zero)', yrs: yrs },
+      legend: { monthly: yearly ? "Each year's rain" : none ? 'Monthly value, as measured' : 'Monthly value, seasons removed', range: rk + ' of the trend', zero: yrs + ' average (zero)', yrs: yrs,
+        trend: 'Trend line' + (from ? ', from ' + Y(fit.start) : '') },
       drawn: drawn, endLabel: drawn ? f.val(fit.level_end, fit.units) : '', endSub: fit.end ? 'trend line, ' + Mo(fit.end) : '',
       cols: cols, caption: 'Records: ' + srcText(t) + '. ' + str(t.latest && t.latest.text) + '.' + (yearly ? ' One row a year, as the chart shows; the CSV has every month.' : ''),
     };
@@ -462,9 +465,9 @@
       if (isSea) s6.work.push('The full record, ' + Y(fit.start) + ' to ' + Y(fit.end) + ': ' + r.text + '. It gets no world ratio, because satellites only start in 1993.');
       if (isSea && w.source && str(w.source.method)) s6.work.push('The world figure: ' + lc1(stop(w.source.method))); // it names what the satellites don't correct for
       s6.link = w.source && https(w.source.record_url) ? { text: w.source.name + ' ↗', href: w.source.record_url } : null;
-    } else {
+    } else { // why there is no world figure, then the place's own rule (rain, water storage) in world.text
       s6.short = str(w.why_none) || str(w.text);
-      s6.words = [s6.short];
+      s6.words = [str(w.why_none), str(w.text)].filter(Boolean);
     }
     out.push(s6);
 
@@ -506,12 +509,12 @@
   function projOf(t) { var p = t && t.projection; return p && p.available === true && Array.isArray(p.scenarios) && p.scenarios.length && Array.isArray(p.years) ? p : null; }
   function sspOf(id) { return String(id).replace(/_(medium|low)$/, ''); }
   function scenShort(S) { return cap(str(S.name).replace(/ emissions$/, '')); } // "Intermediate", "Very high"
-  // cm(): mm as cm (inches), 2 significant figures but at most 1 decimal, half away from zero: 36, 8.0, 0.9, 104
+  // cm(): mm as cm (inches), 2 significant figures, half away from zero, as the server's sig2: 36, 8.0, 0.90, 100
   function cmv(mm, imp, unsigned) {
     if (!isNum(mm)) return 'no value';
-    var v = imp ? mm / 25.4 : mm / 10, a = Math.abs(v), d = a ? Math.min(1, Math.max(0, 1 - Math.floor(Math.log10(a)))) : 0;
-    var r = Math.round(a * Math.pow(10, d) + 1e-9) / Math.pow(10, d);
-    return (r === 0 ? '0' : (unsigned ? '' : v < 0 ? MINUS : '+') + r.toFixed(d)) + NB + (imp ? 'in' : 'cm');
+    var v = imp ? mm / 25.4 : mm / 10, a = Math.abs(v), e = a ? Math.floor(Math.log10(a)) : 0, k = Math.pow(10, e - 1);
+    var r = Math.round(a / k + 1e-9) * k;
+    return (r === 0 ? '0' : (unsigned ? '' : v < 0 ? MINUS : '+') + r.toFixed(Math.max(0, 1 - e))) + NB + (imp ? 'in' : 'cm');
   }
   function rngc(a, b, imp) { return isNum(a) && isNum(b) ? cmv(a, imp).slice(0, -3) + ' to ' + cmv(b, imp) : 'no value'; } // "+27 to +46 cm"
   function wholeMm(x) { return (x < 0 ? -1 : 1) * Math.round(Math.abs(x)); }
@@ -530,12 +533,17 @@
     var axis = (t.baseline || {}).projection_axis !== false;
     var old = !!nw && /-/.test(str(n.end)) && (isNum(today) ? today : estMonth()) - mi(n.end) > 24, tw = old ? 'in ' + Y(n.end) : 'today', more = null;
     if (nw && axis && isNum(n.value) && isNum(p50)) more = S === S0 && mt && isNum(mt.value) ? mt.value : wholeMm(p50 - n.value);
+    // the default scenario in metric prints the server's texts as given ("+36 cm (likely +27 to +46 cm)"); only the
+    // space before "cm" becomes a no-break space, and an old record's "today" reads "in {year}"
+    var srv = S === S0 && !imp, gv = srv ? /^(\S+ cm) \(likely (\S+ to \S+ cm)\)$/.exec(str(b50.text)) : null;
+    var nb = function (x) { return x.replace(/ cm\b/g, NB + 'cm'); };
     var loc = p.location || {}, chk = p.check || {};
     return { p: p, S: S, S0: S0, ssp: ssp, noLow: !!(sel && sel.low) && !lowS, low: low, lc: low ? ', low confidence' : '', rk: str(S.range_kind),
       rkShort: low ? str(S.range_kind) : 'Likely', med: p.scenarios.filter(function (x) { return x.confidence === 'medium'; }),
       name: str(S.name), Name: cap(str(S.name)), short: scenShort(S), code: str(S.code), p50: p50, lo: lo, hi: hi,
-      now: nw, old: old, nowWord: old ? 'Latest' : 'Now', more: more == null ? '' : more === 0 ? 'about the same as ' + tw
-        : 'about ' + cmv(Math.abs(more), imp, true) + ' ' + (more > 0 ? 'more' : 'less') + ' than ' + tw,
+      t50: gv ? nb(gv[1]) : cmv(p50, imp), trng: gv ? nb(gv[2]) : rngc(lo, hi, imp),
+      now: nw, old: old, nowWord: old ? 'Latest' : 'Now', more: more == null ? '' : srv && mt && str(mt.text) ? nb(mt.text).replace(/today$/, tw)
+        : more === 0 ? 'about the same as ' + tw : 'about ' + cmv(Math.abs(more), imp, true) + ' ' + (more > 0 ? 'more' : 'less') + ' than ' + tw,
       regional: loc.kind === 'regional estimate', loc: loc, axis: axis, check: chk, outside: chk.inside === false };
   }
   // 'past': PR1's chart; 'both': past and future on the 1995-2014 axis; 'future': the record is off that axis, so the
@@ -574,7 +582,7 @@
   // The readout line over the chart, the line under it and the flags (design 11 §4)
   function futRead(t, fx, imp) {
     var fl = (t.guidance || {}).future_link, regional = fx.regional && str(fx.loc.note);
-    return { b: cmv(fx.p50, imp) + ' by 2050', rest: ' under ' + fx.name + ' (' + fx.code + ')' + fx.lc + ': ' + fx.rk + ' ' + rngc(fx.lo, fx.hi, imp) + '.'
+    return { b: fx.t50 + ' by 2050', rest: ' under ' + fx.name + ' (' + fx.code + ')' + fx.lc + ': ' + fx.rk + ' ' + fx.trng + '.'
         + (!fx.axis ? " This record has no 1995–2014 average, so we can't say how far that is above today." : fx.more ? ' That is ' + fx.more + '.' : ''),
       sub: str(fx.p.caveat) + (fl && https(fl.url) && str(fl.label) ? ' For flood planning here: ' : ''), link: fl && https(fl.url) && str(fl.label) ? { text: fl.label + ' ↗', href: fl.url } : null,
       regional: regional || '', outside: fx.outside ? "Here the measured level for 2019 to 2021 is outside the experts' 2020 range. " : '',
@@ -599,7 +607,7 @@
     var sub = function (x) { return x.charAt(0) === MINUS ? '(' + x + ')' : x; }, work = [];
     if (fx.now) {
       work.push(fx.nowWord + ': the 12 months to ' + M(t.now.end) + ' average ' + fx.now.value + ' compared with ' + bt + '.');
-      if (fx.more) work.push('2050, ' + fx.code + ': ' + cmv(fx.p50, imp) + ' − ' + sub(fx.now.value) + ' = ' + fx.more + '. Approximate: it takes a 12-month average from a projection.');
+      if (fx.more) work.push('2050, ' + fx.code + ': ' + fx.t50 + ' − ' + sub(fx.now.value) + ' = ' + fx.more + '. Approximate: it takes a 12-month average from a projection.');
     } else work.push('Now: fewer than 10 of the last 12 months have data, so there is no 12-month average to compare.');
     var r20 = S0.code + ' (' + str(S0.outer_kind) + ' ' + rngc(c.ar6_2020_p05, c.ar6_2020_p95, imp) + ')';
     if (isNum(o)) {
@@ -613,9 +621,9 @@
     work.push('After 2100 the experts used a different set of model runs, so the table can jump between 2100 and 2110.');
     var names = andList(fx.med.map(function (x) { return scenShort(x).toLowerCase() + ' (' + x.code + ')'; })) + ' emissions';
     return { title: 'What comes next', open: fx.outside,
-      short: cmv(fx.p50, imp) + ' by 2050 under ' + fx.name + ' (' + fx.code + ')' + fx.lc + ', from the IPCC' + (fx.outside ? " · Check: outside the experts' 2020 range" : ''),
+      short: fx.t50 + ' by 2050 under ' + fx.name + ' (' + fx.code + ')' + fx.lc + ', from the IPCC' + (fx.outside ? " · Check: outside the experts' 2020 range" : ''),
       words: ["For the future we use only published expert projections: the IPCC's sea level projections (AR6, 2021) " + where + '. They use the same 1995–2014 average as the rest of this page, so past and future share one axis.',
-        'Under ' + fx.name + ' (' + fx.code + ')' + fx.lc + ", the experts' middle estimate for 2050 is " + cmv(fx.p50, imp) + '. Their ' + fx.rk + ' is ' + rngc(fx.lo, fx.hi, imp) + ', and their '
+        'Under ' + fx.name + ' (' + fx.code + ')' + fx.lc + ", the experts' middle estimate for 2050 is " + fx.t50 + '. Their ' + fx.rk + ' is ' + fx.trng + ', and their '
           + str(fx.S.outer_kind) + ' is ' + rngc(atY(p, fx.S, 'p05', 2050), atY(p, fx.S, 'p95', 2050), imp) + '.'
           + (fx.low ? ' This version adds ice-sheet changes that are hard to predict, so the experts give no chance for its range.' : ''),
         "The experts' scenarios are " + names + ". They are possible paths for the world's emissions, not predictions. The experts give no odds for which one will happen. " + str(p.caveat),
@@ -856,7 +864,7 @@
       if (fx.now) lg.append(key(swatch([['circle', { cx: 14, cy: 6, r: 4.5, class: 's-now' }]]), fx.nowWord));
       if (T.hasPre) lg.append(key(line28('s-pre'), 'Preliminary month (may still change)'));
       lg.append(h('span', { class: 'br' }), h('span', { class: 'grp' }, 'Our calculation:'));
-      if (T.drawn) lg.append(key(line28('s-trend'), 'Trend line'), key(swatch([['rect', { x: 1, y: 1, width: 26, height: 10, class: 's-fan' }]]), T.legend.range));
+      if (T.drawn) lg.append(key(line28('s-trend'), T.legend.trend), key(swatch([['rect', { x: 1, y: 1, width: 26, height: 10, class: 's-fan' }]]), T.legend.range));
       lg.append(key(line28('c-zero'), T.legend.zero), h('span', { class: 'br' }));
     }
     var four = sv('svg', { width: 34, height: 14, 'aria-hidden': 'true' });
@@ -889,7 +897,7 @@
       lg.append(h('span', { class: 'grp' }, 'Our calculation:'));
       if (!T.yearly) lg.append(key(swatch([['circle', { cx: 14, cy: 6, r: 3.4, class: 's-year' }]]), 'Yearly average'));
       if (T.drawn) {
-        lg.append(key(swatch([['line', { x1: 2, y1: 6, x2: 26, y2: 6, class: 's-trend' }]]), 'Trend line'),
+        lg.append(key(swatch([['line', { x1: 2, y1: 6, x2: 26, y2: 6, class: 's-trend' }]]), T.legend.trend),
           key(swatch([['rect', { x: 1, y: 1, width: 26, height: 10, class: 's-fan' }], ['line', { x1: 1, y1: 1, x2: 27, y2: 1, class: 's-edge' }], ['line', { x1: 1, y1: 11, x2: 27, y2: 11, class: 's-edge' }]]), T.legend.range));
       }
       if (!T.none) lg.append(key(swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 'c-zero' }]]), T.legend.zero));
@@ -1030,7 +1038,7 @@
       var i50 = fm.years.indexOf(2050), v50 = i50 < 0 ? null : fm.sel.p50[i50];
       if (v50 != null) { // the card's 2050 number, on its line
         root.append(sv('circle', { cx: fxs[i50], cy: Yp(v50), r: 4.5, class: 'f-dot' + sk }));
-        root.append(sv('text', { x: fxs[i50], y: (fm.sel.p83[i50] != null ? Yp(fm.sel.p83[i50]) : Yp(v50) - 4) - 10, 'text-anchor': 'middle', class: 'pc-lab' }, cmv(fx.p50, imp) + ' in 2050'));
+        root.append(sv('text', { x: fxs[i50], y: (fm.sel.p83[i50] != null ? Yp(fm.sel.p83[i50]) : Yp(v50) - 4) - 10, 'text-anchor': 'middle', class: 'pc-lab' }, fx.t50 + ' in 2050'));
       }
       var nw = t.now;
       if (obs && fx.now && isNum(nw.value)) { // the card's "Now", at the middle of its 12 months
@@ -1138,7 +1146,8 @@
       var tr = h('tr', r.hl ? { class: 'hl' } : {});
       r.cells.forEach(function (x, i) { tr.append(i ? h('td', {}, x) : h('th', { scope: 'row' }, x)); });
       tb.append(tr);
-      if (r.brk) tb.append(h('tr', { class: 'brk' }, h('td', { colspan: String(C.cols.length) }, C.brk)));
+      // the note spans the row and wraps at the box's visible width, even when the table is wider and scrolls (375 px)
+      if (r.brk) tb.append(h('tr', { class: 'brk' }, h('td', { colspan: String(C.cols.length) }, h('div', {}, C.brk))));
     });
     return h('div', {}, h('h3', {}, C.th), h('p', { class: 'csub' }, C.tsub),
       h('div', { class: 'dec-scroll', tabindex: '0', role: 'region', 'aria-label': C.scroll }, h('table', { class: 'dec' }, h('thead', {}, hr), tb)), h('p', { class: 'caveat' }, C.caveat));
