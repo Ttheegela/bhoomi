@@ -148,6 +148,7 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
             "end": used[-1], "where": _where(series)}
     if rain:  # the trend's own counts: calendar years with enough months
         data.update(n_years=n, n_missing_years=int(year[ok][-1] - year[ok][0]) + 1 - n)
+    now = _now(var, base, used, year[ok], month[ok], idx[ok], xl[ok], fit_units) if monthly else None
     result = {
         "variable": var,
         "units": units,
@@ -175,9 +176,9 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
         "latest": {"month": last,
                    "text": f"Data through {calendar.month_name[int(last[5:7])]} {last[:4]}" if monthly
                    else f"Data through {last[:4]}"},
-        "now": _now(var, base, used, year[ok], month[ok], idx[ok], xl[ok], fit_units) if monthly else None,
+        "now": now,
         "world": world,
-        "projection": _sea_level_projection(s, base) if var == "sea_level"
+        "projection": _sea_level_projection(s, base, now) if var == "sea_level"
         else {"available": False, "why": PROJECTION.get(var, PROJECTION_LATER)},
         "explain": {
             "data": data,

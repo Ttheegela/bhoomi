@@ -13,6 +13,7 @@ import httpx
 import numpy as np
 import pytest
 
+from earthtrends.agent import tools
 from earthtrends.data import ar6, coops, psmsl
 from earthtrends.stats import compute_trend, projection
 from earthtrends.stats.baseline import anomaly, baseline, columns, fit
@@ -116,38 +117,60 @@ def test_scenarios_carry_the_ipcc_names(battery):
 
 
 def test_battery_readouts(battery):
+    """readouts.now is the TrendResult's own `now`, same keys and unrounded value (one "now" on the page)."""
     r = battery["projection"]["readouts"]
+    assert battery["now"] == r["now"]
     a = anomaly(coops_series("8518750"))["values"][-12:]  # the fixture ends 2026-10 with no gap
-    assert r["now"] == {"value": round(sum(a) / 12), "text": "+6.6 cm", "kind": "12-month mean", "start": "2025-11",
-                        "end": "2026-10", "label": "the 12 months to October 2026"}
+    assert r["now"] == {"value": 65.6083, "units": "mm", "kind": "12-month mean", "start": "2025-11", "end": "2026-10",
+                        "n": 12, "text": "+6.6 cm", "label": "the 12 months to October 2026"}
+    assert r["now"]["value"] == pytest.approx(sum(a) / 12, abs=1e-3)  # anomalies are rounded to 4 dp each
     assert r["by_2050"] == {"scenario": "ssp245_medium", "p50": 358, "low": 266, "high": 464,
                             "range_kind": "likely range (about 2 in 3 chance)", "text": "+36 cm (likely +27 to +46 cm)"}
-    assert r["more_than_today"] == {"value": 358 - 66, "text": "about 29 cm more than today", "approximate": True}
+    # 358 - 65.6083 = 292.39, to whole mm
+    assert r["more_than_today"] == {"value": 292, "text": "about 29 cm more than today", "approximate": True}
+
+
+def test_a_window_keeps_the_whole_records_now_and_projection(monkeypatch):
+    """Like the baseline, `now` and `projection` come from the whole series: "now" is the latest 12 months, never
+    the end of a window. The trend itself is still the window's."""
+    def get_series(variable, lat, lon, start=None, end=None, source=None):
+        s = coops_series("8518750", "The Battery")
+        keep = [k for k, t in enumerate(s["times"]) if end is None or t[:4] <= end]
+        return {**s, "times": [s["times"][k] for k in keep], "values": [s["values"][k] for k in keep]}
+    monkeypatch.setattr(tools.data, "get_series", get_series)
+    whole = tools.detect_trend("sea_level", 40.7, -74.0)
+    part = tools.detect_trend("sea_level", 40.7, -74.0, end="2010")
+    assert part["period"]["end"] == "2010-12" and whole["period"]["end"] == "2026-10"
+    assert part["now"] == whole["now"] == part["projection"]["readouts"]["now"]
+    assert part["now"]["end"] == "2026-10" and part["projection"] == whole["projection"]
 
 
 def test_now_needs_10_of_the_12_latest_months():
     gaps = {t: None for t in MONTHS[-3:-1]}  # 10 of the last 12 months
-    r = projection.sea_level(s := flat(MONTHS, 7000.0, gaps), baseline(s))["readouts"]
-    assert (r["now"]["value"], r["now"]["text"], r["now"]["label"]) == (0, "0 cm", "the 12 months to December 2025")
+    tr = compute_trend(flat(MONTHS, 7000.0, gaps))
+    r = tr["projection"]["readouts"]
+    assert r["now"] == tr["now"] and (r["now"]["value"], r["now"]["n"], r["now"]["text"], r["now"]["label"]) == (
+        0, 10, "0 cm", "the 12 months to December 2025")
     assert r["more_than_today"] == {"value": 358, "text": "about 36 cm more than today", "approximate": True}
     gaps = {t: None for t in MONTHS[-4:-1]}  # 9 of 12
-    r = projection.sea_level(s := flat(MONTHS, 7000.0, gaps), baseline(s))["readouts"]
-    assert r["now"] is None and r["more_than_today"] is None and r["by_2050"]["p50"] == 358
+    tr = compute_trend(flat(MONTHS, 7000.0, gaps))
+    r = tr["projection"]["readouts"]
+    assert tr["now"] is None and r["now"] is None and r["more_than_today"] is None and r["by_2050"]["p50"] == 358
 
 
 def test_now_is_the_mean_of_the_latest_12_monthly_anomalies_and_can_be_above_2050():
     last = {t: 7000.0 + 400 + (5 if t.endswith("-01") else 0) for t in MONTHS[-12:]}
-    r = projection.sea_level(s := flat(MONTHS, 7000.0, last), baseline(s))["readouts"]
-    assert r["now"]["value"] == 400 and r["now"]["text"] == "+40 cm"  # 400.4 mm, to whole mm
+    r = compute_trend(flat(MONTHS, 7000.0, last))["projection"]["readouts"]
+    assert r["now"]["value"] == 400.4167 and r["now"]["text"] == "+40 cm"
     assert r["more_than_today"] == {"value": -42, "text": "about 4.2 cm less than today", "approximate": True}
 
 
 def test_record_without_a_baseline_keeps_the_projection_but_no_now_or_check():
-    times = [t for t in MONTHS if t >= "2015"]  # starts after 2014: off the projection axis (D3)
+    times = [t for t in MONTHS if t >= "2015"]  # starts after 2014: off the projection axis (D3), so no `now` either
     s = flat(times, 7000.0)
     b = baseline(s)
-    p = projection.sea_level(s, b)
-    assert b["projection_axis"] is False and p["available"] is True
+    p = projection.sea_level(s, b, None)
+    assert b["projection_axis"] is False and b["value"] is None and p["available"] is True
     assert p["readouts"]["now"] is None and p["readouts"]["more_than_today"] is None
     assert p["check"] == {"observed_2019_2021": None, "ar6_2020_p05": 41, "ar6_2020_p95": 168, "inside": None}
 
@@ -208,31 +231,32 @@ def test_psmsl_gauge_without_ar6_takes_the_nearest_by_the_mapping_rules(monkeypa
     monkeypatch.setattr(psmsl, "stations", lambda: psmsl.parse_stations((FX / "psmsl_filelist.txt").read_text()))
     s = psmsl_series(212, "Bombay (Princes Dock)", 18.95, 72.833333, MONTHS, [7000.0] * len(MONTHS))
     assert 212 not in ar6.load()["index"]
-    loc = projection.sea_level(s, baseline(s))["location"]  # over 3 km, but shares BOMBAY with "Mumbai / Bombay (...)"
+    # over 3 km, but shares BOMBAY with "Mumbai / Bombay (...)"
+    loc = projection.sea_level(s, baseline(s), None)["location"]
     assert (loc["kind"], loc["id"], loc["name"], loc["km"]) == ("gauge", 43, "Mumbai / Bombay (Apollo Bandar)", 3.4)
     def down():
         raise httpx.ConnectError("no network")
     monkeypatch.setattr(psmsl, "stations", down)  # AR6's own name alone ("MUMBAI") shares no word: none
-    assert projection.sea_level(s, baseline(s))["why"] == "There is no expert projection for this tide gauge."
+    assert projection.sea_level(s, baseline(s), None)["why"] == "There is no expert projection for this tide gauge."
     far = psmsl_series(99999, "Nowhere", 0.0, -30.0, MONTHS, [7000.0] * len(MONTHS))
-    assert projection.sea_level(far, baseline(far)) == {"available": False,
-                                                        "why": "There is no expert projection for this tide gauge."}
+    assert projection.sea_level(far, baseline(far), None) == {"available": False,
+                                                              "why": "There is no expert projection for this tide gauge."}
 
 
 def test_coops_regional_estimate_great_lakes_and_unknown_station():
-    no = projection.sea_level(s := flat(MONTHS, 7000.0), baseline(s))  # The Battery, as a baseline for the others
+    no = projection.sea_level(s := flat(MONTHS, 7000.0), baseline(s), None)  # The Battery, as a baseline for the others
     assert no["available"]
     nola = {**s, "source": {**coops.SOURCE, "record_url": coops.record_url("8761927")}}  # New Canal, New Orleans
-    loc = projection.sea_level(nola, baseline(nola))["location"]
+    loc = projection.sea_level(nola, baseline(nola), None)["location"]
     assert (loc["kind"], loc["name"], loc["km"]) == ("regional estimate", "1° area around 30°N, 90°W", 11.3)
     assert loc["id"] >= 10**9 and "regional estimate" in loc["note"] and "local sinking" in loc["note"]
     lakes = {**s, "source": {**coops.SOURCE, "record_url": coops.record_url("9063020")}}  # Buffalo, Lake Erie
-    assert projection.sea_level(lakes, baseline(lakes)) == {"available": False,
-                                                            "why": "Sea level projections don't cover the Great Lakes."}
+    assert projection.sea_level(lakes, baseline(lakes), None) == {
+        "available": False, "why": "Sea level projections don't cover the Great Lakes."}
     new = {**s, "source": {**coops.SOURCE, "record_url": coops.record_url("1234567")}}
-    assert projection.sea_level(new, baseline(new))["why"] == "There is no expert projection for this tide gauge."
+    assert projection.sea_level(new, baseline(new), None)["why"] == "There is no expert projection for this tide gauge."
     bare = {**s, "source": dict(coops.SOURCE)}  # no record_url, so no station id
-    assert projection.sea_level(bare, baseline(bare))["available"] is False
+    assert projection.sea_level(bare, baseline(bare), None)["available"] is False
 
 
 def test_name_rule_matches_the_build_script():
