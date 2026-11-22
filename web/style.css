@@ -267,9 +267,9 @@ thead th { position: sticky; top: 0; background: var(--surface); }
 .c-today { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; }
 .c-brk { stroke: var(--ink-2); stroke-width: 1.5; fill: none; }
 .f-band { fill: var(--k); fill-opacity: var(--scen-band); stroke: none; }
-.f-edge { fill: none; stroke: var(--k); stroke-opacity: .6; stroke-width: 1; }
+.f-edge { fill: none; stroke: var(--k); stroke-width: 1; }
 .f-edge.low { stroke-dasharray: 4 3; }
-.f-med { fill: none; stroke: var(--k); stroke-width: 1.6; stroke-opacity: .75; }
+.f-med { fill: none; stroke: var(--k); stroke-width: 1.25; } /* full colour for 3:1 (section 9); lighter than S by width only */
 .f-sel { fill: none; stroke: var(--k); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .f-sel.low { stroke-dasharray: 7 4; }
 .f-dot { fill: var(--k); stroke: var(--surface); stroke-width: 2; }

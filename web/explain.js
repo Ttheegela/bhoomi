@@ -482,7 +482,7 @@
 
     var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', ' + ver(src.version, 'version ') : '') + '. Retrieved ' + D(src.retrieved) + '. ',
       link: url ? { text: 'Open this exact record ↗', href: url } : null }];
-    if (wp && w.source) list.push({ text: 'World figure: ' + w.source.name + '. Retrieved ' + D(w.source.retrieved) + '. ', link: https(w.source.record_url) ? { text: 'Open it ↗', href: w.source.record_url } : null });
+    if (wp && w.source) list.push({ text: 'World figure: ' + w.source.name + (str(w.source.dataset_id) ? ', ' + w.source.dataset_id : '') + '. Retrieved ' + D(w.source.retrieved) + '. ', link: https(w.source.record_url) ? { text: 'Open it ↗', href: w.source.record_url } : null });
     var ps = fx && (fx.p.source || {}), s9 = [{ list: list }];
     if (ps) {
       list.push({ text: 'Future: ' + str(ps.name) + ', ' + str(ps.dataset_id) + ', ' + ver(ps.version, 'version ') + ', ' + str(ps.licence) + '. ',
@@ -534,17 +534,19 @@
     var old = !!nw && /-/.test(str(n.end)) && (isNum(today) ? today : estMonth()) - mi(n.end) > 24, tw = old ? 'in ' + Y(n.end) : 'today', more = null;
     if (nw && axis && isNum(n.value) && isNum(p50)) more = S === S0 && mt && isNum(mt.value) ? mt.value : wholeMm(p50 - n.value);
     // the default scenario in metric prints the server's texts as given ("+36 cm (likely +27 to +46 cm)"); only the
-    // space before "cm" becomes a no-break space, and an old record's "today" reads "in {year}"
+    // space before "cm" becomes a no-break space (the server's more_than_today.text already says "than in {year}" for an old record)
     var srv = S === S0 && !imp, gv = srv ? /^(\S+ cm) \(likely (\S+ to \S+ cm)\)$/.exec(str(b50.text)) : null;
     var nb = function (x) { return x.replace(/ cm\b/g, NB + 'cm'); };
-    var loc = p.location || {}, chk = p.check || {};
+    var loc = p.location || {}, chk = p.check || {}, ts = t.source || {};
+    var gid = ts.id === 'psmsl' && /\/stations\/(\d+)\.php$/.exec(str(ts.record_url)); // a PSMSL record's id, from its station page
     return { p: p, S: S, S0: S0, ssp: ssp, noLow: !!(sel && sel.low) && !lowS, low: low, lc: low ? ', low confidence' : '', rk: str(S.range_kind),
       rkShort: low ? str(S.range_kind) : 'Likely', med: p.scenarios.filter(function (x) { return x.confidence === 'medium'; }),
       name: str(S.name), Name: cap(str(S.name)), short: scenShort(S), code: str(S.code), p50: p50, lo: lo, hi: hi,
       t50: gv ? nb(gv[1]) : cmv(p50, imp), trng: gv ? nb(gv[2]) : rngc(lo, hi, imp),
-      now: nw, old: old, nowWord: old ? 'Latest' : 'Now', more: more == null ? '' : srv && mt && str(mt.text) ? nb(mt.text).replace(/today$/, tw)
+      now: nw, old: old, nowWord: old ? 'Latest' : 'Now', more: more == null ? '' : srv && mt && str(mt.text) ? nb(mt.text)
         : more === 0 ? 'about the same as ' + tw : 'about ' + cmv(Math.abs(more), imp, true) + ' ' + (more > 0 ? 'more' : 'less') + ' than ' + tw,
-      regional: loc.kind === 'regional estimate', loc: loc, axis: axis, check: chk, outside: chk.inside === false };
+      regional: loc.kind === 'regional estimate', loc: loc, axis: axis, check: chk, outside: chk.inside === false,
+      same: loc.kind === 'gauge' && ((isNum(loc.km) && loc.km < 1) || (!!gid && +gid[1] === loc.id)) }; // the AR6 gauge is this gauge
   }
   // 'past': PR1's chart; 'both': past and future on the 1995-2014 axis; 'future': the record is off that axis, so the
   // place chart stays PR1's and "What experts project" draws the projection alone
@@ -603,7 +605,7 @@
   function step7(t, fx, imp, flink) {
     var p = fx.p, c = fx.check, S0 = fx.S0, o = c.observed_2019_2021, b20 = atY(p, S0, 'p50', 2020), bt = str((t.baseline || {}).text), loc = fx.loc;
     var where = fx.regional ? 'for the ' + str(loc.name) + ", because there is no AR6 tide gauge close enough. The land motion in it is AR6's regional estimate, and local sinking here may differ"
-      : 'at the tide gauge ' + str(loc.name) + ', ' + loc.km + ' km from this one';
+      : fx.same ? 'at this tide gauge' : 'at the tide gauge ' + str(loc.name) + ', ' + loc.km + ' km from this one';
     var sub = function (x) { return x.charAt(0) === MINUS ? '(' + x + ')' : x; }, work = [];
     if (fx.now) {
       work.push(fx.nowWord + ': the 12 months to ' + M(t.now.end) + ' average ' + fx.now.value + ' compared with ' + bt + '.');
@@ -614,7 +616,7 @@
       if (isNum(b20)) work.push("2020: the experts' middle estimate is " + cmv(b20, imp) + '; the measured average for 2019 to 2021 is ' + cmv(o, imp)
         + '. We plot the projection as published, so the gap of ' + cmv(Math.abs(b20 - o), imp, true) + ' shows on the chart.');
       work.push(c.inside ? 'Check: ' + cmv(o, imp) + " is inside the experts' 2020 range for " + r20 + ', so the record and the projection agree here.'
-        : { bad: true, text: 'Check: ' + cmv(o, imp) + " is outside the experts' 2020 range for " + r20 + '. About 1 in 7 tide gauges fall outside, mostly for real reasons such as an earthquake, fast land uplift or a recent regional surge. Read the projection here with extra care.' });
+        : { bad: true, text: 'Check: ' + cmv(o, imp) + " is outside the experts' 2020 range for " + r20 + ". Some tide gauges fall outside the experts' 2020 range, often because of earthquakes, land rising after the ice age, or a recent surge. Read the projection here with extra care." });
       // the owner's domain review: one year's mean is noisy at a gauge
       work.push('One 12-month “Now” can swing by about ' + (imp ? '1 inch' : '3 cm') + ' from year to year at a gauge, so a single year can sit above or below the line.');
     } else work.push(fx.axis ? 'Check: not possible here. The record has fewer than 24 of the 36 months from 2019 to 2021.' : 'Check: not possible here. This record has no 1995–2014 average.');
@@ -645,7 +647,7 @@
     });
     return { title: 'What experts project for ' + ctx.label,
       sub: (fx.regional ? 'IPCC AR6 regional estimate for the ' + str(loc.name) + ' (' + loc.km + ' km from this gauge), compared with ' + pb + '.'
-        : 'IPCC AR6 sea level projections at the tide gauge ' + str(loc.name) + ', ' + loc.km + ' km from this one, compared with ' + pb + '.') + ' Source: ',
+        : 'IPCC AR6 sea level projections ' + (fx.same ? 'at this tide gauge' : 'at the tide gauge ' + str(loc.name) + ', ' + loc.km + ' km from this one') + ', compared with ' + pb + '.') + ' Source: ',
       src: { text: str(src.name) + ' ↗', href: https(src.record_url) }, srcTail: ', ' + ver(src.version, 'version ') + ', ' + str(src.licence) + '.',
       dh: 'What drives the rise by ' + dy, dk: SCOL[sspOf(S0.id)] || 2,
       dsub: cap(str(S0.name)) + ' (' + S0.code + "), the one scenario this breakdown comes in. The bar is each part's likely range (about 2 in 3 chance); the dot is its middle estimate. The thin line is zero.",
