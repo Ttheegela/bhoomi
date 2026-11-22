@@ -208,6 +208,13 @@ assert.strictEqual(bl[4], '# Station: The Battery, lat 40.7006, lon -74.0142');
 assert.strictEqual(bl[8], '# Data through: ' + B.trend.latest.text.replace('Data through ', ''));
 sumAddsUp(B, bc, NB + 'mm');
 assert.strictEqual(bS[5].work[2], 'The full record, 1920 to 2025: ' + B.trend.headline_rate.text + '. It gets no world ratio, because satellites only start in 1993.');
+var bw = B.trend.world, biS = steps(B.trend, B.series, ctx(B, 'New York, NY', true));
+assert.ok(/ \(in metric\)\.$/.test(biS[5].words[0]), biS[5].words[0]);
+assert.strictEqual(biS[5].work[0].indexOf(fmtNum(bw.local_rate, false) + ' ÷ ' + fmtNum(bw.world_rate, false) + ' = ' + fixed(bw.ratio, 1) + '×'), 0, biS[5].work[0]);
+assert.strictEqual(bS[5].work[0].indexOf(fmtNum(bw.local_rate, false) + ' ÷ '), 0);
+assert.ok(/not corrected for the slow sinking of the ocean floor/.test(bw.source.method));
+assert.strictEqual(bS[5].work[3], 'The world figure: ' + lc1(stop(bw.source.method)));
+assert.strictEqual(pS[5].work.length, 2); // air temperature: no world-method line
 assert.strictEqual(readout(B.trend, B.series, bc, B.series.times.length - 1).slice(-13), ' Preliminary.');
 clean(B, bc);
 // a fitted baseline, and a long record whose rounded headline rate would not add up: the sum still does
@@ -216,6 +223,10 @@ assert.ok(/\. Baseline estimated from the fitted trend\.$/.test(card(K.trend, fa
 var kw = steps(K.trend, K.series, kc)[2].work[0];
 assert.ok(kw.indexOf('The record spans ' + Math.round(K.trend.record.years) + ' years, at least 5 of the 20 years are counted, and it has data both before 1995 and after 2014, so we fit the trend and the seasons together') > 0, kw);
 sumAddsUp(K, kc, NB + 'mm');
+assert.strictEqual(K.trend.guidance.risk_label, 'Risk level unclear (low to high)');
+assert.strictEqual(card(K.trend, false).chip, 'Risk level unclear (low to high)');
+var kS6 = steps(K.trend, K.series, kc)[5].work[1];
+assert.ok(/ Here the 95% range spans every level, so the risk level is unclear\.$/.test(kS6) && !/\(low to high\)/.test(kS6), kS6);
 clean(K, kc);
 
 // Chennai, rain: shares of the usual rain; monthly totals in mm; the annual total as given; rates a day
@@ -244,6 +255,11 @@ var cwS = steps(CW.trend, CW.series, cc);
 assert.strictEqual(cwS[4].work[1], 'Years next to each other can be alike. We allow for that, so this range is wider than 45 separate years would give.'); // no months clause
 clean(CW, cc);
 assert.ok(/ 2 years are left out\.$/.test(cwS[0].words[0]));
+var yrows = yearRows(C.trend, false), y17 = C.trend.yearly.findIndex(function (q) { return q.year === 2017; });
+assert.strictEqual(yrows.length, C.trend.yearly.length);
+assert.deepStrictEqual(cT.cols, ['Year', "Each year's rain, compared with the 1995–2014 average"]);
+assert.strictEqual(readout(C.trend, C.series, cc, y17).indexOf(yrows[y17][0] + ': ' + yrows[y17][1] + ' compared with'), 0);
+assert.ok(/One row a year/.test(cT.caption));
 // no yearly (an older answer): the monthly plot
 var CY = copy(C); delete CY.trend.yearly;
 var cyT = chartText(CY.trend, CY.series, cc);
@@ -280,6 +296,21 @@ assert.strictEqual(hS[5].short, 'There is no matching world figure for the hotte
 assert.strictEqual(hS[5].work, undefined);
 clean(H, hdc);
 
+// QA B10: NASA POWER air temperature and hottest day say what a grid is and offer the station; the station's answer says
+// when it disagrees with the POWER answer the page already has
+var ML = 'This comes from a weather model grid about 50 km wide. A weather station nearby can tell a different story.';
+assert.deepStrictEqual(modelNote(H.trend, null), { line: ML, offer: 'ghcn' });
+assert.deepStrictEqual(modelNote(P.trend, null), { line: ML, offer: 'ghcn' });
+assert.strictEqual(modelNote(C.trend, null), null); // rain: not asked for
+var HS = copy(H); HS.trend.source = { id: 'ghcn', name: 'NOAA NCEI GHCN-Daily' };
+HS.trend.verdict = 'falling';
+assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model disagree here.', strong: true });
+HS.trend.verdict = H.trend.verdict;
+assert.strictEqual(modelNote(HS.trend, H.trend), null); // they agree
+assert.strictEqual(modelNote(HS.trend, null), null); // no POWER answer on the page: nothing to compare
+var HE = copy(H); HE.trend.source = { id: 'era5' };
+assert.strictEqual(modelNote(HE.trend, null), null);
+
 // a station with no 1995-2014 average: values as measured, no level, the rate still holds
 var R = load('riverside_no_baseline'), rc = ctx(R, 'Riverside'), rk = card(R.trend, false), rT = chartText(R.trend, R.series, rc), rS = steps(R.trend, R.series, rc);
 assert.strictEqual(rk.r1, null); // no trend.now: no "Now" readout
@@ -303,9 +334,11 @@ assert.ok(!/− −/.test(gS[1].work[0]) && / − \(−[\d.]+ cm\) \(the usual 
 sumAddsUp(G, gc, NB + 'cm');
 clean(G, gc);
 
-// no clear change: the chip says so, the range includes zero
+// no clear change: the headline says so, so the chip doesn't say it again (item 8); the range includes zero
 var S = load('seattle_air_temp_no_change'), sc = ctx(S, 'Seattle'), sk = card(S.trend, false), sS = steps(S.trend, S.series, sc);
-assert.strictEqual(sk.chip, 'No clear change');
+assert.ok(S.trend.guidance.risk_label === 'No clear change' && sk.word === 'No clear change');
+assert.strictEqual(sk.chip, '');
+assert.strictEqual(card(B.trend, false).chip, B.trend.guidance.risk_label); // any other label is the chip, as given
 assert.strictEqual(sk.conf, '45 years of records');
 assert.ok(/, which includes no change$/.test(sk.r2.line));
 assert.ok(/^That does not mean nothing changed/.test(sS[4].words[2]));
@@ -351,6 +384,18 @@ assert.strictEqual(cmpl[5], 'place,time,value_mm,anomaly_mm,flag');
 assert.ok(/^"New York, NY",1920-01,/.test(cmpl[6]));
 assert.strictEqual(cmpl.length, 6 + B.series.times.length + L.series.times.length + 1);
 
+// QA B9: under 600 px the y-axis title is at most 40 characters (13 px semibold is about 7 px a character, so 280 px,
+// the narrowest chart), for every fixture, in metric and imperial, rain's monthly plot too
+['princeton_air_temp', 'battery_sea_level', 'chennai_rain', 'delhi_hottest_day', 'lewes_sea_level_short', 'riverside_no_baseline',
+  'grace_water_storage', 'seattle_air_temp_no_change', 'kolkata_sea_level_fitted', 'mumbai_sea_level_no_world'].map(load).concat([CY]).forEach(function (d) {
+  [false, true].forEach(function (imp) {
+    var T = chartText(d.trend, d.series, ctx(d, 'X', imp));
+    assert.ok(T.ytitleNarrow && T.ytitleNarrow.length <= 40, T.ytitleNarrow + ' (' + T.ytitle + ')');
+  });
+});
+assert.strictEqual(cT.ytitleNarrow, '% above or below the 1995–2014 average');
+assert.strictEqual(chartText(G.trend, G.series, gc).ytitleNarrow, 'cm of water compared with 2004–2009');
+
 // formatting
 assert.strictEqual(fmtNum(0.4, true), '+0.40'); assert.strictEqual(fmtNum(-12.34, true), '−12.3');
 assert.strictEqual(given(false, 30.5059, 'mm', true), '+3.05059'); assert.strictEqual(given(false, -0.37, 'degC', false), '−0.37');
@@ -378,3 +423,23 @@ def test_how_clears_the_sticky_top_bar():
     tiny = re.search(r"@media \(max-width: 399px\) \{ :root \{ --top-h: (\d+)px; \} \}", css)
     assert root and narrow and tiny
     assert (int(root[1]), int(narrow[1]), int(tiny[1])) == (64, 117, 149)
+
+
+def test_compare_table_fits_wide_screens():
+    """QA B8: a long place name pushed the Risk column out of sight at 1440. Place names and risk chips wrap in the
+    compare table; the box still scrolls sideways, which only a narrow screen needs."""
+    css = (ROOT / "web" / "compare.css").read_text(encoding="utf-8")
+    rules = re.findall(r"([^{}]+)\{([^}]*)\}", css)
+    place = [sel for sel, body in rules if "nowrap" in body and re.search(r"td:first-child|td:nth-child\(1\)", sel)]
+    assert not place, place
+    assert re.search(r"\.cmp-tbl \.risk \{[^}]*white-space: normal;", css)
+    assert re.search(r"\.cmp-scroll \{ overflow-x: auto; \}", css)
+
+
+def test_narrow_readout_value_column_is_capped():
+    """QA B9: at 375 px rain's long unit filled an `auto` value column and squeezed the label to one word a line."""
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    narrow = re.search(r"@container \(max-width: 519px\) \{(.*?)\n\}", css, re.S)
+    assert narrow
+    cols = re.search(r"\.reads > div, \.reads > div \+ div \{[^}]*grid-template-columns: ([^;]+);", narrow[1])
+    assert cols and cols[1] == "minmax(0, 1fr) fit-content(45%)", cols and cols[1]
