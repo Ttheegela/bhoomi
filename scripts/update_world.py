@@ -25,6 +25,12 @@ NOAA_VERSION, NOAA_DOI = "6.1.0", "doi:10.25921/vvaa-wq11"
 LAND_UNITS, LAND_BASE = "Degrees Celsius", "1901-2000"
 GMSL_URL = "https://assets.science.nasa.gov/content/dam/science/microapps/vital-signs/data/charts/sea-level.json"
 GMSL_MIN = 3  # values a month needs (one about every 7 days, so a full month has 4 or 5)
+# NOAAGlobalTemp's land part is built from GHCN-Monthly (NCEI's Climate at a Glance background and NOAAGlobalTemp pages).
+LAND_METHOD = ("Monthly land-only average temperature anomaly from NOAAGlobalTemp v6.1, built from GHCN-Monthly weather "
+               "stations; anomalies against the 1901–2000 average of each calendar month.")
+GMSL_METHOD = ("Global mean sea level from satellite altimetry (NASA-SSH: TOPEX/Poseidon, the Jason series, Sentinel-6), "
+               "about every 7 days and averaged by us into calendar months; it includes the seasonal cycle and is not "
+               "adjusted for glacial isostatic adjustment (land rebound).")
 
 
 def _axis(by_month: dict[str, float | None]) -> tuple[list[str], list[float | None]]:
@@ -72,9 +78,7 @@ def land_temp(csv: str, url: str, retrieved: str) -> dict:
     source = {"id": "noaaglobaltemp_land", "name": "NOAA NCEI Climate at a Glance, global land (NOAAGlobalTemp)",
               "url": "https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/", "dataset_id": NOAA_DOI,
               "version": NOAA_VERSION, "record_url": url, "retrieved": retrieved,
-              "method": "NOAA's monthly air temperature averaged over all land areas of the world (NOAAGlobalTemp), "
-                        "as the departure from the 1901-2000 average of each calendar month.",
-              "cadence": "monthly", "deseasoned_upstream": True}
+              "method": LAND_METHOD, "cadence": "monthly", "deseasoned_upstream": True}
     notes = ["Land areas only: no ocean.",
              "Departures from the 1901-2000 average of each calendar month, the provider's base period.",
              "NOAA says its most recent months are preliminary and may change after quality control.",
@@ -88,10 +92,7 @@ def gmsl(reply: dict, retrieved: str) -> dict:
     source = {"id": "nasa_ssh_gmsl", "name": "NASA-SSH global mean sea level (satellite altimetry)",
               "url": "https://doi.org/10.5067/NSIND-GMSV1","dataset_id": "doi:10.5067/NSIND-GMSV1",
               "version": "1", "record_url": GMSL_URL, "retrieved": retrieved,
-              "method": "Area-weighted global mean of NASA-SSH gridded sea surface height from the reference altimeter "
-                        "missions (TOPEX/Poseidon, the Jason series, Sentinel-6), about every 7 days, seasons kept and "
-                        "not adjusted for glacial isostatic adjustment; we average each calendar month's values.",
-              "cadence": "monthly", "deseasoned_upstream": False}
+              "method": GMSL_METHOD, "cadence": "monthly", "deseasoned_upstream": False}
     notes = ["Satellite measurement of the whole ocean's average height; it does not include land rising or sinking at any coast.",
              "Not adjusted for glacial isostatic adjustment (GIA), and the seasonal cycle is kept.",
              f"Each month is the mean of its values (one about every 7 days); a month with fewer than {GMSL_MIN} is left empty.",
