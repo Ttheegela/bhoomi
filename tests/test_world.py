@@ -40,6 +40,13 @@ def test_reference_values_are_in_range_and_sources_exact():
     assert any("glacial isostatic adjustment" in n for n in gmsl["notes"])
 
 
+def test_reference_method_is_what_the_script_writes():
+    land, gmsl = world.reference("land_temp")["source"]["method"], world.reference("gmsl")["source"]["method"]
+    assert land == update_world.LAND_METHOD and "GHCN-Monthly weather stations" in land and "1901–2000" in land
+    assert gmsl == update_world.GMSL_METHOD and "includes the seasonal cycle" in gmsl
+    assert "not adjusted for glacial isostatic adjustment (land rebound)" in gmsl
+
+
 def test_reference_unknown_name_and_copies():
     with pytest.raises(ValueError, match="Unknown world series 'sea_level'"):
         world.reference("sea_level")
