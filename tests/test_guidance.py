@@ -63,7 +63,7 @@ LEVELS = [
 
 @pytest.mark.parametrize("var,verdict,slope,mean,ratio,risk,key", LEVELS)
 def test_levels_and_boundaries(var, verdict, slope, mean, ratio, risk, key):
-    g = guidance_for(res(var, verdict, slope, ratio=ratio), mean)
+    g = guidance_for(res(var, verdict, slope, lo=slope, hi=slope, ratio=ratio), mean)  # a range on one level
     assert (g["risk"], g["ratio"]) == (risk, ratio)
     assert g["risk_label"] == {"high": "High risk", "moderate": "Moderate risk", "low": "Low risk"}[risk]
     assert g["recommendation"] == RECOMMEND[var][key]
@@ -182,7 +182,7 @@ def test_water_storage_24_years_falling():
 
 def test_future_link():
     us = guidance_for(res(place=BATTERY))["future_link"]
-    assert us["label"] == "Future flood map (NOAA)"
+    assert us["label"] == "Future flood map (NOAA, intermediate-high scenario)"  # the viewer opens on that scenario
     # lon -74.0, lat 40.7 in Web Mercator metres: x = -74 * 20037508.34 / 180, y from ln(tan((90 + lat) * pi / 360))
     assert us["url"] == ("https://coast.noaa.gov/slr/#/layer/slr/0/-8237642/4968192/10/satellite/none/0.8/2050/"
                          "interHigh/midAccretion")
@@ -267,3 +267,47 @@ def test_precip_rate_is_the_share_with_mm_in_the_note():
                                                ("air_temp_max", "falling", -0.3), ("water_storage", "falling", -5.0)])
 def test_rate_note_is_null_for_the_others(var, verdict, slope):
     assert guidance_for(res(var, verdict, slope))["rate"]["note"] is None
+
+
+# ---- domain review F2: a 95% range across a threshold names both levels; the advice is the lower level's ----
+
+@pytest.mark.parametrize("ratio,ends,risk,label,key", [
+    (1.5, (1.3, 1.8), "moderate", "Moderate to high risk", "moderate"),  # the Battery: 1.5, range 1.3 to 1.8
+    (0.8, (0.6, 0.9), "low", "Low to moderate risk", "low"),
+    (1.2, (0.6, 1.6), "low", "Low to high risk", "low"),  # across both thresholds
+    (1.7, (1.5, 1.9), "high", "High risk", "high"),  # the whole range on one level
+    (1.5, (None, None), "high", "High risk", "high"),  # no range given: the ratio alone
+])
+def test_a_ratio_range_across_a_threshold_names_both_levels(ratio, ends, risk, label, key):
+    r = res("sea_level", "rising", 49.0, ratio=ratio)
+    r["world"].update(ratio_low=ends[0], ratio_high=ends[1])
+    g = guidance_for(r)
+    assert (g["risk"], g["risk_label"], g["recommendation"]) == (risk, label, RECOMMEND["sea_level"][key])
+    assert g["ratio"] == ratio  # the why sentence keeps the central ratio
+
+
+@pytest.mark.parametrize("verdict,slope,lo,hi,risk,label,key", [
+    ("rising", 0.168, 0.015, 0.364, "low", "Low to high risk", "low_clear"),  # Chennai: 5.6% (0.4 to 10.7%)
+    ("rising", 0.24, 0.18, 0.33, "moderate", "Moderate to high risk", "moderate_wetter"),  # 8% (6 to 11%)
+    ("falling", -0.24, -0.33, -0.18, "moderate", "Moderate to high risk", "moderate_drier"),
+    ("rising", 0.24, 0.18, 0.27, "moderate", "Moderate risk", "moderate_wetter"),  # 6 to 9%: one level
+])
+def test_rain_level_from_its_own_95_range(verdict, slope, lo, hi, risk, label, key):
+    g = guidance_for(res("precip", verdict, slope, lo=lo, hi=hi), 3.0)
+    assert (g["risk"], g["risk_label"], g["recommendation"]) == (risk, label, RECOMMEND["precip"][key])
+
+
+def test_too_little_rain_for_a_percentage_rule():
+    mean = 99.9 / 365.25  # an annual normal just under 100 mm
+    g = guidance_for(res("precip", "rising", 0.1 * mean, lo=0.05 * mean, hi=0.15 * mean), mean)
+    assert (g["risk"], g["risk_label"], g["recommendation"]) == (None, None, None)
+    assert g["why"] == "Rain here is too scarce for a percentage rule." and g["rate"]["text"] == "+10%"
+    assert guidance_for(res("precip", "rising", 0.1 * mean, lo=0.05 * mean, hi=0.15 * mean), 100.1 / 365.25)[
+        "risk_label"] == "Moderate to high risk"
+
+
+def test_advice_describes_the_evidence_and_what_to_check():
+    words = json.dumps(RECOMMEND)
+    assert "advise against" not in words and "we'd" not in words
+    assert "flood maps" in RECOMMEND["sea_level"]["high"] and "storm floods" in RECOMMEND["sea_level"]["low"]
+    assert guidance.OWN_RULE["precip"].endswith("It covers total rain, not heavy downpours or floods.")

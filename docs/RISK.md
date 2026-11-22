@@ -7,6 +7,14 @@ Rework v2 (2026-11-22, `docs/REWORK-SPEC.md` D1, D5, D6) changed three things:
 - the world comparison is like for like;
 - hottest day of the month has no risk level.
 
+The climate-scientist review of PR1 (2026-11-22) added:
+- `now`, the measured level of the last 12 months, and a trend line through the mean (F1);
+- a 95% range on the world ratio and on the rain share, with two-level labels when it crosses a threshold (F2);
+- rainfall tested on calendar-year totals, and no % rule where rain is scarce (F4);
+- advice that describes the evidence and says what to check, instead of advising against a purchase;
+- caveats for station records and for NASA POWER temperatures (F5, F7);
+- a widening rule for months that are alike, picked by Monte Carlo (it replaces the all-lags Hamed–Rao).
+
 ## What guidance is not
 
 - **Not a forecast.** Guidance never gives a future value. No future number is made from a past trend. Future values will come only from published expert projections, in the result's `projection` object (added in later work).
@@ -20,22 +28,36 @@ Rework v2 (2026-11-22, `docs/REWORK-SPEC.md` D1, D5, D6) changed three things:
 - If no window meets both rules, there is no result at all: a 400 with a plain message.
   - A long record whose recent stretch is too thin says so: "Too few recent readings for a trend: the record runs from {first} to {last}, but only {start} on ({years} years) has a value in at least 80% of its months. A trend needs at least 20 such years."
   - A record that is short overall says "The record here is too short for a trend: …".
-- **Tide gauges (PSMSL).** A gauge that fails this check is passed over for the next nearest within 100 km. The series and the trend take the same gauge, read once. Its caveats name the gauge passed over, for example "Sheerness, 61 km away, has too few recent readings for a trend."
+- **Tide gauges (PSMSL and NOAA CO-OPS).** A gauge that fails this check is passed over for the next nearest within 100 km. The series and the trend take the same gauge, read once. Its caveats name the gauge passed over, for example "Sheerness, the nearest gauge, has too few recent readings for a trend." (a farther one: "…, 61 km away, has …").
+- **Rainfall** is tested on calendar years (below), so it also needs at least 20 calendar years with 11 or more valid months; otherwise a 400: "Too few whole years of rain for a trend: …".
 
 A record of 20 to 29 years is shown with `record.status` "short" and the caveat "Short record: under 30 years of data, so this trend is less certain." Land water storage counts as "ok" from 10 years. Preliminary values (`flags`) are left out of the baseline and the fit.
 
 ## How the trend and its range are computed
 
 1. Each monthly value minus its calendar month's 1995–2014 normal.
+   - When the baseline is observed but fewer than all 20 years count, each month's normal is moved along the trend to the middle of 1995–2014: plus slope × (2004.5 − the mean year of that month's counted values). The slope is the least-squares line (with annual and semiannual harmonics) through the counted 1995–2014 values. Without this, missing years at one end would make the "1995–2014 average" the average of the years present.
+   - A fitted baseline (coverage short) also needs at least 5 of the 20 years to count, and valid data both before 1995 and after 2014; otherwise there is no baseline (`method` "none").
 2. The Mann–Kendall test and Sen's slope (the median of all pairwise slopes) on those anomalies.
-3. The variance of the Mann–Kendall statistic is corrected for months that are alike, by Hamed & Rao (1998).
-   - The series is detrended with Sen's slope and ranked.
-   - The rank autocorrelation ρ(i) is computed at every lag i.
-   - Only the lags significant at 5% (|ρ(i)| > 1.96/√n) are kept.
-   - n/n* = 1 + 2/(n(n−1)(n−2)) × Σ (n−i)(n−i−1)(n−i−2) ρ(i) over those lags.
-   - The variance is multiplied by n/n* only when n/n* is above 1. As published the factor can fall below 1, but with every lag tested, chance lags in pure noise often push it there: for 480 months of white noise the median is 0.85. Applied, that would narrow the range and call noise a clear change.
-4. The p-value and the 95% range of Sen's slope (Gilbert's rank method) both use that same corrected variance. `autocorrelation_adjusted` and `explain.real.widened` are true when the correction widened them.
+   - **Rainfall** is tested on calendar years instead (domain review F4: monthly ranks weigh a dry month like a monsoon month). A year counts with at least 11 valid months. Its value is the day-weighted mean of its monthly anomalies: how far its total was from the usual total, as % of the 1995–2014 annual normal (a missing month is taken to be like the rest of its year). The p-value, the 95% range, the verdict and `headline_rate` come from these years; `slope_per_decade`, `ci_low` and `ci_high` are the same rates in mm/day. `n` and `explain.data.n_years` count the years, and `explain.data.n_missing_years` the years without enough months; `explain.data.n_months` still counts the monthly values. The anomalies on the chart stay monthly.
+3. The variance of the Mann–Kendall statistic is multiplied by a factor n/n* for values that are alike, never below 1. The rule was picked by a Monte Carlo (1,500 to 3,000 series per case). It replaced the all-lags Hamed & Rao (1998) correction, which covered only 85% of AR(1) series with φ = 0.6 and 77% of tide-gauge-like residuals.
+   - The series is detrended with Sen's slope.
+   - f₁ is Hamed & Rao's n/n* in its AR(1) form, ρ(k) = r^k, from the lag-1 correlation r of the detrended values: 1 + 2/(n(n−1)(n−2)) × Σ (n−k)(n−k−1)(n−k−2) r^k. It is 1 when r ≤ 0.
+   - For monthly data, the values are also cut into blocks of 12 consecutive values. The variance ratio is 12 × var(block means) ÷ var(values), and f₂ is the AR(1) factor of the block means.
+   - n/n* = max(f₁, variance ratio, 1) × max(f₂, 1). Yearly values (rainfall totals) use max(f₁, 1).
+   - In the simulation this covered 95–99% of AR(1) and white-noise series, and 88–91% of tide-gauge-like ones.
+4. The p-value and the 95% range of Sen's slope (Gilbert's rank method) both use that same corrected variance. `autocorrelation_adjusted` is true when the factor is above 1. `explain.real.widened` is true only when the factor (on the variance) is 1.2 or more, which widens the range by about 10%. So the page never says "we widened the range" about a 1% change.
 5. `headline_rate` and `fit.change` are computed from the unrounded slope, range and span. Only the shown numbers are rounded.
+6. **The trend line** has Sen's slope and passes through the mean of the anomalies at their mean time (not the median: domain review F1), on the same footing as the mean baseline. `fit.level_end` is that line at the last fitted month.
+7. **`now`** is measured, never read off the line. It is the mean of the anomalies in the 12 calendar months to the last fitted month (preliminary values left out), when at least 10 of them have a value (`n`).
+   - Rainfall: their day-weighted mean, the 12-month total's departure from the usual total as % of the 1995–2014 annual normal (`kind` "12-month total").
+   - `text` is in the display unit to 2 significant figures ("+6.6 cm", "+0.49 °C", "+5.9%"); `label` is "the 12 months to October 2026".
+   - `now` is null without a baseline, for annual data, or with fewer than 10 of those months.
+
+## Caveats by kind of record
+
+- NOAA GHCN-Daily stations: "Station records are not adjusted for changes in instruments, observing times or station moves." (domain review F5; the world land series is homogenized.)
+- NASA POWER air temperature and hottest day: "NASA POWER comes from a weather model, MERRA-2, which does not use land thermometer readings; a nearby weather station can differ." (F7)
 
 ## Rates and display units
 
@@ -81,6 +103,8 @@ For rainfall the big number is the share of this place's 1995–2014 average rai
   The world land series (NOAAGlobalTemp, global land) is built from station records. Other sources get the method alone.
 - The two rates are rounded to 2 significant figures as shown.
 - **ratio** = the rate here ÷ the world rate, from those shown rates, rounded to 1 decimal place (half away from zero). The level is judged on that rounded number, so the ratio shown and the level always agree. A world rate of zero or less gives no ratio.
+- **ratio_low** and **ratio_high** = the ends of the local rate's 95% range over the same months (the same Mann–Kendall and Sen computation as the trend, 2 significant figures) ÷ the world rate, rounded the same way.
+- `ratio`, `ratio_low` and `ratio_high` are null unless the verdict is rising or falling: an unclear trend shows the two rates and no ratio.
 - For sea level, the full-record rate stays in `slope_per_decade`, with its own years and no ratio.
 - Without the world reference series (the data lane's module is missing or fails), `world.available` is false and `why_none` reads "The world reference series is not available."
 - When `world.available` is false, every number in `world` is null and `why_none` is one plain sentence.
@@ -89,7 +113,7 @@ For rainfall the big number is the share of this place's 1995–2014 average rai
 `world.text` as shown:
 - air_temp: "Over the same years, the average for all land areas warmed {world} °C per decade. Here: {here} °C per decade."
 - sea_level: "Over the same months, {first year} to {last year}, global average sea level measured by satellites rose {world} mm a year. Here: {here} mm a year."
-- precip: "Our rule: a change of 10% or more of this place's 1995–2014 average rainfall every 10 years is high; 5 to 10% is moderate."
+- precip: "Our rule: a change of 10% or more of this place's 1995–2014 average rainfall every 10 years is high; 5 to 10% is moderate. It covers total rain, not heavy downpours or floods." Where the 1995–2014 annual normal is under 100 mm, `text` is null and `why_none` is "Rain here is too scarce for a percentage rule."
 - water_storage: "Our rule: a fall of 1 cm of water a year or more is high; 0.5 to 1 cm is moderate."
 
 ## Risk levels
@@ -109,9 +133,14 @@ The checks run in this order:
 | precip | both (wetter means flooding, drier means drought) | change per 10 years as a share of this place's 1995–2014 average rainfall | ≥ 10 % | 5 to 10 % | < 5 % |
 | water_storage | falling | our fixed levels, cm of water a year | ≥ 1 | 0.5 to 1 | < 0.5 |
 
+- **A 95% range across a threshold.** Sea level and air temperature are judged on `ratio`, `ratio_low` and `ratio_high`; rainfall on its share and on the shares of both ends of its 95% range. When they fall on different levels:
+  - `risk_label` names the lowest and the highest: "Moderate to high risk", "Low to moderate risk", or "Low to high risk" when the range crosses both thresholds;
+  - `risk` is the lowest, and the recommendation is the lowest level's;
+  - `why` keeps the central number.
 - Sea level or air temperature rising with no world ratio (for example a gauge with under 20 years since 1993): risk `unknown` ("Not enough data"), `why` is `world.why_none`, and the recommendation is "We can't give guidance for this record." The rate is still shown.
 - One side effect of judging the ratio as shown: a ratio from 1.45 up shows as 1.5 and counts as High.
 - The rainfall share (2 significant figures) and the water fall (2 significant figures) are also judged as shown.
+- **Too little rain for a % rule.** Where the 1995–2014 annual normal is under 100 mm, a clear rain change has no risk level: `risk`, `risk_label` and `recommendation` are null, and `why` is "Rain here is too scarce for a percentage rule." The rate is still shown.
 - For rainfall, the average is the 1995–2014 baseline value: the mean of the twelve calendar-month normals, in mm/day (`baseline.value`; `baseline.annual_total_mm` is the same in mm a year). `compute_trend` passes it in. With no baseline, or none above 0, the risk is `unknown`. Rainfall levels (`fit`, `anomaly`) are % of that average, and `explain.seasons` gives each month's usual rain in mm a month.
 
 **Hottest day of the month (air_temp_max) has no risk level.** `risk`, `risk_label`, `why` and `recommendation` are null; the verdict alone answers. `rate`, `display`, `disclaimer` and every other key are unchanged and always present. The Ask agent inserts no guidance for it.
@@ -127,14 +156,16 @@ The checks run in this order:
 
 | Variable | High | Moderate | Low |
 |---|---|---|---|
-| sea_level | For a long-term home or investment near the shore here, we'd advise against it unless the site sits well above flood level. | For a long-term home or investment near the shore here, check how high the site sits above flood level before you commit. | Past records give no special reason to avoid the shore here. Check the site's flood level as you would on any coast. |
+| sea_level | The sea here has been rising faster than the world average. Before you buy or build near the shore, check the site's height above flood level and the official flood maps. | The sea here has been rising at least about as fast as the world average. Before you buy or build near the shore, check the site's flood level as you would on any coast. | Past sea-level records here give no special reason to avoid the shore, but they say nothing about storm floods. Check the site's flood level as you would on any coast. |
 | air_temp | Plan for hotter years here. For a home, a farm or outdoor work, budget for cooling, shade and water. | It has been getting warmer here. Build cooling and shade into long-term plans. | Past records give no special reason to change plans here because of heat. |
 | precip, wetter | Rain here has been increasing strongly. Before you build or plant, check drainage and the flood history of the site. | Rain here has been increasing. Check drainage and flood history before you build or plant. | No clear change: Past records show rain here holding steady enough that it gives no special reason to change plans. A clear change under 5 %: Rain here has changed, but only by a small share of its usual amount. Past records give no special reason to change plans. |
 | precip, drier | Rain here has been decreasing strongly. For farming or a business that needs water, don't count on today's rainfall. | Rain here has been decreasing. Plan for less water than today if you farm or depend on rainfall. | (same as above) |
-| water_storage | Water stored in this region is falling fast. For farming or a new well, we'd advise against relying on groundwater here without a secure supply. | Water stored in this region is falling. Before investing in a farm or a well, check local water levels and supply. | Past records give no special reason to worry about water supply in this region. |
+| water_storage | Water stored in this region is falling fast. Before you rely on groundwater for a farm or a new well, check local water levels and make sure of a secure supply. | Water stored in this region is falling. Before investing in a farm or a well, check local water levels and supply. | Past records give no special reason to worry about water supply in this region. |
+
+The advice describes what the records show and what to check. A ratio of past rates says nothing about a site's height, storm surge or flood defences, so no level advises against a purchase. The sea-level moderate text says "at least about as fast" because a range from moderate to high gets the moderate text.
 
 ## Future map link (`future_link`)
 
 This is for sea_level only. Every other variable gets null.
-- Inside the US coast boxes (lower 48, Alaska, Hawaii; same boxes as `US_BOXES` in `earthtrends/agent/resources.py`), the link is "Future flood map (NOAA)". It opens the NOAA Sea Level Rise Viewer centred on the place: `https://coast.noaa.gov/slr/#/layer/slr/0/{x}/{y}/10/satellite/none/0.8/2050/interHigh/midAccretion`. Here x and y are Web Mercator metres, rounded: x = lon × 20037508.34 / 180, and y = ln(tan((90 + lat) × π / 360)) / (π / 180) × 20037508.34 / 180.
+- Inside the US coast boxes (lower 48, Alaska, Hawaii; same boxes as `US_BOXES` in `earthtrends/agent/resources.py`), the link is "Future flood map (NOAA, intermediate-high scenario)", naming the scenario the viewer opens on. It opens the NOAA Sea Level Rise Viewer centred on the place: `https://coast.noaa.gov/slr/#/layer/slr/0/{x}/{y}/10/satellite/none/0.8/2050/interHigh/midAccretion`. Here x and y are Web Mercator metres, rounded: x = lon × 20037508.34 / 180, and y = ln(tan((90 + lat) × π / 360)) / (π / 180) × 20037508.34 / 180.
 - Elsewhere, `future_link` is null. The NASA AR6 projection tool page we linked before answered 404 on 2026-11-22. Every URL `future_link` carries must answer 200 when checked; the NOAA viewer did on 2026-11-22.

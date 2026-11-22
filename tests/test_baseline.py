@@ -85,22 +85,43 @@ def test_years_count_with_9_months_and_the_baseline_needs_15(whole, part, method
 def test_fitted_baseline_recovers_the_1995_2014_mean():
     t = 1960 + (np.arange(66 * 12) + 0.5) / 12
     x = 15 + 0.02 * (t - 1960) + SEASON[np.arange(t.size) % 12] + 2 * np.cos(4 * np.pi * t)  # no noise
-    b = baseline(ts(blank(x, 1960, range(1993, 2013)), start=1960))  # only 2013 and 2014 left of the 20 years
+    b = baseline(ts(blank(x, 1960, range(1993, 2009)), start=1960))  # 2009-2014 left: 6 of the 20 years
     mid = 2004.5 + (np.arange(12) + 0.5) / 12  # the mean time of each calendar month over 1995-2014
     want = 15 + 0.02 * (mid - 1960) + SEASON + 2 * np.cos(4 * np.pi * mid)
-    assert (b["method"], b["label"], b["years_covered"], b["projection_axis"]) == ("fitted", FITTED, 2, True)
+    assert (b["method"], b["label"], b["years_covered"], b["projection_axis"]) == ("fitted", FITTED, 6, True)
     assert b["months"] == pytest.approx(list(want), abs=1e-3)
 
 
-@pytest.mark.parametrize("first,last,method", [
-    (1960, 2014, "fitted"),  # 1995-2014 inside the record: the fit never runs past the data
-    (1960, 2013, "none"),  # ends before 2014: a fitted 1995-2014 mean would extend the past trend (D1)
-    (1950, 1990, "none"),
-    (1996, 2030, "none"),  # starts after 1995
+@pytest.mark.parametrize("first,last,gone,method", [
+    (1960, 2015, range(1995, 2005), "fitted"),  # 10 years inside 1995-2014, data on both sides
+    (1960, 2025, range(1995, 2009), "fitted"),  # 6 good years inside, data on both sides
+    (1960, 2025, range(1995, 2010), "fitted"),  # 5 good years (2010-2014), the least that counts
+    (1960, 2025, range(1995, 2011), "none"),  # 4 good years
+    (1960, 2025, range(1990, 2019), "none"),  # data only before 1990 and after 2018: a fit across the gap is a guess
+    (1960, 2014, range(1995, 2005), "none"),  # nothing after 2014
+    (1960, 2013, range(1995, 2005), "none"),  # ends before 2014: a fitted 1995-2014 mean would extend the trend (D1)
+    (1950, 1990, (), "none"),
+    (1995, 2030, range(1995, 2005), "none"),  # nothing before 1995
 ])
-def test_fitted_baseline_needs_1995_2014_inside_the_record(first, last, method):
-    x = blank(synth(last - first + 1, start=first), first, range(1995, 2013))  # never 15 observed years
-    assert baseline(ts(x, start=first))["method"] == method
+def test_fitted_baseline_needs_real_data_in_and_around_1995_2014(first, last, gone, method):
+    x = blank(synth(last - first + 1, start=first), first, gone)  # never 15 observed years
+    b = baseline(ts(x, start=first))
+    assert b["method"] == method and (b["value"] is None) == (method == "none")
+
+
+@pytest.mark.parametrize("gone", [[1995], [1995, 1996, 1997], [2012, 2013, 2014], [1999, 2002]])
+def test_observed_baseline_with_missing_years_is_the_1995_2014_mean(gone):
+    # Missing years tilt a plain mean towards the years present (3 mm at 3 mm a year for the first three missing);
+    # each month's normal is moved along the trend to the mean year of all 20.
+    x = blank(synth(45, per_decade=30.0, sd=0.01, level=7000.0), 1981, gone)
+    b = baseline(ts(x, variable="sea_level"))
+    year, month = cal(1981, x.size)
+    full = synth(45, per_decade=30.0, sd=0.01, level=7000.0)
+    want = [full[(year >= 1995) & (year <= 2014) & (month == m)].mean() for m in range(1, 13)]
+    assert (b["method"], b["years_covered"]) == ("observed", 20 - len(gone))
+    assert b["months"] == pytest.approx(want, abs=0.02)
+    plain = [x[(year >= 1995) & (year <= 2014) & (month == m)] for m in range(1, 13)]
+    assert abs(np.nanmean(plain[0]) - want[0]) > 0.2  # without the shift the normal would be off
 
 
 def test_atlantic_city_cut_at_1990_has_no_fitted_baseline():
@@ -272,7 +293,7 @@ def ar1(n, phi=0.6, seed=0):
 def test_ar1_noise_gets_a_wider_range_than_white_noise_for_the_same_trend():
     line = 0.03 * np.arange(480) / 12  # 0.3 per decade
     ratios = []
-    for seed in range(6):  # Hamed-Rao's lag-by-lag test is itself noisy, so several series
+    for seed in range(6):
         red, white = ar1(480, seed=seed)
         a, w = compute_trend(ts(line + red)), compute_trend(ts(line + white))
         assert a["autocorrelation_adjusted"] and a["explain"]["real"]["widened"]
@@ -280,43 +301,42 @@ def test_ar1_noise_gets_a_wider_range_than_white_noise_for_the_same_trend():
     assert min(ratios) > 1.2 and np.mean(ratios) > 1.5, ratios
 
 
-def test_a_positive_but_insignificant_lag_does_not_widen():
-    # 40 annual values: rank lag-1 autocorrelation 0.26, under the 5% limit 1.96 / sqrt(40) = 0.31, and no other lag
-    # significant either. The old lag-1 rule (any r1 > 0) widened this; Hamed-Rao as published does not.
-    t = np.arange(1981.0, 2021.0)
-    x = 0.02 * (t - 1981) + np.random.default_rng(10).normal(0, 0.3, t.size)
-    assert trend._hamed_rao(x - float(np.median(trend._pair_slopes(t, x))) * t) == 1.0
-    s = {"variable": "air_temp", "units": "degC", "freq": "annual", "place": {"name": "X"}, "source": POWER,
-         "times": [str(int(y)) for y in t], "values": list(x), "notes": []}
-    r = compute_trend(s)
-    assert (r["autocorrelation_adjusted"], r["explain"]["real"]["widened"]) == (False, False)
-    _, lo, hi, *_ = trend._mk_sen(t, x - float(np.mean(x[14:34])))  # anomalies against 1995-2014: same slopes
-    i, j = np.triu_indices(40, 1)
-    slopes = np.sort((x[j] - x[i]) / (t[j] - t[i]))
-    c = 1.96 * math.sqrt(40 * 39 * 85 / 18)  # white-noise Var(S), no ties
-    assert (lo, hi) == (slopes[round((780 - c) / 2) - 1], slopes[round((780 + c) / 2 + 1) - 1])
+def test_widening_factor_over_many_series():
+    # The rule the Monte Carlo picked (95-99% coverage on AR(1) and white noise): about 1.1 for white noise and about
+    # 4.4 for AR(1) 0.6, for 480 months. One white series can reach about 2, so only the medians are bounded.
+    white = [trend._widen(np.random.default_rng(s).normal(size=480)) for s in range(200)]
+    red = [trend._widen(ar1(480, seed=s)[0]) for s in range(200)]
+    assert all(f >= 1 for f in white + red)
+    assert np.median(white) < 1.3 and 3.5 < np.median(red) < 5.5, (np.median(white), np.median(red))
+    yearly = ar1(40, seed=2)[0]  # yearly values (rain totals): the lag-1 AR(1) factor alone
+    assert trend._widen(yearly, 1) == max(trend._ar1_factor(40, trend._lag1(yearly)), 1.0) > 1
 
 
-def test_negative_lags_never_narrow_the_range():
-    # As published, chance "significant" lags in pure noise often give n/n* below 1; it is not applied.
-    x = np.random.default_rng(1).normal(15, 1, 480)  # this series' n/n* is about 0.37
-    t = 1981 + (np.arange(480) + 0.5) / 12
-    assert trend._hamed_rao(x - float(np.median(trend._pair_slopes(t, x))) * t) < 0.5
-    r = compute_trend(ts(x))
-    assert r["verdict"] == "no_clear_change" and r["autocorrelation_adjusted"] is False
+def test_values_that_alternate_never_narrow_the_range():
+    e = np.tile([1.0, -1.0], 240)  # lag-1 of -1: the AR(1) form gives no factor below 1
+    assert trend._widen(e) == 1.0 and trend._widen(e, 1) == 1.0
+    r = compute_trend(ts(np.random.default_rng(1).normal(15, 1, 480)))
+    assert r["verdict"] == "no_clear_change"
+
+
+def test_widened_is_said_only_for_a_factor_of_1_2_or_more(monkeypatch):
+    s = ts(synth(45))
+    for f, widened in ((1.0, False), (1.19, False), (1.2, True), (3.0, True)):
+        monkeypatch.setattr(trend, "_widen", lambda e, per_year=12, f=f: f)
+        r = compute_trend(s)
+        assert (r["autocorrelation_adjusted"], r["explain"]["real"]["widened"]) == (f > 1, widened)
 
 
 def test_sen_range_uses_the_inflated_variance_not_white_noise_ranks():
     red, _ = ar1(480, seed=1)
     t = 1981 + (np.arange(480) + 0.5) / 12
     x = 0.03 * (t - 1981) + red
-    _, lo, hi, _, adjusted, widened, _ = trend._mk_sen(t, x)
-    assert widened == adjusted
+    slope, lo, hi, _, adjusted, widened, _ = trend._mk_sen(t, x, 12)
     i, j = np.triu_indices(480, 1)
     slopes = np.sort((x[j] - x[i]) / (t[j] - t[i]))
-    c = 1.96 * math.sqrt(480 * 479 * 965 / 18)  # white-noise Var(S), no ties
-    lo0, hi0 = slopes[round((slopes.size - c) / 2) - 1], slopes[round((slopes.size + c) / 2 + 1) - 1]
-    assert adjusted and lo < lo0 and hi > hi0
+    c = 1.96 * math.sqrt(480 * 479 * 965 / 18 * trend._widen(x - slope * t, 12))  # no ties
+    assert adjusted and widened
+    assert (lo, hi) == (slopes[round((slopes.size - c) / 2) - 1], slopes[round((slopes.size + c) / 2 + 1) - 1])
 
 
 # ---- fit, latest, explain ----
