@@ -317,7 +317,8 @@ function pinLine(p) {
   if (p.status === 'loading') { const n = secsSince(p); return n < 2 ? 'Checking…' : `Checking… ${n} s`; }
   if (p.status === 'error') return 'No record here';
   const t = p.trend, rate = fmt.rate(t), clear = t.verdict === 'rising' || t.verdict === 'falling';
-  return rate && (clear || (t.guidance && t.guidance.risk_label)) ? rate : 'No clear change';
+  if (rate && (clear || (t.guidance && t.guidance.risk_label))) return rate;
+  return clear ? window.TDX.card(t, imperial()).word : 'No clear change'; // an answer from before the rework has no rate
 }
 
 /* ---------- the sidebar ---------- */
@@ -400,6 +401,7 @@ function renderRec() {
   box.append(el('div', { class: 'where' }, el('div', {}, h2(pin.label), meta), C.chip ? el('span', { class: `risk ${riskClass(g)}` }, C.chip) : ''));
   box.append(el('div', { class: 'verdict' }, el('b', {}, el('span', { class: 'shape', 'aria-hidden': 'true' }, C.shape), C.word), el('span', {}, C.conf)));
   if (C.why) box.append(el('p', { class: 'say' }, C.why));
+  if (C.old) return; // a cached answer from before the rework: the verdict only, until it is asked again
   if (C.world) box.append(el('p', { class: 'world' }, `${C.world}.`));
   const r3 = el('div', {}, el('p', { class: 'rl' }, 'What experts project'), el('p', { class: 'rt' }, C.r3));
   const fl = g.future_link;
