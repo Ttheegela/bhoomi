@@ -308,7 +308,8 @@ const fmt = {
   // the rate every view prints: headline_rate ("+3.1 mm a year", "+0.31 °C per decade"), in the Units setting
   rate(t) { const r = t && window.TDX.rate(t, imperial()); return r ? r.text : ''; },
 };
-const riskShort = (g) => (g && g.risk_label ? g.risk_label.replace(/ risk$/, '') : '');
+// the sidebar chip's short form: "Moderate to high", "Unclear" (for "Risk level unclear (low to high)")
+const riskShort = (g) => (g && g.risk_label ? (/^Risk level unclear\b/.test(g.risk_label) ? 'Unclear' : g.risk_label.replace(/ risk$/, '')) : '');
 // High, Moderate, Low; anything else ("Not enough data", "No clear change") is drawn like Low
 const riskClass = (g) => (g && ['high', 'moderate', 'low'].includes(g.risk) ? g.risk : 'unknown');
 
@@ -343,13 +344,18 @@ function renderControls() {
   $('src-field').hidden = !many;
   if (many) {
     const cur = sourceFor(curWin) || v.sources[0];
-    buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, (s) => {
-      wsrc[curWin] = s === v.sources[0] ? null : s;
-      ensureLoaded(curWin);
-      renderControls(); changed(); renderFoot();
-    });
+    buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, pickSource);
     $('src-help').textContent = SOURCE_HELP[cur] || '';
   }
+}
+
+// Measure the current window with another source (the sidebar's "Measured by", or a button on the card).
+function pickSource(s) {
+  const v = varById(curWin);
+  if (!v || !Array.isArray(v.sources) || !v.sources.includes(s)) return;
+  wsrc[curWin] = s === v.sources[0] ? null : s;
+  ensureLoaded(curWin);
+  renderControls(); changed(); renderFoot();
 }
 
 function renderSidebar() {
@@ -392,10 +398,11 @@ function renderRec() {
   }
   if (pin.status === 'error') {
     box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."));
-    // "no record here" from a source picked by hand: offer the measurement's default once (the default for sea level
-    // already tries the other gauge list, so a failure there offers nothing)
+    // "no record here" from a source picked by hand: offer the measurement's default once. Never NOAA CO-OPS: it covers
+    // US coasts only, so after PSMSL (worldwide) found no gauge it is a dead end; the default for sea level already falls
+    // back to PSMSL, so a failure there offers nothing either (QA B7).
     const v = varById(curWin), def = v && Array.isArray(v.sources) ? v.sources[0] : null, prev = results[`${curWin}||${pin.key}`];
-    if (pin.none && sourceFor(curWin) && def && !(prev && prev.none)) { // not when the default already found nothing here
+    if (pin.none && sourceFor(curWin) && def && def !== 'coops' && !(prev && prev.none)) { // not when the default already found nothing here
       const b = el('button', { type: 'button', class: 'btn' }, `Try ${SOURCE_SEG[def] || sourceShort(def)} instead`);
       b.addEventListener('click', () => { wsrc[curWin] = null; ensureLoaded(curWin); renderControls(); changed(); renderFoot(); });
       box.append(el('div', { class: 'acts' }, b));
@@ -414,6 +421,19 @@ function renderRec() {
   if (C.why) box.append(el('p', { class: 'say' }, C.why));
   if (C.old) return; // a cached answer from before the rework: the verdict only, until it is asked again
   if (C.world) box.append(el('p', { class: 'world' }, `${C.world}.`));
+  // NASA POWER's grid against the nearest weather station (QA B10): the line, the switch, and after it whether they
+  // disagree, from the POWER answer this page already has (the default source's result)
+  const v = varById(curWin), prev = results[`${curWin}||${pin.key}`];
+  const note = X.modelNote(t, prev && prev.status === 'ok' ? prev.trend : null);
+  if (note) {
+    const box2 = el('div', { class: note.strong ? 'model strong' : 'model' }, el('p', {}, note.line));
+    if (note.offer && v && Array.isArray(v.sources) && v.sources.includes(note.offer)) {
+      const b = el('button', { type: 'button', class: 'btn' }, 'Compare with the nearest weather station');
+      b.addEventListener('click', () => pickSource(note.offer));
+      box2.append(b);
+    }
+    box.append(box2);
+  }
   const r3 = el('div', {}, el('p', { class: 'rl' }, 'What experts project'), el('p', { class: 'rt' }, C.r3));
   const fl = g.future_link;
   if (fl && typeof fl.url === 'string' && fl.url.startsWith('https://') && fl.label) r3.append(el('p', { class: 'rt' }, el('a', { href: fl.url, target: '_blank', rel: 'noopener' }, `${fl.label} ↗`)));

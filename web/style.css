@@ -120,7 +120,10 @@ span.srclink { color: var(--ink-2); }
 /* the answer card (10-foundation.md section 3) */
 .rec { container-type: inline-size; }
 .rec h2 { font-size: 24px; }
-.rec .where { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.rec .where { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px 12px; }
+/* a long chip ("Risk level unclear (low to high)") moves under the heading on a phone instead of squeezing it */
+.rec .where > div { flex: 1 1 14em; min-width: 0; }
+.rec .where .risk { max-width: 100%; white-space: normal; }
 .rec .meta { color: var(--ink-2); font-size: 14px; margin: 4px 0 0; }
 .rec .meta a { color: var(--ink-2); }
 .verdict { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin: 18px 0 6px; }
@@ -129,6 +132,11 @@ span.srclink { color: var(--ink-2); }
 .verdict > span { color: var(--ink-2); font-size: 15px; }
 .rec .say { font-size: 18px; line-height: 1.45; margin: 0 0 14px; max-width: none; }
 .rec .world { font-size: 15px; color: var(--ink-2); margin: -6px 0 16px; max-width: none; }
+/* the model grid against the nearest weather station (QA B10): a grey line and its button; a disagreement in ink */
+.rec .model { margin: -6px 0 16px; }
+.rec .model p { font-size: 15px; color: var(--ink-2); margin: 0 0 8px; max-width: none; }
+.rec .model.strong p { font-size: 16px; font-weight: 600; color: var(--ink); }
+.rec .model .btn { white-space: normal; text-align: left; padding: 8px 16px; max-width: 100%; } /* wraps on a phone */
 .reads { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 0 18px; }
 .reads > div { padding: 14px 14px 14px 0; min-width: 0; }
 .reads > div + div { padding-left: 14px; border-left: 1px solid var(--line); }
@@ -141,7 +149,8 @@ span.srclink { color: var(--ink-2); }
 .reads .rt a { color: var(--ink); }
 @container (max-width: 519px) {
   .reads { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); }
-  .reads > div, .reads > div + div { padding: 12px 0; border-left: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; align-items: center; }
+  /* the value column takes at most 45%, so a long unit wraps under its number, never squeezing the label (QA B9) */
+  .reads > div, .reads > div + div { padding: 12px 0; border-left: 0; display: grid; grid-template-columns: minmax(0, 1fr) fit-content(45%); column-gap: 16px; align-items: center; }
   .reads > div + div { border-top: 1px solid var(--line); }
   .reads .rl { min-height: 0; grid-column: 1; }
   .reads .rv { grid-column: 2; grid-row: 1 / span 2; margin: 0; font-size: 24px; text-align: right; }

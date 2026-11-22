@@ -171,9 +171,19 @@
     var r2 = { label: 'Rate, ' + Y(fit.start) + '–' + Y(fit.end), value: r ? bare(r) : '—', per: r ? r.per : '', line: r ? rk + ' ' + r.range : '' };
     if (r && !clear && isNum(r.low) && isNum(r.high) && r.low <= 0 && r.high >= 0) r2.line += ', which includes no change';
     if (short) r2.line += '. Short record.';
-    var g = t.guidance || {};
-    return { word: verdictWord(t), shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, why: why(t, imp),
-      world: worldLine(t, imp, /^Since \d{4}\b/.test(str(g.why))), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), chip: str(g.risk_label) };
+    var g = t.guidance || {}, word = verdictWord(t);
+    return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, why: why(t, imp),
+      world: worldLine(t, imp, /^Since \d{4}\b/.test(str(g.why))), r1: r1, r2: r2, r3: str(t.projection && t.projection.why),
+      chip: str(g.risk_label) === word ? '' : str(g.risk_label) }; // the headline already says "No clear change"
+  }
+  // The NASA POWER grid against the nearest weather station (QA B10). other: this place's POWER answer the page
+  // already has (or null); nothing is fetched for it.
+  var MODEL_LINE = 'This comes from a weather model grid about 50 km wide. A weather station nearby can tell a different story.';
+  function modelNote(t, other) {
+    var id = (t.source || {}).id;
+    if (id === 'power' && (t.variable === 'air_temp' || t.variable === 'air_temp_max')) return { line: MODEL_LINE, offer: 'ghcn' };
+    if (id === 'ghcn' && other && (other.source || {}).id === 'power' && other.verdict && other.verdict !== t.verdict) return { line: 'The weather station and the model disagree here.', strong: true };
+    return null;
   }
 
   // Rain's trend runs on yearly values (trend.yearly, in fit.units): the chart plots those. An answer without them, or
@@ -192,10 +202,13 @@
       : seasons ? 'Seasons removed: each month is compared with its own ' + own(b.text) + (a.kind === 'percent' ? ', as a share of the usual rain.' : '.') : '';
     if (t.variable === 'sea_level') sub += (sub ? ' ' : '') + 'Measured against the land, so land sinking adds to the rise.';
     var u = none ? f.unit(s.units) : f.unit(a.units);
+    var uw = u + (t.variable === 'water_storage' ? ' of water' : '');
     var ytitle = none ? u + ', as measured'
       : yearly ? "Each year's rain, % above or below " + b.text
       : a.kind === 'percent' ? '% of the usual rain, compared with ' + b.text
-      : u + (t.variable === 'water_storage' ? ' of water' : '') + ' compared with ' + b.text;
+      : uw + ' compared with ' + b.text;
+    // a chart under 600 px: at most about 40 characters, so the title is never cut (QA B9)
+    var ytitleNarrow = none ? ytitle : a.kind === 'percent' ? '% above or below the ' + yrs + ' average' : uw + ' compared with ' + yrs;
     var summary = ctx.name + ' at ' + place + ', ' + M(t.period.start) + ' to ' + M(t.period.end) + (none ? ', as measured.' : ', compared with ' + b.text + '.');
     if (r) {
       var line = drawn ? 'The trend line' : 'The trend';
@@ -215,15 +228,21 @@
     var cols = ['Month', ctx.name + ' (' + normU(s.units) + ')'];
     if (!none) cols.push('Compared with ' + b.text + ' (' + normU(a.units) + ')');
     cols.push('Note');
+    if (yearly) cols = ['Year', "Each year's rain, compared with " + b.text]; // the rows the chart plots (yearRows)
     return {
       title: ctx.name + ' at ' + place + ', ' + Y(t.period.start) + ' to ' + Y(t.period.end), sub: sub, src: srcText(t), url: recordUrl(src),
-      latest: str(t.latest && t.latest.text), ytitle: ytitle, summary: summary, none: none, hasPre: pre.length > 0, yearly: yearly,
+      latest: str(t.latest && t.latest.text), ytitle: ytitle, ytitleNarrow: ytitleNarrow, summary: summary, none: none, hasPre: pre.length > 0, yearly: yearly,
       hint: 'Hover, tap or use the arrow keys to read ' + (yearly ? 'a year.' : 'a month.'),
       noneNote: none ? 'This record has too few years from 1995 to 2014 for an average, so the chart shows the values as measured, with no trend line. The rate on the card still holds.' : '',
       legend: { monthly: yearly ? "Each year's rain" : none ? 'Monthly value, as measured' : 'Monthly value, seasons removed', range: rk + ' of the trend', zero: yrs + ' average (zero)', yrs: yrs },
       drawn: drawn, endLabel: drawn ? f.val(fit.level_end, fit.units) : '', endSub: fit.end ? 'trend line, ' + Mo(fit.end) : '',
-      cols: cols, caption: 'Records: ' + srcText(t) + '. ' + str(t.latest && t.latest.text) + '.',
+      cols: cols, caption: 'Records: ' + srcText(t) + '. ' + str(t.latest && t.latest.text) + '.' + (yearly ? ' One row a year, as the chart shows; the CSV has every month.' : ''),
     };
+  }
+  // rain on yearly values: the table's rows, printed as the chart's readout prints them
+  function yearRows(t, imp) {
+    var f = F(t, imp);
+    return t.yearly.map(function (q) { return [String(q.year), isNum(q.value) ? f.val(q.value, t.fit.units) : 'no data']; });
   }
   // the readout for point i: a month, or a year for rain on yearly values
   function readout(t, s, ctx, i) {
@@ -391,17 +410,21 @@
 
     var wp = worldParts(t, imp), s6 = { title: 'Compared with the world' };
     if (wp) {
-      var th = w.thresholds || {}, two = / to /.test(str(g.risk_label));
+      var th = w.thresholds || {}, lbl = str(g.risk_label), two = / to /.test(lbl), unclear = /^Risk level unclear\b/.test(lbl);
       // the ratio's 95% range, unless the API's sentence already gives it
       var rr = wp.ratio && isNum(w.ratio_low) && isNum(w.ratio_high) ? fixed(w.ratio_low, 1) + ' to ' + fixed(w.ratio_high, 1) : '';
       if (rr && str(w.text).indexOf(rr) >= 0) rr = '';
+      // the division in metric, like the API's sentence above it ("(in metric)" in °F or inches): one unit in the step (B5)
+      var wm = worldParts(t, false);
       s6.short = worldLine(t, imp);
       s6.words = [imp ? metric(w.text) : str(w.text)];
-      s6.work = [(wp.ratio ? fmtNum(wp.a, false) + ' ÷ ' + fmtNum(wp.b, false) + ' = ' + wp.ratio + ' · ' + (rr ? rr + ' times (' + rk + ') · ' : '') : '')
+      s6.work = [(wp.ratio ? fmtNum(wm.a, false) + ' ÷ ' + fmtNum(wm.b, false) + ' = ' + wp.ratio + ' · ' + (rr ? rr + ' times (' + rk + ') · ' : '') : '')
         + M(w.window.start) + ' to ' + M(w.window.end) + ' · ' + stop(str(w.method)),
-        '1× is the same as the world. ' + th.high + '× or more: high risk. ' + th.moderate + '× to ' + th.high + '×: moderate risk. Under ' + th.moderate + '×: low risk. Here: '
-        + (str(g.risk_label) ? g.risk_label.toLowerCase() : 'no risk level') + (two && rr ? ', because the ' + rk + ' spans more than one level.' : '.')];
+        '1× is the same as the world. ' + th.high + '× or more: high risk. ' + th.moderate + '× to ' + th.high + '×: moderate risk. Under ' + th.moderate + '×: low risk. '
+        + (unclear ? 'Here the ' + rk + ' spans every level, so the risk level is unclear.'
+          : 'Here: ' + (lbl ? lbl.toLowerCase() : 'no risk level') + (two && rr ? ', because the ' + rk + ' spans more than one level.' : '.'))];
       if (isSea) s6.work.push('The full record, ' + Y(fit.start) + ' to ' + Y(fit.end) + ': ' + r.text + '. It gets no world ratio, because satellites only start in 1993.');
+      if (isSea && w.source && str(w.source.method)) s6.work.push('The world figure: ' + lc1(stop(w.source.method))); // it names what the satellites don't correct for
       s6.link = w.source && https(w.source.record_url) ? { text: w.source.name + ' ↗', href: w.source.record_url } : null;
     } else {
       s6.short = str(w.why_none) || str(w.text);
@@ -565,22 +588,22 @@
     }
     if (!T.none) lg.append(key(swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 'c-zero' }]]), T.legend.zero));
     var ro = h('p', { class: 'readout', 'aria-live': 'polite' }, T.hint);
-    sec.append(lg, ro, h('p', { class: 'summary' }, T.summary), dataTable(T, s));
+    sec.append(lg, ro, h('p', { class: 'summary' }, T.summary), dataTable(T, function () { return T.yearly ? yearRows(t, ctx.imperial) : tableRows(s); }));
     sec.hidden = false;
     cur = { pin: pin, ctx: ctx, T: T, box: box, ro: ro };
     draw();
   }
 
-  function dataTable(T, s) {
+  function dataTable(T, rows) { // rows: a function, called when the table is first opened
     var body = h('tbody'), det = h('details', { class: 'pc-table' }, h('summary', {}, h('span', { class: 'mark', 'aria-hidden': 'true' }), 'Show the data as a table'));
     var head = h('tr');
     T.cols.forEach(function (c) { head.append(h('th', { scope: 'col' }, c)); });
-    det.append(h('div', { class: 'table-scroll', tabindex: '0', role: 'region', 'aria-label': 'Monthly data table' },
+    det.append(h('div', { class: 'table-scroll', tabindex: '0', role: 'region', 'aria-label': T.yearly ? 'Yearly data table' : 'Monthly data table' },
       h('table', {}, h('caption', {}, T.caption), h('thead', {}, head), body)));
     det.addEventListener('toggle', function () { // built when first opened: a century of months is a long table
       if (!det.open || body.firstChild) return;
       var frag = document.createDocumentFragment();
-      tableRows(s).forEach(function (r) { var tr = h('tr'); r.forEach(function (c) { tr.append(h('td', {}, c)); }); frag.append(tr); });
+      rows().forEach(function (r) { var tr = h('tr'); r.forEach(function (c) { tr.append(h('td', {}, c)); }); frag.append(tr); });
       body.append(frag);
     });
     return det;
@@ -600,7 +623,7 @@
     var X = function (m) { return ml + (m - md.x0) / (md.x1 - md.x0) * pw; };
     var Yp = function (v) { return mt + (tk.hi - v) / (tk.hi - tk.lo) * ph; };
     var root = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, role: 'img', tabindex: '0', 'aria-label': T.summary, class: 'pc-svg' });
-    root.append(sv('text', { x: 0, y: 14, class: 'pc-ytitle' }, T.ytitle));
+    root.append(sv('text', { x: 0, y: 14, class: 'pc-ytitle' }, narrow ? T.ytitleNarrow : T.ytitle));
     if (md.band) {
       var bx0 = Math.max(ml, X(md.band[0])), bx1 = Math.min(ml + pw, X(md.band[1]));
       if (bx1 > bx0) {
@@ -704,7 +727,7 @@
       g.append(sv('path', { d: d, 'vector-effect': 'non-scaling-stroke' }));
       return g;
     };
-    var au = a.kind === 'percent' ? '% of the usual rain' : f.unit(a.units);
+    var au = a.kind === 'percent' ? '% of the yearly average rate' : f.unit(a.units);
     return h('div', { class: 'fig', 'aria-hidden': 'true' },
       h('p', { class: 'fig-l' }, 'As measured (' + f.unit(s.units) + '), last 10 years'), strip(s.values.slice(from)),
       h('p', { class: 'fig-l' }, 'Seasons removed (' + au + ' compared with ' + yrsOf(t.baseline) + ')'), strip(a.values.slice(from)));
@@ -768,5 +791,5 @@
   function redraw() { if (cur && Math.round(cur.box.clientWidth) !== cur.W) draw(); }
 
   window.TDX = { show: show, redraw: redraw, card: card, rate: rate, worldParts: worldParts, srcText: srcText, recordUrl: recordUrl,
-    csvCompare: csvCompare, download: download, Mo: Mo, Y: Y, conv: conv, metric: metric };
+    csvCompare: csvCompare, download: download, Mo: Mo, Y: Y, conv: conv, metric: metric, modelNote: modelNote };
 })();

@@ -251,7 +251,7 @@
       tr.appendChild(h('td', 'n', c.rate));
       if (hasW) { tr.appendChild(h('td', 'w', c.here)); tr.appendChild(h('td', 'w', c.ratio)); }
       if (hasRisk) {
-        var cr = h('td');
+        var cr = h('td', 'rk');
         if (c.risk) cr.appendChild(h('span', 'risk ' + (/^(high|moderate|low)$/.test(c.risk.risk) ? c.risk.risk : 'unknown'), c.risk.risk_label));
         else cr.textContent = '—';
         tr.appendChild(cr);
