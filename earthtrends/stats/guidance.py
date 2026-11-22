@@ -18,11 +18,15 @@ RATE = {"sea_level": ("mm", "0.1", "a year"), "water_storage": ("cm", "0.1", "of
 MIN_YEARS = {"water_storage": 10}  # years of record to guide a decision, as D6's trend minimum (GRACE 10)
 MIN_YEARS_OTHER = 20
 THRESHOLDS = {"moderate": 0.75, "high": 1.5}  # local rate / world rate, judged on the ratio as shown (1 decimal)
+RAIN_THRESHOLDS = (5, 10)  # % of the 1995-2014 annual normal per decade: moderate, high
+LEVELS = ("low", "moderate", "high")
+RAIN_MIN_MM = 100  # a 1995-2014 annual normal under this many mm a year gets no % rule and no risk level
+SCARCE = "Rain here is too scarce for a percentage rule."
 
 # Rainfall and water storage have no world figure: their own-place rules, printed in world.text.
 OWN_RULE = {
     "precip": "Our rule: a change of 10% or more of this place's 1995–2014 average rainfall every 10 years is high; "
-              "5 to 10% is moderate.",
+              "5 to 10% is moderate. It covers total rain, not heavy downpours or floods.",
     "water_storage": "Our rule: a fall of 1 cm of water a year or more is high; 0.5 to 1 cm is moderate.",
 }
 
@@ -34,13 +38,14 @@ HARMLESS = {"sea_level": "The sea here has been falling.", "air_temp": "It has b
 NO_WORLD = "There is no matching world figure to compare with."
 NO_RULE = "We can't give guidance for this record."
 RECOMMEND = {
-    "sea_level": {
-        "high": "For a long-term home or investment near the shore here, we'd advise against it unless the site sits "
-                "well above flood level.",
-        "moderate": "For a long-term home or investment near the shore here, check how high the site sits above "
-                    "flood level before you commit.",
-        "low": "Past records give no special reason to avoid the shore here. Check the site's flood level as you would "
-               "on any coast."},
+    "sea_level": {  # describe the evidence, then what to check: a past rate says nothing about a site's height
+        "high": "The sea here has been rising faster than the world average. Before you buy or build near the shore, "
+                "check the site's height above flood level and the official flood maps.",
+        # "at least": a range from moderate to high gets this, the lower level's, text (ratio 1.3 to 2.2, say)
+        "moderate": "The sea here has been rising at least about as fast as the world average. Before you buy or "
+                    "build near the shore, check the site's flood level as you would on any coast.",
+        "low": "Past sea-level records here give no special reason to avoid the shore, but they say nothing about "
+               "storm floods. Check the site's flood level as you would on any coast."},
     "air_temp": {
         "high": "Plan for hotter years here. For a home, a farm or outdoor work, budget for cooling, shade and water.",
         "moderate": "It has been getting warmer here. Build cooling and shade into long-term plans.",
@@ -57,8 +62,8 @@ RECOMMEND = {
         "low_clear": "Rain here has changed, but only by a small share of its usual amount. Past records give no "
                      "special reason to change plans."},
     "water_storage": {
-        "high": "Water stored in this region is falling fast. For farming or a new well, we'd advise against relying "
-                "on groundwater here without a secure supply.",
+        "high": "Water stored in this region is falling fast. Before you rely on groundwater for a farm or a new well, "
+                "check local water levels and make sure of a secure supply.",
         "moderate": "Water stored in this region is falling. Before investing in a farm or a well, check local water "
                     "levels and supply.",
         "low": "Past records give no special reason to worry about water supply in this region."},
@@ -114,40 +119,56 @@ def _future_link(place) -> dict | None:
             and any(a <= lat <= b and c <= lon <= d for a, b, c, d in US_BOXES)):
         x = lon * 20037508.34 / 180
         y = math.log(math.tan((90 + lat) * math.pi / 360)) / (math.pi / 180) * 20037508.34 / 180
-        return {"label": "Future flood map (NOAA)", "url": NOAA_SLR.format(x=round(x), y=round(y))}
+        return {"label": "Future flood map (NOAA, intermediate-high scenario)",
+                "url": NOAA_SLR.format(x=round(x), y=round(y))}
     return None
 
 
-def _risk(var: str, verdict: str, slope: Decimal, mean: Decimal, ratio: Decimal | None,
-          why_none) -> tuple[str, str, str | None]:
-    """(risk, why, recommendation key or None) for a clear rising or falling verdict."""
+def _span(values, cuts) -> tuple[str, str]:
+    """(lowest, highest) level over the values, each judged as shown against (moderate, high) cuts."""
+    got = [LEVELS[sum(v >= Decimal(repr(c)) for c in cuts)] for v in values]
+    return min(got, key=LEVELS.index), max(got, key=LEVELS.index)
+
+
+def _label(low: str, high: str) -> str:
+    """"Moderate risk", or for a 95% range across a threshold both levels: "Moderate to high risk"."""
+    return LABEL[low] if low == high else f"{low.capitalize()} to {high} risk"
+
+
+def _risk(var: str, verdict: str, slopes: tuple, mean: Decimal, ratios: tuple,
+          why_none) -> tuple[str, str, str, str | None]:
+    """(lowest risk, highest risk, why, recommendation key or None) for a clear rising or falling verdict. slopes is
+    (slope, low, high) per decade; ratios is (ratio, ratio_low, ratio_high), the ends None when not given. A 95% range
+    across a threshold gives both levels; the recommendation is the lower level's."""
     up = verdict == "rising"
+    slope = slopes[0]
     if var in FASTER:
+        ratio = ratios[0]
         if not up:
-            return "low", HARMLESS[var], "low"
+            return "low", "low", HARMLESS[var], "low"
         if ratio is None:  # no like-for-like world figure: no level
-            return "unknown", why_none if isinstance(why_none, str) and why_none else NO_WORLD, None
-        risk = ("high" if ratio >= Decimal(repr(THRESHOLDS["high"]))
-                else "moderate" if ratio >= Decimal(repr(THRESHOLDS["moderate"])) else "low")
+            return "unknown", "unknown", why_none if isinstance(why_none, str) and why_none else NO_WORLD, None
+        low, high = _span([r for r in ratios if r is not None], (THRESHOLDS["moderate"], THRESHOLDS["high"]))
         if ratio > Decimal("1.1"):
             why = f"{FASTER[var]} about {ratio:f} times faster than {THAN[var]}."
         elif ratio >= Decimal("0.9"):
             why = f"{FASTER[var]} about as fast as {THAN[var]}."
         else:
             why = f"{FASTER[var]} more slowly than {THAN[var]}."
-        return risk, why, risk
+        return low, high, why, low
     if var == "water_storage":
         if up:
-            return "low", HARMLESS[var], "low"
+            return "low", "low", HARMLESS[var], "low"
         fall = sig2(abs(slope) / 10)  # cm a year
         risk = "high" if fall >= 1 else "moderate" if fall >= Decimal("0.5") else "low"
-        return risk, f"Water stored in this region is falling by about {fall:f} cm a year.", risk
-    # precip: both directions count, as a share of this place's 1995-2014 average rainfall (mean > 0, checked by caller)
-    share = sig2(abs(slope) / mean * 100)
-    risk = "high" if share >= 10 else "moderate" if share >= 5 else "low"
+        return risk, risk, f"Water stored in this region is falling by about {fall:f} cm a year.", risk
+    # precip: both directions count, as a share of this place's 1995-2014 average rainfall (mean > 0, checked by
+    # caller), the level from the share and from both ends of its 95% range
+    share, *ends = (sig2(abs(v) / mean * 100) for v in slopes)
+    low, high = _span([share, *ends], RAIN_THRESHOLDS)
     way = "increasing" if up else "decreasing"
     why = f"Rain here has been {way} by about {share:f}% of its usual amount every 10 years."
-    return risk, why, "low_clear" if risk == "low" else f"{risk}_{'wetter' if up else 'drier'}"
+    return low, high, why, "low_clear" if low == "low" else f"{low}_{'wetter' if up else 'drier'}"
 
 
 def guidance_for(result: dict, mean: float | None = None) -> dict:
@@ -161,7 +182,8 @@ def guidance_for(result: dict, mean: float | None = None) -> dict:
     unit, factor = DISPLAY[var] if var else (str(result.get("units") or ""), "1")
     world = result.get("world") if isinstance(result.get("world"), dict) else {}
     shown = world.get("available") is True
-    ratio = _dec(world.get("ratio")) if shown else None
+    ratios = tuple(_dec(world.get(k)) if shown else None for k in ("ratio", "ratio_low", "ratio_high"))
+    ratio = ratios[0]
     src = world.get("source") if isinstance(world.get("source"), dict) else {}
     g = {"risk": "unknown", "risk_label": LABEL["unknown"], "why": "",
          "ratio": float(ratio) if ratio is not None else None,
@@ -169,13 +191,13 @@ def guidance_for(result: dict, mean: float | None = None) -> dict:
          if shown else None,
          "rate": None, "display": {"unit": unit, "factor": float(Decimal(factor))}, "recommendation": "",
          "future_link": _future_link(result.get("place")) if var == "sea_level" else None, "disclaimer": DISCLAIMER}
-    _rules(g, result, var, Decimal(factor), _dec(mean), ratio, world.get("why_none"))
+    _rules(g, result, var, Decimal(factor), _dec(mean), ratios, world.get("why_none"))
     if var == "air_temp_max":
         g.update(risk=None, risk_label=None, why=None, recommendation=None)
     return g
 
 
-def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratio, why_none) -> None:
+def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratios, why_none) -> None:
     verdict = result.get("verdict")
     slope, lo, hi = (_dec(result.get(k)) for k in ("slope_per_decade", "ci_low", "ci_high"))
     years = _years(result.get("period"))
@@ -208,5 +230,9 @@ def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratio, why_none) -
                      "note": {"value": float(-mm if down else mm), "unit": "mm", "text": f"about {mm:f} mm {more} a year"}}
     if var not in RECOMMEND:  # hottest day of the month: no risk level (D5)
         return
-    risk, why, key = _risk(var, verdict, slope, mean, ratio, why_none)
-    g.update(risk=risk, risk_label=LABEL[risk], why=why, recommendation=RECOMMEND[var][key] if key else NO_RULE)
+    if var == "precip" and mean * Decimal("365.25") < RAIN_MIN_MM:  # a % of a tiny normal is no guide: no level
+        g.update(risk=None, risk_label=None, why=SCARCE, recommendation=None)
+        return
+    low, high, why, key = _risk(var, verdict, (slope, lo, hi), mean, ratios, why_none)
+    g.update(risk=low, risk_label=_label(low, high), why=why,
+             recommendation=RECOMMEND[var][key] if key else NO_RULE)
