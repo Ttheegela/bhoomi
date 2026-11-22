@@ -1,4 +1,4 @@
-# Contracts (frozen at hour 0, Sat 2026-11-14)
+# Contracts (frozen at hour 0, Sat 2026-11-14; Rework v2 added Sun 2026-11-22)
 
 Every lane codes against these shapes, so nobody waits on anybody. To change one after the freeze: open a PR that edits only this file (plus the code that must follow), and tag every lane that uses the shape.
 
@@ -16,6 +16,127 @@ One variable can come from several sources. Tools take an optional `source`; res
 | `coops` | NOAA CO-OPS tide gauges, nearest station, https://tidesandcurrents.noaa.gov/ | US coasts |
 | `psmsl` | Permanent Service for Mean Sea Level (PSMSL), RLR monthly means, nearest tide gauge, https://psmsl.org/ | tide gauges worldwide |
 | `grace` | NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0, https://earth.gsfc.nasa.gov/geo/data/grace-mascons | land, 2002 on; a value is a regional average about 400 km across |
+
+## Rework v2 (2026-11-22): self-describing series, one baseline, like-for-like comparisons
+
+Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the older fields where they overlap; every lane codes against them. Shapes added later in the rework (expert projections, PR2 and PR3) are marked "PR2/PR3" and are `null` until then.
+
+### Source block (every TimeSeries and TrendResult) — data lane fills it
+
+```json
+"source": {
+  "id": "power",
+  "name": "NASA POWER (MERRA-2)",
+  "url": "https://power.larc.nasa.gov/",
+  "dataset_id": "NASA POWER monthly point data, parameter T2M (MERRA-2)",
+  "version": "POWER API v2",
+  "record_url": "https://power.larc.nasa.gov/api/temporal/monthly/point?parameters=T2M&community=AG&latitude=40.35&longitude=-74.66&start=1981&end=2025&format=JSON",
+  "retrieved": "2026-11-22",
+  "method": "Monthly mean of the daily 2 m air temperature for the MERRA-2 grid cell (about 50 km).",
+  "cadence": "monthly",
+  "deseasoned_upstream": false
+}
+```
+
+- `url` stays the provider's home page. `record_url` opens **this** record: the exact request we made, or the station or dataset page by ID, and the page it opens names our station or coordinates (REWORK-SPEC PR1 item 2 lists the form per source).
+- `dataset_id`: a DOI (as `doi:10.…`) or the provider's catalogue name. `version`: the release or API version we read, as the provider names it, or `null` if the provider names none.
+- `retrieved`: UTC date (YYYY-MM-DD) the values were fetched from the provider (a cached value keeps its first fetch date).
+- `method`: one plain sentence on how the provider made the values we use. `cadence`: the cadence of `values` (`"monthly"` | `"annual"`). `deseasoned_upstream`: true only when the provider has already removed the seasonal cycle.
+
+### TimeSeries additions — data lane
+
+- `flags`: same length as `values`; each `null` or `"preliminary"` (a value the provider says may still change). Stats leaves preliminary values out of the baseline and the trend fit; the chart marks them.
+- `anomaly` (added by the stats lane in `get_series` and `/api/series`; the data lane does not fill it):
+
+```json
+"anomaly": {"kind": "difference", "units": "degC", "values": [-0.42, 0.18, null], "baseline": {"...": "the Baseline object below"}}
+```
+
+  - `kind`: `"difference"` (value minus the 1995–2014 mean of its calendar month) or `"percent"` (rainfall: the same difference as a percentage of the 1995–2014 annual mean rate, so dry months never divide by a small number). `values` is `null` wherever `values` is `null` or there is no baseline.
+
+### Baseline object — stats lane
+
+```json
+"baseline": {
+  "text": "the 1995–2014 average",
+  "years": [1995, 2014],
+  "method": "observed",
+  "label": null,
+  "years_covered": 20,
+  "value": 11.84,
+  "months": [0.4, 1.6, 5.9, 11.4, 16.9, 21.9, 24.6, 23.8, 19.9, 13.6, 8.2, 3.1],
+  "projection_axis": true
+}
+```
+
+- `method`: `"observed"` (at least 15 of the 20 years have 9 or more valid months), `"fitted"` (coverage short, but the record spans 30 or more years and starts before 2005: trend plus harmonics fitted, then its 1995–2014 mean; `label` is "baseline estimated from the fitted trend"), `"provider"` (GRACE only: the provider's own reference period in `years`, with `label` naming it), or `"none"` (no baseline possible; `value` and `months` are `null`).
+- `value`: the baseline level in the series `units` (the mean of `months`). `months`: the twelve calendar-month normals, January first, or `null`.
+- `projection_axis`: false when the record starts after 2014 or `method` is `"none"`. Such a record is shown on its own chart, never on the projection axis.
+
+### TrendResult additions and changes — stats lane
+
+- `source`: the full source block above (copied from the series).
+- `baseline`: the Baseline object. Every level the page, the agent, the CSV or "How we calculated this" shows is against it.
+- `record`: `{"years": 44.9, "coverage": 0.98, "status": "ok"}`. `years`: span of the fitted data; `coverage`: valid share of expected months in that span. `status` `"ok"`, or `"short"` for a 20–29 year record (shown, labelled "short record"). Under 20 years (GRACE: under 10), or under 80% monthly coverage, there is no trend: a 400 with a plain message, as for any other bad input.
+- `range_kind`: `"95% range"`, the name of `ci_low`…`ci_high` wherever they are shown.
+- `fit`: the headline change, read from the fitted line, never from the last raw month: `{"start": "1981-01", "end": "2025-12", "years": 44.9, "change": 1.4, "change_low": 1.0, "change_high": 1.8, "level_end": 0.6, "units": "degC"}`. `change*` are slope × span; `level_end` is the fitted line's level at the last data month against the baseline (`null` without a baseline).
+- `latest`: `{"month": "2025-12", "text": "Data through December 2025"}`: the last valid value, preliminary included.
+- `world`: the like-for-like world comparison (D5).
+
+```json
+"world": {
+  "available": true,
+  "measure": "average for all land areas",
+  "local_rate": 0.31, "world_rate": 0.29, "unit": "°C per decade",
+  "window": {"start": "1981-01", "end": "2025-12"},
+  "method": "Sen's slope of monthly anomalies, same months for both",
+  "ratio": 1.1,
+  "thresholds": {"moderate": 0.75, "high": 1.5},
+  "source": {"name": "NOAA NCEI Climate at a Glance, global land", "dataset_id": "…", "record_url": "…", "retrieved": "2026-11-22"},
+  "text": "Over the same years, the average for all land areas warmed 0.29 °C per decade. Here: 0.31 °C per decade.",
+  "why_none": null
+}
+```
+
+  - Air temperature: local Sen slope against the global land-only Sen slope over exactly the same months. Sea level: the gauge's Sen slope over 1993 to its last month against satellite global mean sea level over the same months, in mm a year; needs at least 20 of those years. The full-record rate stays in `slope_per_decade` with no ratio.
+  - `available: false` (with every number `null` and `why_none` one plain sentence) for hottest day ("There is no matching world figure for the hottest day of the month."), rainfall and water storage (own-place rules, printed in `text`), and a sea-level gauge with under 20 years since 1993.
+- `projection` (PR2/PR3): the expert projection for this place. Until then `{"available": false, "why": "…"}`. For water storage it stays so, with `why` "There is no standard expert projection for total water storage, so we don't show one."
+- `explain`: the extra numbers "How we calculated this" needs, from the same computation as everything above:
+
+```json
+"explain": {
+  "data": {"n_months": 540, "n_missing": 3, "start": "1981-01", "end": "2025-12", "where": "a grid cell about 50 km wide"},
+  "seasons": {"high_month": 7, "high": 24.6, "low_month": 1, "low": 0.4, "swing": 24.2, "units": "degC"},
+  "real": {"p_value": 0.003, "in_100": "less than 1", "rule": "We call a change clear when that chance is under 5 in 100 and the whole 95% range is on one side of zero.", "widened": true}
+}
+```
+
+  - `seasons` uses the baseline's calendar-month normals (`null` for `method` `"none"` or annual data). `real.widened`: true when the range was widened for months that are alike (autocorrelation).
+- `guidance` changes: `outlook` and `outlook_label` are removed (D1: no future from a past trend). `ratio` and `reference` come from `world` (`null` when `world.available` is false). Hottest day of the month has no risk level: `risk` and `risk_label` are `null`, and so are `why` and `recommendation`; the verdict alone answers. Every other key is unchanged and always present.
+
+### World reference series — data lane, stats lane reads
+
+`earthtrends.data.world.reference(name)` returns a TimeSeries (with the full source block) from a snapshot file kept in the repo and refreshed by `scripts/update_world.py`; nothing is fetched per request.
+
+| name | What | Units |
+|---|---|---|
+| `land_temp` | Global land-only monthly air temperature anomaly, from a published series with an exact URL | degC |
+| `gmsl` | Satellite global mean sea level, 1993 on, monthly | mm |
+
+### CSV download — UI lane builds it from the fields above
+
+```
+# Bhoomi: Air temperature at Princeton, New Jersey
+# Source: NASA POWER (MERRA-2)
+# Dataset: NASA POWER monthly point data, parameter T2M (MERRA-2); version: POWER API v2
+# Record: https://power.larc.nasa.gov/api/temporal/monthly/point?…
+# Baseline: the 1995–2014 average (observed); anomaly = value minus the 1995–2014 mean of its calendar month
+# Method: Monthly mean of the daily 2 m air temperature for the MERRA-2 grid cell (about 50 km).
+# Retrieved: 2026-11-22
+# Built with AI assistance. bhoomi.earth
+time,value_degC,anomaly_degC,flag
+1981-01,-0.8,-1.2,
+```
 
 ## TimeSeries — data lane produces, stats lane consumes
 
@@ -70,8 +191,6 @@ One variable can come from several sources. Tools take an optional `source`; res
     "rate": {"value": 0.21, "unit": "°C", "text": "+0.21 °C", "per": "every 10 years", "note": null},
     "display": {"unit": "°C", "factor": 1},
     "recommendation": "It has been getting warmer here. Build cooling and shade into long-term plans.",
-    "outlook_label": "If the past trend continues",
-    "outlook": [{"year": 2050, "low": 0.3, "high": 0.7, "unit": "°C", "text": "+0.3 to +0.7 °C by 2050"}],
     "future_link": null,
     "disclaimer": "This guidance isn't perfect. It is based only on past records, and the future is not certain. Not professional financial or legal advice."
   }
@@ -91,7 +210,7 @@ One variable can come from several sources. Tools take an optional `source`; res
   - `why`: one plain sentence on the reason. `ratio`: the trend against the reference rate (a number), or `null` where the rule uses no world rate. `reference`: `{"text", "source": {"name", "url"} | null}` naming what the trend was compared with, or `null`.
   - `rate`: the change per 10 years in familiar units (`value`, `unit`, signed `text`, `per`, `note`), or `null` when there is no clear change. For rainfall it is the share of the place's usual rainfall, with the amount in `note`: `{"value": 4.8, "unit": "%", "text": "+4.8%", "per": "more rain every 10 years", "note": {"value": 60, "unit": "mm", "text": "about 60 mm more a year"}}` (falling: `"−4.8%"`, `"less rain every 10 years"`, a negative `note.value`, `"about 60 mm less a year"`). `note` is `null` for every other measurement. `display`: the familiar unit and the factor that turns values in `units` into it.
   - `recommendation`: one or two sentences for the risk level and measurement.
-  - `outlook`: for 2035, 2050 and 2075, the range the past trend would reach if it simply continued (`ci_low` and `ci_high` × the decades from the last data year), with `text` ready to show under the label `outlook_label` ("If the past trend continues"). It is `[]` unless the verdict is rising or falling and the record spans at least 20 years; a record of 20 to 29 years gets 2035 and 2050 only, because a look-ahead should not reach much further than the record is long. It is not a forecast and is never called one.
+  - `outlook` and `outlook_label`: removed 2026-11-22 (Rework v2, D1).
   - `future_link`: `{"label", "url"}` to an official projection tool (sea level only), or `null`.
   - `disclaimer`: one sentence, always present, shown wherever `recommendation` is shown.
   - All keys are always present. Show the strings as text; add no number of your own to them.
@@ -171,6 +290,6 @@ Request:
 - `question`: a string of 1 to 500 characters after trimming; outside that is a 400; missing is a 422.
 - `history` (optional): earlier turns of the same chat, oldest first. At most 6 messages and 4,000 characters in total; whole pairs in order (`user`, then `assistant`); each `content` a non-empty string; no other keys. Anything outside these limits is a 400 with a plain message; nothing is trimmed. Leaving it out, `null`, or `[]` means a question on its own.
 - Earlier turns are text only. They are used to understand the question (which place, measurement, period or source); every number in the answer comes from this turn's tool results.
-- Answers that looked something up end with the tool's own guidance for each result (risk level, why, recommendation, the 2050 outlook, then the disclaimer once and any official future-map link). Code inserts these strings from `guidance` word for word; the model adds no recommendation and no future number of its own (added 2026-11-15).
+- Answers that looked something up end with the tool's own guidance for each result (risk level, why, recommendation, then the disclaimer once and any official future-map link; the 2050 outlook was removed 2026-11-22). Code inserts these strings from `guidance` word for word; the model adds no recommendation and no future number of its own (added 2026-11-15).
 - Limits per network address: 30 questions a minute and 150 an hour (raised 2026-11-15 from 10 and 100, because the page's voice and text assistant asks on visitors' behalf from a few shared addresses); 200 an hour over all callers, unchanged.
 - Any other top-level field is refused (422).
