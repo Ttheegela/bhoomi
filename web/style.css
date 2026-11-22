@@ -14,7 +14,7 @@
   --map-h: 440px;
   --top-h: 64px; /* the sticky top bar's height; the narrow queries below set the tallest it gets there */
   /* data colours: trend line and range, per verdict (charts only) */
-  --up-bg: #D4620A; --dn-bg: #1B3F73; --nc-bg: #6B6B6B;
+  --up-bg: #CC5C00; --dn-bg: #1B3F73; --nc-bg: #6B6B6B;
   /* emissions scenarios, low to very high (web/design/11-sea-level-future.md section 9): lines and fills only, never text */
   --scen-1: #1D8E6E; --scen-2: #5A5FD0; --scen-3: #A0307E; --scen-4: #6A0F36; --scen-band: .15;
   --font-head: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
