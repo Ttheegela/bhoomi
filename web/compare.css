@@ -1,11 +1,11 @@
 /* Compare: chart + table cards. Tokens come from style.css. */
 .cmp-h { margin: 0 0 2px; font-size: 17px; }
-.cmp-cap { margin: 0 0 10px; color: var(--ink-2, #5A5A5A); font-size: 13px; }
+.cmp-cap { margin: 4px 0 10px; color: var(--ink-2, #5A5A5A); font-size: 15px; }
 .cmp-src { color: inherit; text-decoration: underline; }
 .cmp-plot { overflow-x: auto; }
 .cmp-svg { max-width: 1100px; min-width: 720px; display: block; }
-.cmp-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; font-size: 13px; }
-.cmp-key { display: inline-flex; align-items: center; gap: 8px; padding: 2px 4px; border: 0; background: none;
+.cmp-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; font-size: 14px; }
+.cmp-key { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px 4px; border: 0; background: none;
   font: inherit; color: var(--ink, #141414); }
 button.cmp-key { cursor: pointer; border-radius: 6px; }
 button.cmp-key:focus-visible { outline: 2px solid var(--focus, var(--ink, #141414)); outline-offset: 1px; }
@@ -14,32 +14,27 @@ button.cmp-key:focus-visible { outline: 2px solid var(--focus, var(--ink, #14141
 .cmp-sw.s0 { border-color: var(--p1); } .cmp-sw.s1 { border-color: var(--p2); } .cmp-sw.s2 { border-color: var(--p3); }
 .cmp-sw.s3 { border-color: var(--p4); } .cmp-sw.s4 { border-color: var(--p5); } .cmp-sw.s5 { border-color: var(--p6); }
 .cmp-sw.ssel { border-top-width: 4px; border-color: var(--ink, #141414); }
-.cmp-sw.dashk { border-top: 2px dashed var(--ink-2, #5A5A5A); }
 .cmp-grid { stroke: var(--line, #E3E3DE); }
-.cmp-grid.zero { stroke: var(--ink-2, #5A5A5A); opacity: .6; }
+.cmp-grid.zero { stroke: var(--ink-2, #5A5A5A); stroke-width: 1.5; stroke-dasharray: 6 4; }
 .cmp-ax { font: 12px Inter, sans-serif; fill: var(--ink-2, #5A5A5A); }
-.cmp-today { stroke: var(--ink, #141414); stroke-width: 1; stroke-dasharray: 2 4; }
+.cmp-ytitle { font: 600 13px Inter, sans-serif; fill: var(--ink, #141414); }
 .cmp-line { fill: none; stroke-width: 1.6; stroke-linejoin: round; opacity: .85; }
 .cmp-line.ssel { stroke: var(--ink, #141414); stroke-width: 3; opacity: 1; }
 .cmp-line.s0 { stroke: var(--p1); } .cmp-line.s1 { stroke: var(--p2); } .cmp-line.s2 { stroke: var(--p3); }
 .cmp-line.s3 { stroke: var(--p4); } .cmp-line.s4 { stroke: var(--p5); } .cmp-line.s5 { stroke: var(--p6); }
-.cmp-dash { fill: none; stroke-width: 1.6; stroke-dasharray: 6 5; }
-.cmp-dash.s0 { stroke: var(--p1); } .cmp-dash.s1 { stroke: var(--p2); } .cmp-dash.s2 { stroke: var(--p3); }
-.cmp-dash.s3 { stroke: var(--p4); } .cmp-dash.s4 { stroke: var(--p5); } .cmp-dash.s5 { stroke: var(--p6); }
-.cmp-wedge { fill: var(--accent, #D4620A); opacity: .18; }
-.cmp-centre { fill: none; stroke: var(--accent, #D4620A); stroke-width: 2.5; stroke-dasharray: 6 5; }
-.cmp-left { margin: 8px 0 0; color: var(--ink-2, #5A5A5A); font-size: 12.5px; }
+.cmp-left { margin: 8px 0 0; color: var(--ink-2, #5A5A5A); font-size: 14px; }
 
 .cmp-scroll { overflow-x: auto; }
-.cmp-tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cmp-tbl { width: 100%; border-collapse: collapse; font-size: 15px; }
 .cmp-tbl th { font-size: 12px; text-transform: uppercase; letter-spacing: .3px; color: var(--ink-2, #5A5A5A);
   text-align: left; font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line, #E3E3DE); }
 .cmp-tbl td { padding: 10px 8px; border-bottom: 1px solid var(--line, #E3E3DE); }
 .cmp-tbl td.n { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.cmp-tbl td:nth-child(3) { white-space: nowrap; }
+.cmp-tbl td:first-child, .cmp-tbl td:nth-child(3) { white-space: nowrap; }
+.cmp-tbl td.w { min-width: 9em; }
 .cmp-tbl tbody tr { cursor: pointer; }
 .cmp-tbl tbody tr:focus-visible { outline: 2px solid var(--focus, var(--ink, #141414)); outline-offset: -2px; }
-.cmp-tbl tr.on td { background: var(--advice-bg-sel, rgba(127, 127, 127, .09)); font-weight: 600; }
+.cmp-tbl tr.on td { background: var(--bg); font-weight: 600; }
 .cmp-tbl td.cmp-msg { color: var(--ink-2, #5A5A5A); font-weight: 400; }
 .cmp-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; }
 .cmp-dot.dsel { background: var(--ink, #141414); }

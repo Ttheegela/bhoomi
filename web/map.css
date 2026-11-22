@@ -13,7 +13,7 @@
 /* markers: one button per pinned place; fill by risk (the risk is also in the accessible name and the tag) */
 .map-mk { position: absolute; top: 0; left: 0; box-sizing: border-box; width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--ink); background: var(--mk-low); cursor: pointer; }
 .map-mk::before { content: ""; position: absolute; inset: -17px; }
-.map-mk.high { background: var(--risk-high); }
+.map-mk.high { background: var(--ink); }
 .map-mk.moderate { background: var(--mk-mod); }
 .map-mk.low { background: var(--mk-low); }
 .map-mk.sel { width: 20px; height: 20px; box-shadow: 0 0 0 2px var(--ink); z-index: 2; }
