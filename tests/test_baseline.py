@@ -422,9 +422,10 @@ def test_headline_rate_per_measurement(var, level, unit, per):
     assert h["low"] == pytest.approx(r["ci_low"] * per_decade, rel=5e-3)
     assert h["high"] == pytest.approx(r["ci_high"] * per_decade, rel=5e-3)
     assert h["text"].endswith(f"{unit} {per}") and h["range_text"].endswith(f"{unit} {per}")
-    if var == "sea_level":  # guidance shows the same rate: mm a year, not cm every 10 years
+    if var in ("sea_level", "water_storage"):  # guidance and meaning show the same rate, a year, not per 10 years
         g = r["guidance"]["rate"]
-        assert (g["unit"], g["per"], f"{g['text']} {g['per']}") == ("mm", "a year", h["text"])
+        assert (g["unit"], g["per"], f"{g['text']} {g['per']}") == (unit, per, h["text"])
+        assert r["meaning"]["comparison"].startswith("About ") and "each year" in r["meaning"]["comparison"]
 
 
 @pytest.mark.parametrize("last,available", [(2011, False), (2012, True)])

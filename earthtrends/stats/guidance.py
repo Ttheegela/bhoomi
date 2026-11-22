@@ -13,7 +13,8 @@ LABEL = {"high": "High risk", "moderate": "Moderate risk", "low": "Low risk", "u
 NO_CLEAR = "No clear change"  # the label for a no_clear_change verdict: no risk level, it is not evidence of low risk
 DISPLAY = {"sea_level": ("cm", "0.1"), "air_temp": ("°C", "1"), "air_temp_max": ("°C", "1"),
            "precip": ("mm a year", "365.25"), "water_storage": ("cm", "1")}  # levels; rates may differ (RATE)
-RATE = {"sea_level": ("mm", "0.1", "a year")}  # sea level rates are mm a year, the world's unit (headline_rate)
+# Rates in headline_rate's units: sea level mm a year (the world's unit), water storage cm of water a year.
+RATE = {"sea_level": ("mm", "0.1", "a year"), "water_storage": ("cm", "0.1", "of water a year")}
 MIN_YEARS = 20
 THRESHOLDS = {"moderate": 0.75, "high": 1.5}  # local rate / world rate, judged on the ratio as shown (1 decimal)
 

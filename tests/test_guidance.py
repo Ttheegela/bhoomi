@@ -145,6 +145,9 @@ def test_rate_text():
     assert guidance_for(res("air_temp", "rising", 0.21))["rate"] == {
         "value": 0.21, "unit": "°C", "text": "+0.21 °C", "per": "every 10 years", "note": None}
     assert guidance_for(res("sea_level", "falling", -14.0))["rate"]["text"] == "−1.4 mm"
+    # water storage: cm of water a year (as headline_rate), not cm every 10 years
+    assert guidance_for(res("water_storage", "falling", -40.53))["rate"] == {
+        "value": -4.1, "unit": "cm", "text": "−4.1 cm", "per": "of water a year", "note": None}
 
 
 def test_short_record_is_unknown():

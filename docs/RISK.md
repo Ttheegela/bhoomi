@@ -40,7 +40,9 @@ Every rate shown anywhere comes from the result's `headline_rate`, in the unit p
 
 `guidance.rate` is the rate for a clear change, to 2 significant figures, rounded half away from zero and always signed. It is null when there is no clear change, and `rate.note` is always present and null, except for rainfall.
 - Sea level is in mm a year: `{"value": 4.3, "unit": "mm", "text": "+4.3 mm", "per": "a year"}`, the same number as `headline_rate.text`.
-- Temperature and water storage are per 10 years in the display unit ("+0.21 °C", "every 10 years").
+- Water storage is in cm of water a year: `{"value": -4.1, "unit": "cm", "text": "−4.1 cm", "per": "of water a year"}`, the same number as `headline_rate.text`.
+- Temperature is per 10 years ("+0.21 °C", "every 10 years").
+- `meaning.comparison` follows the same units: "About 4 mm higher each year." for sea level, and "About 4 cm less water each year, as a layer spread over the region." for water storage.
 
 For rainfall the big number is the share of this place's 1995–2014 average rainfall: the same share, with the same rounding, that the `why` sentence prints. For example, `{"value": 4.8, "unit": "%", "text": "+4.8%", "per": "more rain every 10 years", "note": {"value": 60, "unit": "mm", "text": "about 60 mm more a year"}}`. When rain is falling, it reads "−4.8%" with "less rain every 10 years", and the note is `{"value": -60, ..., "text": "about 60 mm less a year"}`. The note is the slope per 10 years in mm a year, rounded the same way as `meaning.comparison`. Its `value` is signed; its text is unsigned, and a word carries the direction. `display` stays mm a year (factor 365.25) for the chart. A clear rain change with no usable average gets risk `unknown` and `rate` null.
 

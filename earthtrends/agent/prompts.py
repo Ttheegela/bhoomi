@@ -49,8 +49,8 @@ for this answer. The answer goes in this order:
 A. First sentence, the plain result: answer the question in plain words, built on the default source's \
 meaning.headline, reworded only to name the place and fit the question ("Yes. Sea level at The Battery in New York \
 has clearly been rising."). The verdict rules below still hold.
-B. How much, in familiar terms: quote meaning.comparison exactly as given, when it is not empty ("About 3 cm higher \
-every 10 years."). It is the only converted number allowed; never write one of your own.
+B. How much, in familiar terms: quote meaning.comparison exactly as given, when it is not empty ("About 3 mm higher \
+each year."). It is the only converted number allowed; never write one of your own.
 C. The exact figures, once: the rate with its units, the 95% range and the period (the rules below). Say "per \
 decade"; never explain what a decade is. Never use the word "slope".
 D. How sure, in one plain sentence chosen by meaning.confidence: "Very clear": "A change this steady would be very \

@@ -90,14 +90,15 @@ def test_about(x, want):
 # ---- comparison: each row, both directions ----
 
 @pytest.mark.parametrize("r,want", [
-    (res("sea_level", "rising", 31.79), "About 3 cm higher every 10 years."),
-    (res("sea_level", "falling", -31.79), "About 3 cm lower every 10 years."),
-    (res("sea_level", "rising", 14.6), "About 1.5 cm higher every 10 years."),
-    (res("sea_level", "rising", 9.36), "About 9 mm higher every 10 years."),
-    (res("sea_level", "falling", -9.36), "About 9 mm lower every 10 years."),
-    (res("sea_level", "rising", 10.0), "About 1 cm higher every 10 years."),  # exactly 10 mm: cm
-    (res("sea_level", "rising", 9.9999), "About 10 mm higher every 10 years."),  # switch on the unrounded size
-    (res("sea_level", "rising", 9.96), "About 10 mm higher every 10 years."),
+    # sea level in mm a year, the world's unit (slope per decade / 10), as in headline_rate
+    (res("sea_level", "rising", 42.5046), "About 4 mm higher each year."),  # Atlantic City
+    (res("sea_level", "rising", 31.79), "About 3 mm higher each year."),
+    (res("sea_level", "falling", -31.79), "About 3 mm lower each year."),
+    (res("sea_level", "rising", 14.6), "About 1.5 mm higher each year."),
+    (res("sea_level", "rising", 9.36), "About 0.9 mm higher each year."),
+    (res("sea_level", "falling", -9.36), "About 0.9 mm lower each year."),
+    (res("sea_level", "rising", 10.0), "About 1 mm higher each year."),
+    (res("sea_level", "rising", 9.9999), "About 1 mm higher each year."),
     (res("air_temp", "rising", 0.25), "About 0.3 °C warmer every 10 years."),
     (res("air_temp", "rising", 0.125), "About 0.13 °C warmer every 10 years."),
     (res("air_temp", "falling", -0.0372), "About 0.04 °C cooler every 10 years."),
@@ -108,8 +109,10 @@ def test_about(x, want):
     (res("precip", "rising", 0.1), "About 40 mm more rain a year, every 10 years."),  # 36.525
     (res("precip", "falling", -0.05), "About 18 mm less rain a year, every 10 years."),  # 18.2625
     (res("precip", "rising", 0.2), "About 70 mm more rain a year, every 10 years."),  # 73.05
-    (res("water_storage", "rising", 1.46), "About 1.5 cm more water every 10 years, as a layer spread over the region."),
-    (res("water_storage", "falling", -0.25), "About 0.3 cm less water every 10 years, as a layer spread over the region."),
+    # water storage in cm of water a year (slope per decade / 10), as in headline_rate
+    (res("water_storage", "rising", 1.46), "About 0.15 cm more water each year, as a layer spread over the region."),
+    (res("water_storage", "falling", -0.25), "About 0.03 cm less water each year, as a layer spread over the region."),
+    (res("water_storage", "falling", -40.53), "About 4 cm less water each year, as a layer spread over the region."),
 ])
 def test_comparison(r, want):
     assert meaning_for(r)["comparison"] == want
