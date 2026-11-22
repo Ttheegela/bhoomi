@@ -1,5 +1,6 @@
 """The "guidance" object (earthtrends/stats/guidance.py, rules in docs/RISK.md). Offline: no model, no network."""
 
+import itertools
 import json
 
 import pytest
@@ -52,7 +53,8 @@ LEVELS = [
     ("precip", "falling", -0.3, 3.0, None, "high", "high_drier"),
     ("precip", "rising", 0.297, 3.0, None, "moderate", "moderate_wetter"),  # 9.9 %
     ("precip", "falling", -0.15, 3.0, None, "moderate", "moderate_drier"),  # 5 %
-    ("precip", "rising", 0.147, 3.0, None, "low", "low_clear"),  # 4.9 %, a clear change
+    ("precip", "rising", 0.147, 3.0, None, "low", "low_wetter"),  # 4.9 %, a clear change
+    ("precip", "falling", -0.147, 3.0, None, "low", "low_drier"),
     # water storage: a fall of cm a year
     ("water_storage", "falling", -10.0, None, None, "high", "high"),  # 1 cm a year
     ("water_storage", "falling", -9.9, None, None, "moderate", "moderate"),
@@ -72,13 +74,13 @@ def test_levels_and_boundaries(var, verdict, slope, mean, ratio, risk, key):
 
 WHY = [
     (res("sea_level", "rising", 81.6, ratio=2.4), None,
-     "The sea here is rising about 2.4 times faster than the world average over the same years."),
+     "The sea here is rising about 2.4 times as fast as the world average over the same years."),
     (res("sea_level", "rising", 37.4, ratio=1.1), None,
      "The sea here is rising about as fast as the world average over the same years."),
     (res("sea_level", "rising", 27.2, ratio=0.8), None,
      "The sea here is rising more slowly than the world average over the same years."),
     (res("air_temp", "rising", 0.48, ratio=2.4), None,
-     "It is getting warmer here about 2.4 times faster than the average for all land areas over the same years."),
+     "It is getting warmer here about 2.4 times as fast as the average for all land areas over the same years."),
     (res("air_temp", "rising", 0.18, ratio=0.9), None,
      "It is getting warmer here about as fast as the average for all land areas over the same years."),
     (res("precip", "falling", -0.36), 3.0, "Rain here has been decreasing by about 12% of its usual amount every 10 years."),
@@ -231,7 +233,7 @@ def test_large_numbers_have_no_scientific_notation():
     assert guidance_for(res("water_storage", "falling", -1500.0))["why"] == (
         "Water stored in this region is falling by about 150 cm a year.")
     assert guidance_for(res("sea_level", "rising", 5000.0, ratio=147.1))["why"] == (
-        "The sea here is rising about 147.1 times faster than the world average over the same years.")
+        "The sea here is rising about 147.1 times as fast as the world average over the same years.")
 
 
 def test_precip_note():
@@ -287,7 +289,7 @@ def test_a_ratio_range_across_a_threshold_names_both_levels(ratio, ends, risk, l
 
 
 @pytest.mark.parametrize("verdict,slope,lo,hi,risk,label,key", [
-    ("rising", 0.168, 0.015, 0.364, "low", "Low to high risk", "low_clear"),  # Chennai: 5.6% (0.4 to 10.7%)
+    ("rising", 0.168, 0.015, 0.364, "low", "Low to high risk", "low_wetter"),  # Chennai: 5.6% (0.4 to 10.7%)
     ("rising", 0.24, 0.18, 0.33, "moderate", "Moderate to high risk", "moderate_wetter"),  # 8% (6 to 11%)
     ("falling", -0.24, -0.33, -0.18, "moderate", "Moderate to high risk", "moderate_drier"),
     ("rising", 0.24, 0.18, 0.27, "moderate", "Moderate risk", "moderate_wetter"),  # 6 to 9%: one level
@@ -311,3 +313,50 @@ def test_advice_describes_the_evidence_and_what_to_check():
     assert "advise against" not in words and "we'd" not in words
     assert "flood maps" in RECOMMEND["sea_level"]["high"] and "storm floods" in RECOMMEND["sea_level"]["low"]
     assert guidance.OWN_RULE["precip"].endswith("It covers total rain, not heavy downpours or floods.")
+
+
+# ---- climate review L6: the why names the years of the world comparison when they are not the record's ----
+
+@pytest.mark.parametrize("var,start,window,ratio,why", [
+    ("sea_level", "1920-01", "1993-01", 1.5,  # The Battery: record from 1920, satellites from 1993
+     "Since 1993, the sea here has risen about 1.5 times as fast as the world average."),
+    ("sea_level", "1920-01", "1993-01", 1.0, "Since 1993, the sea here has risen about as fast as the world average."),
+    ("sea_level", "1920-01", "1994-03", 0.8, "Since 1994, the sea here has risen more slowly than the world average."),
+    ("air_temp", "1836-01", "1850-01", 1.2,  # a station older than the world land record
+     "Since 1850, it has warmed here about 1.2 times as fast as the average for all land areas."),
+    ("sea_level", "1999-01", "1999-01", 1.6,
+     "The sea here is rising about 1.6 times as fast as the world average over the same years."),
+])
+def test_why_names_the_world_window_when_it_starts_after_the_record(var, start, window, ratio, why):
+    r = res(var, "rising", 34.0 if var == "sea_level" else 0.3, start=start, ratio=ratio)
+    r["world"]["window"] = {"start": window, "end": "2025-12"}
+    assert guidance_for(r)["why"] == why
+
+
+def test_rain_low_advice_is_true_for_a_small_change_and_for_one_reaching_high():
+    small = guidance_for(res("precip", "rising", 0.09, lo=0.06, hi=0.12), 3.0)  # 3% (2 to 4%): low throughout
+    wide = guidance_for(res("precip", "rising", 0.168, lo=0.015, hi=0.364), 3.0)  # Chennai-like: 5.6% (0.5 to 12%)
+    assert (small["risk_label"], wide["risk_label"]) == ("Low risk", "Low to high risk")
+    assert small["recommendation"] == wide["recommendation"] == RECOMMEND["precip"]["low_wetter"]
+    for k in ("low_wetter", "low_drier"):
+        text = RECOMMEND["precip"][k].lower()
+        assert "check" in text and "no special reason" not in text  # what was found, then what to check
+        assert not any(w in text for w in ("range", "95", "significan", "confiden", "p-value", "statistic", "chance"))
+
+
+CONTRACT_LABELS = {"High risk", "Moderate risk", "Low risk", "Moderate to high risk", "Low to moderate risk",
+                   "Low to high risk", "Not enough data", "No clear change"}  # docs/CONTRACTS.md, guidance.risk_label
+
+
+def test_every_risk_label_is_in_the_contract_list():
+    made = {guidance._label(a, b) for i, a in enumerate(guidance.LEVELS) for b in guidance.LEVELS[i:]}
+    assert made | set(guidance.LABEL.values()) | {guidance.NO_CLEAR} == CONTRACT_LABELS
+    seen = {guidance_for(r, 3.0)["risk_label"] for r in ALL}
+    for low, mid, high in itertools.combinations_with_replacement((0.5, 1.0, 2.0), 3):  # world ratios, in order
+        r = res("sea_level", "rising", 34.0, ratio=mid)
+        r["world"].update(ratio_low=low, ratio_high=high)
+        seen.add(guidance_for(r)["risk_label"])
+    for low, mid, high in itertools.combinations_with_replacement((0.06, 0.21, 0.45), 3):  # 2, 7, 15% of 3 mm/day
+        seen.add(guidance_for(res("precip", "rising", mid, lo=low, hi=high), 3.0)["risk_label"])
+    seen.add(guidance_for(res("sea_level", "rising", 34.0))["risk_label"])  # no world figure
+    assert seen == CONTRACT_LABELS | {None}  # None: the hottest day of the month

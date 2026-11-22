@@ -159,6 +159,22 @@ def test_chennai_rain_trend_comes_from_yearly_totals():
     assert len(anomaly(s)["values"]) == 540  # the chart stays monthly
 
 
+def test_rain_carries_the_yearly_values_its_test_used(monkeypatch):
+    calls = []
+    mk = trend._mk_sen
+    monkeypatch.setattr(trend, "_mk_sen", lambda t, x, k: calls.append((t, x)) or mk(t, x, k))
+    r = compute_trend(fixture("chennai_rain"))
+    (t, x), = calls  # rain has no world comparison: the trend's own call is the only one
+    assert r["yearly"] == [{"year": int(a), "value": round(float(b), 4)} for a, b in zip(t, x)]
+    assert [e["year"] for e in r["yearly"]] == list(range(1981, 2026))  # one per counted year, oldest first
+    assert len(r["yearly"]) == r["n"] == r["explain"]["data"]["n_years"] and r["fit"]["units"] == "%"
+    x = 3 + SEASON[np.arange(26 * 12) % 12] / 5 + np.random.default_rng(2).normal(0, 0.2, 312)
+    r = compute_trend(ts(x, start=2001, variable="precip"))  # no 1995-2014 baseline: mm/day
+    assert r["baseline"]["method"] == "none" and r["fit"]["units"] == "mm/day" and len(r["yearly"]) == 26
+    assert "yearly" not in compute_trend(fixture("battery_sea_level"))
+    assert "yearly" not in compute_trend(fixture("princeton_air_temp"))
+
+
 def test_a_year_needs_11_months_and_the_trend_20_such_years():
     x = 3 + SEASON[np.arange(40 * 12) % 12] / 5 + np.random.default_rng(2).normal(0, 0.2, 480)
     x[::12] = np.nan  # every January missing: 11 months a year still count
@@ -175,6 +191,16 @@ def test_too_little_rain_for_a_percentage_rule():
     assert (r["world"]["text"], r["world"]["why_none"]) == (None, SCARCE)
     assert (r["guidance"]["risk"], r["guidance"]["risk_label"], r["guidance"]["why"]) == (None, None, SCARCE)
     assert r["headline_rate"]["unit"] == "%"  # the rate itself is still shown
+
+
+# ---- L6: the sea-level why names the years its world ratio is from ----
+
+def test_sea_level_why_names_the_years_of_its_world_comparison():
+    r = compute_trend(fixture("battery_sea_level"))  # record from 1920, the world comparison from 1993
+    assert r["world"]["window"]["start"][:4] > r["period"]["start"][:4]
+    assert r["guidance"]["why"].startswith(f"Since {r['world']['window']['start'][:4]}, the sea here has risen ")
+    lewes = compute_trend(fixture("lewes_sea_level_short"))  # record and comparison both start in 1999
+    assert lewes["guidance"]["why"].endswith(" the world average over the same years.")
 
 
 # ---- F5, F7: caveats by kind of record ----
