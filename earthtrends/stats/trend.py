@@ -12,6 +12,7 @@ from earthtrends.data.world import reference as _reference  # the world snapshot
 from earthtrends.stats.baseline import YEAR_MONTHS, baseline, columns, fit, normals_at, num
 from earthtrends.stats.guidance import OWN_RULE, THRESHOLDS, guidance_for, q, sig2, signed
 from earthtrends.stats.meaning import UNITS, meaning_for
+from earthtrends.stats.projection import sea_level as _sea_level_projection
 
 MIN_DAYS_PER_MONTH = 20
 # Spec D6, in years: (no trend below, "short record" below). GRACE has its own minimum of 10 years.
@@ -145,7 +146,8 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
                    "text": f"Data through {calendar.month_name[int(last[5:7])]} {last[:4]}" if monthly
                    else f"Data through {last[:4]}"},
         "world": _world(var, monthly, used, t[ok], xa[ok], (series.get("source") or {}).get("id")),
-        "projection": {"available": False, "why": PROJECTION.get(var, PROJECTION_LATER)},
+        "projection": _sea_level_projection(s, base) if var == "sea_level"
+        else {"available": False, "why": PROJECTION.get(var, PROJECTION_LATER)},
         "explain": {
             "data": {"n_months": n, "n_missing": int(idx[ok][-1] - idx[ok][0]) + 1 - n, "start": used[0],
                      "end": used[-1], "where": _where(series)},

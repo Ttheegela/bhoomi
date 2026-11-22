@@ -9,8 +9,12 @@ Rework v2 (2026-11-22, `docs/REWORK-SPEC.md` D1, D5, D6) changed three things:
 
 ## What guidance is not
 
-- **Not a forecast.** Guidance never gives a future value. No future number is made from a past trend. Future values will come only from published expert projections, in the result's `projection` object (added in later work).
+- **Not a forecast.** Guidance never gives a future value. No future number is made from a past trend. Future values come only from published expert projections, in the result's `projection` object (sea level since PR2; see below).
 - **Not professional advice.** It is not financial, legal, engineering or insurance advice. Every guidance object ends with this disclaimer: "This guidance isn't perfect. It is based only on past records, and the future is not certain. Not professional financial or legal advice."
+
+## Expert projections and the risk level
+
+A sea-level result carries `projection`: IPCC AR6 relative sea level at the tide gauge (or AR6's regional estimate for the area around it), exactly as published, against the 1995–2014 average. It is built in `earthtrends/stats/projection.py` and tested in `tests/test_projection.py`. It does not change the risk level, `why`, the recommendation or any other guidance field: those still come only from the measured trend and the like-for-like world comparison below. The page shows the projection beside the guidance, not inside it. Whether a later rule should weigh it is a separate decision.
 
 ## Before guidance: the record must support a trend
 
