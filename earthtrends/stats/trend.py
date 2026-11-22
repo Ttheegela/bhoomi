@@ -8,6 +8,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 import numpy as np
 
+from earthtrends.data.world import reference as _reference  # the world snapshots (D5); tests replace it
 from earthtrends.stats.baseline import YEAR_MONTHS, baseline, columns, fit, normals_at, num
 from earthtrends.stats.guidance import OWN_RULE, THRESHOLDS, guidance_for, q, sig2, signed
 from earthtrends.stats.meaning import UNITS, meaning_for
@@ -40,15 +41,12 @@ WORLD = {
                            "the world average."},
 }
 WORLD_METHOD = "Sen's slope of monthly anomalies, same months for both"
-# Different kinds of record on the two sides, said in world.method. NOAAGlobalTemp's land part (the data lane's
-# land_temp) is built from GHCN-Monthly station records; its source block does not say "station" itself.
-KIND = {("air_temp", "power"): "different datasets: a grid cell here, station-based for the world; same months, "
-                               "same method",
-        ("air_temp", "ghcn"): "different datasets: one weather station here, station-based for the world; same "
-                              "months, same method"}
+# Different kinds of record on the two sides, added to world.method after the method itself. NOAAGlobalTemp's land
+# part (the data lane's land_temp) is built from GHCN-Monthly station records.
+KIND = {("air_temp", "power"): "different datasets: a grid cell here, station-based for the world",
+        ("air_temp", "ghcn"): "different datasets: one weather station here, station-based for the world"}
 KIND[("air_temp", "era5")] = KIND[("air_temp", "power")]
-SEA_KIND = ("different instruments: a tide gauge here (measured against the land), satellites for the world; "
-            "same months, same method")
+SEA_KIND = "different instruments: a tide gauge here (measured against the land), satellites for the world"
 # headline_rate: variable -> (factor from units per decade, unit, per). Rainfall is a share of the baseline instead.
 HEADLINE = {"sea_level": ("0.1", "mm", "a year"), "air_temp": ("1", "°C", "per decade"),
             "air_temp_max": ("1", "°C", "per decade"), "water_storage": ("0.1", "cm", "of water a year")}
@@ -61,8 +59,10 @@ NO_MATCH = {"air_temp_max": "There is no matching world figure for the hottest d
 NO_MATCH_OTHER = "There is no matching world figure for this measurement."
 
 
-def compute_trend(series: dict) -> dict:
-    """TimeSeries dict -> TrendResult dict. Bad input, or too short or gappy a record, is a ValueError (a 400)."""
+def compute_trend(series: dict, base: dict | None = None) -> dict:
+    """TimeSeries dict -> TrendResult dict. Bad input, or too short or gappy a record, is a ValueError (a 400).
+    `base`: the baseline of the whole series when `series` is a start/end window of it (tools.py passes it, so the
+    1995-2014 average never depends on the window); default: computed from `series`."""
     freq, times, values = series["freq"], list(series["times"]), list(series["values"])
     if len(times) != len(values):
         raise ValueError(f"times and values must have the same length, got {len(times)} and {len(values)}.")
@@ -96,7 +96,7 @@ def compute_trend(series: dict) -> dict:
         caveats.append(SHORT_CAVEAT)
     n = len(ok)
 
-    base = baseline(s)
+    base = baseline(s) if base is None else base
     xa = _anomalies(cols, base, monthly)
     slope, lo, hi, p, adjusted, intercept = _mk_sen(t[ok], xa[ok])
 
@@ -111,11 +111,13 @@ def compute_trend(series: dict) -> dict:
     else:
         verdict = "no_clear_change"
 
-    yrs, units = record["years"], series["units"]
-    level_end = None if base["value"] is None else round(intercept + slope * float(t[ok][-1]), 4) + 0.0
+    yrs, units, var = record["years"], series["units"], series["variable"]
+    # Rainfall levels are % of the 1995-2014 annual mean rate, like its anomaly and headline_rate.
+    pct = var == "precip" and base["value"] is not None and base["value"] > 0
+    f, fit_units = (100 / base["value"], "%") if pct else (1.0, units)
+    level_end = None if base["value"] is None else round((intercept + slope * float(t[ok][-1])) * f, 4) + 0.0
     have = np.flatnonzero(~np.isnan(x))  # the last valid value, preliminary included
     last = times[have[np.argmax(t[have])]]
-    var = series["variable"]
     result = {
         "variable": var,
         "units": units,
@@ -136,9 +138,9 @@ def compute_trend(series: dict) -> dict:
         "range_kind": RANGE_KIND,
         "headline_rate": _headline_rate(var, units, (slope_d, lo_d, hi_d), base["value"]),
         "fit": {"start": used[0], "end": used[-1], "years": yrs,
-                **{k: round(v * yrs / 10, 4) + 0.0 for k, v in (("change", slope_d), ("change_low", lo_d),
-                                                                 ("change_high", hi_d))},
-                "level_end": level_end, "units": units},
+                **{k: round(v * yrs / 10 * f, 4) + 0.0 for k, v in (("change", slope_d), ("change_low", lo_d),
+                                                                     ("change_high", hi_d))},
+                "level_end": level_end, "units": fit_units},
         "latest": {"month": last,
                    "text": f"Data through {calendar.month_name[int(last[5:7])]} {last[:4]}" if monthly
                    else f"Data through {last[:4]}"},
@@ -147,7 +149,7 @@ def compute_trend(series: dict) -> dict:
         "explain": {
             "data": {"n_months": n, "n_missing": int(idx[ok][-1] - idx[ok][0]) + 1 - n, "start": used[0],
                      "end": used[-1], "where": _where(series)},
-            "seasons": _seasons(base, units),
+            "seasons": _seasons(base, units, var == "precip"),
             "real": {"p_value": p, "in_100": _in_100(p), "rule": RULE, "widened": adjusted},
         },
         "caveats": caveats,
@@ -262,15 +264,6 @@ def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict 
             "range_text": f"{_signed0(_at(lo, exp))} to {_signed0(_at(hi, exp))}{gap}{unit} {per}"}
 
 
-def _reference(name: str) -> dict | None:
-    """The data lane's world reference TimeSeries, or None while that module is not there."""
-    try:
-        from earthtrends.data.world import reference
-    except ImportError:
-        return None
-    return reference(name)
-
-
 def _plain(d: Decimal) -> str:
     return ("−" if d < 0 else "") + format(abs(d), "f")
 
@@ -285,8 +278,6 @@ def _world(var: str, monthly: bool, used: list, t, xa, source_id=None) -> dict:
         return out
     try:
         ref = _reference(cfg["name"])
-        if not ref:
-            return {**out, "why_none": NO_REFERENCE}
         rc = columns(ref)
         ra = _anomalies(rc, baseline(ref), ref["freq"] == "monthly")  # the same rebasing as the local record
         world = {tm: float(v) for tm, v, u in zip(ref["times"], ra, rc[4]) if u}
@@ -305,7 +296,8 @@ def _world(var: str, monthly: bool, used: list, t, xa, source_id=None) -> dict:
     src = ref.get("source") or {}
     return {"available": True, "measure": cfg["measure"], "local_rate": float(local), "world_rate": float(glob),
             "unit": cfg["unit"], "window": {"start": start, "end": end},
-            "method": SEA_KIND if var == "sea_level" else KIND.get((var, source_id), WORLD_METHOD),
+            "method": "; ".join(m for m in (WORLD_METHOD, SEA_KIND if var == "sea_level" else KIND.get((var, source_id)))
+                                if m),
             "ratio": float(q(local / glob, "0.1") + 0) if glob > 0 else None,  # judged as shown, like the verdict
             "thresholds": dict(THRESHOLDS),
             "source": {k: src.get(k) for k in ("name", "dataset_id", "record_url", "retrieved")},
@@ -322,11 +314,17 @@ def _where(series: dict) -> str | None:
     return WHERE.get(sid)
 
 
-def _seasons(base: dict, units: str) -> dict | None:
-    """The usual high and low month, from the baseline's calendar-month normals; None without them."""
+MONTH_DAYS = (31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)  # a calendar month's mean length in days
+
+
+def _seasons(base: dict, units: str, rain: bool = False) -> dict | None:
+    """The usual high and low month, from the baseline's calendar-month normals; None without them. Rainfall in mm a
+    month (the month's normal mm/day x its mean length), so the page says "the wettest month usually gets x mm"."""
     m = base["months"]
     if not m:
         return None
+    if rain:
+        m, units = [round(v * d, 1) + 0.0 for v, d in zip(m, MONTH_DAYS)], "mm a month"
     hi, lo = int(np.argmax(m)), int(np.argmin(m))
     return {"high_month": hi + 1, "high": m[hi], "low_month": lo + 1, "low": m[lo],
             "swing": round(m[hi] - m[lo], 4) + 0.0, "units": units}

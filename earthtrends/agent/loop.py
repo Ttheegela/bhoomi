@@ -316,17 +316,45 @@ def hidden_calls(calls: list[dict]) -> set[int]:
     return {i for i, c in enumerate(calls) if c.get("error") is None and any(c["result"] is r for r in others)}
 
 
+# The TrendResult fields the model reads (the prompt's), and so the only numbers the invented-number check accepts:
+# what results carried before Rework v2, plus headline_rate and the baseline's and world's text. The rest (baseline
+# normals, fit, explain, record, world numbers, the source block's record details) is for the page.
+MODEL_FIELDS = ("variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade", "ci_low",
+                "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "headline_rate", "baseline",
+                "world", "caveats", "meaning", "guidance")
+SOURCE_FIELDS = ("id", "name", "url")
+TEXT_ONLY = ("baseline", "world")
+
+
+def model_view(r):
+    """A tool result as the model reads it and the number check pools it: a detect_trend result cut to MODEL_FIELDS
+    (the source to id, name and url; baseline and world to their text), in its own key order. Anything else is
+    returned as it is."""
+    if not isinstance(r, dict):
+        return r
+    out = {}
+    for k, v in r.items():
+        if k not in MODEL_FIELDS:
+            continue
+        if k == "source" and isinstance(v, dict):
+            v = {f: x for f, x in v.items() if f in SOURCE_FIELDS}
+        elif k in TEXT_ONLY and isinstance(v, dict):
+            v = {"text": v.get("text")}
+        out[k] = v
+    return out
+
+
 def for_model(calls: list[dict]) -> list[dict]:
     """What the model reads: digit-free error reasons, each with the sources the call tried (tried_sources), and each
-    agreeing non-default source without its numbers (nor its "meaning"). Every other result goes in full, "meaning"
-    included."""
+    agreeing non-default source without its numbers (nor its "meaning"). Every other result goes as model_view
+    shows it, "meaning" included."""
     hidden = hidden_calls(calls)
 
     def brief(r):
-        return {"variable": r.get("variable"), "verdict": r.get("verdict"), "source": r.get("source"),
+        return {"variable": r.get("variable"), "verdict": r.get("verdict"), "source": model_view(r).get("source"),
                 "caveats": r.get("caveats", []), "note": AGREE_NOTE}
     return [{**c, "error": model_reason(c["error"]), **({"sources": s} if (s := tried_sources(c)) else {})} if c["error"]
-            else {**c, "result": brief(c["result"])} if i in hidden else c
+            else {**c, "result": brief(c["result"])} if i in hidden else {**c, "result": model_view(c["result"])}
             for i, c in enumerate(calls)]
 
 
@@ -419,11 +447,12 @@ def invented_numbers(answer: str, results: list) -> list[str]:
 
 
 def model_results(calls: list[dict]) -> list:
-    """The results as the model saw them, for invented_numbers: every call without an error, with "meaning" left out
-    of the agreeing sources it got without numbers. The eval scorer builds the same list."""
+    """The results as the model saw them, for invented_numbers: every call without an error, as model_view shows it,
+    with "meaning" left out of the agreeing sources it got without numbers. The eval scorer builds the same list."""
     hid = hidden_calls(calls)
-    return [{k: v for k, v in c["result"].items() if k != "meaning"} if i in hid else c["result"]
-            for i, c in enumerate(calls) if c.get("error") is None and c.get("result") is not None]
+    views = [(i, model_view(c["result"])) for i, c in enumerate(calls)
+             if c.get("error") is None and c.get("result") is not None]
+    return [{k: v for k, v in r.items() if k != "meaning"} if i in hid else r for i, r in views]
 
 
 # ---- periods: every range the answer gives must be the period of a returned result ----
