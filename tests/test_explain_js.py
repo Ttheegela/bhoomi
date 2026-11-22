@@ -30,6 +30,10 @@ function clean(d, c) {
   all(d, c).forEach(function (x) {
     assert.ok(!/undefined|NaN|null|\[object/.test(x), 'leak: ' + x);
     assert.ok(!/If the past trend continues|by 2050|confidence interval|chance it.s real/i.test(x), 'banned: ' + x);
+    // the old fitted-baseline rule (the record only had to run from 1995 or earlier to 2014 or later)
+    assert.ok(!/1995 or earlier|2014 or later/.test(x), 'old baseline rule: ' + x);
+    // step 5 says what we did, not that the record "holds less independent information"
+    assert.ok(!/independent information|we widened the range/.test(x), 'old widened sentence: ' + x);
   });
 }
 function num(s) { return Number(String(s).replace(/−/g, '-').replace(/[^\d.+-]/g, '')); }
@@ -81,7 +85,7 @@ assert.ok(P.trend.caveats.some(function (x) { return /weather model, MERRA-2/.te
 P.trend.caveats.forEach(function (x) { assert.ok(pS[7].words[0].list.indexOf(x) >= 0, x); });
 // widened on: the exact sentence with the month count; no sea-level or water-storage line here
 assert.ok(P.trend.explain.real.widened);
-assert.strictEqual(pS[4].work[1], 'Months next to each other tend to be alike, and so can whole years in a row. So this record holds less independent information than its 540 months suggest, and we widened the range to allow for that.');
+assert.strictEqual(pS[4].work[1], 'Months next to each other can be alike, and so can whole years in a row. We allow for that, so this range is wider than 540 separate months would give.');
 assert.strictEqual(pS[4].work.length, 2);
 assert.strictEqual(pS[3].short, P.trend.headline_rate.text + ', 95% range ' + P.trend.headline_rate.range_text);
 sumAddsUp(P, pc, NB + '°C');
@@ -145,6 +149,13 @@ assert.ok(csvPlace(PL.trend, PL.series, pc).text.split('\n').every(function (l) 
 var EVIL = 'a,=HYPERLINK("https://evil.example")', hc = ctx(P, EVIL);
 var hl = csvPlace(P.trend, P.series, hc).text.split('\n');
 assert.strictEqual(hl[0], "# Bhoomi: Air temperature at a,'=HYPERLINK('https://evil.example')"); // a spreadsheet splits at the comma: that piece stays text
+// a tab in a header line becomes a space, as a line break does (some imports split at tabs); a formula after it still gets a '
+var PT = copy(P); PT.trend.place.name = 'Princeton\tBorough';
+var tl = csvPlace(PT.trend, PT.series, ctx(P, 'Princeton\tNJ,\t=1+1')).text.split('\n');
+assert.strictEqual(tl[0], "# Bhoomi: Air temperature at Princeton NJ, '=1+1");
+assert.strictEqual(tl[4], '# Grid point: Princeton Borough, lat 40.35, lon -74.66');
+assert.ok(tl.slice(0, 10).every(function (l) { return l.indexOf('\t') < 0; }));
+assert.ok(/^# Place: Princeton NJ; /.test(csvCompare([{ label: 'Princeton\tNJ', t: P.trend, s: P.series }], { name: 'Air temperature', slug: 'air-temperature' }).text.split('\n')[3]));
 var hcmp = csvCompare([{ label: EVIL, t: P.trend, s: P.series }, { label: '=1+1', t: P.trend, s: P.series }, { label: '@SUM(A1)', t: P.trend, s: P.series }], { name: 'Air temperature', slug: 'air-temperature' }).text.split('\n');
 assert.ok(/^# Place: a,'=HYPERLINK\('https:\/\/evil\.example'\); Source: /.test(hcmp[3]), hcmp[3]);
 assert.ok(hcmp.slice(0, 6).every(function (l) { return /^# /.test(l); }));
@@ -186,7 +197,7 @@ assert.ok(/^Since 1993, /.test(B.trend.guidance.why) && /^Here \+/.test(bk.world
 assert.ok(/^Since 1993: here /.test(bS[5].short), bS[5].short);
 // widened, then the sea-level line
 assert.ok(B.trend.explain.real.widened);
-assert.deepStrictEqual(bS[4].work.slice(1), ['Months next to each other tend to be alike, and so can whole years in a row. So this record holds less independent information than its ' + commas(bd.n_months) + ' months suggest, and we widened the range to allow for that.',
+assert.deepStrictEqual(bS[4].work.slice(1), ['Months next to each other can be alike, and so can whole years in a row. We allow for that, so this range is wider than ' + commas(bd.n_months) + ' separate months would give.',
   'Slow swings in the ocean that last a decade or more can still make this range a little too narrow.']);
 // widened off: no widened sentence and no substitute; the sea-level line stays
 var B0 = copy(B); B0.trend.explain.real.widened = false;
@@ -202,7 +213,8 @@ clean(B, bc);
 // a fitted baseline, and a long record whose rounded headline rate would not add up: the sum still does
 var K = load('kolkata_sea_level_fitted'), kc = ctx(K, 'Kolkata');
 assert.ok(/\. Baseline estimated from the fitted trend\.$/.test(card(K.trend, false).r1.line));
-assert.ok(/so we fit the trend and the seasons together/.test(steps(K.trend, K.series, kc)[2].work[0]));
+var kw = steps(K.trend, K.series, kc)[2].work[0];
+assert.ok(kw.indexOf('The record spans ' + Math.round(K.trend.record.years) + ' years, at least 5 of the 20 years are counted, and it has data both before 1995 and after 2014, so we fit the trend and the seasons together') > 0, kw);
 sumAddsUp(K, kc, NB + 'mm');
 clean(K, kc);
 
@@ -229,7 +241,8 @@ assert.ok(/every pair of years\. One odd year/.test(cS[3].words[1]));
 assert.ok(!C.trend.explain.real.widened && cS[4].work.length === 1, cS[4].work);
 var CW = copy(C); CW.trend.explain.real.widened = true; CW.trend.explain.data.n_missing_years = 2;
 var cwS = steps(CW.trend, CW.series, cc);
-assert.ok(/than its 45 years suggest, and we widened/.test(cwS[4].work[1]), cwS[4].work[1]);
+assert.strictEqual(cwS[4].work[1], 'Years next to each other can be alike. We allow for that, so this range is wider than 45 separate years would give.'); // no months clause
+clean(CW, cc);
 assert.ok(/ 2 years are left out\.$/.test(cwS[0].words[0]));
 // no yearly (an older answer): the monthly plot
 var CY = copy(C); delete CY.trend.yearly;
@@ -272,7 +285,7 @@ var R = load('riverside_no_baseline'), rc = ctx(R, 'Riverside'), rk = card(R.tre
 assert.strictEqual(rk.r1, null); // no trend.now: no "Now" readout
 assert.ok(rT.none && rT.ytitle === '°C, as measured' && rT.endLabel === '');
 assert.strictEqual(rS[2].short, 'No 1995–2014 average for this record');
-assert.ok(/runs from 1995 or earlier to 2014 or later\.$/.test(rS[2].work[0]));
+assert.strictEqual(rS[2].work[0], R.trend.baseline.years_covered + ' of the 20 years have at least 9 months of data. We need at least 15, or a record of 30 years or more with at least 5 of the 20 years counted and data both before 1995 and after 2014.');
 var rl = csvPlace(R.trend, R.series, rc).text.split('\n');
 assert.strictEqual(rl[4], '# Station: RIVERSIDE FIRE STATION 3, lat 33.95, lon -117.39');
 assert.strictEqual(rl[5], '# Baseline: none (too few years from 1995 to 2014)');

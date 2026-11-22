@@ -341,13 +341,13 @@
     } else if (b.method === 'none') {
       s3.short = 'No 1995–2014 average for this record';
       s3.words = ['This record has too few years from 1995 to 2014 to make that average, so this page shows no levels for it, only the rate.'];
-      s3.work = [b.years_covered + ' of the 20 years have at least 9 months of data. We need at least 15, or a record of 30 years or more that runs from 1995 or earlier to 2014 or later.'];
+      s3.work = [b.years_covered + ' of the 20 years have at least 9 months of data. We need at least 15, or a record of 30 years or more with at least 5 of the 20 years counted and data both before 1995 and after 2014.'];
     } else {
       s3.short = 'Every level is compared with ' + b.text + (lvl3 ? ' here, ' + lvl3 : '');
       s3.words = ['Every level on this page is compared with ' + b.text + ' at this place' + (lvl3 ? ', ' + lvl3 : '') + ', so 0 means that average. '
         + 'The card, the chart, the table and the CSV all use it. Expert projections from the IPCC use the same years, so past and future can share one axis.'];
       s3.work = [b.method === 'fitted'
-        ? b.years_covered + ' of the 20 years have at least 9 months of data; we need 15. The record spans ' + Math.round(rec.years) + " years and runs from 1995 or earlier to 2014 or later, so we fit the trend and the seasons together and take the line's 1995–2014 average (" + b.label + ').'
+        ? b.years_covered + ' of the 20 years have at least 9 months of data; we need 15. The record spans ' + Math.round(rec.years) + " years, at least 5 of the 20 years are counted, and it has data both before 1995 and after 2014, so we fit the trend and the seasons together and take the line's 1995–2014 average (" + b.label + ').'
         : b.years_covered + ' of the 20 years from 1995 to 2014 have at least 9 months of data. We need at least 15.'];
     }
     out.push(s3);
@@ -382,8 +382,9 @@
     if (!clear) s5.words.push("That does not mean nothing changed. The data can't rule out anything from " + r.range + '.');
     s5.work = ['p-value ' + (pv < 0.001 ? 'under 0.001' : fixed(pv, 3)) + ', so ' + (pv < 0.05 ? 'below' : 'not below') + ' 0.05 · ' + rk + ' ' + r.range + ', '
       + (r.low > 0 ? 'all above zero' : r.high < 0 ? 'all below zero' : 'which includes zero') + ' → ' + conf.toLowerCase() + '.'];
-    if (real.widened) s5.work.push('Months next to each other tend to be alike, and so can whole years in a row. So this record holds less independent information than its '
-      + (byYear ? commas(dat.n_years) + ' years' : commas(dat.n_months) + ' months') + ' suggest, and we widened the range to allow for that.');
+    // what we did, not what the data are (white noise can come out widened too)
+    if (real.widened) s5.work.push(byYear ? 'Years next to each other can be alike. We allow for that, so this range is wider than ' + commas(dat.n_years) + ' separate years would give.'
+      : 'Months next to each other can be alike, and so can whole years in a row. We allow for that, so this range is wider than ' + commas(dat.n_months) + ' separate months would give.');
     if (isSea) s5.work.push('Slow swings in the ocean that last a decade or more can still make this range a little too narrow.');
     if (t.variable === 'water_storage') s5.work.push('Slow swings in rain and groundwater that last several years can still make this range a little too narrow.');
     out.push(s5);
@@ -436,8 +437,9 @@
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
   // A header line starts with "#" and is never quoted, so tools that skip "#" lines skip it. A spreadsheet still splits
-  // it at commas: a piece that would start a formula there gets a ' first; quotes and line breaks can't open a cell.
-  function headLine(x) { return String(x).replace(/[\r\n]+/g, ' ').replace(/"/g, "'").replace(/,(\s*)(?=[=+\-@\t])/g, ",$1'"); }
+  // it at commas (some imports at tabs too): a piece that would start a formula there gets a ' first; quotes, tabs and
+  // line breaks can't open a cell.
+  function headLine(x) { return String(x).replace(/[\r\n\t]+/g, ' ').replace(/"/g, "'").replace(/,(\s*)(?=[=+\-@])/g, ",$1'"); }
   // "Station: The Battery, lat 40.7006, lon -74.0142" from trend.place; a grid source names only its point
   function placeLine(t) {
     var p = t.place || {}, nm = str(p.name), at = 'lat ' + p.lat + ', lon ' + p.lon;
