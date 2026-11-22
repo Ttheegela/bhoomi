@@ -2,8 +2,8 @@
 like-for-like world comparisons and the autocorrelation-widened range. Offline: small synthetic series only."""
 import json
 import math
-import sys
 from decimal import Decimal
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -92,6 +92,26 @@ def test_fitted_baseline_recovers_the_1995_2014_mean():
     assert b["months"] == pytest.approx(list(want), abs=1e-3)
 
 
+@pytest.mark.parametrize("first,last,method", [
+    (1960, 2014, "fitted"),  # 1995-2014 inside the record: the fit never runs past the data
+    (1960, 2013, "none"),  # ends before 2014: a fitted 1995-2014 mean would extend the past trend (D1)
+    (1950, 1990, "none"),
+    (1996, 2030, "none"),  # starts after 1995
+])
+def test_fitted_baseline_needs_1995_2014_inside_the_record(first, last, method):
+    x = blank(synth(last - first + 1, start=first), first, range(1995, 2013))  # never 15 observed years
+    assert baseline(ts(x, start=first))["method"] == method
+
+
+def test_atlantic_city_cut_at_1990_has_no_fitted_baseline():
+    from earthtrends.data import coops
+    times, values = coops.parse(json.loads((Path(__file__).parent / "fixtures" / "coops_8534720_msl.json").read_text()))
+    keep = [k for k, t in enumerate(times) if t < "1991"]
+    b = baseline({"variable": "sea_level", "units": "mm", "freq": "monthly", "times": [times[k] for k in keep],
+                  "values": [values[k] for k in keep], "source": {"id": "coops"}})
+    assert (b["method"], b["value"]) == ("none", None)
+
+
 def test_short_coverage_and_short_record_has_no_baseline():
     s = ts(synth(26, start=2001), start=2001)  # 2001-2014 is 14 of the 20 years; 26 years is too short to fit
     b = baseline(s)
@@ -129,7 +149,7 @@ def test_grace_uses_the_providers_reference_period():
     year, month = cal(2002, x.size)
     b = baseline(ts(x, start=2002, variable="water_storage", source={**GRACE, "reference_period": [2004, 2009]}))
     want = [x[(year >= 2004) & (year <= 2009) & (month == m)].mean() for m in range(1, 13)]
-    assert (b["method"], b["years"], b["years_covered"]) == ("provider", [2004, 2009], 6)
+    assert (b["method"], b["years"], b["years_covered"], b["projection_axis"]) == ("provider", [2004, 2009], 6, False)
     assert (b["label"], b["text"]) == ("the provider's own reference period, 2004–2009", "the 2004–2009 average")
     assert b["months"] == pytest.approx(want, abs=1e-4)
     b = baseline(ts(x, start=2002, variable="water_storage", source=GRACE))  # the data lane has not filled it
@@ -366,8 +386,8 @@ def test_sea_level_compares_1993_on_in_mm_a_year(refs):
     assert w["available"] and w["window"] == {"start": "1993-01", "end": "2025-12"} and w["unit"] == "mm a year"
     assert (w["local_rate"], w["world_rate"]) == (float(rate(s, months, 1)), float(rate(gmsl_ref(), months, 1)))
     assert w["text"].startswith("Over the same months, 1993 to 2025, global average sea level measured by satellites rose")
-    assert w["method"] == ("different instruments: a tide gauge here (measured against the land), satellites for the "
-                           "world; same months, same method")
+    assert w["method"] == ("Sen's slope of monthly anomalies, same months for both; different instruments: a tide "
+                           "gauge here (measured against the land), satellites for the world")
     assert r["period"]["start"] == "1950-01"  # the full-record rate stays in slope_per_decade, with no ratio of its own
 
 
@@ -381,15 +401,15 @@ def test_sea_level_window_is_exactly_the_months_both_have(refs):
     assert (w["local_rate"], w["world_rate"]) == (float(rate(s, months, 1)), float(rate(gmsl_ref(), months, 1)))
 
 
-@pytest.mark.parametrize("src,method", [
-    ("power", "different datasets: a grid cell here, station-based for the world; same months, same method"),
-    ("era5", "different datasets: a grid cell here, station-based for the world; same months, same method"),
-    ("ghcn", "different datasets: one weather station here, station-based for the world; same months, same method"),
-    ("other", "Sen's slope of monthly anomalies, same months for both"),
+@pytest.mark.parametrize("src,kind", [
+    ("power", "; different datasets: a grid cell here, station-based for the world"),
+    ("era5", "; different datasets: a grid cell here, station-based for the world"),
+    ("ghcn", "; different datasets: one weather station here, station-based for the world"),
+    ("other", ""),
 ])
-def test_temperature_world_method_names_the_kinds_of_record(refs, src, method):
+def test_temperature_world_method_names_the_method_then_the_kinds_of_record(refs, src, kind):
     w = compute_trend(ts(synth(45), source={**POWER, "id": src}))["world"]
-    assert w["available"] and w["method"] == method
+    assert w["available"] and w["method"] == "Sen's slope of monthly anomalies, same months for both" + kind
 
 
 # ---- headline_rate: the rate in the reader's unit ----
@@ -443,14 +463,21 @@ def test_sea_level_needs_20_years_since_1993(refs, last, available):
         assert r["guidance"]["risk"] == "unknown" and r["guidance"]["why"] == w["why_none"]
 
 
-def test_no_world_module_or_a_broken_one_is_never_an_error(monkeypatch):
-    monkeypatch.setitem(sys.modules, "earthtrends.data.world", None)  # importing it now fails
-    for broken in (None, lambda name: 1 / 0):
-        if broken:
-            monkeypatch.setattr(trend, "_reference", broken)
-        w = compute_trend(ts(synth(45)))["world"]
-        assert (w["available"], w["why_none"], w["ratio"], w["local_rate"]) == (
-            False, "The world reference series is not available.", None, None)
+def raise_oserror(name):
+    raise OSError("snapshot missing")
+
+
+@pytest.mark.parametrize("broken", [lambda name: 1 / 0, raise_oserror, lambda name: None, lambda name: {"times": 1}])
+def test_a_broken_world_reference_is_never_an_error(monkeypatch, broken):
+    monkeypatch.setattr(trend, "_reference", broken)
+    w = compute_trend(ts(synth(45)))["world"]
+    assert (w["available"], w["why_none"], w["ratio"], w["local_rate"]) == (
+        False, "The world reference series is not available.", None, None)
+
+
+def test_the_shipped_world_reference_is_used():
+    w = compute_trend(ts(synth(45)))["world"]  # the data lane's snapshot of global land (NOAAGlobalTemp)
+    assert w["available"] and w["source"]["name"].startswith("NOAA NCEI Climate at a Glance")
 
 
 @pytest.mark.parametrize("var,why", [

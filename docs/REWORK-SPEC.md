@@ -20,7 +20,7 @@ Outside reviews of bhoomi.earth (Nov 22) found three faults. All three are confi
    - hottest-day trends against the mean-temperature reference.
 3. **Source links open homepages.** NASA POWER opens https://power.larc.nasa.gov/, not the record we used.
 
-The bar is oceanrise.earth (slr.earth), built by the NASA Sea Level Change Team. We studied every module. Reports are in `research/slr-earth/reports/` next to this file:
+The bar is oceanrise.earth (slr.earth), built by the NASA Sea Level Change Team. We studied every module. Reports are kept locally in `research/slr-earth/reports/` (outside this repository):
 - `indicators.md`: charts and math;
 - `maps.md`;
 - `ar6.md`: projections and data access;

@@ -15,7 +15,8 @@ DISPLAY = {"sea_level": ("cm", "0.1"), "air_temp": ("°C", "1"), "air_temp_max":
            "precip": ("mm a year", "365.25"), "water_storage": ("cm", "1")}  # levels; rates may differ (RATE)
 # Rates in headline_rate's units: sea level mm a year (the world's unit), water storage cm of water a year.
 RATE = {"sea_level": ("mm", "0.1", "a year"), "water_storage": ("cm", "0.1", "of water a year")}
-MIN_YEARS = 20
+MIN_YEARS = {"water_storage": 10}  # years of record to guide a decision, as D6's trend minimum (GRACE 10)
+MIN_YEARS_OTHER = 20
 THRESHOLDS = {"moderate": 0.75, "high": 1.5}  # local rate / world rate, judged on the ratio as shown (1 decimal)
 
 # Rainfall and water storage have no world figure: their own-place rules, printed in world.text.
@@ -184,8 +185,8 @@ def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratio, why_none) -
         g["why"] = "There is no guidance rule for this kind of record."
         g["recommendation"] = NO_RULE
         return
-    if years < MIN_YEARS:
-        g["why"] = f"The record here covers fewer than {MIN_YEARS} years."
+    if years < (least := MIN_YEARS.get(var, MIN_YEARS_OTHER)):
+        g["why"] = f"The record here covers fewer than {least} years."
         g["recommendation"] = SHORT
         return
     if verdict == "no_clear_change":  # not evidence of low risk: no level, only the label

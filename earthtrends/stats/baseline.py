@@ -11,7 +11,7 @@ FITTED = "baseline estimated from the fitted trend"
 PROVIDER = "the provider's own reference period"
 YEAR_MONTHS = 9  # a year counts towards the baseline with at least this many valid months
 NEED_YEARS = 15  # of the 20 baseline years
-FIT_SPAN, FIT_BEFORE = 30, 2005  # short coverage: fit the whole record if it spans 30+ years and starts before 2005
+FIT_SPAN = 30  # short coverage: fit the whole record if it spans 30+ years and holds 1995-2014 inside it
 
 
 def num(v) -> float:
@@ -65,7 +65,7 @@ def baseline(series: dict) -> dict:
     monthly = series["freq"] == "monthly"
     n = 12 if monthly else 1
     out = {"text": TEXT, "years": list(YEARS), "method": "none", "label": None, "years_covered": 0,
-           "value": None, "months": None, "projection_axis": False}
+           "value": None, "months": None, "annual_total_mm": None, "projection_axis": False}
     if not use.any():
         return out
     first = int(year[use].min())
@@ -94,7 +94,8 @@ def baseline(series: dict) -> dict:
                 out["method"] = "observed"
         idx = year * 12 + month if monthly else year
         span = (int(idx[use].max()) - int(idx[use].min()) + 1) / (12 if monthly else 1)
-        if normals is None and span >= FIT_SPAN and first < FIT_BEFORE:
+        # the record must hold 1995-2014 inside it, so the fit never runs past the data (no past trend extended, D1)
+        if normals is None and span >= FIT_SPAN and first <= YEARS[0] and int(year[use].max()) >= YEARS[1]:
             line = fit(t[use], x[use], monthly)
             yrs = np.arange(YEARS[0], YEARS[1] + 1, dtype=float)
             normals = [float(line(yrs + ((m - 0.5) / 12 if monthly else 0)).mean()) for m in range(1, n + 1)]
@@ -102,7 +103,10 @@ def baseline(series: dict) -> dict:
     if normals is None:
         return out
     months = [round(v, 4) + 0.0 for v in normals]
-    out.update(value=round(sum(months) / n, 4) + 0.0, months=months if monthly else None, projection_axis=first <= YEARS[1])
+    value = round(sum(months) / n, 4) + 0.0
+    out.update(value=value, months=months if monthly else None,
+               annual_total_mm=round(value * 365.25, 1) if series.get("variable") == "precip" else None,
+               projection_axis=first <= YEARS[1] and out["method"] != "provider")  # GRACE is off the 1995-2014 axis
     return out
 
 
@@ -111,10 +115,11 @@ def normals_at(base: dict, month) -> np.ndarray:
     return np.array(base["months"])[month - 1] if base["months"] else np.full(month.shape, base["value"], dtype=float)
 
 
-def anomaly(series: dict) -> dict:
+def anomaly(series: dict, base: dict | None = None) -> dict:
     """The `anomaly` block for get_series: each value against its calendar month's normal. Rainfall is a percent of the
-    1995-2014 annual mean rate, so dry months never divide by a small number."""
-    base = baseline(series)
+    1995-2014 annual mean rate, so dry months never divide by a small number. `base`: the baseline of the whole
+    series, when `series` is a start/end window of it (default: computed from `series`)."""
+    base = baseline(series) if base is None else base
     _, month, _, x, _ = columns(series)
     rain = series.get("variable") == "precip"
     d = np.full(x.shape, np.nan)
