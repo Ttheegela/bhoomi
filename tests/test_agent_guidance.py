@@ -11,9 +11,6 @@ GUIDE = {"risk": "high", "risk_label": "High risk",
          "display": {"unit": "cm", "factor": 0.1},
          "recommendation": "For a long-term home or investment near the shore here, we'd advise against it unless "
                            "the site sits well above flood level.",
-         "outlook_label": "If the past trend continues",
-         "outlook": [{"year": 2035, "low": 6.0, "high": 7.0, "unit": "cm", "text": "+6 to +7 cm by 2035"},
-                     {"year": 2050, "low": 18.2, "high": 21.4, "unit": "cm", "text": "+18 to +21 cm by 2050"}],
          "future_link": {"label": "Future flood map (NOAA)", "url": "https://coast.noaa.gov/slr/"},
          "disclaimer": "This guidance isn't perfect. It is based only on past records, and the future is not "
                        "certain. Not professional financial or legal advice."}
@@ -27,7 +24,7 @@ GI = {"variable": "sea_level", "units": "mm", "place": {"name": "Grand Isle", "l
 GI_ARGS = {"variable": "sea_level", "lat": 29.26, "lon": -89.96}
 EXPECT = ("Sea level: High risk. The sea here is rising about 2.4 times faster than the world average. For a "
           "long-term home or investment near the shore here, we'd advise against it unless the site sits well above "
-          "flood level. If the past trend continues: +18 to +21 cm by 2050. This guidance isn't perfect. It is based "
+          "flood level. This guidance isn't perfect. It is based "
           "only on past records, and the future is not certain. Not professional financial or legal advice. "
           "Future flood map (NOAA) (https://coast.noaa.gov/slr/).")
 
@@ -46,9 +43,18 @@ def clean(monkeypatch):
 
 def test_block_is_the_tools_strings_word_for_word():
     assert guidance.block([ok(GI, GI_ARGS)]) == EXPECT
-    for s in (GUIDE["why"], GUIDE["recommendation"], GUIDE["disclaimer"], "+18 to +21 cm by 2050"):
+    for s in (GUIDE["why"], GUIDE["recommendation"], GUIDE["disclaimer"]):
         assert s in EXPECT
-    assert "2035" not in EXPECT  # only the 2050 outlook
+    # an old result that still carries a past-trend outlook adds nothing about the future (spec D1)
+    old = {**GUIDE, "outlook_label": "If the past trend continues",
+           "outlook": [{"year": 2050, "low": 18.2, "high": 21.4, "unit": "cm", "text": "+18 to +21 cm by 2050"}]}
+    assert guidance.block([ok({**GI, "guidance": old}, GI_ARGS)]) == EXPECT
+
+
+def test_hottest_day_adds_no_guidance():
+    flat = {**GUIDE, "risk": None, "risk_label": None, "why": None, "recommendation": None, "future_link": None}
+    hot = {**GI, "variable": "air_temp_max", "units": "degC", "guidance": flat}
+    assert guidance.block([ok(hot, {**GI_ARGS, "variable": "air_temp_max"})]) == ""
 
 
 @pytest.mark.parametrize("text,want", [
@@ -406,4 +412,36 @@ def test_wrong_number_long_answer_is_not_kept(fake, monkeypatch):
 
 def test_scorer_uses_the_loops_number_check():
     assert run.invented_numbers is loop.invented_numbers and run._pool is loop._pool
+
+
+# ---- the model reads, and the number check pools, only the fields the prompt uses ----
+
+LEAKS = ("It could warm another 1.5 °C by mid-century.",  # fit.change
+         "July is about 24 °C.",  # baseline.months
+         "up to 0.75 °C")  # world.thresholds
+
+
+def test_rework_fields_stay_out_of_the_model_view_and_the_number_check(monkeypatch):
+    import json
+    from pathlib import Path
+
+    from earthtrends.data import power
+    fx = json.loads((Path(__file__).parent / "fixtures" / "power_monthly.json").read_text())
+    monkeypatch.setattr(power, "fetch", lambda p, la, lo: fx)
+    args = {"variable": "air_temp", "lat": 39.36, "lon": -74.42}
+    full = tools.detect_trend(**args)
+    calls = [ok(full, args)]
+    view = loop.for_model(calls)[0]["result"]
+    assert loop.model_results(calls) == [view]  # one view for the model and for the check (the scorer's too)
+    assert set(view) <= set(loop.MODEL_FIELDS) and not {"fit", "explain", "record", "latest"} & set(view)
+    assert view["baseline"] == {"text": full["baseline"]["text"]} and view["world"] == {"text": full["world"]["text"]}
+    assert set(view["source"]) == {"id", "name", "url"} and view["headline_rate"] == full["headline_rate"]
+    assert all(not loop.invented_numbers(t, [full]) for t in LEAKS)  # the whole result would let them through
+    res = loop.model_results(calls)
+    for text in LEAKS:
+        assert loop.invented_numbers(loop.without_periods(text), res), text
+    h = full["headline_rate"]
+    good = (f"It has clearly been getting warmer here: {h['text']} (95% range {h['range_text']}), January 1981 to "
+            f"December 2025. {full['world']['text']}")
+    assert loop.invented_numbers(loop.without_periods(good), res) == []
 

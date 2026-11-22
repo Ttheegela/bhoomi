@@ -1,86 +1,132 @@
-"""Mann-Kendall trend test + Sen's slope for a contract TimeSeries (docs/CONTRACTS.md). numpy + stdlib only."""
+"""Mann-Kendall trend test + Sen's slope for a contract TimeSeries (docs/CONTRACTS.md, Rework v2). numpy + stdlib only.
+Anomalies are taken against the fixed 1995-2014 baseline (baseline.py), the headline change is read from the fitted
+line, the world comparison is like for like (spec D5), and no future value is made from the past trend (D1)."""
 
+import calendar
 import math
+from decimal import ROUND_HALF_UP, Decimal
 
 import numpy as np
 
-from earthtrends.stats.guidance import guidance_for
-from earthtrends.stats.meaning import meaning_for
+from earthtrends.data.world import reference as _reference  # the world snapshots (D5); tests replace it
+from earthtrends.stats.baseline import MONTH_DAYS, YEAR_MONTHS, baseline, columns, fit, normals_at, num
+from earthtrends.stats.guidance import (DISPLAY, OWN_RULE, RAIN_MIN_MM, RAIN_THRESHOLDS, SCARCE, THRESHOLDS,
+                                        guidance_for, q, sig2, signed)
+from earthtrends.stats.meaning import UNITS, meaning_for
 
-MIN_POINTS = 10
 MIN_DAYS_PER_MONTH = 20
+# Spec D6, in years: (no trend below, "short record" below). GRACE has its own minimum of 10 years.
+MIN_YEARS = {"water_storage": (10, 10)}
+MIN_YEARS_OTHER = (20, 30)
+SHORT_CAVEAT = "Short record: under 30 years of data, so this trend is less certain."
+RANGE_KIND = "95% range"
+RULE = "We call a change clear when that chance is under 5 in 100 and the whole 95% range is on one side of zero."
+WHERE = {"power": "a grid cell about 50 km wide", "era5": "a grid cell about 25 km wide",
+         "grace": "a region about 400 km across"}
+STATION = {"ghcn": "the weather station {}", "coops": "the tide gauge {}", "psmsl": "the tide gauge {}"}
+PROJECTION = {"water_storage": "There is no standard expert projection for total water storage, so we don't show one."}
+PROJECTION_LATER = "Expert projections for this measurement are not added yet."
+
+# Spec D5: the same months on both sides, the same method, the same kind of record.
+WORLD = {
+    "air_temp": {"name": "land_temp", "measure": "average for all land areas", "unit": "°C per decade", "per": 10,
+                 "since": "", "verb": "warmed",
+                 "text": "Over the same years, the average for all land areas {verb} {w} °C per decade. "
+                         "Here: {l} °C per decade.",
+                 "short": "The world land record shares fewer than 20 years with this record."},
+    "sea_level": {"name": "gmsl", "measure": "global average sea level, measured by satellites", "unit": "mm a year",
+                  "per": 1, "since": "1993-01", "verb": "rose",
+                  "text": "Over the same months, {start} to {end}, global average sea level measured by satellites "
+                          "{verb} {w} mm a year. Here: {l} mm a year.",
+                  "short": "This gauge has fewer than 20 years of readings since 1993, so it is not compared with "
+                           "the world average."},
+}
+WORLD_METHOD = "Sen's slope of monthly anomalies, same months for both"
+# Different kinds of record on the two sides, added to world.method after the method itself. NOAAGlobalTemp's land
+# part (the data lane's land_temp) is built from GHCN-Monthly station records.
+KIND = {("air_temp", "power"): "different datasets: a grid cell here, station-based for the world",
+        ("air_temp", "ghcn"): "different datasets: one weather station here, station-based for the world"}
+KIND[("air_temp", "era5")] = KIND[("air_temp", "power")]
+SEA_KIND = "different instruments: a tide gauge here (measured against the land), satellites for the world"
+# headline_rate: variable -> (factor from units per decade, unit, per). Rainfall is a share of the baseline instead.
+HEADLINE = {"sea_level": ("0.1", "mm", "a year"), "air_temp": ("1", "°C", "per decade"),
+            "air_temp_max": ("1", "°C", "per decade"), "water_storage": ("0.1", "cm", "of water a year")}
+RAIN_PER = "of the 1995–2014 average per decade"
+WORLD_YEARS = 20  # years with at least YEAR_MONTHS shared months
+NO_REFERENCE = "The world reference series is not available."
+WORLD_FLAT = "The world figure did not rise over these years, so there is no ratio."  # a world rate of 0 or less
+NO_MATCH = {"air_temp_max": "There is no matching world figure for the hottest day of the month.",
+            "precip": "Rainfall is compared with this place's own usual rainfall, not with a world figure.",
+            "water_storage": "Water storage is judged on this region's own change, not against a world figure."}
+NO_MATCH_OTHER = "There is no matching world figure for this measurement."
+RAIN_YEAR_MONTHS = 11  # a calendar year's rainfall total counts with at least this many valid months
+WIDENED = 1.2  # explain.real.widened: _widen's factor on Var(S) (a variance factor) is at least this, ~10% wider
+NOW_MONTHS, NOW_NEED = 12, 10  # `now`: the latest 12 months, at least 10 of them with a value
+# Caveats by kind of record (domain review F5, F7), so the page, the CSV and the agent carry them.
+GHCN_CAVEAT = "Station records are not adjusted for changes in instruments, observing times or station moves."
+POWER_T_CAVEAT = ("NASA POWER comes from a weather model, MERRA-2, which does not use land thermometer readings; a "
+                  "nearby weather station can differ.")
 
 
-def compute_trend(series: dict) -> dict:
-    """TimeSeries dict -> TrendResult dict."""
+def compute_trend(series: dict, base: dict | None = None) -> dict:
+    """TimeSeries dict -> TrendResult dict. Bad input, or too short or gappy a record, is a ValueError (a 400).
+    `base`: the baseline of the whole series when `series` is a start/end window of it (tools.py passes it, so the
+    1995-2014 average never depends on the window); default: computed from `series`."""
     freq, times, values = series["freq"], list(series["times"]), list(series["values"])
     if len(times) != len(values):
         raise ValueError(f"times and values must have the same length, got {len(times)} and {len(values)}.")
     caveats = list(series.get("notes") or [])
+    flags = series.get("flags")
     if freq == "daily":
         times, values = _daily_to_monthly(times, values)
-        freq = "monthly"
+        freq, flags = "monthly", None  # ponytail: flags on daily input are dropped; the data lane sends monthly
         caveats.append("Daily values averaged to monthly.")
     if freq not in ("monthly", "annual"):
         raise ValueError(f"Unknown freq {freq!r}: expected daily, monthly or annual.")
+    s = {**series, "freq": freq, "times": times, "values": values, "flags": flags}
+    cols = year, month, t, x, use = columns(s)
+    monthly = freq == "monthly"
+    idx = year * 12 + month - 1 if monthly else year
 
-    x = np.array([_num(v) for v in values])
-    year = np.array([int(t[:4]) for t in times])
-    mean = float(x[~np.isnan(x)].mean()) if (~np.isnan(x)).any() else None  # raw mean, before deseasonalizing
-    if freq == "monthly":
-        month = np.array([int(t[5:7]) for t in times])
-        for m in range(1, 13):  # anomalies from each calendar month's mean
-            sel = (month == m) & ~np.isnan(x)
-            if sel.any():
-                x[sel] -= x[sel].mean()
-        idx, per_year = year * 12 + month - 1, 12
-        t = year + (month - 0.5) / 12
-    else:
-        idx, per_year = year, 1
-        t = year.astype(float)
-
-    # Drop nulls, then sort by time: the contract doesn't promise sorted or unique times.
-    ok = np.flatnonzero(~np.isnan(x))
+    # Drop nulls and preliminary values, then sort by time: the contract doesn't promise sorted or unique times.
+    ok = np.flatnonzero(use)
     ok = ok[np.argsort(t[ok], kind="stable")]
-    x, t, idx = x[ok], t[ok], idx[ok]
     used = [times[k] for k in ok]
-    if (dup := np.flatnonzero(np.diff(t) == 0)).size:
+    if (dup := np.flatnonzero(np.diff(t[ok]) == 0)).size:
         raise ValueError(f"Duplicate times in series: {used[dup[0]]} appears more than once.")
-    n = len(x)
-    if n < MIN_POINTS:
-        raise ValueError(f"Too few data points: {n} valid, need at least {MIN_POINTS}.")
+    if not ok.size:
+        raise ValueError("There are no values in this record to test.")
+    k, record = _record(series["variable"], idx[ok], year[ok], 12 if monthly else 1, used)
+    if k:  # sparse early readings: the fit starts later; the baseline below still uses the whole series
+        ok, used = ok[k:], used[k:]
+        when = f"{calendar.month_name[int(used[0][5:7])]} {used[0][:4]}" if monthly else used[0][:4]
+        caveats.append(f"Readings before {when} are too sparse, so the trend starts there.")
+    if record["status"] == "short":
+        caveats.append(SHORT_CAVEAT)
+    var, units, sid = series["variable"], series["units"], (series.get("source") or {}).get("id")
+    if sid == "ghcn":
+        caveats.append(GHCN_CAVEAT)
+    if sid == "power" and var in ("air_temp", "air_temp_max"):
+        caveats.append(POWER_T_CAVEAT)
 
-    # Mann-Kendall S and Var(S) with tie correction.
-    i, j = np.triu_indices(n, 1)
-    dx = x[j] - x[i]
-    s = int(np.sign(dx).sum())
-    _, ties = np.unique(x, return_counts=True)
-    var_s = (n * (n - 1) * (2 * n + 5) - int(np.sum(ties * (ties - 1) * (2 * ties + 5)))) / 18
-
-    # Sen's slope (units per year).
-    slopes = np.sort(dx / (t[j] - t[i]))
-    slope = float(np.median(slopes))
-
-    # Lag-1 autocorrelation of residuals around the Sen trend.
-    # ponytail: r1 uses consecutive valid values, so gaps from nulls are ignored; lag by time index if gappy series matter.
-    e = x - slope * t
-    e -= e.mean()
-    denom = float(e @ e)
-    r1 = float(e[:-1] @ e[1:]) / denom if denom > 0 else 0.0
-    adjusted = r1 > 0
-    if adjusted:  # Hamed & Rao (1998) with AR(1), rho_k = r1**k. r1 > 0 means this only ever inflates Var(S).
-        k = np.arange(1, n)
-        var_s *= 1 + 2 / (n * (n - 1) * (n - 2)) * float(np.sum((n - k) * (n - k - 1) * (n - k - 2) * r1**k))
-
-    # Two-sided p with continuity correction. s != 0 implies var_s > 0.
-    p = 1.0 if s == 0 else math.erfc(abs(s - math.copysign(1, s)) / math.sqrt(var_s) / math.sqrt(2))
-
-    # 95% CI for Sen's slope, rank method (Gilbert 1987); 1-indexed ranks M1 and M2+1.
-    c, big_n = 1.96 * math.sqrt(var_s), len(slopes)
-    lo_i, hi_i = (min(max(round(r) - 1, 0), big_n - 1) for r in ((big_n - c) / 2, (big_n + c) / 2 + 1))
+    base = baseline(s) if base is None else base
+    xa = _anomalies(cols, base, monthly)
+    # Levels are in the series units, except rainfall: % of the 1995-2014 annual mean rate, like its anomaly and
+    # headline_rate. The trend is fitted on levels, so its slope is in level units a year.
+    pct = var == "precip" and base["value"] is not None and base["value"] > 0
+    f, fit_units = (100 / base["value"], "%") if pct else (1.0, units)
+    xl = xa * f
+    rain = var == "precip" and monthly
+    tt, xx = (t[ok], xl[ok]) if not rain else _yearly(year[ok], month[ok], xl[ok])
+    if rain and len(xx) < MIN_YEARS_OTHER[0]:
+        raise ValueError(f"Too few whole years of rain for a trend: only {len(xx)} calendar years from {used[0][:4]} "
+                         f"to {used[-1][:4]} have a value in at least {RAIN_YEAR_MONTHS} months. A trend needs at "
+                         f"least {MIN_YEARS_OTHER[0]} such years.")
+    n = len(xx)
+    slope, lo, hi, p, adjusted, widened, intercept = _mk_sen(tt, xx, 12 if monthly and not rain else 1)
 
     # ponytail: fixed 4 decimals suits mm, degC, mm/day; values ~1e-6 get a degenerate CI. Round to significant figures if a small-unit variable is added.
-    slope_d, lo_d, hi_d = (round(float(v) * 10, 4) + 0.0 for v in (slope, slopes[lo_i], slopes[hi_i]))  # + 0.0 turns -0.0 into 0.0
+    slope_d, lo_d, hi_d = (round(float(v) / f * 10, 4) + 0.0 for v in (slope, lo, hi))  # + 0.0 turns -0.0 into 0.0
     p = float(f"{p:.3g}")
     # Verdict from the rounded numbers, so the output always agrees with the contract rule on its face.
     if p < 0.05 and lo_d > 0:
@@ -90,16 +136,26 @@ def compute_trend(series: dict) -> dict:
     else:
         verdict = "no_clear_change"
 
-    if idx[-1] - idx[0] + 1 < 10 * per_year:
-        caveats.append("Short record: trends over less than 10 years are unreliable.")
-
+    yrs = record["years"]
+    span = (int(idx[ok][-1] - idx[ok][0]) + 1) / (12 if monthly else 1)  # unrounded: fit.change is slope x span
+    level_end = None if base["value"] is None else round(intercept + slope * float(t[ok][-1]), 4) + 0.0
+    have = np.flatnonzero(~np.isnan(x))  # the last valid value, preliminary included
+    last = times[have[np.argmax(t[have])]]
+    world = _world(var, monthly, used, t[ok], xa[ok], sid, verdict)
+    # too little rain for a % rule (domain review F4), a normal of zero included; guidance reads world.why_none
+    if var == "precip" and base["value"] is not None and base["value"] * 365.25 < RAIN_MIN_MM:
+        world.update(text=None, why_none=SCARCE)
+    data = {"n_months": len(ok), "n_missing": int(idx[ok][-1] - idx[ok][0]) + 1 - len(ok), "start": used[0],
+            "end": used[-1], "where": _where(series)}
+    if rain:  # the trend's own counts: calendar years with enough months
+        data.update(n_years=n, n_missing_years=int(year[ok][-1] - year[ok][0]) + 1 - n)
     result = {
-        "variable": series["variable"],
-        "units": series["units"],
+        "variable": var,
+        "units": units,
         "place": series["place"],
         "period": {"start": used[0], "end": used[-1]},
         "n": n,
-        "deseasonalized": freq == "monthly",
+        "deseasonalized": monthly,
         "method": "mann_kendall_sen",
         "slope_per_decade": slope_d,
         "ci_low": lo_d,
@@ -108,14 +164,315 @@ def compute_trend(series: dict) -> dict:
         "autocorrelation_adjusted": adjusted,
         "verdict": verdict,
         "source": series["source"],
+        "baseline": base,
+        "record": record,
+        "range_kind": RANGE_KIND,
+        # from the unrounded slope and range (and span), so no number is rounded twice
+        "headline_rate": _headline_rate(var, units, tuple(v / f * 10 for v in (slope, lo, hi)), base["value"]),
+        "fit": {"start": used[0], "end": used[-1], "years": yrs,
+                **{k: round(v * span, 4) + 0.0 for k, v in (("change", slope), ("change_low", lo),
+                                                            ("change_high", hi))},
+                "level_end": level_end, "units": fit_units},
+        # rainfall: the yearly values the test was given, for the chart (rounded like `anomaly`)
+        **({"yearly": [{"year": int(y), "value": round(float(v), 4) + 0.0} for y, v in zip(tt, xx)]}
+           if var == "precip" else {}),
+        "latest": {"month": last,
+                   "text": f"Data through {calendar.month_name[int(last[5:7])]} {last[:4]}" if monthly
+                   else f"Data through {last[:4]}"},
+        "now": _now(var, base, used, year[ok], month[ok], idx[ok], xl[ok], fit_units) if monthly else None,
+        "world": world,
+        "projection": {"available": False, "why": PROJECTION.get(var, PROJECTION_LATER)},
+        "explain": {
+            "data": data,
+            "seasons": _seasons(base, units, var == "precip"),
+            "real": {"p_value": p, "in_100": _in_100(p), "rule": RULE, "widened": widened},
+        },
         "caveats": caveats,
     }
     result["meaning"] = meaning_for(result)
     try:
-        result["guidance"] = guidance_for(result, mean)
+        result["guidance"] = guidance_for(result, base["value"])
     except Exception:  # guidance must never sink a result: fall back to the "no guidance rule" object
         result["guidance"] = guidance_for({})
     return result
+
+
+def _record(var: str, idx, year, per_year: int, used: list) -> tuple[int, dict]:
+    """Spec D6 -> (k, record): fit from used[k] on, the earliest whole-year start from which at least 80% of the
+    expected values up to the last one are there; that window then needs enough years. Else a ValueError."""
+    n = len(idx)
+    for k in range(n):  # the first valid value of each year, earliest first; k = 0 is the whole record
+        span = int(idx[-1] - idx[k]) + 1  # months (or years) from the window's first value to the last, both included
+        if (not k or year[k] != year[k - 1]) and 5 * (n - k) >= 4 * span:
+            break
+    else:
+        whole = int(idx[-1] - idx[0]) + 1
+        raise ValueError(f"Too many months are missing here for a trend: only {math.floor(100 * n / whole)}% of the "
+                         f"months from {used[0]} to {used[-1]} have a value, and no stretch of the record up to its "
+                         "end reaches the 80% a trend needs.")
+    years = span / per_year
+    least, full = MIN_YEARS.get(var, MIN_YEARS_OTHER)
+    if span < least * per_year:
+        whole = int(idx[-1] - idx[0]) + 1
+        if whole >= least * per_year:  # a long record whose recent stretch is too thin
+            raise ValueError(f"Too few recent readings for a trend: the record runs from {used[0]} to {used[-1]}, "
+                             f"but only {used[k]} on ({years:.1f} years) has a value in at least 80% of its months. "
+                             f"A trend needs at least {least} such years.")
+        raise ValueError(f"The record here is too short for a trend: {whole / per_year:.1f} years ({used[0]} to "
+                         f"{used[-1]}). A trend needs at least {least} years of data.")
+    return k, {"years": round(years, 1), "coverage": round((n - k) / span, 2),
+               "status": "ok" if span >= full * per_year else "short", "trimmed_from": used[0] if k else None}
+
+
+def trend_problem(series: dict) -> str | None:
+    """Why compute_trend would refuse this monthly record under the D6 rules (its plain 400 sentence), or None. The
+    data lane asks it to pass over a tide gauge that cannot give a trend, so the series and the trend pick the same
+    gauge."""
+    year, month, t, _, use = columns({**series, "freq": "monthly"})
+    ok = np.flatnonzero(use)
+    ok = ok[np.argsort(t[ok], kind="stable")]
+    if not ok.size:
+        return "There are no values in this record to test."
+    try:
+        _record(series.get("variable"), (year * 12 + month - 1)[ok], year[ok], 12, [series["times"][k] for k in ok])
+    except ValueError as e:
+        return str(e)
+    return None
+
+
+def _anomalies(cols, base: dict, monthly: bool):
+    """Each value minus its calendar month's 1995-2014 normal. With no baseline, only the fitted seasonal cycle is
+    taken out (never a whole-record mean); the levels then have no zero, and level_end is null."""
+    year, month, t, x, use = cols
+    if base["value"] is not None:
+        return x - normals_at(base, month)
+    return x - fit(t[use], x[use], monthly)(t, True)
+
+
+def _pair_slopes(t, x):
+    """Every pairwise slope (later minus earlier; t increasing), sorted."""
+    i, j = np.triu_indices(len(x), 1)
+    return np.sort((x[j] - x[i]) / (t[j] - t[i]))
+
+
+def _mk_sen(t, x, per_year: int):
+    """Mann-Kendall test, Sen's slope and its 95% range, per unit of t. per_year: values a year (12 monthly, 1 yearly).
+    -> (slope, low, high, p, adjusted, widened, intercept). The line has Sen's slope and passes through the mean of x
+    at the mean of t (domain review F1), on the same footing as the mean baseline. widened: the variance factor is at
+    least WIDENED, so "we widened the range" is never said of a small change."""
+    n = len(x)
+    slopes = _pair_slopes(t, x)
+    s = int(np.sign(slopes).sum())  # t increases, so each slope has the sign of its pair's difference
+    _, ties = np.unique(x, return_counts=True)
+    var_s = (n * (n - 1) * (2 * n + 5) - int(np.sum(ties * (ties - 1) * (2 * ties + 5)))) / 18
+    slope = float(np.median(slopes))
+
+    # Var(S) times n/n* for values that are alike, from the Sen-detrended series (_widen), never below 1.
+    factor = _widen(x - slope * t, per_year)
+    adjusted = factor > 1
+    if adjusted:
+        var_s *= factor
+
+    # Two-sided p with continuity correction. s != 0 implies var_s > 0.
+    p = 1.0 if s == 0 else math.erfc(abs(s - math.copysign(1, s)) / math.sqrt(var_s) / math.sqrt(2))
+
+    # 95% range for Sen's slope, rank method (Gilbert 1987), 1-indexed ranks M1 and M2+1. It uses the same corrected
+    # Var(S) (an effective sample size), so months that are alike widen the range, not only the p-value.
+    c, big_n = 1.96 * math.sqrt(var_s), len(slopes)
+    lo_i, hi_i = (min(max(round(r) - 1, 0), big_n - 1) for r in ((big_n - c) / 2, (big_n + c) / 2 + 1))
+    return (slope, float(slopes[lo_i]), float(slopes[hi_i]), p, adjusted, factor >= WIDENED,
+            float(np.mean(x - slope * t)))
+
+
+def _days(year, month):
+    """Days in each (year, month)."""
+    return np.array([calendar.monthrange(int(y), int(m))[1] for y, m in zip(year, month)], dtype=float)
+
+
+def _yearly(year, month, x):
+    """Rainfall on calendar years (domain review F4: monthly ranks weigh a dry month like a monsoon month).
+    -> (mid-year times, values) for the years with at least RAIN_YEAR_MONTHS valid months. A year's value is the
+    day-weighted mean of its monthly levels: how far its total was from the usual total, as % of the 1995-2014 annual
+    normal (a missing month is taken to be like the rest of its year)."""
+    d = _days(year, month)
+    keep = [y for y in np.unique(year) if np.sum(year == y) >= RAIN_YEAR_MONTHS]
+    return (np.array(keep, dtype=float) + 0.5,
+            np.array([np.average(x[year == y], weights=d[year == y]) for y in keep]))
+
+
+def _now(var: str, base: dict, used: list, year, month, idx, xl, units: str) -> dict | None:
+    """Contract `now` (domain review F1): the measured level today, never the end of the trend line. The mean of the
+    levels in the 12 calendar months to the last fitted month, at least 10 of them there; rainfall: their day-weighted
+    mean, the 12-month total's departure as % of the 1995-2014 annual normal. None without a baseline."""
+    rain = var == "precip"
+    sel = idx > idx[-1] - NOW_MONTHS
+    if base["value"] is None or (rain and units != "%") or sel.sum() < NOW_NEED:
+        return None
+    v = float(np.average(xl[sel], weights=_days(year[sel], month[sel])) if rain else xl[sel].mean())
+    unit, k = ("%", "1") if rain else DISPLAY.get(var, (units, "1"))
+    y, m = divmod(int(idx[-1]) - NOW_MONTHS + 1, 12)
+    end = used[-1]
+    return {"value": round(v, 4) + 0.0, "units": units, "kind": "12-month total" if rain else "12-month mean",
+            "start": f"{y:04d}-{m + 1:02d}", "end": end, "n": int(sel.sum()),
+            "text": f"{_signed0(sig2(Decimal(repr(v)) * Decimal(k)) + 0)}{'' if unit == '%' else ' '}{unit}",
+            "label": f"the 12 months to {calendar.month_name[int(end[5:7])]} {end[:4]}"}
+
+
+def _ar1_factor(n: int, r: float) -> float:
+    """Hamed & Rao's n/n* with rho_k = r**k (AR(1) form); 1 when r <= 0."""
+    if r <= 0 or n < 3:
+        return 1.0
+    k = np.arange(1, n, dtype=float)
+    return 1 + 2 / (n * (n - 1) * (n - 2)) * float(np.sum((n - k) * (n - k - 1) * (n - k - 2) * r ** k))
+
+
+def _lag1(v) -> float:
+    v = v - v.mean()
+    d = float(v @ v)
+    return float(v[:-1] @ v[1:]) / d if d > 0 else 0.0
+
+
+def _widen(e, per_year: int = 12) -> float:
+    """n/n* for Var(S), never below 1: max(month-to-month AR(1) factor, variance ratio of 12-value means) times the
+    AR(1) factor of those means. e: the Sen-detrended values. Picked by Monte Carlo over the published all-lags
+    Hamed-Rao, which under-covered AR(1) (85% at phi 0.6) and tide-gauge-like residuals (77%).
+    ponytail: blocks are 12 consecutive valid values, not calendar years; gaps ignored, as for the lag-1."""
+    n = len(e)
+    f = _ar1_factor(n, _lag1(e))
+    m = n // per_year * per_year
+    if per_year == 1 or m < 3 * per_year:
+        return max(f, 1.0)
+    a = e[:m].reshape(-1, per_year).mean(1)
+    ev = float(np.var(e))
+    vr = per_year * float(np.var(a)) / ev if ev > 0 else 1.0
+    return max(f, vr, 1.0) * max(_ar1_factor(len(a), _lag1(a)), 1.0)
+
+
+def _sig(d: Decimal, digits: int) -> Decimal:
+    return d if not d else d.quantize(Decimal(1).scaleb(d.adjusted() - digits + 1), rounding=ROUND_HALF_UP) + 0
+
+
+def _at(d: Decimal, exp: int) -> Decimal:
+    return d.quantize(Decimal(1).scaleb(exp), rounding=ROUND_HALF_UP) + 0
+
+
+def _signed0(d: Decimal) -> str:
+    return "0" if not d else signed(d)
+
+
+def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict | None:
+    """The trend rate in the unit people read, with its 95% range (contract `headline_rate`): value, low and high to
+    3 significant figures; text to 2 (rainfall: the share as guidance judges it); both ends of range_text to the same decimals, enough that they differ, except
+    that a rainfall end shown on or across one of guidance's RAIN_THRESHOLDS is shown as guidance judges it (2
+    significant figures: 4.51 reads +4.5, not +5). None for rainfall without a 1995-2014 average above zero."""
+    rain = var == "precip" and units == UNITS["precip"]
+    if rain:
+        if not base_value or base_value <= 0:
+            return None
+        factor, unit, per = Decimal(100) / Decimal(repr(base_value)), "%", RAIN_PER
+    elif var in HEADLINE and units == UNITS[var]:
+        factor, unit, per = Decimal(HEADLINE[var][0]), HEADLINE[var][1], HEADLINE[var][2]
+    else:  # a measurement we have no reader's unit for: its own units per decade
+        factor, unit, per = Decimal(1), units, "per decade"
+    v, lo, hi = (Decimal(repr(float(x))) * factor for x in per_decade)
+    exp = sig2(max(abs(lo), abs(hi))).as_tuple().exponent if (lo or hi) else 0
+    # enough decimals that the ends differ and neither non-zero end shows as 0 (a clear rise is never "0 to +11")
+    while exp > -6 and (lo != hi and _at(lo, exp) == _at(hi, exp) or any(v and not _at(v, exp) for v in (lo, hi))):
+        exp -= 1
+    ends, mid = [_at(lo, exp), _at(hi, exp)], sig2(v) + 0
+    if rain:  # text is the share guidance judges (and shows as rate), off the 4-decimal slope, not the raw one:
+        # 0.049496 on 1.0 mm/day is +5.0%, not +4.9%. Each range end too when it would read on or across a threshold
+        mid = _rain_judged(per_decade[0], base_value).copy_sign(v) + 0
+        for i, (shown, raw) in enumerate(zip(ends, per_decade[1:])):
+            judged = _rain_judged(raw, base_value)
+            if any(abs(shown) == c or (abs(shown) >= c) != (judged >= c) for c in RAIN_THRESHOLDS):
+                ends[i] = judged.copy_sign(shown)
+    gap = "" if unit == "%" else " "
+    return {"value": float(_sig(v, 3)), "low": float(_sig(lo, 3)), "high": float(_sig(hi, 3)), "unit": unit,
+            "per": per, "text": f"{_signed0(mid)}{gap}{unit} {per}",
+            "range_text": f"{_signed0(ends[0])} to {_signed0(ends[1])}{gap}{unit} {per}"}
+
+
+def _rain_judged(per_decade, base_value) -> Decimal:
+    """The share (%, no sign) guidance._risk judges a rain end on: sig2 of the result's 4-decimal slope over the
+    1995-2014 average, worked out the same way, so a shown end and its level never disagree."""
+    return sig2(abs(Decimal(repr(round(float(per_decade), 4) + 0.0))) / Decimal(repr(float(base_value))) * 100)
+
+
+def _plain(d: Decimal) -> str:
+    return ("−" if d < 0 else "") + format(abs(d), "f")
+
+
+def _world(var: str, monthly: bool, used: list, t, xa, source_id=None, verdict: str = "rising") -> dict:
+    """Spec D5. used, t, xa: the fitted months, their times and their anomalies, in time order. The ratio and its
+    range (the local rate's 95% range ends over the same months, domain review F2) only for a rising or falling
+    verdict: an unclear trend gets the two rates and no ratio."""
+    out = {"available": False, "measure": None, "local_rate": None, "world_rate": None, "unit": None, "window": None,
+           "method": None, "ratio": None, "ratio_low": None, "ratio_high": None, "thresholds": None, "source": None,
+           "text": OWN_RULE.get(var), "why_none": NO_MATCH.get(var, NO_MATCH_OTHER)}
+    cfg = WORLD.get(var)
+    if cfg is None or not monthly:
+        return out
+    try:
+        ref = _reference(cfg["name"])
+        rc = columns(ref)
+        ra = _anomalies(rc, baseline(ref), ref["freq"] == "monthly")  # the same rebasing as the local record
+        world = {tm: float(v) for tm, v, u in zip(ref["times"], ra, rc[4]) if u}
+    except Exception:  # missing or broken reference: say so, never sink the result
+        return {**out, "why_none": NO_REFERENCE}
+    pick = [k for k, tm in enumerate(used) if tm in world and tm >= cfg["since"]]
+    per_year: dict = {}
+    for k in pick:
+        per_year[used[k][:4]] = per_year.get(used[k][:4], 0) + 1
+    if sum(c >= YEAR_MONTHS for c in per_year.values()) < WORLD_YEARS:
+        return {**out, "why_none": cfg["short"]}
+    tp = t[pick]
+    # here: Sen's slope and its 95% range from the same _mk_sen call as the trend; the world: Sen's slope
+    local, local_lo, local_hi = (sig2(Decimal(repr(float(v) * cfg["per"]))) for v in _mk_sen(tp, xa[pick], 12)[:3])
+    wv = np.array([world[used[k]] for k in pick])
+    glob = sig2(Decimal(repr(float(np.median(_pair_slopes(tp, wv))) * cfg["per"])))
+    start, end = used[pick[0]], used[pick[-1]]
+    src = ref.get("source") or {}
+    moving = verdict in ("rising", "falling")
+    clear = glob > 0 and moving
+    ratios = [float(q(v / glob, "0.1") + 0) if clear else None for v in (local, local_lo, local_hi)]  # judged as shown
+    return {"available": True, "measure": cfg["measure"], "local_rate": float(local), "world_rate": float(glob),
+            "unit": cfg["unit"], "window": {"start": start, "end": end},
+            "method": "; ".join(m for m in (WORLD_METHOD, SEA_KIND if var == "sea_level" else KIND.get((var, source_id)))
+                                if m),
+            "ratio": ratios[0], "ratio_low": ratios[1], "ratio_high": ratios[2],
+            "thresholds": dict(THRESHOLDS),
+            "source": {k: src.get(k) for k in ("name", "dataset_id", "record_url", "retrieved", "method")},  # GIA note
+            "text": cfg["text"].format(verb=cfg["verb"] if glob > 0 else "changed by", w=_plain(glob),
+                                       l=_plain(local), start=start[:4], end=end[:4]),
+            "why_none": WORLD_FLAT if moving and not clear else None}
+
+
+def _where(series: dict) -> str | None:
+    sid = (series.get("source") or {}).get("id")
+    place = series.get("place") if isinstance(series.get("place"), dict) else {}
+    if sid in STATION and place.get("name"):
+        return STATION[sid].format(place["name"])
+    return WHERE.get(sid)
+
+
+def _seasons(base: dict, units: str, rain: bool = False) -> dict | None:
+    """The usual high and low month, from the baseline's calendar-month normals; None without them. Rainfall in mm a
+    month (the month's normal mm/day x its mean length), so the page says "the wettest month usually gets x mm"."""
+    m = base["months"]
+    if not m:
+        return None
+    if rain:
+        m, units = [round(v * d, 1) + 0.0 for v, d in zip(m, MONTH_DAYS)], "mm a month"
+    hi, lo = int(np.argmax(m)), int(np.argmin(m))
+    return {"high_month": hi + 1, "high": m[hi], "low_month": lo + 1, "low": m[lo],
+            "swing": round(m[hi] - m[lo], 4) + 0.0, "units": units}
+
+
+def _in_100(p: float) -> str:
+    """The p-value as "k in 100", for "How we calculated this": "less than 1" under 0.01."""
+    k = Decimal(repr(p)) * 100
+    return "less than 1" if k < 1 else str(k.quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 def _daily_to_monthly(times: list, values: list) -> tuple[list, list]:
@@ -123,14 +480,6 @@ def _daily_to_monthly(times: list, values: list) -> tuple[list, list]:
     days: dict[str, list] = {}
     for tm, v in zip(times, values):
         days.setdefault(tm[:7], [])
-        if not math.isnan(v := _num(v)):
+        if not math.isnan(v := num(v)):
             days[tm[:7]].append(v)
     return list(days), [sum(d) / len(d) if len(d) >= MIN_DAYS_PER_MONTH else None for d in days.values()]
-
-
-def _num(v) -> float:
-    """None -> NaN, numbers and numeric strings -> float, anything else -> ValueError."""
-    try:
-        return math.nan if v is None else float(v)
-    except TypeError:
-        raise ValueError(f"Value {v!r} is not a number.") from None

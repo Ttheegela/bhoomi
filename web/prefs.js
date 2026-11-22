@@ -10,7 +10,7 @@
   function defaults() {
     var maps = {};
     WINDOWS.forEach(function (w) { maps[w] = { base: 'light', labels: true, stations: true }; });
-    return { theme: 'light', units: 'metric', lookAhead: 2050, maps: maps };
+    return { theme: 'light', units: 'metric', maps: maps };
   }
 
   // Merge stored text into the defaults, keeping only values of the right kind.
@@ -19,7 +19,6 @@
     if (!raw || typeof raw !== 'object') return d;
     if (THEMES.indexOf(raw.theme) >= 0) d.theme = raw.theme;
     if (raw.units === 'metric' || raw.units === 'imperial') d.units = raw.units;
-    if ([2035, 2050, 2075].indexOf(raw.lookAhead) >= 0) d.lookAhead = raw.lookAhead;
     if (raw.maps && typeof raw.maps === 'object') {
       WINDOWS.forEach(function (w) {
         var m = raw.maps[w];
@@ -47,13 +46,12 @@
 
   window.TDPrefs = {
     get: copy,
-    // patch: { theme?, units?, lookAhead?, maps?: { <window id>: { base?, labels?, stations? } } }
+    // patch: { theme?, units?, maps?: { <window id>: { base?, labels?, stations? } } }
     set: function (patch) {
       patch = patch || {};
       var next = copy();
       if (patch.theme !== undefined) next.theme = patch.theme;
       if (patch.units !== undefined) next.units = patch.units;
-      if (patch.lookAhead !== undefined) next.lookAhead = Number(patch.lookAhead);
       if (patch.maps && typeof patch.maps === 'object') {
         Object.keys(patch.maps).forEach(function (w) {
           if (next.maps[w] && patch.maps[w] && typeof patch.maps[w] === 'object') Object.assign(next.maps[w], patch.maps[w]);

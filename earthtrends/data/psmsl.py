@@ -9,8 +9,9 @@ from math import isfinite
 
 import httpx
 
+from . import upstream
 from .coops import haversine_km
-from .upstream import LIMIT, NAME, readable, rule, text, why_not
+from .upstream import LIMIT, NAME, readable, rule, source_block, text, why_not
 
 BASE = "https://psmsl.org/data/obtaining/rlr.monthly.data"
 SOURCE = {"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/"}
@@ -20,6 +21,14 @@ MAX_TRIES = 12  # gauge files fetched at most
 DEADLINE_S = 40  # the lookup starts no new request after this; one request can still take up to 5 + 10 + 30 s
 MISSING = -99999
 RULE = rule(MAX_KM)
+DATASET_ID = "PSMSL Revised Local Reference (RLR) monthly mean sea level"
+METHOD = ("Monthly mean sea level from the gauge's authority, checked by PSMSL and reduced to the gauge's Revised Local "
+          "Reference datum; we leave out months PSMSL flags for caution or as interpolated.")
+
+
+def record_url(station_id: int) -> str:
+    """PSMSL's page for the gauge, which names it, its id and its coordinates."""
+    return f"https://psmsl.org/data/obtaining/stations/{int(station_id)}.php"
 
 
 def _get(url: str, left: float | None = None) -> str:
@@ -100,8 +109,8 @@ def _check(deadline: float) -> float:
     return left
 
 
-def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str]]:
-    """Nearest usable gauge within MAX_KM -> (times, values, place, notes)."""
+def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str], dict]:
+    """Nearest usable gauge within MAX_KM -> (times, values, place, notes, source block)."""
     deadline = time.monotonic() + DEADLINE_S
     _check(deadline)
     near = sorted(((haversine_km(lat, lon, s["lat"], s["lon"]), s["id"], s) for s in stations()), key=lambda t: t[:2])
@@ -110,18 +119,26 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
         km, _, s = near[0]
         raise ValueError(text(f"There is no tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "
                               f"The nearest gauge is {s['name']}, {km:.0f} km away.", LIMIT))
-    skipped = []
-    for km, s in close[:MAX_TRIES]:
+    from earthtrends.stats.trend import trend_problem  # here, not at the top: the stats lane imports this package
+
+    skipped, thin = [], []  # thin: nearer gauges passed over because their recent readings cannot give a trend
+    for n, (km, s) in enumerate(close[:MAX_TRIES]):
         times, values, dropped = parse(fetch(s["id"], left=_check(deadline)))
-        if (why := why_not(times, values)) is None:
-            notes = [f"Tide gauge {s['name']} (PSMSL id {s['id']}), {km:.0f} km from the point you asked about.",
+        if (why := why_not(times, values)) is None and trend_problem({"variable": "sea_level", "times": times,
+                                                                      "values": values}):
+            why = "it has too few recent readings for a trend"
+            thin.append(f"{s['name']}, {'the nearest gauge' if n == 0 else f'{km:.0f} km away'}, has too few recent "
+                        "readings for a trend.")
+        if why is None:
+            notes = [f"Tide gauge {s['name']} (PSMSL id {s['id']}), {km:.0f} km from the point you asked about.", *thin,
                      "Heights are relative to PSMSL's revised local reference (RLR) for this gauge, a fixed datum of that gauge, "
                      "so only the change over time matters, not the height itself.",
                      "Sea level relative to the land at the gauge, so land sinking or rising is included.",
                      RULE]
             if dropped:
                 notes.append(f"{dropped} monthly values that PSMSL flags as doubtful (flag 001 or interpolated) were left out.")
-            return times, values, {"name": s["name"], "lat": s["lat"], "lon": s["lon"]}, notes
+            src = source_block(SOURCE, DATASET_ID, None, record_url(s["id"]), upstream.utc_today(), METHOD)
+            return times, values, {"name": s["name"], "lat": s["lat"], "lon": s["lon"]}, notes, src
         skipped.append(f"{s['name']}, {km:.0f} km away: {why}")
     # the sentence lists the nearest gauges and why; the full rule is in the notes of a successful result
     raise ValueError(text(f"There is no usable tide gauge within {MAX_KM} km of this place, so sea level can't be measured here. "

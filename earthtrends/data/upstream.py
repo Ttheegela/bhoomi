@@ -2,10 +2,21 @@
 Models read these messages, so a provider must not be able to put a long block of text in front of them."""
 import re
 import unicodedata
-from datetime import date
+from datetime import date, datetime, timezone
 
 LIMIT = 200  # the most a caller sees in one error sentence, our own words included
 NAME = 80  # the most of a provider's station or gauge name
+
+
+def utc_today() -> str:
+    """Today's UTC date as YYYY-MM-DD: the `retrieved` date of a series fetched now."""
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def source_block(base: dict, dataset_id: str, version: str | None, record_url: str, retrieved: str, method: str) -> dict:
+    """The full source block of docs/CONTRACTS.md (Rework v2) for a monthly series that still has its seasons."""
+    return {**base, "dataset_id": dataset_id, "version": version, "record_url": record_url, "retrieved": retrieved,
+            "method": method, "cadence": "monthly", "deseasoned_upstream": False}
 
 
 def text(value, limit: int) -> str:

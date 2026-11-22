@@ -13,7 +13,8 @@ from earthtrends.stats import compute_trend
 NOAA_IN_PER_DECADE, NOAA_ERR = 1.67, 0.03
 # mm/yr. The gap allowed for is mostly the method: we fit Sen's slope (median of pairwise slopes) to deseasonalized
 # monthly means, NOAA fits least squares with its own seasonal and autocorrelation model. Our series also runs ten
-# months longer (to 2026-10), which moves a 115-year slope very little.
+# months longer (to 2026-10), which moves a 115-year slope very little. Since Rework v2 the seasons are removed against
+# fixed 1995-2014 calendar-month normals, not whole-record means: ours moved from 4.254 to 4.250 mm/yr (NOAA: 4.24).
 WIDEN = 0.3
 
 # Fixture: year, month and MSL only (rows with an empty MSL dropped), from the raw response to the request

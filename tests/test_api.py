@@ -12,10 +12,10 @@ from earthtrends.app import CACHE, app, mount_web
 from earthtrends.data import coops, power
 
 FX = Path(__file__).parent / "fixtures"
-SERIES_KEYS = {"variable", "units", "freq", "place", "times", "values", "source", "notes"}
+SERIES_KEYS = {"variable", "units", "freq", "place", "times", "values", "source", "notes", "flags", "anomaly"}
 TREND_KEYS = {"variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
-              "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "caveats", "meaning",
-              "guidance"}
+              "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "baseline", "record",
+              "range_kind", "headline_rate", "fit", "latest", "now", "world", "projection", "explain", "caveats", "meaning", "guidance"}
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 client = TestClient(app)
 
@@ -45,21 +45,65 @@ def test_series_and_trend_shapes(offline, variable, src):
     q = {"variable": variable, "lat": 39.36, "lon": -74.42, "source": src}
     r = client.get("/api/series", params=q)
     assert r.status_code == 200, r.text
-    assert set(r.json()) == SERIES_KEYS and r.json()["source"]["id"] == src
+    s = r.json()
+    assert set(s) == SERIES_KEYS and s["source"]["id"] == src  # exactly the contract's fields: nothing unnamed leaks
+    assert len(s["anomaly"]["values"]) == len(s["values"]) and s["anomaly"]["baseline"]["years"] == [1995, 2014]
     assert r.headers["cache-control"] == CACHE
 
     r = client.get("/api/trend", params=q)
     assert r.status_code == 200, r.text
     assert set(r.json()) == TREND_KEYS and r.json()["source"]["id"] == src
     assert r.json()["verdict"] in {"rising", "falling", "no_clear_change"}
+    assert r.json()["baseline"] == s["anomaly"]["baseline"]  # one baseline for the chart and the card
+    # the gauge's two sparse years from 1911 are left out of the fit; the grid cell is dense from the start
+    assert (r.json()["record"]["trimmed_from"] or "")[:4] == ("1911" if src == "coops" else "")
     assert r.headers["cache-control"] == CACHE
 
 
 def test_start_end_passed_through(offline):
-    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "start": "1990-03", "end": "1999"}
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "start": "1990-03", "end": "2019"}
     s = client.get("/api/series", params=q).json()
-    assert (s["times"][0], s["times"][-1]) == ("1990-03", "1999-12")
-    assert client.get("/api/trend", params=q).json()["period"] == {"start": "1990-03", "end": "1999-12"}
+    assert (s["times"][0], s["times"][-1]) == ("1990-03", "2019-12")
+    t = client.get("/api/trend", params=q).json()
+    assert t["period"] == {"start": "1990-03", "end": "2019-12"} and t["record"]["status"] == "short"  # 29.8 years
+
+
+@pytest.mark.parametrize("variable,src", [("air_temp", "power"), ("sea_level", "coops"), ("sea_level", None)])
+def test_the_baseline_never_depends_on_the_window(offline, variable, src):
+    q = {"variable": variable, "lat": 39.36, "lon": -74.42, **({"source": src} if src else {})}
+    whole = client.get("/api/trend", params=q).json()["baseline"]
+    assert whole["method"] == "observed"
+    for w in ({"start": "1999"}, {"start": "2006"}, {"end": "2010"}, {"start": "1990", "end": "2010"}):
+        s = client.get("/api/series", params={**q, **w}).json()
+        assert s["anomaly"]["baseline"] == whole, w
+        assert all(v is not None for v, x in zip(s["anomaly"]["values"], s["values"]) if x is not None), w
+        t = client.get("/api/trend", params={**q, **w})
+        if t.status_code == 200:  # start=2006 is 20 years of POWER; a short window is a 400, as before
+            assert t.json()["baseline"] == whole, w
+
+
+def test_rainfall_levels_in_percent_seasons_in_mm_a_month(offline):
+    t = client.get("/api/trend", params={"variable": "precip", "lat": 39.36, "lon": -74.42}).json()
+    b, f, sea = t["baseline"], t["fit"], t["explain"]["seasons"]
+    assert b["annual_total_mm"] == round(b["value"] * 365.25, 1) and b["value"] == pytest.approx(3.180, abs=1e-3)  # day-weighted 1995-2014 normal
+    pct = 100 / b["value"]  # % of the 1995-2014 annual mean rate, like anomaly and headline_rate
+    assert f["units"] == "%" and f["years"] == t["record"]["years"]
+    for k, v in (("change", t["slope_per_decade"]), ("change_low", t["ci_low"]), ("change_high", t["ci_high"])):
+        assert f[k] == pytest.approx(v * f["years"] / 10 * pct, abs=0.02)  # fit uses the unrounded slope
+    assert -100 < f["level_end"] < 100 and t["headline_rate"]["unit"] == "%"
+    days = (31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+    mm = [round(v * d, 1) for v, d in zip(b["months"], days)]
+    assert sea["units"] == "mm a month" and (sea["high"], sea["low"]) == (max(mm), min(mm))
+    assert (sea["high_month"], sea["low_month"]) == (mm.index(max(mm)) + 1, mm.index(min(mm)) + 1)
+    assert 0 < sea["swing"] < 100  # tens of mm a month, not thousands of mm a year
+    air = client.get("/api/trend", params={"variable": "air_temp", "lat": 39.36, "lon": -74.42}).json()
+    assert air["baseline"]["annual_total_mm"] is None and air["fit"]["units"] == "degC"
+
+
+def test_too_short_a_window_is_a_plain_400(offline):
+    r = client.get("/api/trend", params={"variable": "air_temp", "lat": 39.36, "lon": -74.42, "start": "2010"})
+    assert r.status_code == 400 and "too short for a trend" in r.json()["detail"]
+    assert "cache-control" not in r.headers
 
 
 @pytest.mark.parametrize("params,match", [

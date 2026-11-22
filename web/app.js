@@ -1,22 +1,9 @@
 'use strict';
-/* Bhoomi page shell (web/design/09-rework.md). Same-origin /api/ calls only. Printed numbers come from the API;
-   the browser's own arithmetic is for drawing and for converting units (see the "pure helpers" block). */
+/* Bhoomi page shell (web/design/09-rework.md, 10-foundation.md). Same-origin /api/ calls only. Printed numbers come
+   from the API; the place chart, "How we calculated this" and the CSV downloads are in explain.js (window.TDX). */
 
 const PLACE_SOURCE = { name: 'Open-Meteo Geocoding API (GeoNames)', url: 'https://open-meteo.com/en/docs/geocoding-api' };
 
-const MINUS = '−';
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const PRESETS = [
-  { label: 'New York', lat: 40.71, lon: -74.01, variable: 'sea_level' },
-  { label: 'Princeton, NJ', lat: 40.35, lon: -74.66, variable: 'air_temp' },
-  { label: 'Delhi', lat: 28.58, lon: 77.21, variable: 'air_temp_max' },
-  { label: 'Visakhapatnam', lat: 17.69, lon: 83.22, variable: 'air_temp' },
-  { label: 'Mumbai', lat: 19.08, lon: 72.88, variable: 'air_temp_max' },
-  { label: 'Chennai', lat: 13.08, lon: 80.27, variable: 'air_temp' },
-  { label: 'London', lat: 51.51, lon: -0.13, variable: 'air_temp' },
-  { label: 'Seattle', lat: 47.61, lon: -122.33, variable: 'sea_level' },
-];
 const SOURCES = {
   power: { name: 'NASA POWER (MERRA-2)', url: 'https://power.larc.nasa.gov/' },
   era5: { name: 'ERA5 reanalysis via Open-Meteo archive', url: 'https://open-meteo.com/',
@@ -39,178 +26,15 @@ const SOURCE_HELP = {
 };
 // Names in the source select (every width); SOURCE_LABELS are the full names used in text elsewhere.
 const SOURCE_SHORT = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'GHCN-Daily', coops: 'CO-OPS', psmsl: 'PSMSL', grace: 'GRACE' };
-// Short names for the first screen; the full dataset name stays in "How we calculated this".
-const SOURCE_PLAIN = { coops: 'NOAA tide gauge', psmsl: 'tide gauge (PSMSL)', ghcn: 'NOAA weather station', power: 'NASA POWER', era5: 'ERA5', grace: 'NASA GRACE satellites' };
 const SOURCE_LABELS = { power: 'NASA POWER', era5: 'ERA5', ghcn: 'NOAA GHCN-Daily', coops: 'NOAA CO-OPS tide gauges', grace: 'NASA GSFC GRACE mascons', psmsl: 'PSMSL tide gauges' };
 
-/* ---------- pure helpers (no DOM; exported for a node check) ---------- */
-
-function median(a) {
-  const s = a.slice().sort((x, y) => x - y);
-  if (!s.length) return NaN;
-  const h = s.length >> 1;
-  return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2;
-}
-
-// 'YYYY-MM' -> months since year 0 (a bare 'YYYY' counts as January).
-function monthIndex(t) {
-  const p = String(t).split('-');
-  return +p[0] * 12 + (p.length > 1 ? +p[1] - 1 : 0);
-}
-
-// value minus its calendar month's mean over all non-null values.
-function deseasonalize(times, values) {
-  const sum = new Array(12).fill(0), cnt = new Array(12).fill(0);
-  const mon = times.map((t) => monthIndex(t) % 12);
-  values.forEach((v, i) => { if (v != null) { sum[mon[i]] += v; cnt[mon[i]]++; } });
-  return values.map((v, i) => (v == null ? null : v - sum[mon[i]] / cnt[mon[i]]));
-}
-
-// intercept = median(value - slope * t), t in decades, nulls skipped.
-function trendIntercept(ts, ds, slope) {
-  const r = [];
-  ds.forEach((d, i) => { if (d != null) r.push(d - slope * ts[i]); });
-  return median(r);
-}
-
-function niceNum(x, round) {
-  const e = Math.floor(Math.log10(x)), f = x / Math.pow(10, e);
-  const n = round ? (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) : (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10);
-  return n * Math.pow(10, e);
-}
-
-// 4 to 5 nice ticks covering [lo, hi].
-function niceTicks(lo, hi, n) {
-  n = n || 5;
-  if (!(hi > lo)) { const pad = Math.abs(lo) * 0.1 || 1; lo -= pad; hi += pad; }
-  const step = niceNum(niceNum(hi - lo, false) / (n - 1), true);
-  const start = Math.floor(lo / step + 1e-9) * step, end = Math.ceil(hi / step - 1e-9) * step;
-  const ticks = [];
-  for (let v = start, i = 0; v <= end + step / 2; i++, v = start + i * step) ticks.push(+v.toFixed(10));
-  return { ticks, step, lo: ticks[0], hi: ticks[ticks.length - 1] };
-}
-
-// Year ticks by screen spacing: smallest step in STEPS whose ticks are >= 56 screen px apart
-// (pw = plot width in viewBox units, cw = container px, vw = viewBox width). Needs >= 2 labels when span >= 2 years.
-const TICK_STEPS = [1, 2, 5, 10, 20, 25, 50];
-function yearTicks(m0, m1, pw, cw, vw) {
-  const span = (m1 - m0) / 12, y0 = Math.floor(m0 / 12), y1 = Math.floor(m1 / 12);
-  const at = (step) => { const r = []; for (let y = Math.ceil(m0 / 12 / step) * step; y * 12 <= m1; y += step) r.push(y); return r; };
-  const px = (step) => span > 0 ? step * pw / span * (cw / vw) : Infinity;
-  const need = span >= 2 ? 2 : 1;
-  let step = TICK_STEPS.find((st) => px(st) >= 56 && at(st).length >= need);
-  if (step === undefined) step = TICK_STEPS.slice().reverse().find((st) => at(st).length >= need) || 1;
-  return at(step).filter((y) => y >= y0 && y <= y1);
-}
-
-// Yearly averages of seasons-removed values, drawing only. A year needs >= 6 valid months;
-// x is the mean month index of its valid months.
-function yearlyAverages(ms, des) {
-  const years = new Map();
-  des.forEach((v, i) => {
-    if (v == null) return;
-    const y = Math.floor(ms[i] / 12), e = years.get(y) || { sum: 0, n: 0, m: 0 };
-    e.sum += v; e.n += 1; e.m += ms[i];
-    years.set(y, e);
-  });
-  const out = [];
-  years.forEach((e, y) => { if (e.n >= 6) out.push({ year: y, x: e.m / e.n, mean: e.sum / e.n }); });
-  return out.sort((p, q) => p.x - q.x);
-}
-
-// Dot radius: at most rmax and at most 0.35 of the typical gap between neighbouring dots.
-function dotRadius(xs, rmax) {
-  const g = [];
-  for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] > 0) g.push(xs[i] - xs[i - 1]);
-  return g.length ? Math.min(rmax, 0.35 * median(g)) : rmax;
-}
-
-function unitLabel(u) { return u === 'degC' ? '°C' : u; }
 // Source name for a picker: short name, then the long label, then the raw id.
 function sourceShort(id) { return SOURCE_SHORT[id] || SOURCE_LABELS[id] || id; }
-function lcName(n) { return /^[A-Z]{2,}/.test(n) ? n : n.charAt(0).toLowerCase() + n.slice(1); }
-
-function fixed(x, d) {
-  let s = x.toFixed(d);
-  if (Number(s) === 0) s = (0).toFixed(d);
-  return s.replace('-', MINUS);
-}
-function tickLabel(v, step) {
-  const d = step >= 1 ? 0 : Math.min(2, Math.ceil(-Math.log10(step) - 1e-9));
-  return fixed(v, d);
-}
-// Plain number: 2 decimals if |x| < 1, else 1. A value that would round to zero keeps 3 decimals.
-function fmtNum(x, signed) {
-  let d = Math.abs(x) < 1 ? 2 : 1;
-  if (x !== 0 && Number(x.toFixed(d)) === 0) d = 3;
-  const s = fixed(x, d);
-  return signed && x > 0 ? '+' + s : s;
-}
-function fmtVal(x, units) { return fmtNum(x, true) + (units ? '\u00a0' + unitLabel(units) : ''); }
-function fmtAbs(x, units) { return fmtNum(Math.abs(x), false) + (units ? '\u00a0' + unitLabel(units) : ''); }
-function fmtP(p) { return p < 0.001 ? '< 0.001' : String(p); }
-
 function stripParens(name) { return String(name).replace(/\s*\([^)]*\)\s*$/, ''); }
-// Station sources (coops, ghcn) give a real station name: use it as given. Otherwise a preset
-// within 0.005 degrees gives its chip label; any other point is written as "lat, lon".
-function placeFor(lat, lon, apiName, sourceId) {
-  if (apiName && (sourceId === 'coops' || sourceId === 'ghcn')) return apiName;
-  const p = PRESETS.find((q) => Math.abs(q.lat - lat) <= 0.005 && Math.abs(q.lon - lon) <= 0.005);
-  return p ? p.label : `${fixed(Number(lat), 2)}, ${fixed(Number(lon), 2)}`;
-}
-function monthLabel(t) { const m = monthIndex(t); return MONTHS[m % 12] + ' ' + Math.floor(m / 12); }
-
-function verdictCopy(t, name, place) {
-  const y0 = t.period.start.slice(0, 4), y1 = t.period.end.slice(0, 4), n = lcName(name);
-  const lo = fmtVal(t.ci_low, t.units), hi = fmtVal(t.ci_high, t.units);
-  const sl = t.slope_per_decade;
-  if (t.verdict === 'rising' || t.verdict === 'falling') {
-    const up = t.verdict === 'rising';
-    return { head: up ? 'Rising' : 'Falling', shape: up ? 'up' : 'down', lean: null,
-      p1: `From ${y0} to ${y1}, ${n} at ${place} ${up ? 'rose' : 'fell'} by about ${fmtAbs(sl, t.units)} per decade, and the data support a range of ${lo} to ${hi}.`,
-      p2: up ? 'Even the low end of the range is above zero, so this is a clear rise.' : 'Even the high end of the range is below zero, so this is a clear fall.' };
-  }
-  const zeroIn = t.ci_low <= 0 && t.ci_high >= 0;
-  const dir = sl > 0 ? 'up' : 'down';
-  const p1 = sl === 0
-    ? `From ${y0} to ${y1}, we can't tell ${n} at ${place} apart from no change: the data show no lean either way, and the range runs from ${lo} to ${hi}.`
-    : `From ${y0} to ${y1}, we can't tell ${n} at ${place} apart from no change: the data lean ${dir} about ${fmtAbs(sl, t.units)} per decade, but the range runs from ${lo} to ${hi}.`;
-  const lean = sl === 0 ? `The data show no lean either way, and the range includes zero.`
-    : `The data lean ${dir}, but ${zeroIn ? 'the range includes zero' : 'the p-value is not below 0.05'}.`;
-  const p2 = zeroIn
-    ? 'That is an answer: over this period, any change is too small or too noisy to separate from normal ups and downs.'
-    : `The 95% range (${lo} to ${hi}) stays ${t.ci_low > 0 ? 'above' : 'below'} zero, but the p-value is ${fmtP(t.p_value)}, which is not below 0.05. We go by the stricter test, so we don't call this a clear change. Treat it as a hint, not a finding.`;
-  return { head: 'No clear change', shape: 'flat', lean, p1, p2 };
-}
-
-function captionText(t, name, place) {
-  const s = fmtVal(t.slope_per_decade, t.units);
-  const amt = fmtAbs(t.slope_per_decade, t.units);
-  const range = `(range of trends the data support: ${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade)`;
-  const y = t.verdict === 'rising' ? `rises by ${amt} per decade` : t.verdict === 'falling' ? `falls by ${amt} per decade` : `moves by ${s} per decade, which we can't tell from zero`;
-  const v = t.verdict === 'no_clear_change' ? 'no clear change' : t.verdict;
-  return `${name} at ${place}, ${t.period.start} to ${t.period.end}. The trend line ${y} ${range}. Verdict: ${v}.`;
-}
-
-function rawLine(source, withTrend) { return `Raw values: ${shownName(source)}.` + (withTrend ? " Trend and range: our calculation, the Mann-Kendall test with Sen's slope on monthly values with seasons removed." : ''); }
-function chartHead(t, name, place) { return `${name} at ${place}, ${t.period.start.slice(0, 4)} to ${t.period.end.slice(0, 4)}`; }
-
-function layoutFor(w) {
-  if (w <= 599) return { vw: 340, hA: 126, hB: 206 };
-  if (w < 900) return { vw: 640, hA: 166, hB: 246 };
-  return { vw: 720, hA: 156, hB: 276 };
-}
-
-function nearestIndex(ms, m) {
-  let lo = 0, hi = ms.length - 1;
-  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (ms[mid] < m) lo = mid; else hi = mid; }
-  return Math.abs(ms[lo] - m) <= Math.abs(ms[hi] - m) ? lo : hi;
-}
 
 /* ---------- DOM helpers ---------- */
 
 const $ = (id) => document.getElementById(id);
-const SVGNS = 'http://www.w3.org/2000/svg';
 
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
@@ -218,26 +42,11 @@ function el(tag, attrs, ...kids) {
   kids.forEach((c) => n.append(c));
   return n;
 }
-function svg(tag, attrs, text) {
-  const n = document.createElementNS(SVGNS, tag);
-  for (const k in attrs || {}) n.setAttribute(k, attrs[k]);
-  if (text != null) n.textContent = text;
-  return n;
-}
 function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
 
 const isHttps = (src) => !!src && typeof src.url === 'string' && src.url.startsWith('https://');
-// One block-level 48 px line: grey "<label>:" then "<name> ↗" as a link (https URLs only), plain text without the arrow otherwise.
-// The text sits in one inner span so a long name wraps across the full line, not beside the label.
 // Display only: a trailing ", RLR monthly means" is jargon; the link is unchanged.
 const shownName = (src) => (src && typeof src.name === 'string' ? src.name.replace(/, RLR monthly means$/, '') : 'unknown');
-function srcBlock(node, label, source) {
-  clear(node);
-  const name = shownName(source);
-  const inner = (arrow) => el('span', {}, el('span', { class: 'src-label' }, label + ':'), ` ${name}` + (arrow ? '\u00a0↗' : ''));
-  if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, inner(true)));
-  else node.append(el('span', { class: 'srclink' }, inner(false)));
-}
 // Link with the name only (footer list).
 function srcLink(node, source, arrow) {
   if (isHttps(source)) node.append(el('a', { href: source.url, class: 'srclink' }, shownName(source) + (arrow ? '\u00a0↗' : '')));
@@ -259,169 +68,6 @@ async function api(path, params) {
   }
 }
 
-function renderTable(s, withTrend) {
-  const name = nameOf(s.variable);
-  $('table-col').textContent = `${name} (${unitLabel(s.units)})`;
-  srcBlock($('table-source'), 'Raw data', s.source);
-  $('table-caption').textContent = rawLine(s.source, withTrend);
-  const body = $('table-body');
-  clear(body);
-  const frag = document.createDocumentFragment();
-  s.times.forEach((t, i) => {
-    const v = s.values[i];
-    frag.append(el('tr', {}, el('td', {}, t), el('td', {}, v == null ? 'no data' : String(v).replace('-', MINUS))));
-  });
-  body.append(frag);
-}
-
-/* ---------- chart ---------- */
-
-let chartW = 0; // box width (px) the chart was last drawn at
-function renderChart(s, t) {
-  const box = $('chart-box');
-  clear(box);
-  const times = s.times, vals = s.values;
-  const ms = times.map(monthIndex);
-  const des = deseasonalize(times, vals);
-  const m0 = ms[0], m1 = ms[ms.length - 1];
-  const name = nameOf(s.variable), place = placeOf(t || s);
-  const units = unitLabel(s.units);
-  const LY = layoutFor(window.innerWidth);
-  // The drawing is as wide as its box (1 unit = 1 px), so the font is 12 px on screen at every width.
-  // A box that is not laid out yet (hidden) falls back to the band's width.
-  const fs = 12;
-  const vw = Math.max(280, Math.round(box.clientWidth || LY.vw)), cw = vw;
-  chartW = box.clientWidth;
-  const ml = Math.round(fs * 3.4) + 4, mr = 8;
-  const axis = Math.max(40, Math.round(3.2 * fs) + 6);
-  const gap = fs + 8; // between the upper panel's bottom and the lower panel's title
-  const vh = LY.hA + gap + LY.hB + axis;
-  const hh = Math.round(fs * 3.5); // panel header: title, y label, then room above the top tick label
-  const pw = vw - ml - mr;
-  const xS = (m) => ml + (m1 === m0 ? 0 : (m - m0) / (m1 - m0) * pw);
-
-  const nn = (a) => a.filter((v) => v != null);
-  const nTicks = (h) => Math.min(5, Math.max(3, Math.floor(h / (1.6 * fs)))); // ticks at least 19 px apart
-  const A = { top: hh, bot: LY.hA - 4, t: niceTicks(Math.min(...nn(vals)), Math.max(...nn(vals)), nTicks(LY.hA - 4 - hh)), y0: 0 };
-  const yB = LY.hA + gap;
-  const B = { top: yB + hh, bot: yB + LY.hB, t: niceTicks(Math.min(0, ...nn(des)), Math.max(0, ...nn(des)), nTicks(LY.hB - hh)), y0: yB };
-  [A, B].forEach((p) => { p.yS = (v) => p.top + (p.t.hi - v) / (p.t.hi - p.t.lo) * (p.bot - p.top); });
-
-  const root = svg('svg', { viewBox: `0 0 ${vw} ${vh}`, role: 'img', tabindex: '0', 'aria-labelledby': 'c-title c-desc', 'font-size': fs });
-  root.append(svg('title', { id: 'c-title' }, `${name} at ${place}`));
-  root.append(svg('desc', { id: 'c-desc' }, t ? captionText(t, name, place) : `${name} at ${place}, ${times[0]} to ${times[times.length - 1]}.`));
-
-  const xt = yearTicks(m0, m1, pw, cw, vw);
-
-  const panel = (P, title, ylabel) => {
-    root.append(svg('text', { x: 0, y: P.y0 + fs, class: 'c-text c-title' }, title));
-    root.append(svg('text', { x: 0, y: P.y0 + Math.round(fs * 2.3), class: 'c-text' }, ylabel));
-    xt.forEach((y) => root.append(svg('line', { x1: xS(y * 12), x2: xS(y * 12), y1: P.top, y2: P.bot, class: 'c-grid' })));
-    P.t.ticks.forEach((v) => {
-      const y = P.yS(v);
-      root.append(svg('line', { x1: ml, x2: vw - mr, y1: y, y2: y, class: 'c-grid' }));
-      root.append(svg('text', { x: ml - 6, y: y + fs * 0.35, 'text-anchor': 'end', class: 'c-text' }, tickLabel(v, P.t.step)));
-    });
-  };
-  panel(A, 'Raw monthly values', `${name} (${units})`);
-  panel(B, 'Seasons removed, with trend', `Change from the usual for that month (${units})`);
-  xt.forEach((y) => {
-    const x = xS(y * 12), hw = 0.3 * fs * String(y).length; // half the label width, roughly
-    const edge = x + hw > vw ? ['end', vw] : x - hw < 0 ? ['start', 0] : ['middle', x];
-    root.append(svg('text', { x: edge[1], y: B.bot + Math.round(fs * 1.5) + 2, 'text-anchor': edge[0], class: 'c-text' }, String(y)));
-  });
-  root.append(svg('text', { x: ml + pw / 2, y: B.bot + Math.round(fs * 2.9) + 4, 'text-anchor': 'middle', class: 'c-text' }, 'Year'));
-  root.append(svg('line', { x1: ml, x2: vw - mr, y1: B.yS(0), y2: B.yS(0), class: 'c-zero' }));
-
-  const path = (P, arr) => {
-    let d = '', pen = false;
-    arr.forEach((v, i) => {
-      if (v == null) { pen = false; return; }
-      d += `${pen ? 'L' : 'M'}${xS(ms[i]).toFixed(1)} ${P.yS(v).toFixed(1)}`;
-      pen = true;
-    });
-    return d;
-  };
-  root.append(svg('path', { d: path(A, vals), class: 's-raw' }));
-  root.append(svg('path', { d: path(B, des), class: 's-des' }));
-
-  let trendLine = null;
-  if (t) {
-    const ts = ms.map((m) => (m - m0) / 120); // decades since the first month
-    const b0 = trendIntercept(ts, des, t.slope_per_decade);
-    const tv = ts.filter((_, i) => des[i] != null);
-    const tm = median(tv), yp = b0 + t.slope_per_decade * tm;
-    const tEnd = (m1 - m0) / 120;
-    const line = (slope, a, b) => [B.yS(yp + slope * (a - tm)), B.yS(yp + slope * (b - tm))];
-    const [l0, l1] = line(t.ci_low, 0, tEnd), [h0, h1] = line(t.ci_high, 0, tEnd), [m0y, m1y] = line(t.slope_per_decade, 0, tEnd);
-    const x0 = xS(m0), x1 = xS(m1);
-    const clip = svg('clipPath', { id: 'c-clip' });
-    clip.append(svg('rect', { x: ml, y: B.top, width: pw, height: B.bot - B.top }));
-    const g = svg('g', { 'clip-path': 'url(#c-clip)' });
-    g.append(svg('polygon', { points: `${x0},${l0} ${x1},${l1} ${x1},${h1} ${x0},${h0}`, class: 's-fan' }));
-    g.append(svg('line', { x1: x0, y1: l0, x2: x1, y2: l1, class: 's-edge' }));
-    g.append(svg('line', { x1: x0, y1: h0, x2: x1, y2: h1, class: 's-edge' }));
-    trendLine = { x1: x0, y1: m0y, x2: x1, y2: m1y };
-    root.append(clip, g);
-  }
-
-  // Yearly averages (dots) sit over the faint monthly line; the solid trend line goes on top. Drawing only: never printed.
-  const dots = yearlyAverages(ms, des);
-  const r = dotRadius(dots.map((d) => xS(d.x)), Math.max(2.5, fs * 0.22));
-  dots.forEach((d) => root.append(svg('circle', { cx: xS(d.x).toFixed(1), cy: B.yS(d.mean).toFixed(1), r: r.toFixed(2), class: 's-year', 'aria-hidden': 'true' })));
-  if (trendLine) root.append(svg('line', Object.assign({ class: 's-trend', 'clip-path': 'url(#c-clip)' }, trendLine)));
-
-  const rule = svg('line', { y1: A.top, y2: B.bot, class: 'c-rule', visibility: 'hidden' });
-  root.append(rule);
-  box.append(root);
-
-  $('chart-head').textContent = t ? chartHead(t, name, place) : `${name} at ${place}`;
-  $('chart-caption').textContent = t ? captionText(t, name, place) : `${name} at ${place}.`;
-  // With a trend the answer card names the source once; here only what we calculated. Without one there is no card, so the link stays.
-  const cs = $('chart-source');
-  clear(cs);
-  if (t) cs.append(el('span', { class: 'source' }, 'Trend and range: our calculation.')); else srcBlock(cs, 'Raw data', s.source);
-  $('chart-key').textContent = t ? 'Thick line: the trend. Shaded band: the range of trends the data support. Dashed line: no change.' : 'Dashed line: no change.';
-  $('chart-raw').textContent = rawLine(t ? t.source : s.source, !!t);
-
-  // readout
-  const readout = $('readout');
-  const EMPTY = 'Tap or hover the chart to read a month.';
-  const dRange = Math.max(...nn(des)) - Math.min(...nn(des));
-  const select = (i) => {
-    state.selIdx = i;
-    readout.classList.toggle('sel', i != null);
-    if (i == null) { rule.setAttribute('visibility', 'hidden'); readout.textContent = EMPTY; return; }
-    const x = xS(ms[i]);
-    rule.setAttribute('x1', x); rule.setAttribute('x2', x); rule.setAttribute('visibility', 'visible');
-    const mi = ms[i] % 12, v = vals[i];
-    if (v == null) { readout.textContent = `${monthLabel(times[i])}: no data.`; return; }
-    const d = des[i], rel = d === 0 || Math.abs(d) < 1e-9 * dRange ? 'at' : d > 0 ? 'above' : 'below';
-    readout.textContent = `${monthLabel(times[i])}: ${String(v).replace('-', MINUS)}\u00a0${units} raw, ${rel} the usual ${MONTHS_LONG[mi]}.`;
-  };
-  const at = (e) => {
-    const rc = root.getBoundingClientRect();
-    const xv = (e.clientX - rc.left) / rc.width * vw;
-    select(nearestIndex(ms, m0 + (xv - ml) / pw * (m1 - m0)));
-  };
-  root.addEventListener('pointermove', at);
-  root.addEventListener('pointerdown', at);
-  root.addEventListener('keydown', (e) => {
-    const n = ms.length, cur = state.selIdx, big = e.shiftKey ? 12 : 1;
-    let i = null;
-    if (e.key === 'ArrowLeft') i = cur == null ? n - 1 : Math.max(0, cur - big);
-    else if (e.key === 'ArrowRight') i = cur == null ? n - 1 : Math.min(n - 1, cur + big);
-    else if (e.key === 'Home') i = 0;
-    else if (e.key === 'End') i = n - 1;
-    else if (e.key === 'Escape') { select(null); return; }
-    else return;
-    e.preventDefault();
-    select(i);
-  });
-  select(null);
-}
-
-
 /* ---------- text and link helpers ---------- */
 
 // A place name from a link or a search is only ever shown with textContent. Control characters and angle brackets
@@ -442,7 +88,7 @@ const VARIABLE_ALIASES = { precipitation: 'precip', rain: 'precip', temperature:
 
 const WINDOWS = [
   { id: 'sea_level', slug: 'sea-level', name: 'Sea level', search: 'Search a coastal town or city',
-    question: 'Is the sea rising where you live, build or invest? Tide gauges have measured it for up to 125 years.', units: ['cm', 'inches'] },
+    question: 'Is the sea rising where you live, build or invest? Some tide gauges have measured it for more than a century.', units: ['cm', 'inches'] },
   { id: 'air_temp', slug: 'air-temperature', name: 'Air temperature', search: 'Search a town or city',
     question: 'Is the air getting warmer where you live? Our records start in 1981 and come from weather models and weather stations.', units: ['°C', '°F'] },
   { id: 'air_temp_max', slug: 'hottest-days', name: 'Hottest days', search: 'Search a town or city',
@@ -470,8 +116,7 @@ const DEFAULT_PINS = {
 
 /* ---------- state ---------- */
 
-// Old chart code reads state.params (the place being drawn), state.place (its name) and state.selIdx (the readout).
-const state = { variables: [], params: null, place: null, selIdx: null };
+const state = { variables: [] };
 const pinKeyOf = (lat, lon) => `${Number(lat).toFixed(2)},${Number(lon).toFixed(2)}`;
 const store = {};          // variable id -> { pins: [{label, lat, lon, slot, link?}], selected: key }
 const wsrc = {};           // variable id -> the data source chosen by hand (null = the measurement's default)
@@ -484,16 +129,6 @@ function varById(id) { return state.variables.find((v) => v.id === id); }
 // The visitor's name for a measurement ("Rain", not "Precipitation"), in every string the page builds.
 function nameOf(id) { const w = WIN_BY_ID[id]; if (w) return w.name; const v = varById(id); return stripParens(v ? v.name : String(id).replace(/_/g, ' ')); }
 function winOf(id) { return WIN_BY_ID[id] || null; }
-
-// The name used in a sentence: a station or gauge name from the data; else the visitor's word for the place
-// (first part of its label); a name that came from a link is not trusted, so coordinates stay.
-function placeOf(t) {
-  const q = state.params || {};
-  const lat = q.lat !== undefined ? q.lat : t.place.lat, lon = q.lon !== undefined ? q.lon : t.place.lon;
-  const named = placeFor(lat, lon, t.place && t.place.name, t.source && t.source.id);
-  if (!state.place || state.place.link || named !== `${fixed(Number(lat), 2)}, ${fixed(Number(lon), 2)}`) return named;
-  return cleanPlace(state.place.label.split(',')[0]) || named;
-}
 
 function loadStore() {
   let raw = null;
@@ -601,8 +236,8 @@ function landed(win, p, res) {
   changed();
   const e = store[win];
   if (pinKeyOf(p.lat, p.lon) === e.selected && res.status === 'ok') {
-    const g = res.trend.guidance;
-    TD.announce(`${p.label}: ${g && g.risk_label ? g.risk_label + '. ' + whyOf(g) : (res.trend.meaning && res.trend.meaning.headline) || 'Loaded.'}`);
+    const c = window.TDX.card(res.trend, imperial());
+    TD.announce(`${p.label}: ${[c.chip, c.why].filter(Boolean).join('. ') || c.word}`);
   }
 }
 
@@ -613,7 +248,7 @@ function pinList(win) {
   if (!e) return [];
   return e.pins.map((p) => {
     const key = pinKeyOf(p.lat, p.lon), r = results[resKey(win, p)] || { status: 'loading', trend: null, series: null, error: null };
-    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, trend: r.trend, series: r.series, link: !!p.link, started: r.t0 || 0 };
+    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, none: !!r.none, trend: r.trend, series: r.series, link: !!p.link, started: r.t0 || 0 };
   });
 }
 function selectedPin(win) { return pinList(win).find((p) => p.selected) || null; }
@@ -637,7 +272,7 @@ function loadingLine(p) {
   const n = secsSince(p), v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]);
   if (sid === 'ghcn') return `Reading daily weather-station records from NOAA since 1981. ${n > 20 ? 'This is taking longer than usual; still reading.' : 'This usually takes 5 to 20 seconds for each place.'} ${n} s so far.`;
   if (n > 15) return `This is taking longer than usual; still checking. ${n} s so far.`;
-  return `Checking the records for ${p.label}…${n >= 3 ? ` ${n} s so far.` : ''}`;
+  return `Checking ${SOURCES[sid] ? SOURCES[sid].name : 'the records'}. This usually takes about ${usualSecs()} seconds.${n >= 3 ? ` ${n} s so far.` : ''}`;
 }
 function tickLoading() {
   const pins = curWin === 'settings' ? [] : pinList(curWin);
@@ -659,6 +294,7 @@ function changed() {
   renderSrcNote();
   renderSidebar();
   renderRec();
+  renderDetail();
   syncTimer();
   const pins = pinList(curWin);
   const sel = pins.find((p) => p.selected);
@@ -667,62 +303,23 @@ function changed() {
 
 /* ---------- units and wording ---------- */
 
-const UNIT_NAME = { degC: '°C', '°C': '°C', C: '°C' };
-const normUnit = (u) => UNIT_NAME[u] || u;
-function convert(v, unit) {
-  const u = normUnit(unit);
-  if (window.TDPrefs.get().units === 'imperial') {
-    if (u === 'cm') return { v: v / 2.54, unit: 'in' };
-    if (u === 'mm') return { v: v / 25.4, unit: 'in' };
-    if (u === '°C') return { v: v * 1.8, unit: '°F' };
-  }
-  return { v, unit: u };
-}
-const signed = (x) => fmtNum(x, true);
 const imperial = () => window.TDPrefs.get().units === 'imperial';
 const fmt = {
-  rate(t) {
-    const g = t && t.guidance, r = g && g.rate;
-    if (!r || typeof r.value !== 'number') return '';
-    if (!imperial() || r.unit === '%') return String(r.text || ''); // a percentage reads the same in both unit settings
-    const c = convert(r.value, r.unit);
-    return `${signed(c.v)} ${c.unit}`;
-  },
-  outlook(t, year) {
-    const g = t && t.guidance, o = g && Array.isArray(g.outlook) && g.outlook.find((x) => x && x.year === year);
-    if (!o) return '';
-    if (!imperial()) return String(o.text || '').replace(/ by \d{4}$/, '');
-    const lo = convert(o.low, o.unit), hi = convert(o.high, o.unit);
-    const a = signed(lo.v), b = signed(hi.v);
-    return a === b ? `about ${a} ${lo.unit}` : `${a} to ${b} ${lo.unit}`;
-  },
-  years(t) { return t && t.period ? `${t.period.start.slice(0, 4)}–${t.period.end.slice(0, 4)}` : ''; },
-  unit(t) { const g = t && t.guidance; return convert(0, (g && g.display && g.display.unit) || (t && t.units) || '').unit; },
+  // the rate every view prints: headline_rate ("+3.1 mm a year", "+0.31 °C per decade"), in the Units setting
+  rate(t) { const r = t && window.TDX.rate(t, imperial()); return r ? r.text : ''; },
 };
-// The "why" sentence; a rate note (Rain: "about 60 mm more a year") goes in brackets before its final full stop.
-function noteText(n) {
-  if (!n || typeof n.text !== 'string') return '';
-  if (!imperial() || typeof n.value !== 'number') return n.text;
-  const c = convert(Math.abs(n.value), n.unit);
-  return `about ${fmtNum(c.v, false)} ${c.unit} ${n.value < 0 || /\bless\b/.test(n.text) ? 'less' : 'more'} a year`;
-}
-function whyOf(g) {
-  if (!g || !g.why) return '';
-  const note = noteText(g.rate && g.rate.note);
-  return note ? `${g.why.replace(/\.\s*$/, '')} (${note}).` : g.why;
-}
-const perOf = (t) => (t && t.guidance && t.guidance.rate && t.guidance.rate.per) || '';
-const riskShort = (g) => (g && g.risk_label ? g.risk_label.replace(/ risk$/, '') : '');
-const riskClass = (g) => (g && ['high', 'moderate', 'low', 'unknown'].includes(g.risk) ? g.risk : 'unknown');
+// the sidebar chip's short form: "Moderate to high", "Low–high" (for "Risk between low and high (wide range)")
+const riskShort = (g) => (g && g.risk_label ? (/^Risk between low and high\b/.test(g.risk_label) ? 'Low–high' : g.risk_label.replace(/ risk$/, '')) : '');
+// High, Moderate, Low; anything else ("Not enough data", "No clear change") is drawn like Low
+const riskClass = (g) => (g && ['high', 'moderate', 'low'].includes(g.risk) ? g.risk : 'unknown');
 
-// The line under a pinned place's name.
+// The line under a pinned place's name: the rate, or "No clear change" when no chip says so already.
 function pinLine(p) {
   if (p.status === 'loading') { const n = secsSince(p); return n < 2 ? 'Checking…' : `Checking… ${n} s`; }
   if (p.status === 'error') return 'No record here';
-  const t = p.trend, rate = fmt.rate(t);
-  if (rate) return t.guidance.rate.unit === '%' ? `${rate} every 10 years` : `${rate} ${perOf(t)}`.trim(); // the sign already gives the direction
-  if (t.guidance) return 'No clear change';
-  return (t.meaning && t.meaning.comparison) || 'No clear change';
+  const t = p.trend, rate = fmt.rate(t), clear = t.verdict === 'rising' || t.verdict === 'falling';
+  if (rate && (clear || (t.guidance && t.guidance.risk_label))) return rate;
+  return clear ? window.TDX.card(t, imperial()).word : 'No clear change'; // an answer from before the rework has no rate
 }
 
 /* ---------- the sidebar ---------- */
@@ -743,18 +340,22 @@ function renderControls() {
   if (!w) return;
   const prefs = window.TDPrefs.get();
   buildSeg($('seg-units'), [{ value: 'metric', label: w.units[0] }, { value: 'imperial', label: w.units[1] }], prefs.units, (u) => window.TDPrefs.set({ units: u }));
-  buildSeg($('seg-look'), [2035, 2050, 2075].map((y) => ({ value: y, label: String(y) })), prefs.lookAhead, (y) => window.TDPrefs.set({ lookAhead: y }));
   const v = varById(curWin), many = !!v && Array.isArray(v.sources) && v.sources.length > 1;
   $('src-field').hidden = !many;
   if (many) {
     const cur = sourceFor(curWin) || v.sources[0];
-    buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, (s) => {
-      wsrc[curWin] = s === v.sources[0] ? null : s;
-      ensureLoaded(curWin);
-      renderControls(); changed(); renderFoot();
-    });
+    buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, pickSource);
     $('src-help').textContent = SOURCE_HELP[cur] || '';
   }
+}
+
+// Measure the current window with another source (the sidebar's "Measured by", or a button on the card).
+function pickSource(s) {
+  const v = varById(curWin);
+  if (!v || !Array.isArray(v.sources) || !v.sources.includes(s)) return;
+  wsrc[curWin] = s === v.sources[0] ? null : s;
+  ensureLoaded(curWin);
+  renderControls(); changed(); renderFoot();
 }
 
 function renderSidebar() {
@@ -777,10 +378,16 @@ function renderSidebar() {
   $('pin-hint').hidden = false;
 }
 
-/* ---------- the recommendation card ---------- */
+/* ---------- the answer card (web/design/10-foundation.md section 3) ---------- */
 
+// A re-render removes whatever had focus in the card (a button that switched the source, a link): focus then goes to the
+// new card's heading, not to <body> (QA N5).
 function renderRec() {
-  const box = $('rec');
+  const box = $('rec'), had = box.contains(document.activeElement);
+  drawRec(box);
+  if (had && !box.contains(document.activeElement)) { const h = box.querySelector('h2'); if (h) h.focus({ preventScroll: true }); }
+}
+function drawRec(box) {
   clear(box);
   const pin = selectedPin(curWin), w = winOf(curWin);
   box.setAttribute('aria-busy', String(!!pin && pin.status === 'loading'));
@@ -796,121 +403,87 @@ function renderRec() {
     return;
   }
   if (pin.status === 'error') {
-    box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."), el('p', { class: 'say' }, 'Try another place.'));
-    if (curWin === 'sea_level') box.append(el('p', { class: 'say' }, el('a', { href: 'https://sealevel.nasa.gov/ipcc-ar6-sea-level-projection-tool', target: '_blank', rel: 'noopener' }, 'Future sea level (NASA projection tool)\u00a0↗')));
+    box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."));
+    // "no record here" from a source picked by hand: offer the measurement's default only when the page already holds a
+    // working answer for this place from it (a US coast where CO-OPS worked, then PSMSL picked by hand); anything else
+    // would be a dead end (QA B7, review)
+    const v = varById(curWin), def = v && Array.isArray(v.sources) ? v.sources[0] : null, prev = results[`${curWin}||${pin.key}`];
+    const offer = pin.none && sourceFor(curWin) && def && prev && prev.status === 'ok';
+    if (offer) {
+      const b = el('button', { type: 'button', class: 'btn' }, `Try ${SOURCE_SEG[def] || sourceShort(def)} instead`);
+      b.addEventListener('click', () => pickSource(def));
+      box.append(el('div', { class: 'acts' }, b));
+    }
+    box.append(el('p', { class: 'say' }, pin.none && curWin === 'sea_level' && !offer
+      ? "Without a usable tide gauge nearby, our records can't tell you about this coast. For property here, check local flood maps and whether the land is sinking."
+      : 'Try another place.'));
     return;
   }
 
-  state.params = { lat: pin.lat, lon: pin.lon, variable: curWin }; // the sentence helpers read the place being shown
-  state.place = { label: pin.label, link: pin.link };
-  const t = pin.trend, g = t.guidance, m = meaningOf(t), look = window.TDPrefs.get().lookAhead;
-  const risk = riskClass(g), years = fmt.years(t), pl = t.place && t.place.name;
-  const station = pl && t.source && ['coops', 'ghcn', 'psmsl'].includes(t.source.id) ? pl : '';
-  const srcLine = el('div', { class: 'src' });
-  const short = t.source && SOURCE_PLAIN[t.source.id];
-  const srcText = (short ? short.charAt(0).toUpperCase() + short.slice(1) : shownName(t.source)) + (short && station ? ` at ${station}` : '');
-  if (isHttps(t.source)) srcLine.append(el('a', { href: t.source.url, class: 'srclink', target: '_blank', rel: 'noopener' }, `${srcText}\u00a0↗`)); else srcLine.append(srcText);
-  srcLine.append(` · ${years}`);
-  box.append(el('div', { class: 'where' }, el('div', {}, h2(pin.label), srcLine), g && g.risk_label ? el('span', { class: `risk ${risk}` }, g.risk_label) : ''));
-
-  // big number
-  const rate = fmt.rate(t);
-  const big = el('div', { class: 'big' });
-  if (g && rate) big.append(rate, ' ', el('small', {}, perOf(t)));
-  else if (g) big.append('No clear change', ' ', el('small', {}, years));
-  else big.append(verdictWord(t));
-  box.append(big);
-  box.append(el('p', { class: 'say' }, g && g.why ? whyOf(g) : [m && m.headline, m && m.comparison].filter(Boolean).join(' ') || verdictCopy(t, nameOf(t.variable), placeOf(t)).p1));
-  if (g && g.recommendation) box.append(el('div', { class: `advice ${risk}` }, el('b', {}, 'Our recommendation'), g.recommendation));
-
-  // two facts
-  const facts = el('div', { class: 'facts2' });
-  const outlook = fmt.outlook(t, look);
-  if (g && outlook) facts.append(el('div', {}, g.outlook_label || 'If the past trend continues', el('b', {}, `${outlook} by ${look}`)));
-  const yrs = Number(t.period.end.slice(0, 4)) - Number(t.period.start.slice(0, 4));
-  facts.append(el('div', {}, 'How sure we are', el('b', {}, [m && m.confidence, `${yrs} years of data`].filter(Boolean).join(' · '))));
-  box.append(facts);
-
-  const acts = el('div', { class: 'acts' });
-  if (g && g.future_link && typeof g.future_link.url === 'string' && g.future_link.url.startsWith('https://')) {
-    acts.append(el('a', { class: 'btn dark', href: g.future_link.url, target: '_blank', rel: 'noopener' }, `${g.future_link.label} ↗`));
+  const t = pin.trend, g = t.guidance || {}, X = window.TDX, C = X.card(t, imperial()), url = X.recordUrl(t.source);
+  const meta = el('p', { class: 'meta' }, url ? el('a', { href: url, target: '_blank', rel: 'noopener' }, `${X.srcText(t)} ↗`) : X.srcText(t));
+  if (t.latest && t.latest.text) meta.append(' · ', el('span', { class: 'nw' }, t.latest.text)); // never split (QA N4)
+  box.append(el('div', { class: 'where' }, el('div', {}, h2(pin.label), meta), C.chip ? el('span', { class: `risk ${riskClass(g)}` }, C.chip) : ''));
+  box.append(el('div', { class: 'verdict' }, el('b', {}, el('span', { class: 'shape', 'aria-hidden': 'true' }, C.shape), C.word), el('span', {}, C.conf)));
+  if (C.why) box.append(el('p', { class: 'say' }, C.why));
+  if (C.old) return; // a cached answer from before the rework: the verdict only, until it is asked again
+  if (C.world) box.append(el('p', { class: 'world' }, `${C.world}.`));
+  // NASA POWER's grid against the nearest weather station (QA B10): the line, the switch, and after it whether they
+  // disagree, from the POWER answer this page already has (the default source's result)
+  const v = varById(curWin), prev = results[`${curWin}||${pin.key}`];
+  const note = X.modelNote(t, prev && prev.status === 'ok' ? prev.trend : null);
+  if (note) {
+    const box2 = el('div', { class: note.strong ? 'model strong' : 'model' }, el('p', {}, note.line));
+    if (note.offer && v && Array.isArray(v.sources) && v.sources.includes(note.offer)) {
+      const b = el('button', { type: 'button', class: 'btn' }, 'Compare with the nearest weather station');
+      b.addEventListener('click', () => pickSource(note.offer));
+      box2.append(b);
+    }
+    box.append(box2);
+    if (note.next) box.append(el('div', { class: 'model' }, el('p', {}, note.next))); // a plain next step under the strong line
   }
-  const how = el('button', { type: 'button', class: 'btn ghost', id: 'how-open' }, 'How we calculated this');
-  how.addEventListener('click', openHow);
-  acts.append(how);
-  box.append(acts);
-  if (g && g.disclaimer) box.append(el('p', { class: 'disc' }, g.disclaimer));
+  const r3 = el('div', {}, el('p', { class: 'rl' }, 'What experts project'), el('p', { class: 'rt' }, C.r3));
+  const fl = g.future_link;
+  if (fl && typeof fl.url === 'string' && fl.url.startsWith('https://') && fl.label) r3.append(el('p', { class: 'rt' }, el('a', { href: fl.url, target: '_blank', rel: 'noopener' }, `${fl.label} ↗`)));
+  box.append(el('div', { class: 'reads' },
+    C.r1 ? el('div', {}, el('p', { class: 'rl' }, C.r1.label), el('p', { class: 'rv' }, C.r1.value), el('p', { class: 'rs' }, C.r1.line)) : '',
+    el('div', {}, el('p', { class: 'rl' }, C.r2.label), el('p', { class: 'rv' }, C.r2.value, C.r2.per ? ' ' : '', C.r2.per ? el('small', {}, C.r2.per) : ''), el('p', { class: 'rs' }, C.r2.line)),
+    r3));
+  if (g.recommendation) box.append(el('div', { class: 'advice' }, el('p', { class: 'al' }, 'Our recommendation'), el('p', {}, g.recommendation)));
+  const how = el('button', { type: 'button', class: 'btn', id: 'how-open' }, 'How we calculated this ↓');
+  how.addEventListener('click', goHow);
+  box.append(el('div', { class: 'acts' }, how));
+  if (g.recommendation && g.disclaimer) box.append(el('p', { class: 'disc' }, g.disclaimer));
 }
-function verdictWord(t) { return t.verdict === 'rising' ? 'Rising' : t.verdict === 'falling' ? 'Falling' : 'No clear change'; }
+// The button holds no route: it scrolls to the section and puts focus on its heading; it never opens a step.
+function goHow() {
+  const sec = $('how');
+  if (sec.hidden) return;
+  sec.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  $('how-h').focus({ preventScroll: true });
+}
 
-// The four plain-words strings the server sends (trend.meaning); null when they are missing or malformed.
-const CONFIDENCE = ['Very clear', 'Clear', 'Not clear'];
-function meaningOf(t) {
-  const m = t && t.meaning;
-  if (!m || typeof m !== 'object' || typeof m.headline !== 'string' || typeof m.confidence !== 'string' || typeof m.comparison !== 'string' || typeof m.limit !== 'string') return null;
-  return m.headline && m.limit && CONFIDENCE.includes(m.confidence) ? m : null;
-}
+/* ---------- the place chart and "How we calculated this" (explain.js), for the selected pin ---------- */
 
-/* ---------- "How we calculated this" (a native dialog with today's detail) ---------- */
-
-function openHow() {
-  const pin = selectedPin(curWin);
-  if (!pin || pin.status !== 'ok') return;
-  const dlg = $('how-dialog');
-  if (!dlg.open) dlg.showModal();
-  renderDetail(pin);
-  // Real or noise? listens for a finished answer: tell it this one is on screen now
-  document.dispatchEvent(new CustomEvent('td:load-end', { detail: compatDetail(pin) }));
+let shown = { trend: null, units: null };
+const loadStart = () => document.dispatchEvent(new CustomEvent('td:load-start', { detail: { id: 0, params: null, place: null, origin: 'window' } }));
+function renderDetail() {
+  const pin = curWin === 'settings' ? null : selectedPin(curWin), units = window.TDPrefs.get().units;
+  const ctx = pin && { label: pin.label, name: nameOf(curWin), slug: winOf(curWin).slug, imperial: units === 'imperial' };
+  if (pin && pin.status === 'ok') {
+    if (pin.trend === shown.trend && units === shown.units) return; // another pin landed: nothing here changed
+    const fresh = pin.trend !== shown.trend;
+    if (fresh && shown.trend) loadStart();
+    shown = { trend: pin.trend, units };
+    window.TDX.show(pin, ctx, fresh);
+    // Real or noise? (in step 5) waits for a finished answer
+    if (fresh) document.dispatchEvent(new CustomEvent('td:load-end', { detail: compatDetail(pin) }));
+    return;
+  }
+  if (shown.trend) loadStart();
+  shown = { trend: null, units: null };
+  window.TDX.show(pin, ctx, true);
 }
-function renderDetail(pin) {
-  const t = pin.trend, series = pin.series;
-  state.params = { lat: pin.lat, lon: pin.lon, variable: curWin };
-  state.place = { label: pin.label, link: pin.link };
-  $('how-place').textContent = `${pin.label}`;
-  const vk = t.verdict === 'rising' ? 'rising' : t.verdict === 'falling' ? 'falling' : 'none';
-  $('how-detail').dataset.verdict = vk;
-  renderChart(series, t);
-  renderTable(series, true);
-  const c = verdictCopy(t, nameOf(t.variable), placeOf(t));
-  $('verdict-p1').textContent = c.p1;
-  $('verdict-lean').textContent = c.lean || '';
-  $('verdict-lean').hidden = !c.lean;
-  $('verdict-p2').textContent = c.p2;
-  $('verdict-evidence').textContent = `p-value: ${fmtP(t.p_value)}. The p-value says how easily luck alone could produce a trend this strong. Below 0.05 counts as a clear change.`;
-  const facts = $('facts');
-  clear(facts);
-  [
-    ['Period', `${t.period.start} to ${t.period.end}`],
-    ['Months of data', String(t.n)],
-    ['Exact rate', `${fmtVal(t.slope_per_decade, t.units)} per decade`],
-    ['Range of trends the data support', `${fmtVal(t.ci_low, t.units)} to ${fmtVal(t.ci_high, t.units)} per decade`],
-    ['p-value', fmtP(t.p_value)],
-    ['Seasons removed', t.deseasonalized ? 'Yes' : 'No'],
-    ['Adjusted for neighbouring months', t.autocorrelation_adjusted ? 'Yes' : 'No'],
-    ['Source', 'src'],
-    ['Method', t.method === 'mann_kendall_sen' ? "Mann-Kendall test with Sen's slope" : String(t.method)],
-  ].forEach(([l, v]) => {
-    if (v !== 'src') { facts.append(fact(l, v)); return; }
-    const dd = el('dd', {});
-    srcLink(dd, t.source, true);
-    facts.append(el('div', {}, el('dt', {}, l), dd));
-  });
-  const list = $('notes-list');
-  clear(list);
-  const notes = [];
-  (t.caveats || []).concat(series.notes || []).forEach((n) => { if (!notes.includes(n)) notes.push(n); });
-  if (!notes.length) notes.push('No extra caveats from the source.');
-  notes.forEach((n) => list.append(el('li', {}, n)));
-  $('howto-ac').textContent = t.autocorrelation_adjusted
-    ? 'We adjusted for months that resemble their neighbours; without that the result would look surer than it is.'
-    : 'We did not adjust for months that resemble their neighbours, so treat the result as less certain.';
-  try {
-    const ms = series.times.map(monthIndex);
-    window.renderStripes($('stripes-art'), yearlyAverages(ms, deseasonalize(series.times, series.values)), t.period);
-    srcBlock($('stripes-source'), 'Raw data', t.source);
-  } catch (e) { $('year-stripes').hidden = true; }
-}
-function fact(label, node) { return el('div', {}, el('dt', {}, label), el('dd', {}, node)); }
 
 /* ---------- compatibility for "Real or noise?" (it reads TD.state and td:load-end) ---------- */
 
@@ -937,7 +510,7 @@ function renderFoot() {
   const src = SOURCES[sid];
   p.append('Data: ');
   if (src) srcLink(p, src, true); else p.append('public records');
-  p.append(". Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed).");
+  p.append(`. Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed against ${curWin === 'water_storage' ? "the provider's own reference period" : 'the 1995–2014 average'}).`);
   // the Open-Meteo attribution travels with its data
   const ul = $('footer-sources');
   let li = Array.prototype.find.call(ul.children, (x) => x.dataset.credit === 'era5');
@@ -1244,7 +817,6 @@ window.TD = {
   fetchTrend(params) { return api('/api/trend', params).then((r) => ({ ok: r.ok, status: r.status, body: r.body, retryAfter: r.retryAfter === undefined ? null : r.retryAfter })); },
   loadPlace(spec) {
     spec = spec || {};
-    if ($('how-dialog').open) $('how-dialog').close();
     return TD.addPlace({ lat: spec.lat, lon: spec.lon, label: spec.label }).then((r) => Object.assign({ ok: r.ok }, r));
   },
 };
@@ -1270,15 +842,7 @@ async function init() {
   route();
 }
 
-$('how-close').addEventListener('click', () => $('how-dialog').close());
-$('how-dialog').addEventListener('click', (e) => { if (e.target === $('how-dialog')) $('how-dialog').close(); }); // a click on the backdrop
-$('how-dialog').addEventListener('close', () => { const b = $('how-open'); if (b) b.focus(); document.dispatchEvent(new CustomEvent('td:load-start', { detail: { id: 0, params: null, place: null, origin: 'window' } })); });
-let lastBand = layoutFor(window.innerWidth).vw;
-window.addEventListener('resize', () => {
-  const b = layoutFor(window.innerWidth).vw;
-  if (b !== lastBand && $('how-dialog').open) { lastBand = b; const p = selectedPin(curWin); if (p && p.status === 'ok') renderChart(p.series, p.trend); }
-});
+window.addEventListener('resize', () => window.TDX.redraw());
 document.addEventListener('td:prefs', () => { if (curWin !== 'settings') { renderControls(); changed(); } });
 window.addEventListener('hashchange', route);
-// the dialog's detail is printed whole
 document.addEventListener('DOMContentLoaded', init);

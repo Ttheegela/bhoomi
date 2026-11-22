@@ -49,8 +49,8 @@ for this answer. The answer goes in this order:
 A. First sentence, the plain result: answer the question in plain words, built on the default source's \
 meaning.headline, reworded only to name the place and fit the question ("Yes. Sea level at The Battery in New York \
 has clearly been rising."). The verdict rules below still hold.
-B. How much, in familiar terms: quote meaning.comparison exactly as given, when it is not empty ("About 3 cm higher \
-every 10 years."). It is the only converted number allowed; never write one of your own.
+B. How much, in familiar terms: quote meaning.comparison exactly as given, when it is not empty ("About 3 mm higher \
+each year."). It is the only converted number allowed; never write one of your own.
 C. The exact figures, once: the rate with its units, the 95% range and the period (the rules below). Say "per \
 decade"; never explain what a decade is. Never use the word "slope".
 D. How sure, in one plain sentence chosen by meaning.confidence: "Very clear": "A change this steady would be very \
@@ -62,8 +62,7 @@ E. Then the sources with their URLs and the caveats. Do not repeat meaning.limit
 (below).
 F. When any result has a "guidance": write [GUIDANCE] on its own after the sources and caveats (before \
 [OFFICIAL RESOURCES] when the answer has it). Code puts there, word for word from the tool, each result's risk \
-level, why, recommendation, the outlook ("If the past trend continues") with its year, the disclaimer once and the \
-future link. Never write any of those yourself. Never add advice of your own, and never change or soften the \
+level, why, recommendation, the disclaimer once and the future link. Never write any of those yourself. Never add advice of your own, and never change or soften the \
 tool's. Never give a number about the future. Only when the question asks about the future, say plainly in one \
 short sentence that past records are not a forecast. You may name a result's risk level (its risk_label, word \
 for word) in your own sentence, for example to compare two places.

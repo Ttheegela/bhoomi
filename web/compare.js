@@ -1,11 +1,11 @@
-// Compare: comparison chart card + comparison table card (rework contract, section 5).
-// Pure helpers (yearly, smooth, baseline, convert, niceTicks, buildModel) take plain data;
-// everything under "DOM" talks to TD / TDPrefs and draws with textContent only.
+// Compare: comparison chart card + comparison table card (web/design/10-foundation.md section 7).
+// Each place is drawn from its own anomalies against its 1995–2014 average (series.anomaly); no future is drawn.
+// Pure helpers (yearly, smooth, niceTicks, buildModel) take plain data; everything under "DOM" talks to TD / TDX / TDPrefs.
 (function () {
   'use strict';
 
   var NS = 'http://www.w3.org/2000/svg';
-  var X0 = 56, X1 = 890, Y0 = 20, Y1 = 304;           // plot area, as the mock
+  var X0 = 56, X1 = 1024, Y0 = 34, Y1 = 304;           // plot area in the 1040 x 340 drawing
   var HEADS = {
     sea_level: 'the sea', air_temp: 'air temperature', air_temp_max: 'the hottest days',
     precip: 'rain', water_storage: 'water storage'
@@ -13,21 +13,19 @@
 
   // ---------- pure helpers ----------
 
-  // Yearly mean of a TimeSeries; a year needs enough periods (9 of 12 months). -> {year: mean}
-  function yearly(series) {
+  // Yearly mean of a list of monthly values; a year needs 9 of its 12 months. -> {year: mean}
+  function yearly(times, values) {
     var out = {}, sum = {}, cnt = {};
-    if (!series || !series.times || !series.values) return out;
-    var need = series.freq === 'monthly' ? 9 : series.freq === 'daily' ? 270 : 1;
-    series.times.forEach(function (t, i) {
-      var v = series.values[i], y = parseInt(String(t).slice(0, 4), 10);
+    (times || []).forEach(function (t, i) {
+      var v = values[i], y = parseInt(String(t).slice(0, 4), 10);
       if (typeof v !== 'number' || !isFinite(v) || !isFinite(y)) return;
       sum[y] = (sum[y] || 0) + v; cnt[y] = (cnt[y] || 0) + 1;
     });
-    Object.keys(cnt).forEach(function (y) { if (cnt[y] >= need) out[y] = sum[y] / cnt[y]; });
+    Object.keys(cnt).forEach(function (y) { if (cnt[y] >= 9) out[y] = sum[y] / cnt[y]; });
     return out;
   }
 
-  // Centred 5-year average, needs 3 of the 5 years. -> [{year, v}] ascending (gaps = missing years)
+  // Centred 5-year average, shown only where 4 of its 5 years exist (D6). -> [{year, v}] ascending; a missing year breaks the line
   function smooth(ym) {
     var ys = Object.keys(ym).map(Number), pts = [];
     if (!ys.length) return pts;
@@ -35,30 +33,9 @@
     for (var y = a; y <= b; y++) {
       var s = 0, n = 0;
       for (var k = y - 2; k <= y + 2; k++) if (ym[k] !== undefined) { s += ym[k]; n++; }
-      if (n >= 3) pts.push({ year: y, v: s / n, filled: ym[y] === undefined });
+      if (n >= 4) pts.push({ year: y, v: s / n });
     }
     return pts;
-  }
-
-  // The place's own 2000-2009 mean; fewer than 5 such years -> its first 10 years. -> {value, fallback}
-  function baseline(ym) {
-    var ys = Object.keys(ym).map(Number).sort(function (a, b) { return a - b; });
-    if (!ys.length) return null;
-    var pick = ys.filter(function (y) { return y >= 2000 && y <= 2009; }), fb = false;
-    if (pick.length < 5) { pick = ys.filter(function (y) { return y < ys[0] + 10; }); fb = true; }
-    var s = 0;
-    pick.forEach(function (y) { s += ym[y]; });
-    return { value: s / pick.length, fallback: fb };
-  }
-
-  // Unit setting applied to a change value: cm/mm -> in, degC -> degF (a change, so x1.8 only).
-  function convert(v, unit, units) {
-    if (units !== 'imperial') return v;
-    var u = String(unit || '');
-    if (u === 'cm') return v / 2.54;
-    if (u === 'mm') return v / 25.4;
-    if (/°?C$/.test(u)) return v * 1.8;
-    return v;
   }
 
   function niceTicks(lo, hi) {
@@ -74,76 +51,47 @@
     return { ticks: t, step: step, lo: a, hi: b };
   }
 
+  // tick label with the step's decimals: "+0.5", "0", "−10"
   function signed(v, step) {
     var d = step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step) - 1e-9));
     var s = Math.abs(v).toFixed(d);
-    return (v < 0 && Number(s) !== 0 ? '-' : '+') + s;
+    return Number(s) === 0 ? '0' : (v < 0 ? '−' : '+') + s;
   }
 
-  function todayYear(now) {
-    var d = now || new Date(), y = d.getFullYear();
-    return y + (d - new Date(y, 0, 1)) / (365.25 * 864e5);
-  }
-
-  // Everything the chart needs, from plain data. pins: [{label, slot, selected, status, trend, series}]
-  function buildModel(pins, o) {
-    var units = o.units, la = o.lookAhead, lines = [], out = { left: [], fallback: [], lines: lines };
+  // Everything the chart needs, from plain data. pins: [{label, slot, selected, status, none, trend, series}];
+  // conv(trend, value, units) -> the value in the unit shown; win: the measurement (a "no record here" answer says why).
+  function buildModel(pins, conv, win) {
+    var lines = [], out = { left: [], lines: lines };
     (pins || []).forEach(function (p) {
       if (p.status === 'loading' || (!p.status && !p.series)) { out.left.push({ label: p.label, why: 'still loading' }); return; }
-      if (p.status === 'error') { out.left.push({ label: p.label, why: 'could not be loaded' }); return; }
-      var ym = yearly(p.series), pts = smooth(ym), base = baseline(ym);
-      if (!pts.length || !base) { out.left.push({ label: p.label, why: 'has too little data' }); return; }
-      var g = p.trend && p.trend.guidance, d = (g && g.display) || {};
-      var f = typeof d.factor === 'number' ? d.factor : 1, du = d.unit || (p.series && p.series.units) || '';
-      var line = {
-        pin: p, slot: p.slot || 0, selected: !!p.selected, unit: du,
-        pts: pts.map(function (q) { return { year: q.year, filled: q.filled, v: convert((q.v - base.value) * f, du, units) }; })
-      };
-      if (base.fallback) out.fallback.push(p.label);
-      var last = line.pts[line.pts.length - 1], oe = null;
-      ((g && g.outlook) || []).forEach(function (e) { if (e && e.year === la) oe = e; });
-      if (oe && typeof oe.low === 'number' && typeof oe.high === 'number' && la > last.year) {
-        line.wedge = {
-          year: la, label: g.outlook_label || '',
-          lo: last.v + convert(oe.low, oe.unit || du, units), hi: last.v + convert(oe.high, oe.unit || du, units)
-        };
+      if (p.status === 'error') { // a 400 is "no record here"; only a real failure (5xx, network) could not be loaded
+        out.left.push({ label: p.label, why: !p.none ? 'could not be loaded' : win === 'sea_level' ? 'no tide gauge near enough' : 'no usable record here' });
+        return;
       }
-      lines.push(line);
+      var a = p.series && p.series.anomaly, b = p.trend && p.trend.baseline;
+      if (!a || !Array.isArray(a.values) || !b || b.method === 'none') { out.left.push({ label: p.label, why: 'no 1995–2014 average for its record' }); return; }
+      var pts = smooth(yearly(p.series.times, a.values));
+      if (!pts.length) { out.left.push({ label: p.label, why: 'has too little data' }); return; }
+      lines.push({ pin: p, slot: p.slot || 0, selected: !!p.selected,
+        pts: pts.map(function (q) { return { year: q.year, v: conv(p.trend, q.v, a.units) }; }) });
     });
     if (!lines.length) return out;
-    var minY = Infinity, minV = Infinity, maxV = -Infinity;
-    lines.forEach(function (l) {
-      minY = Math.min(minY, l.pts[0].year);
-      l.pts.forEach(function (q) { minV = Math.min(minV, q.v); maxV = Math.max(maxV, q.v); });
-      if (l.wedge) { minV = Math.min(minV, l.wedge.lo); maxV = Math.max(maxV, l.wedge.hi); }
-    });
-    var lastYear = Math.max.apply(null, lines.map(function (l) { return l.pts[l.pts.length - 1].year; }));
-    var anyOutlook = (pins || []).some(function (p) {
-      var og = p.status === 'ok' && p.trend && p.trend.guidance && p.trend.guidance.outlook;
-      return og && og.some(function (e) { return e && e.year === la; });
-    });
-    out.xMin = minY; out.xMax = anyOutlook ? Math.max(la, lastYear + 1) : lastYear + 1;
+    var minV = Infinity, maxV = -Infinity;
+    lines.forEach(function (l) { l.pts.forEach(function (q) { minV = Math.min(minV, q.v); maxV = Math.max(maxV, q.v); }); });
+    out.xMin = Math.min.apply(null, lines.map(function (l) { return l.pts[0].year; }));
+    out.xMax = Math.max.apply(null, lines.map(function (l) { return l.pts[l.pts.length - 1].year; })); // the last plotted year
+    if (out.xMax === out.xMin) out.xMax = out.xMin + 1;
     out.y = niceTicks(minV, maxV);
     out.xTicks = [];
     var step = out.xMax - out.xMin <= 30 ? 5 : out.xMax - out.xMin <= 80 ? 10 : 25;
     for (var t = Math.ceil(out.xMin / step) * step; t <= out.xMax; t += step) out.xTicks.push(t);
-    out.unit = lines[0].unit;
-    var span = out.xMax - out.xMin || 1, ys = out.y.hi - out.y.lo || 1;
+    var span = out.xMax - out.xMin, ys = out.y.hi - out.y.lo || 1;
     out.px = function (yr) { return X0 + (yr - out.xMin) / span * (X1 - X0); };
     out.py = function (v) { return Y1 - (v - out.y.lo) / ys * (Y1 - Y0); };
-    out.today = todayYear(o.now);
     var hi = lines[0];
     lines.forEach(function (l) { if (l.pts[l.pts.length - 1].v > hi.pts[hi.pts.length - 1].v) hi = l; });
     out.highest = hi.pin.label;
     return out;
-  }
-
-  function describe(model, unitLabel) {
-    var names = model.lines.map(function (l) { return l.pin.label; }).join(', ');
-    var w = model.lines.filter(function (l) { return l.wedge; })[0];
-    return 'Line chart: five-year average change in ' + unitLabel + ' for ' + names +
-      '. Highest at the latest year: ' + model.highest + '.' +
-      (w ? ' Dashed lines continue each place’s trend to ' + w.wedge.year + '.' : '');
   }
 
   // Path "M..L.." per run of consecutive years; runs of one point are dropped (a gap breaks the line).
@@ -175,6 +123,7 @@
   }
   function httpsOnly(u) { return typeof u === 'string' && /^https:\/\//i.test(u) ? u : ''; }
   function slotCls(l) { return l.selected ? 'sel' : String(l.slot % 6); }
+  function own(text) { return String(text || '').replace(/^the /, ''); } // "its own 1995–2014 average"
 
   function leftOut(g, left) {
     if (!left.length) return;
@@ -183,88 +132,52 @@
   }
 
   function drawChart(slot, pins, o) {
-    var P = window.TD, g = h('div', 'cmp-chart');
-    g.appendChild(h('h3', 'cmp-h', 'How ' + (HEADS[o.window] || 'things') + ' has changed at your places'));
-    var m = buildModel(pins, o);
+    var P = window.TD, X = window.TDX, g = h('div', 'cmp-chart'), head = h('div', 'chead'), hd = h('div');
+    hd.appendChild(h('h3', 'cmp-h', 'How ' + (HEADS[o.window] || 'things') + (o.window === 'air_temp_max' ? ' have' : ' has') + ' changed at your places'));
+    head.appendChild(hd);
+    g.appendChild(head);
+    var m = buildModel(pins, function (t, v, u) { return X.conv(t, o.imperial, v, u).v; }, o.window);
     if (!m.lines.length) {
-      g.appendChild(h('p', 'cmp-cap', m.left.length ? 'Waiting for the records to arrive.' : 'Add a place to see how it compares.'));
+      hd.appendChild(h('p', 'cmp-cap', m.left.length ? 'Waiting for the records to arrive.' : 'Add a place to see how it compares.'));
       leftOut(g, m.left);
       slot.replaceChildren(g);
       return;
     }
-    var selLine = m.lines.filter(function (l) { return l.selected; })[0] || null, wedge = selLine && selLine.wedge;
-    var unitLabel = (P && P.fmt && P.fmt.unit && selLine && P.fmt.unit(selLine.pin.trend)) || m.unit || 'the unit shown';
-    var cap = 'Five-year average, in ' + unitLabel + ', compared with each place’s 2000–2009 level.';
-    m.fallback.forEach(function (n) { cap += ' ' + n + ': compared with its first 10 years instead (no records for 2000–2009).'; });
-    if (selLine) {
-      var runs = [], cur = null;
-      selLine.pts.forEach(function (q) {
-        if (!q.filled) { cur = null; return; }
-        if (cur && q.year === cur[1] + 1) cur[1] = q.year; else { cur = [q.year, q.year]; runs.push(cur); }
-      });
-      if (runs.length) {
-        var txt = runs.length > 2 ? 'some years' : runs.map(function (r) { return r[0] === r[1] ? String(r[0]) : r[0] + '–' + r[1]; }).join(' and ');
-        cap += ' ' + selLine.pin.label + ': ' + txt + ' had too few readings, so the line there averages the years around them.';
-      }
-    }
-    var dashed = m.lines.filter(function (l) { return l.wedge; });
-    if (dashed.length) {
-      cap += ' Dashed lines show where each place would be if its past trend simply continued' +
-        (wedge ? '; the shaded band is the range for ' + selLine.pin.label : '') + '.';
-      if (dashed.length < (pins || []).length) cap += ' A place with no clear change, or with too short a record, has no dashed line.';
-    }
-    g.appendChild(h('p', 'cmp-cap', cap));
+    var first = m.lines.filter(function (l) { return l.selected; })[0] || m.lines[0], ft = first.pin.trend, fa = first.pin.series.anomaly;
+    var unit = fa.kind === 'percent' ? '% of the usual rain' : X.conv(ft, o.imperial, 0, fa.units).unit;
+    var base = ft.baseline.text;
+    var months = m.lines.map(function (l) { return l.pin.trend.latest && l.pin.trend.latest.month; });
+    var same = months.every(function (x) { return x && x === months[0]; });
+    var cap = 'Five-year averages, in ' + unit + ', each compared with its own ' + own(base) + '.' +
+      (same ? ' ' + first.pin.trend.latest.text + '.' : ' Records end at different months; the table has each one.');
+    hd.appendChild(h('p', 'cmp-cap', cap));
+    var dl = h('button', 'btn', 'Download CSV');
+    dl.type = 'button';
+    dl.addEventListener('click', function () {
+      X.download(X.csvCompare(m.lines.map(function (l) { return { label: l.pin.label, t: l.pin.trend, s: l.pin.series }; }), { name: o.name, slug: o.slug }));
+    });
+    head.appendChild(dl);
 
-    var s = svg('svg', { viewBox: '0 0 1040 340', width: '100%', role: 'img', 'aria-label': describe(m, unitLabel), class: 'cmp-svg' });
-    var defs = svg('defs'), cp = svg('clipPath', { id: 'cmp-clip' });
-    cp.appendChild(svg('rect', { x: X0, y: Y0, width: X1 - X0, height: Y1 - Y0 }));
-    defs.appendChild(cp); s.appendChild(defs);
-
+    var names = m.lines.map(function (l) { return l.pin.label; }).join(', ');
+    var s = svg('svg', { viewBox: '0 0 1040 340', width: '100%', role: 'img', class: 'cmp-svg',
+      'aria-label': 'Line chart: five-year averages in ' + unit + ', each compared with its own ' + own(base) + ', for ' + names + '. Highest at the latest year: ' + m.highest + '.' });
+    var ytitle = fa.kind === 'percent' ? '% of the usual rain, compared with ' + base : unit + (o.window === 'water_storage' ? ' of water' : '') + ' compared with ' + base;
+    s.appendChild(svg('text', { x: 0, y: 14, class: 'cmp-ytitle' }, ytitle));
     m.y.ticks.forEach(function (v) {
       var y = m.py(v);
       s.appendChild(svg('line', { x1: X0, x2: X1, y1: y.toFixed(1), y2: y.toFixed(1), class: v === 0 ? 'cmp-grid zero' : 'cmp-grid' }));
       s.appendChild(svg('text', { x: X0 - 10, y: (y + 4).toFixed(1), class: 'cmp-ax', 'text-anchor': 'end' }, signed(v, m.y.step)));
     });
     m.xTicks.forEach(function (t) {
-      s.appendChild(svg('text', { x: m.px(t).toFixed(1), y: 324, class: 'cmp-ax', 'text-anchor': 'middle' }, String(t)));
+      s.appendChild(svg('text', { x: m.px(t).toFixed(1), y: 330, class: 'cmp-ax', 'text-anchor': 'middle' }, String(t)));
     });
-    if (m.today >= m.xMin && m.today <= m.xMax) {
-      var tx = m.px(m.today);
-      s.appendChild(svg('line', { x1: tx.toFixed(1), x2: tx.toFixed(1), y1: Y0, y2: Y1, class: 'cmp-today' }));
-      s.appendChild(svg('text', { x: Math.min(tx, X1).toFixed(1), y: 14, class: 'cmp-ax', 'text-anchor': tx > X1 - 30 ? 'end' : 'middle' }, 'today'));
-    }
-
-    var clip = svg('g', { 'clip-path': 'url(#cmp-clip)' }), lp = null;
-    if (wedge) {
-      lp = selLine.pts[selLine.pts.length - 1];
-      var sx = m.px(lp.year).toFixed(1), sy = m.py(lp.v).toFixed(1), ex = m.px(wedge.year).toFixed(1);
-      clip.appendChild(svg('path', {
-        d: 'M' + sx + ',' + sy + ' L' + ex + ',' + m.py(wedge.hi).toFixed(1) + ' L' + ex + ',' + m.py(wedge.lo).toFixed(1) + ' Z',
-        class: 'cmp-wedge'
-      }));
-    }
     // others first, selected last so it sits on top
     m.lines.slice().sort(function (a, b) { return (a.selected ? 1 : 0) - (b.selected ? 1 : 0); }).forEach(function (l) {
       var d = segments(l.pts, m.px, m.py);
-      if (d) { var pth = svg('path', { d: d, class: 'cmp-line s' + slotCls(l) }); pth.appendChild(svg('title', {}, l.pin.label)); clip.appendChild(pth); }
+      if (d) { var pth = svg('path', { d: d, class: 'cmp-line s' + slotCls(l) }); pth.appendChild(svg('title', {}, l.pin.label)); s.appendChild(pth); }
     });
-    m.lines.forEach(function (l) {
-      if (!l.wedge || l.selected) return;
-      var e = l.pts[l.pts.length - 1];
-      clip.appendChild(svg('path', {
-        d: 'M' + m.px(e.year).toFixed(1) + ',' + m.py(e.v).toFixed(1) + ' L' + m.px(l.wedge.year).toFixed(1) + ',' +
-          m.py((l.wedge.lo + l.wedge.hi) / 2).toFixed(1), class: 'cmp-dash s' + slotCls(l)
-      }));
-    });
-    if (wedge) {
-      clip.appendChild(svg('path', {
-        d: 'M' + m.px(lp.year).toFixed(1) + ',' + m.py(lp.v).toFixed(1) + ' L' + m.px(wedge.year).toFixed(1) + ',' +
-          m.py((wedge.lo + wedge.hi) / 2).toFixed(1), class: 'cmp-centre'
-      }));
-    }
-    s.appendChild(clip);
 
-    // legend (HTML) in pin order, then the chart in a box that scrolls sideways on narrow screens
+    // legend (HTML, place keys only) in pin order, then the chart in a box that scrolls sideways on narrow screens
     var leg = h('div', 'cmp-legend');
     m.lines.forEach(function (l) {
       var b = h('button', 'cmp-key' + (l.selected ? ' on' : ''));
@@ -274,12 +187,6 @@
       b.addEventListener('click', function () { P.select(l.pin.key); });
       leg.appendChild(b);
     });
-    if (dashed.length) {
-      var wk = h('span', 'cmp-key wk');
-      wk.appendChild(h('i', 'cmp-sw dashk'));
-      wk.appendChild(document.createTextNode(dashed[0].wedge.label || 'If the past trend continues'));
-      leg.appendChild(wk);
-    }
     g.appendChild(leg);
     var sc = h('div', 'cmp-plot');
     sc.appendChild(s);
@@ -288,30 +195,45 @@
     slot.replaceChildren(g);
   }
 
-  function dash(td, text) { td.textContent = text || '—'; return td; }
-
   function drawTable(slot, pins, o) {
-    var P = window.TD, f = P.fmt || {}, box = h('div', 'cmp-table');
+    var P = window.TD, X = window.TDX, f = P.fmt || {}, box = h('div', 'cmp-table');
     box.appendChild(h('h3', 'cmp-h', 'Compare your places'));
     var selPin = (pins || []).filter(function (p) { return p.selected; })[0];
-    var ref = selPin && selPin.trend && selPin.trend.guidance && selPin.trend.guidance.reference;
-    if (ref && ref.text) {
-      var rp = h('p', 'cmp-cap', ref.text), u = ref.source && httpsOnly(ref.source.url);
-      if (u) {
-        var a = h('a', 'cmp-src', ref.source.name || u);
-        a.href = u; a.target = '_blank'; a.rel = 'noopener';
-        rp.appendChild(document.createTextNode(' Source: ')); rp.appendChild(a);
-      }
-      box.appendChild(rp);
+    var sw = selPin && selPin.status === 'ok' && selPin.trend && selPin.trend.world;
+    if (sw) {
+      var rp, u = sw.available && sw.source && httpsOnly(sw.source.record_url);
+      if (sw.available) {
+        rp = h('p', 'cmp-cap', 'World figure for ' + selPin.label + ': ' + (o.imperial ? X.metric(sw.text) : sw.text || '') + (sw.why_none ? ' ' + sw.why_none : ''));
+        if (u) {
+          var a = h('a', 'cmp-src', (sw.source.name || u) + ' ↗');
+          a.href = u; a.target = '_blank'; a.rel = 'noopener';
+          rp.appendChild(document.createTextNode(' Source: ')); rp.appendChild(a);
+        }
+      } else if (sw.why_none || sw.text) rp = h('p', 'cmp-cap', selPin.label + ': ' + (sw.why_none || sw.text));
+      if (rp) box.appendChild(rp);
     }
+    // each row's own window and world rate (windows differ from gauge to gauge)
+    var cells = (pins || []).map(function (p) {
+      var t = p.status === 'ok' && p.trend, g = t && t.guidance, wp = t && X.worldParts(t, o.imperial), clear = t && (t.verdict === 'rising' || t.verdict === 'falling');
+      if (!t) return null;
+      var name = t.place && t.place.name ? String(t.place.name).trim() : '';
+      return {
+        at: /[^\d\s.,;°+\-−NSEWnsew]/.test(name) ? name : (t.source && t.source.name) || '—',
+        record: t.period && t.latest ? X.Y(t.period.start) + '–' + X.Mo(t.latest.month) : '—',
+        rate: (f.rate && f.rate(t) && (clear || (g && g.risk_label))) ? f.rate(t) : clear ? X.card(t, o.imperial).word : 'No clear change',
+        here: wp ? wp.here + ' ' + wp.since.toLowerCase() : '—',
+        ratio: wp ? (wp.ratio ? wp.ratio + ' (world ' + wp.world + ')' : 'world ' + wp.world) : '—', // no ratio without a clear trend
+        risk: g && g.risk_label ? g : null
+      };
+    });
+    var hasW = cells.some(function (c) { return c && c.ratio !== '—'; }), hasRisk = cells.some(function (c) { return c && c.risk; });
+    var cols = ['Place', 'Measured at', 'Record', 'Rate'].concat(hasW ? ['Here, same years', '× world, same years'] : [], hasRisk ? ['Risk'] : []);
     var wrap = h('div', 'cmp-scroll'), tbl = h('table', 'cmp-tbl'), thead = h('thead'), hr = h('tr');
-    var hasRatio = (pins || []).some(function (p) { return p.trend && p.trend.guidance && typeof p.trend.guidance.ratio === 'number'; });
-    ['Place', 'Measured at', 'Record', 'Change per 10 years', hasRatio && 'vs world average', 'Risk', 'By ' + o.lookAhead + ' if the trend continues']
-      .filter(Boolean).forEach(function (c) { var th = h('th', null, c); th.scope = 'col'; hr.appendChild(th); });
+    cols.forEach(function (c) { var th = h('th', null, c); th.scope = 'col'; hr.appendChild(th); });
     thead.appendChild(hr); tbl.appendChild(thead);
     var tb = h('tbody');
-    (pins || []).forEach(function (p) {
-      var tr = h('tr', p.selected ? 'on' : ''), t = p.trend, g = t && t.guidance;
+    (pins || []).forEach(function (p, i) {
+      var tr = h('tr', p.selected ? 'on' : ''), c = cells[i];
       tr.tabIndex = 0; if (p.selected) tr.setAttribute('aria-current', 'true');
       tr.addEventListener('click', function () { P.select(p.key); });
       tr.addEventListener('keydown', function (e) {
@@ -320,25 +242,25 @@
       var c0 = h('td'), dot = h('i', 'cmp-dot ' + (p.selected ? 'dsel' : 'd' + ((p.slot || 0) % 6)));
       dot.setAttribute('aria-hidden', 'true');
       c0.appendChild(dot); c0.appendChild(document.createTextNode(p.label)); tr.appendChild(c0);
-      if (p.status !== 'ok' || !t) {
+      if (!c) {
         var cs = h('td', 'cmp-msg', p.status === 'error' ? (p.error || 'Could not load this place.') : 'Checking…');
-        cs.colSpan = hasRatio ? 6 : 5; tr.appendChild(cs); tb.appendChild(tr); return;
+        cs.colSpan = cols.length - 1; tr.appendChild(cs); tb.appendChild(tr); return;
       }
-      var name = t.place && t.place.name ? String(t.place.name).trim() : '', lab = String(p.label).trim().toLowerCase();
-      tr.appendChild(dash(h('td'), /[^\d\s.,;°+\-−NSEWnsew]/.test(name) ? name : (t.source && t.source.name)));
-      tr.appendChild(dash(h('td', 'n'), f.years && f.years(t)));
-      tr.appendChild(h('td', 'n', (f.rate && f.rate(t)) || 'No clear change'));
-      if (hasRatio) tr.appendChild(dash(h('td', 'n'), g && typeof g.ratio === 'number' ? g.ratio.toFixed(1) + '×' : ''));
-      var cr = h('td');
-      if (g && g.risk_label) cr.appendChild(h('span', 'risk ' + (/^(high|moderate|low|unknown)$/.test(g.risk) ? g.risk : 'unknown'), g.risk_label));
-      else cr.textContent = '—';
-      tr.appendChild(cr);
-      tr.appendChild(dash(h('td', 'n'), f.outlook && f.outlook(t, o.lookAhead)));
+      tr.appendChild(h('td', null, c.at));
+      tr.appendChild(h('td', 'n', c.record));
+      tr.appendChild(h('td', 'n', c.rate));
+      if (hasW) { tr.appendChild(h('td', 'w', c.here)); tr.appendChild(h('td', 'w', c.ratio)); }
+      if (hasRisk) {
+        var cr = h('td', 'rk');
+        if (c.risk) cr.appendChild(h('span', 'risk ' + (/^(high|moderate|low)$/.test(c.risk.risk) ? c.risk.risk : 'unknown'), c.risk.risk_label));
+        else cr.textContent = '—';
+        tr.appendChild(cr);
+      }
       tb.appendChild(tr);
     });
     if (!(pins || []).length) {
       var er = h('tr'), ec = h('td', 'cmp-msg', 'No places yet. Search for a place or click the map.');
-      ec.colSpan = hasRatio ? 7 : 6; er.appendChild(ec); tb.appendChild(er);
+      ec.colSpan = cols.length; er.appendChild(ec); tb.appendChild(er);
     }
     tbl.appendChild(tb); wrap.appendChild(tbl); box.appendChild(wrap);
     slot.replaceChildren(box);
@@ -346,9 +268,9 @@
 
   function render() {
     var P = window.TD;
-    if (!P || P.window === 'settings') return;
-    var prefs = (window.TDPrefs && window.TDPrefs.get()) || {};
-    var o = { window: P.window, units: prefs.units || 'metric', lookAhead: prefs.lookAhead || 2050 };
+    if (!P || P.window === 'settings' || !window.TDX) return;
+    var prefs = (window.TDPrefs && window.TDPrefs.get()) || {}, w = (P.windows || []).filter(function (x) { return x.id === P.window; })[0] || {};
+    var o = { window: P.window, imperial: prefs.units === 'imperial', name: w.name || '', slug: w.slug || P.window };
     var pins = P.pins() || [], a = document.getElementById('compare-chart-slot'), b = document.getElementById('compare-table-slot');
     try { if (a) drawChart(a, pins, o); } catch (e) { if (a) a.textContent = 'The chart could not be drawn.'; console.error(e); }
     try { if (b) drawTable(b, pins, o); } catch (e) { if (b) b.textContent = 'The table could not be drawn.'; console.error(e); }
@@ -361,5 +283,5 @@
   if (window.TD && window.TD.ready) window.TD.ready.then(start);
   else document.addEventListener('td:ready', start, { once: true });
 
-  window.TDCompare = { yearly: yearly, smooth: smooth, baseline: baseline, convert: convert, niceTicks: niceTicks, buildModel: buildModel };
+  window.TDCompare = { yearly: yearly, smooth: smooth, niceTicks: niceTicks, buildModel: buildModel };
 })();

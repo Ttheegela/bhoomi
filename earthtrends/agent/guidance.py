@@ -1,14 +1,12 @@
 """The tool's own guidance: the model writes MARKER, the code puts each result's guidance strings there word for word
-(risk level, why, recommendation, the outlook for OUTLOOK_YEAR, then the disclaimer once and the future links). The
-model never composes them. A result without "guidance" adds nothing."""
+(risk level, why, recommendation, then the disclaimer once and the future links). The model never composes them.
+A result without "guidance", or without a risk level (hottest day of the month), adds nothing."""
 import re
 
 from earthtrends.agent import resources, tools
 
 MARKER = "[GUIDANCE]"
 _MARK = re.compile(r"[ \t]*\**\[\s*guidance\s*\]\**", re.I)  # tolerant, like the official-resources marker
-OUTLOOK_YEAR = 2050
-OUTLOOK_LABEL = "If the past trend continues"
 
 
 def _s(x) -> str:
@@ -69,10 +67,6 @@ def block(calls: list[dict]) -> str:
             label += f" ({_s((r.get('source') or {}).get('name')).split(',')[0]})"
         bits = [f"{label}: {_end(g['risk_label'].strip())}"]
         bits += [_end(s) for s in (_s(g.get("why")), _s(g.get("recommendation"))) if s]
-        o = next((x for x in g.get("outlook") or [] if isinstance(x, dict) and x.get("year") == OUTLOOK_YEAR
-                  and _s(x.get("text"))), None)
-        if o:
-            bits.append(f"{_s(g.get('outlook_label')) or OUTLOOK_LABEL}: {_end(o['text'].strip())}")
         parts.append(" ".join(bits))
         disclaimer = disclaimer or _s(g.get("disclaimer"))
         f = g.get("future_link") or {}
