@@ -12,6 +12,7 @@
   var STATION = { coops: 1, ghcn: 1, psmsl: 1 };
   var MEASURE = { sea_level: 'sea level', air_temp: 'air temperature', air_temp_max: 'the hottest day of the month', precip: 'rain', water_storage: 'water storage' };
   var LEVELS = { air_temp: 1, air_temp_max: 1, precip: 1 }; // measurements whose own levels mean something to a visitor
+  var OPEN_STEPS = [3, 4, 5, 6]; // steps that start open on a new answer, at every width
   var NO_FUTURE = 'We never stretch the past trend into the future. Future values on this page come only from published expert projections.';
 
   function isNum(x) { return typeof x === 'number' && isFinite(x); }
@@ -32,11 +33,16 @@
   // point; in °F or inches the converted value to 6 significant figures.
   function given(imp, x, u, tenth) {
     var k = imp && RATE_K[normU(u)], a = Math.abs(x), txt;
-    if (k) txt = String(Number((a * k[0] / (tenth ? 10 : 1)).toPrecision(6)));
-    else if (/e/.test(String(a))) txt = String(tenth ? a / 10 : a);
-    else txt = (a / (tenth ? 10 : 1)).toFixed((String(a).split('.')[1] || '').length + (tenth ? 1 : 0)).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+    var dp = (String(a).split('.')[1] || '').length + (tenth ? 1 : 0); // the decimals the metric value prints with
+    if (k) { // °F and inches keep the metric decimals (QA N6); a value that would read 0 keeps 3 significant digits
+      var v = a * k[0] / (tenth ? 10 : 1);
+      txt = Number(v.toFixed(dp)) === 0 && v !== 0 ? String(Number(v.toPrecision(3))) : String(Number(v.toFixed(dp)));
+    } else if (/e/.test(String(a))) txt = String(tenth ? a / 10 : a);
+    else txt = (a / (tenth ? 10 : 1)).toFixed(dp).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
     return (x > 0 ? '+' : x < 0 ? MINUS : '') + txt;
   }
+  // "Version 3" as given, never "version Version 3" (QA N6)
+  function ver(v, label) { return /^version\b/i.test(String(v)) ? String(v) : label + v; }
   function mi(t) { var p = String(t).split('-'); return +p[0] * 12 + (p.length > 1 ? +p[1] - 1 : 0); }
   function M(t) { var m = mi(t); return MONTHS_LONG[m % 12] + ' ' + Math.floor(m / 12); }
   function Mo(t) { var m = mi(t); return MONTHS[m % 12] + ' ' + Math.floor(m / 12); }
@@ -178,12 +184,16 @@
   }
   // The NASA POWER grid against the nearest weather station (QA B10). other: this place's POWER answer the page
   // already has (or null); nothing is fetched for it.
-  var MODEL_LINE = 'This comes from a weather model grid about 50 km wide. A weather station nearby can tell a different story.';
+  // The grid size comes from explain.data.where ("a grid cell about 50 km wide").
   function modelNote(t, other) {
-    var id = (t.source || {}).id;
-    if (id === 'power' && (t.variable === 'air_temp' || t.variable === 'air_temp_max')) return { line: MODEL_LINE, offer: 'ghcn' };
-    if (id === 'ghcn' && other && (other.source || {}).id === 'power' && other.verdict && other.verdict !== t.verdict) return { line: 'The weather station and the model disagree here.', strong: true };
-    return null;
+    var id = (t.source || {}).id, size = /\babout \d[\d,.]* km\b/.exec(str(((t.explain || {}).data || {}).where));
+    if (id === 'power' && (t.variable === 'air_temp' || t.variable === 'air_temp_max')) {
+      return { line: 'This comes from a weather model grid' + (size ? ' ' + size[0] + ' wide' : '') + '. A weather station nearby can tell a different story.', offer: 'ghcn' };
+    }
+    if (id !== 'ghcn' || !other || (other.source || {}).id !== 'power' || !other.verdict) return null;
+    if (other.verdict === t.verdict) return { line: 'The weather station and the model agree here.' };
+    return { line: 'The weather station and the model disagree here.', strong: true,
+      next: 'For the heat you feel day to day, the station is closer to the ground; the model covers a wider area.' };
   }
 
   // Rain's trend runs on yearly values (trend.yearly, in fit.units): the chart plots those. An answer without them, or
@@ -313,7 +323,7 @@
     out.push({ title: 'The data',
       short: byYear ? commas(dat.n_years) + ' years from ' + srcIn(t) + ', ' + Y(dat.start) + ' to ' + Y(dat.end) : commas(dat.n_months) + ' months from ' + srcIn(t) + ', ' + M(dat.start) + ' to ' + M(dat.end),
       words: s1.concat(nPre ? [months(nPre) + ' preliminary: the provider may still change ' + (nPre === 1 ? 'it, so the trend leaves it out.' : 'them, so the trend leaves them out.')] : []),
-      work: ['How the provider made them: ' + lc1(str(src.method)), 'Dataset: ' + str(src.dataset_id) + '.' + (src.version ? ' Version: ' + src.version + '.' : '') + ' Retrieved ' + D(src.retrieved) + '.'],
+      work: ['How the provider made them: ' + lc1(str(src.method)), 'Dataset: ' + str(src.dataset_id) + '.' + (src.version ? ' ' + ver(src.version, 'Version: ') + '.' : '') + ' Retrieved ' + D(src.retrieved) + '.'],
       link: url ? { text: 'Open this exact record ↗', href: url } : null });
 
     var s2 = { title: 'Seasons removed' };
@@ -418,6 +428,11 @@
       var wm = worldParts(t, false);
       s6.short = worldLine(t, imp);
       s6.words = [imp ? metric(w.text) : str(w.text)];
+      if (str(w.why_none)) s6.words.push(w.why_none); // a world figure that did not rise: no ratio, and why
+      // the owner's domain review: say how the two figures are measured, in plain words
+      if (isSea) s6.words.push('Satellites measure the height of the sea surface itself. The tide gauge measures the sea against the land, so if the land here is sinking, that adds to the local number.');
+      if (t.variable === 'air_temp') s6.words.push('The world figure is built from weather stations on land.'
+        + (src.id === 'power' || src.id === 'era5' ? ' The number here comes from a weather model, so the two are measured in different ways.' : ''));
       s6.work = [(wp.ratio ? fmtNum(wm.a, false) + ' ÷ ' + fmtNum(wm.b, false) + ' = ' + wp.ratio + ' · ' + (rr ? rr + ' times (' + rk + ') · ' : '') : '')
         + M(w.window.start) + ' to ' + M(w.window.end) + ' · ' + stop(str(w.method)),
         '1× is the same as the world. ' + th.high + '× or more: high risk. ' + th.moderate + '× to ' + th.high + '×: moderate risk. Under ' + th.moderate + '×: low risk. '
@@ -442,7 +457,7 @@
     out.push({ title: 'Things to keep in mind', short: notes.length ? notes[0] + (notes.length > 1 ? ' And ' + (notes.length - 1) + ' more' : '') : last,
       words: [{ list: notes.concat([last]) }] });
 
-    var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', version ' + src.version : '') + '. Retrieved ' + D(src.retrieved) + '. ',
+    var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', ' + ver(src.version, 'version ') : '') + '. Retrieved ' + D(src.retrieved) + '. ',
       link: url ? { text: 'Open this exact record ↗', href: url } : null }];
     if (wp && w.source) list.push({ text: 'World figure: ' + w.source.name + '. Retrieved ' + D(w.source.retrieved) + '. ', link: https(w.source.record_url) ? { text: 'Open it ↗', href: w.source.record_url } : null });
     list.push({ text: "Our calculation: the Mann-Kendall test and Sen's slope on " + (byYear ? 'yearly rain' : 'monthly values with seasons removed') + (b.method === 'none' ? '.' : ', against ' + b.text + '.') });
@@ -727,10 +742,10 @@
       g.append(sv('path', { d: d, 'vector-effect': 'non-scaling-stroke' }));
       return g;
     };
-    var au = a.kind === 'percent' ? '% of the yearly average rate' : f.unit(a.units);
+    var au = a.kind === 'percent' ? '% above or below the usual rain' : f.unit(a.units) + ' compared with ' + yrsOf(t.baseline); // the chart's words
     return h('div', { class: 'fig', 'aria-hidden': 'true' },
       h('p', { class: 'fig-l' }, 'As measured (' + f.unit(s.units) + '), last 10 years'), strip(s.values.slice(from)),
-      h('p', { class: 'fig-l' }, 'Seasons removed (' + au + ' compared with ' + yrsOf(t.baseline) + ')'), strip(a.values.slice(from)));
+      h('p', { class: 'fig-l' }, 'Seasons removed (' + au + ')'), strip(a.values.slice(from)));
   }
 
   function wordsNode(item, t, s, ctx) {
@@ -750,7 +765,7 @@
     clear(ol);
     $('how-lead').textContent = 'For ' + ctx.label + '. Every number below is the one the card and the chart use.';
     steps(t, s, ctx).forEach(function (st, i) {
-      var open = fresh ? i === 3 || i === 4 : !!keep[i];
+      var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 : !!keep[i];
       var det = h('details', open ? { open: '' } : {}, h('summary', {},
         h('span', { class: 'step-n' }, String(i + 1)), h('span', { class: 'step-t' }, st.title), h('span', { class: 'step-s' }, st.short), h('span', { class: 'step-c', 'aria-hidden': 'true' })));
       var words = h('div', { class: 'words' }), side = h('div', { class: 'step-w' });

@@ -215,6 +215,40 @@ assert.strictEqual(bS[5].work[0].indexOf(fmtNum(bw.local_rate, false) + ' ÷ '),
 assert.ok(/not corrected for the slow sinking of the ocean floor/.test(bw.source.method));
 assert.strictEqual(bS[5].work[3], 'The world figure: ' + lc1(stop(bw.source.method)));
 assert.strictEqual(pS[5].work.length, 2); // air temperature: no world-method line
+// QA N6: the inches working rounds the rate like the metric one, and still adds up
+var bic = ctx(B, 'New York, NY', true), biW = steps(B.trend, B.series, bic)[3].work[0];
+assert.ok(biW.indexOf(given(true, B.trend.slope_per_decade, B.trend.fit.units, true) + NB + 'in a year × ') > 0, biW);
+assert.ok(!/\d\.\d{5}/.test(biW), biW);
+sumAddsUp(B, bic, NB + 'in', 1 / 25.4);
+// QA N6: a version that already says "Version" is printed once
+var RV = load('riverside_no_baseline'), rvc = ctx(RV, 'Riverside'); RV.trend.source.version = 'Version 3';
+var rvS = steps(RV.trend, RV.series, rvc);
+assert.ok(rvS[8].words[0].list[0].text.indexOf(', Version 3. Retrieved ') > 0 && !/version Version/i.test(JSON.stringify(rvS)), rvS[8].words[0].list[0].text);
+assert.ok(/ Version 3\. Retrieved /.test(rvS[0].work[1]), rvS[0].work[1]);
+RV.trend.source.version = '2.1';
+assert.ok(steps(RV.trend, RV.series, rvc)[8].words[0].list[0].text.indexOf(', version 2.1. ') > 0);
+// step 6, sea level: satellites vs a gauge against the land, in plain words (the owner's domain review)
+var SEA6 = 'Satellites measure the height of the sea surface itself. The tide gauge measures the sea against the land, so if the land here is sinking, that adds to the local number.';
+assert.deepStrictEqual(bS[5].words, [B.trend.world.text, SEA6]);
+var KS = load('kolkata_sea_level_fitted'); assert.strictEqual(KS.trend.source.id, 'psmsl');
+assert.strictEqual(steps(KS.trend, KS.series, ctx(KS, 'Kolkata'))[5].words[1], SEA6);
+// no "land rebound" anywhere; "isostatic" only inside the API's world-method line, which stays as given
+all(B, bc).forEach(function (x) { assert.ok(!/land rebound/i.test(x), x); assert.ok(!/isostatic/i.test(x) || x === bS[5].work[3], x); });
+// contract: a world figure that did not rise (available, why_none set) prints why_none in step 6, with no ratio
+var BF = copy(B); BF.trend.world.why_none = 'The world figure did not rise over these years, so there is no ratio.';
+BF.trend.world.ratio = BF.trend.world.ratio_low = BF.trend.world.ratio_high = null;
+var bfS = steps(BF.trend, BF.series, bc)[5];
+assert.deepStrictEqual(bfS.words, [BF.trend.world.text, BF.trend.world.why_none, SEA6]);
+assert.ok(!/×/.test(bfS.short) && !/ ÷ /.test(bfS.work[0]), bfS.short + ' | ' + bfS.work[0]);
+clean(BF, bc);
+// step 6, air temperature: the world figure is station-based; a model source says the two are measured differently
+var AIR6 = 'The world figure is built from weather stations on land.', MOD6 = ' The number here comes from a weather model, so the two are measured in different ways.';
+assert.strictEqual(P.trend.source.id, 'power');
+assert.deepStrictEqual(pS[5].words, [P.trend.world.text, AIR6 + MOD6]);
+var PE = copy(P); PE.trend.source.id = 'era5';
+assert.strictEqual(steps(PE.trend, PE.series, pc)[5].words[1], AIR6 + MOD6);
+var RG = load('riverside_no_baseline'); assert.strictEqual(RG.trend.source.id, 'ghcn');
+assert.deepStrictEqual(steps(RG.trend, RG.series, ctx(RG, 'Riverside'))[5].words, [RG.trend.world.text, AIR6]);
 assert.strictEqual(readout(B.trend, B.series, bc, B.series.times.length - 1).slice(-13), ' Preliminary.');
 clean(B, bc);
 // a fitted baseline, and a long record whose rounded headline rate would not add up: the sum still does
@@ -304,9 +338,15 @@ assert.deepStrictEqual(modelNote(P.trend, null), { line: ML, offer: 'ghcn' });
 assert.strictEqual(modelNote(C.trend, null), null); // rain: not asked for
 var HS = copy(H); HS.trend.source = { id: 'ghcn', name: 'NOAA NCEI GHCN-Daily' };
 HS.trend.verdict = 'falling';
-assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model disagree here.', strong: true });
+assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model disagree here.', strong: true,
+  next: 'For the heat you feel day to day, the station is closer to the ground; the model covers a wider area.' });
 HS.trend.verdict = H.trend.verdict;
-assert.strictEqual(modelNote(HS.trend, H.trend), null); // they agree
+assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model agree here.' }); // they agree
+// the grid size is read from explain.data.where, never written in
+var HW = copy(H); HW.trend.explain.data.where = 'a grid cell about 55 km wide';
+assert.strictEqual(modelNote(HW.trend, null).line, 'This comes from a weather model grid about 55 km wide. A weather station nearby can tell a different story.');
+HW.trend.explain.data.where = null;
+assert.strictEqual(modelNote(HW.trend, null).line, 'This comes from a weather model grid. A weather station nearby can tell a different story.');
 assert.strictEqual(modelNote(HS.trend, null), null); // no POWER answer on the page: nothing to compare
 var HE = copy(H); HE.trend.source = { id: 'era5' };
 assert.strictEqual(modelNote(HE.trend, null), null);
@@ -396,10 +436,15 @@ assert.strictEqual(cmpl.length, 6 + B.series.times.length + L.series.times.lengt
 assert.strictEqual(cT.ytitleNarrow, '% above or below the 1995–2014 average');
 assert.strictEqual(chartText(G.trend, G.series, gc).ytitleNarrow, 'cm of water compared with 2004–2009');
 
+// steps 3 to 6 start open: one baseline, the trend, is it real, compared with the world
+assert.deepStrictEqual(OPEN_STEPS.map(function (n) { return pS[n - 1].title; }), ['One baseline', 'The trend and its range', 'Is it real?', 'Compared with the world']);
+
 // formatting
 assert.strictEqual(fmtNum(0.4, true), '+0.40'); assert.strictEqual(fmtNum(-12.34, true), '−12.3');
 assert.strictEqual(given(false, 30.5059, 'mm', true), '+3.05059'); assert.strictEqual(given(false, -0.37, 'degC', false), '−0.37');
-assert.strictEqual(given(false, 50, 'mm', true), '+5'); assert.strictEqual(given(true, 0.37, 'degC', false), '+0.666');
+assert.strictEqual(given(false, 50, 'mm', true), '+5'); assert.strictEqual(given(true, 0.37, 'degC', false), '+0.67');
+// QA N6: °F and inches keep the metric decimals (+3.1812 mm a year is +0.1252 in, not +0.125244)
+assert.strictEqual(given(true, 31.812, 'mm', true), '+0.1252'); assert.strictEqual(given(true, 0.004, 'mm', false), '+0.000157');
 assert.strictEqual(D('2026-11-22'), '22 November 2026'); assert.strictEqual(M('2025-12'), 'December 2025'); assert.strictEqual(Mo('2025-08'), 'Aug 2025');
 assert.strictEqual(commas(1266), '1,266'); assert.strictEqual(slug('São Paulo, SP'), 'sao-paulo-sp');
 """
@@ -410,6 +455,38 @@ def test_explain_pure_logic():
     env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
     r = subprocess.run(["node", "-e", PURE + ASSERTS], capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
+
+
+def test_steps_3_to_6_start_open():
+    """The owner's choice: steps 3, 4, 5 and 6 start open on a new answer, 1, 2 and 7 to 9 closed, at every width."""
+    m = re.search(r"var OPEN_STEPS = \[([\d, ]+)\];", PURE)
+    assert m and m[1] == "3, 4, 5, 6", m and m[1]
+    assert "var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 : !!keep[i];" in SRC
+
+
+def test_review_fixes_outside_the_pure_block():
+    """Review: the step 2 strip says what the chart says; the compare caption prints why_none with a world figure; a
+    failed hand-picked sea-level source offers the default only when this place already has a working answer from it."""
+    assert "'% above or below the usual rain'" in SRC and "yearly average rate" not in SRC
+    cmp = (ROOT / "web" / "compare.js").read_text(encoding="utf-8")
+    assert "(sw.why_none ? ' ' + sw.why_none : '')" in cmp
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert "def !== 'coops'" not in app
+    assert "const offer = pin.none && sourceFor(curWin) && def && prev && prev.status === 'ok';" in app
+    assert "b.addEventListener('click', () => pickSource(def));" in app
+    assert "pin.none && curWin === 'sea_level' && !offer" in app
+
+
+def test_card_meta_and_focus():
+    """QA N4: "Data through {month}" never splits across lines. QA N5: a re-render that removes the focused control
+    (the station button) puts focus on the new card's heading, not on <body>."""
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    assert "meta.append(' · ', el('span', { class: 'nw' }, t.latest.text));" in app
+    assert re.search(r"\.rec \.meta \.nw \{ white-space: nowrap; \}", css)
+    rec = re.search(r"function renderRec\(\) \{(.*?)\n\}", app, re.S)
+    assert rec and "had = box.contains(document.activeElement)" in rec[1] and "drawRec(box);" in rec[1]
+    assert "if (had && !box.contains(document.activeElement)) { const h = box.querySelector('h2'); if (h) h.focus({ preventScroll: true }); }" in rec[1]
 
 
 def test_how_clears_the_sticky_top_bar():

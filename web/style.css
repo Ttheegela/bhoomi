@@ -126,6 +126,7 @@ span.srclink { color: var(--ink-2); }
 .rec .where .risk { max-width: 100%; white-space: normal; }
 .rec .meta { color: var(--ink-2); font-size: 14px; margin: 4px 0 0; }
 .rec .meta a { color: var(--ink-2); }
+.rec .meta .nw { white-space: nowrap; }
 .verdict { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin: 18px 0 6px; }
 .verdict b { font-family: var(--font-head); font-size: 40px; font-weight: 700; line-height: 1.1; }
 .verdict .shape { font-size: 30px; margin-right: 8px; position: relative; top: -3px; }

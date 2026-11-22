@@ -203,7 +203,7 @@
     if (sw) {
       var rp, u = sw.available && sw.source && httpsOnly(sw.source.record_url);
       if (sw.available) {
-        rp = h('p', 'cmp-cap', 'World figure for ' + selPin.label + ': ' + (o.imperial ? X.metric(sw.text) : sw.text || ''));
+        rp = h('p', 'cmp-cap', 'World figure for ' + selPin.label + ': ' + (o.imperial ? X.metric(sw.text) : sw.text || '') + (sw.why_none ? ' ' + sw.why_none : ''));
         if (u) {
           var a = h('a', 'cmp-src', (sw.source.name || u) + ' ↗');
           a.href = u; a.target = '_blank'; a.rel = 'noopener';
