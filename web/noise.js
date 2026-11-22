@@ -229,10 +229,11 @@
     legend.appendChild(h('p', 'help', 'Each bar is the range of trends the data support (95% range). The dot is our best estimate. The dashed line is no change. All bars share one scale.'));
     legend.appendChild(h('p', 'help noise-tag', 'Our calculation.'));
     var src = trend.source;
-    if (src && typeof src.name === 'string' && typeof src.url === 'string' && /^https:\/\//.test(src.url)) {
+    var href = src && [src.record_url, src.url].filter(function (u) { return typeof u === 'string' && /^https:\/\//.test(u); })[0]; // this exact record first
+    if (src && typeof src.name === 'string' && href) {
       var line = h('p', 'srcline');
       var a = h('a', 'srclink', 'Raw data: ' + src.name + ' ↗');
-      a.href = src.url;
+      a.href = href;
       a.target = '_blank';
       a.rel = 'noopener';
       line.appendChild(a);
