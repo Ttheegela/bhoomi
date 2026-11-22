@@ -17,6 +17,7 @@ from earthtrends.agent import tools
 from earthtrends.data import ar6, coops, psmsl
 from earthtrends.stats import compute_trend, projection
 from earthtrends.stats.baseline import anomaly, baseline, columns, fit
+from earthtrends.stats.guidance import DISCLAIMER, DISCLAIMER_PROJECTION
 
 FX = Path(__file__).parent / "fixtures"
 _spec = importlib.util.spec_from_file_location("build_ar6", Path(__file__).parent.parent / "scripts" / "build_ar6.py")
@@ -264,3 +265,11 @@ def test_name_rule_matches_the_build_script():
         build_ar6.NEAR_KM, build_ar6.NAME_KM)
     for name in ("Bombay (Princes Dock)", "MUMBAI / BOMBAY (APOLLO BANDAR)", "Port O'Connor", "Harbor Point"):
         assert projection.tokens(name) == build_ar6.tokens(name)
+
+
+def test_disclaimer_names_ipcc_projections_only_when_one_is_shown(battery):
+    """CONTRACTS PR2: with projection.available the disclaimer says the future values are IPCC projections; without
+    one it stays as in PR1."""
+    assert battery["projection"]["available"] is True and battery["guidance"]["disclaimer"] == DISCLAIMER_PROJECTION
+    lakes = compute_trend({**flat(MONTHS, 7000.0), "source": {**coops.SOURCE, "record_url": coops.record_url("9063020")}})
+    assert lakes["projection"]["available"] is False and lakes["guidance"]["disclaimer"] == DISCLAIMER

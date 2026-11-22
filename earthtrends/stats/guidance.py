@@ -9,6 +9,10 @@ from earthtrends.stats.meaning import UNITS, about
 
 DISCLAIMER = ("This guidance isn't perfect. It is based only on past records, and the future is not certain. "
               "Not professional financial or legal advice.")
+# when the result shows an expert projection (projection.available): the future values are not from past records
+DISCLAIMER_PROJECTION = ("This guidance isn't perfect. The past comes from measurements here; the future values are "
+                         "IPCC projections, which depend on how much the world emits and are not predictions. "
+                         "Not professional financial or legal advice.")
 LABEL = {"high": "High risk", "moderate": "Moderate risk", "low": "Low risk", "unknown": "Not enough data"}
 NO_CLEAR = "No clear change"  # the label for a no_clear_change verdict: no risk level, it is not evidence of low risk
 NO_COMPARE = "No world comparison"  # a clear trend whose level needs a world figure that isn't there (QA B3: Mumbai)
@@ -215,12 +219,14 @@ def guidance_for(result: dict, mean: float | None = None) -> dict:
     ratios = tuple(_dec(world.get(k)) if shown else None for k in ("ratio", "ratio_low", "ratio_high"))
     ratio = ratios[0]
     src = world.get("source") if isinstance(world.get("source"), dict) else {}
+    projected = isinstance(result.get("projection"), dict) and result["projection"].get("available") is True
     g = {"risk": "unknown", "risk_label": LABEL["unknown"], "why": "",
          "ratio": float(ratio) if ratio is not None else None,
          "reference": {"text": world.get("text"), "source": {"name": src.get("name"), "url": src.get("record_url")}}
          if shown else None,
          "rate": None, "display": {"unit": unit, "factor": float(Decimal(factor))}, "recommendation": "",
-         "future_link": _future_link(result.get("place")) if var == "sea_level" else None, "disclaimer": DISCLAIMER}
+         "future_link": _future_link(result.get("place")) if var == "sea_level" else None,
+         "disclaimer": DISCLAIMER_PROJECTION if projected else DISCLAIMER}
     _rules(g, result, var, Decimal(factor), _dec(mean), ratios, world.get("why_none"),
            _since(result.get("period"), world.get("window")))
     if var == "air_temp_max":
