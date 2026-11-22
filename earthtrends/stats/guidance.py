@@ -75,13 +75,12 @@ RECOMMEND = {
         "low": "The rain record here shows no clear change, but that is not proof that rain is steady. Before you "
                "build or plant, check drainage and how secure your water supply would be in dry years, as you would "
                "anywhere.",
-        # a clear change whose lower level is low: the whole range under 5%, or reaching up to 10% or more (Chennai)
-        "low_wetter": "Rain here has been increasing, though perhaps only by a small share of its usual amount. "
-                      "Before you build or plant, check drainage and the flood history of the site, as you would "
-                      "anywhere.",
-        "low_drier": "Rain here has been decreasing, though perhaps only by a small share of its usual amount. If you "
-                     "farm or depend on rainfall, check how secure your water supply would be in dry years, as you "
-                     "would anywhere."},
+        # a clear change whose lower level is low: the whole range under 5%, or reaching 10% or more (Chennai,
+        # Mumbai +11%). No size claim (QA B11: "a small share" understated Mumbai); the rate and `why` give the size.
+        "low_wetter": "Rain here has been increasing. Before you build or plant, check drainage and the flood history "
+                      "of the site.",
+        "low_drier": "Rain here has been decreasing. If you farm or depend on rainfall, check how secure your water "
+                     "supply would be in dry years."},
     "water_storage": {
         "high": "Water stored in this region is falling fast. Before you rely on groundwater for a farm or a new well, "
                 "check local water levels and make sure of a secure supply.",
@@ -152,7 +151,10 @@ def _span(values, cuts) -> tuple[str, str]:
 
 
 def _label(low: str, high: str) -> str:
-    """"Moderate risk", or for a 95% range across a threshold both levels: "Moderate to high risk"."""
+    """"Moderate risk", or for a 95% range across a threshold both levels: "Moderate to high risk". A range over
+    every level says so plainly (QA B11): "Risk level unclear (low to high)"."""
+    if (low, high) == ("low", "high"):
+        return "Risk level unclear (low to high)"
     return LABEL[low] if low == high else f"{low.capitalize()} to {high} risk"
 
 
