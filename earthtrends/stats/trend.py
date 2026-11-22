@@ -9,7 +9,7 @@ from decimal import ROUND_HALF_UP, Decimal
 import numpy as np
 
 from earthtrends.data.world import reference as _reference  # the world snapshots (D5); tests replace it
-from earthtrends.stats.baseline import YEAR_MONTHS, baseline, columns, fit, normals_at, num
+from earthtrends.stats.baseline import MONTH_DAYS, YEAR_MONTHS, baseline, columns, fit, normals_at, num
 from earthtrends.stats.guidance import (DISPLAY, OWN_RULE, RAIN_MIN_MM, SCARCE, THRESHOLDS, guidance_for, q, sig2,
                                         signed)
 from earthtrends.stats.meaning import UNITS, meaning_for
@@ -426,7 +426,7 @@ def _world(var: str, monthly: bool, used: list, t, xa, source_id=None, verdict: 
                                 if m),
             "ratio": ratios[0], "ratio_low": ratios[1], "ratio_high": ratios[2],
             "thresholds": dict(THRESHOLDS),
-            "source": {k: src.get(k) for k in ("name", "dataset_id", "record_url", "retrieved")},
+            "source": {k: src.get(k) for k in ("name", "dataset_id", "record_url", "retrieved", "method")},  # GIA note
             "text": cfg["text"].format(verb=cfg["verb"] if glob > 0 else "changed by", w=_plain(glob),
                                        l=_plain(local), start=start[:4], end=end[:4]),
             "why_none": WORLD_FLAT if moving and not clear else None}
@@ -438,9 +438,6 @@ def _where(series: dict) -> str | None:
     if sid in STATION and place.get("name"):
         return STATION[sid].format(place["name"])
     return WHERE.get(sid)
-
-
-MONTH_DAYS = (31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)  # a calendar month's mean length in days
 
 
 def _seasons(base: dict, units: str, rain: bool = False) -> dict | None:

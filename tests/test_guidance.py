@@ -323,6 +323,17 @@ def test_advice_describes_the_evidence_and_what_to_check():
     assert guidance.OWN_RULE["precip"].endswith("It covers total rain, not heavy downpours or floods.")
 
 
+def test_no_advice_states_a_future_from_the_past_trend():
+    """Spec D1, climate recheck: advice says what was found and what to check now. Decades of rain in one grid cell
+    can be swings that turn back, so no text plans for less water or says what will be."""
+    texts = [t for v in RECOMMEND.values() for t in v.values()] + [SHORT, guidance.NO_RULE, *guidance.HARMLESS.values()]
+    banned = ("less water than today", "will be", "plan for less", "plan for more", "plan for hotter", "will ",
+              "expect", "count on")
+    for text in texts:
+        assert not any(b in text.lower() for b in banned), text
+    assert all("check" in t for t in RECOMMEND["precip"].values())  # every rain text says what to check now
+
+
 # ---- climate review L6: the why names the years of the world comparison when they are not the record's ----
 
 @pytest.mark.parametrize("var,start,window,ratio,why", [

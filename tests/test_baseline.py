@@ -11,7 +11,7 @@ import pytest
 from earthtrends import data
 from earthtrends.agent import tools
 from earthtrends.stats import compute_trend, trend
-from earthtrends.stats.baseline import FITTED, PROVIDER, anomaly, baseline
+from earthtrends.stats.baseline import FITTED, MONTH_DAYS, PROVIDER, anomaly, baseline
 from earthtrends.stats.guidance import OWN_RULE, q, sig2
 
 UNITS = {"air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "sea_level": "mm", "water_storage": "cm"}
@@ -198,9 +198,27 @@ def test_rainfall_anomaly_is_a_percent_of_the_annual_mean_rate():
     _, month = cal(1981, x.size)
     a = anomaly(ts(x, variable="precip"))
     n, rate = a["baseline"]["months"], a["baseline"]["value"]
-    assert (a["kind"], a["units"]) == ("percent", "%") and rate == pytest.approx(np.mean(n), abs=1e-4)
+    assert (a["kind"], a["units"]) == ("percent", "%") and rate == pytest.approx(np.average(n, weights=MONTH_DAYS),
+                                                                              abs=1e-4)
     assert all(v == pytest.approx((x[k] - n[month[k] - 1]) / rate * 100, abs=1e-3) for k, v in enumerate(a["values"]))
     assert all(v is None for v in anomaly(ts([0.0] * 540, variable="precip"))["values"])  # no rain: no percent
+
+
+def test_rain_normal_weights_each_month_by_its_days():
+    """Climate recheck: the denominator of every rain % is the 1995-2014 annual normal, each month's normal mm/day
+    weighted by its days (February 28.25), not the plain mean of 12 rates (0.4% off at Chennai)."""
+    normals = np.array([0.9, 0.3, 0.2, 0.4, 1.2, 1.5, 2.7, 4.5, 4.2, 10.1, 13.3, 5.4])  # a monsoon coast, mm/day
+    b = baseline(ts(np.tile(normals, 45), variable="precip"))
+    days = np.array(MONTH_DAYS)
+    assert b["months"] == pytest.approx(normals) and days.sum() == 365.25
+    assert b["value"] == pytest.approx(days @ normals / days.sum(), abs=5e-5)
+    assert abs(b["value"] - normals.mean()) > 0.01  # the months differ, so the weighting matters
+    assert b["annual_total_mm"] == pytest.approx(days @ normals, abs=0.1)  # the sum of the twelve monthly totals
+    r = compute_trend(ts(np.tile(normals, 45) * (1 + 0.01 * np.repeat(np.arange(45) - 24, 12)), variable="precip"))
+    rb = r["baseline"]  # the rising series' own normal: the % rate is a share of the day-weighted value
+    assert rb["value"] == pytest.approx(days @ np.array(rb["months"]) / days.sum(), abs=5e-5)
+    assert r["headline_rate"]["value"] == pytest.approx(r["slope_per_decade"] / rb["value"] * 100, abs=0.06)  # 3 s.f.
+    assert baseline(ts(np.tile(normals, 45)))["value"] == round(float(normals.mean()), 4)  # temperature: plain mean
 
 
 def test_get_series_carries_the_anomaly(monkeypatch):
@@ -431,7 +449,7 @@ def test_temperature_compares_the_same_months_with_the_land_average(refs):
     assert w["ratio"] == float(q(here / world, "0.1"))  # judged as shown
     assert (w["unit"], w["measure"], w["thresholds"]) == ("°C per decade", "average for all land areas",
                                                           {"moderate": 0.75, "high": 1.5})
-    assert w["source"] == {k: LAND_SRC[k] for k in ("name", "dataset_id", "record_url", "retrieved")}
+    assert w["source"] == {k: LAND_SRC.get(k) for k in ("name", "dataset_id", "record_url", "retrieved", "method")}
     assert w["text"] == (f"Over the same years, the average for all land areas warmed {world:f} °C per decade. "
                          f"Here: {here:f} °C per decade.") and w["why_none"] is None
     g = r["guidance"]
@@ -570,6 +588,17 @@ def test_a_broken_world_reference_is_never_an_error(monkeypatch, broken):
 def test_the_shipped_world_reference_is_used():
     w = compute_trend(ts(synth(45)))["world"]  # the data lane's snapshot of global land (NOAAGlobalTemp)
     assert w["available"] and w["source"]["name"].startswith("NOAA NCEI Climate at a Glance")
+
+
+def test_sea_level_world_source_keeps_the_gia_sentence():
+    """The shipped NASA-SSH snapshot says its figure is not corrected for glacial isostatic adjustment; world.source
+    carries that method through (climate recheck)."""
+    s = ts(synth(40, start=1986, per_decade=40, sd=5, level=7000.0), start=1986, variable="sea_level",
+           source={"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"})
+    w = compute_trend(s)["world"]
+    assert w["available"] and w["source"]["method"] == data.world.reference("gmsl")["source"]["method"]
+    assert "not corrected for the slow sinking of the ocean floor" in w["source"]["method"]
+    assert "glacial isostatic adjustment, about 0.3 mm a year" in w["source"]["method"]
 
 
 @pytest.mark.parametrize("var,why", [
