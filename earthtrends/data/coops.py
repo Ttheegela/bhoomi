@@ -120,8 +120,11 @@ def fetch(station_id: str) -> dict:
         except (ValueError, RecursionError) as e:  # a number past Python's integer-digit limit, or nesting too deep
             raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.") from e
         rows = reply.get("data") if isinstance(reply, dict) else None
-        if replies and not isinstance(rows, list):  # an older request with no data ("No data was found"): the record starts later
-            break
+        if replies and not isinstance(rows, list):  # an older request without data
+            err = reply.get("error") if isinstance(reply, dict) else None
+            if str(err.get("message") if isinstance(err, dict) else err).startswith("No data was found"):
+                break  # NOAA's reply when the record starts later
+            parse(reply)  # any other reply raises the error the first request's would, never a record cut short
         replies.insert(0, reply)
         if not (isinstance(rows, list) and any(isinstance(x, dict) and (x.get("year"), x.get("month")) == (str(begin.year), "1")
                                                 for x in rows)):
@@ -143,7 +146,8 @@ def _record(station_id: str) -> tuple[tuple[str, ...], tuple[float | None, ...],
     A provider failure raises, so it is not cached."""
     try:
         reply, retrieved = fetch(station_id), upstream.utc_today()
-    except (ValueError, RecursionError) as e:  # fetch raises these only while reading the JSON: the provider's failure, not "no data"
+    except (ValueError, RecursionError) as e:  # fetch raises these while reading the JSON, or for an older request's
+        # error other than "No data was found": the provider's failure, not "no data" (a record cut short is not cached)
         raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.") from e
     try:
         times, values = parse(reply)

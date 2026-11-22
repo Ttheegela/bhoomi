@@ -1,9 +1,10 @@
-"""Build IPCC AR6 sea-level projections per tide gauge, and the NOAA CO-OPS -> AR6 gauge mapping. Run by hand; never at run time.
+"""Build IPCC AR6 sea-level projections per tide gauge, and the NOAA CO-OPS and PSMSL -> AR6 gauge mappings. Run by hand; never at run time.
 
-Writes (all three are committed; nothing imports this script at request time):
+Writes (all four are committed; nothing imports this script at request time):
   earthtrends/data/ar6_gauges.npz       int16 levels (mm) and rates (0.1 mm a year) at the AR6 tide-gauge locations
   earthtrends/data/ar6_gauges.json      manifest: DOI, version, md5 of every source entry, baseline, units, citations
   earthtrends/data/coops_to_psmsl.csv   every CO-OPS water-level station the app can answer with -> an AR6 location
+  earthtrends/data/psmsl_to_ar6.csv     every PSMSL gauge AR6 doesn't list that the gauge rules map -> an AR6 gauge
 
 Data: Garner et al. (2021), IPCC AR6 Sea Level Projections, version 20210809, Zenodo record 6382554
   (doi:10.5281/zenodo.6382554, concept doi:10.5281/zenodo.5914709), CC-BY-4.0. `ar6-regional-confidence.zip` (9.24 GB)
@@ -203,10 +204,20 @@ def fetch_entry(e: dict) -> bytes:
     if sig != 0x04034B50:
         raise ValueError("bad local header")
     start = e["offset"] + 30 + nl + xl
-    data = zlib.decompress(get_range(start, start + e["csize"] - 1), -15)
+    data = inflate(get_range(start, start + e["csize"] - 1), e["size"], -15)
     if len(data) != e["size"] or zlib.crc32(data) != e["crc"]:
         raise ValueError("entry size or CRC-32 differs from the central directory")
     return data
+
+
+def inflate(data: bytes, size: int, wbits: int) -> bytes:
+    """Deflated data expected to hold `size` bytes, never decompressed past size + 1 (a few bytes can deflate to
+    gigabytes): raises if more remains or the stream ends early. The caller still checks the exact size."""
+    z = zlib.decompressobj(wbits)
+    out = z.decompress(data, size + 1)  # + 1: a cap of 0 would mean no cap, and the stream's end is seen at exactly size
+    if len(out) > size or not z.eof:
+        raise ValueError(f"deflated data does not end within the expected {size} bytes")
+    return out
 
 
 # ---- HDF5 (netCDF4), only what these files use ----
@@ -223,6 +234,7 @@ def _messages(d: bytes, addr: int):
     o = addr + 6 + (16 if fl & 0x20 else 0) + (4 if fl & 0x10 else 0)
     sz = 1 << (fl & 3)
     blocks = [(o + sz, o + sz + _u(d, o, sz))]  # (start, end) of message bytes; checksums lie outside
+    read = set()  # continuation block addresses already followed
     while blocks:
         o, end = blocks.pop(0)
         while o + 4 <= end:  # fewer bytes left than a message header: a gap
@@ -233,6 +245,9 @@ def _messages(d: bytes, addr: int):
                 a, n = _u(body, 0, 8), _u(body, 8, 8)
                 if d[a:a + 4] != b"OCHK":
                     raise ValueError("bad object header continuation")
+                if a in read:
+                    raise ValueError("object header continuations loop")
+                read.add(a)
                 blocks.append((a + 4, a + n - 4))
             else:
                 yield t, body
@@ -331,7 +346,7 @@ def _read_selected(d: bytes, info: dict, qi: list[int], yi: list[int]) -> np.nda
             continue
         if mask:
             raise ValueError("a chunk skipped a filter")
-        raw = zlib.decompress(d[addr:addr + size])
+        raw = inflate(d[addr:addr + size], cq * cy * cl * dt.itemsize, 15)
         if len(raw) != cq * cy * cl * dt.itemsize:
             raise ValueError("chunk size differs from the layout")
         if 2 in info["filters"]:  # undo the shuffle filter: all first bytes, then all second bytes
@@ -410,6 +425,21 @@ def tokens(name: str) -> set[str]:
     return {w for w in re.sub(r"[^A-Z]+", " ", name.upper()).split() if len(w) >= 3 and w not in GENERIC}
 
 
+def gauge_rule(km: np.ndarray, name: str, gauges: dict) -> tuple[int, str, str] | None:
+    """The two gauge rules, given each AR6 gauge's distance: the nearest within 3 km, else the nearest within 15 km
+    whose name shares a word -> (index into gauges, rule, reason), or None."""
+    order = np.argsort(km, kind="stable")
+    if km[order[0]] <= NEAR_KM:
+        return int(order[0]), "within_3km", ""
+    mine = tokens(name)
+    for i in order:
+        if km[i] > NAME_KM:
+            break
+        if common := mine & set().union(*map(tokens, gauges["names"][i])):
+            return int(i), "within_15km_name", f"name shares {', '.join(sorted(common))}"
+    return None
+
+
 def match(st: dict, gauges: dict, cells: dict) -> dict:
     """One CO-OPS station -> its mapping row. gauges: ids, names (every name known for each), lat, lon;
     cells: ids, lat, lon of the valid AR6 grid cells."""
@@ -418,28 +448,19 @@ def match(st: dict, gauges: dict, cells: dict) -> dict:
         return {**row, "ar6_id": "", "psmsl_id": "", "psmsl_name": "", "km": "", "rule": "none",
                 "reason": "Great Lakes: lake levels are not sea level, and AR6 projects no sea level there"}
     km = km_to(st["lat"], st["lng"], gauges["lat"], gauges["lon"])
-    order = np.argsort(km, kind="stable")
     hit, rule, reason = None, "", ""
     if st["id"] in OVERRIDES:
         gid, reason = OVERRIDES[st["id"]]
         hit, rule = int(np.flatnonzero(gauges["ids"] == gid)[0]), "override"
-    elif km[order[0]] <= NEAR_KM:
-        hit, rule = int(order[0]), "within_3km"
-    else:
-        mine = tokens(st["name"])
-        for i in order:
-            if km[i] > NAME_KM:
-                break
-            if common := mine & set().union(*map(tokens, gauges["names"][i])):
-                hit, rule, reason = int(i), "within_15km_name", f"name shares {', '.join(sorted(common))}"
-                break
+    elif r := gauge_rule(km, st["name"], gauges):
+        hit, rule, reason = r
     if hit is not None:
         gid = int(gauges["ids"][hit])
         return {**row, "ar6_id": gid, "psmsl_id": gid, "psmsl_name": gauges["names"][hit][0],
                 "km": round(float(km[hit]), 1), "rule": rule, "reason": reason}
     ck = km_to(st["lat"], st["lng"], cells["lat"], cells["lon"])
     c = int(np.argmin(ck))
-    g = int(order[0])
+    g = int(np.argmin(km))
     return {**row, "ar6_id": int(cells["ids"][c]), "psmsl_id": "", "psmsl_name": "", "km": round(float(ck[c]), 1),
             "rule": "regional_estimate",
             "reason": f"AR6 1-degree cell at {cells['lat'][c]:.0f}, {cells['lon'][c]:.0f}; nearest AR6 gauge "
@@ -454,9 +475,23 @@ def coops_stations() -> list[dict]:
     return [{**s, "lat": float(s["lat"]), "lng": float(s["lng"])} for s in json.loads(cached("coops_stations.json", fetch))]
 
 
-def psmsl_names() -> dict[int, str]:
+def psmsl_stations() -> list[dict]:
     from earthtrends.data import psmsl
-    return {s["id"]: s["name"] for s in psmsl.parse_stations(cached("psmsl_filelist.txt", lambda: get(PSMSL_LIST)).decode())}
+    return psmsl.parse_stations(cached("psmsl_filelist.txt", lambda: get(PSMSL_LIST)).decode())
+
+
+def psmsl_match(stations: list[dict], gauges: dict) -> list[dict]:
+    """Every PSMSL gauge AR6 doesn't list -> the AR6 gauge the two gauge rules give it, if any. No override and no
+    regional estimate: the file holds only the 1-degree cells the CO-OPS mapping uses."""
+    have, rows = set(gauges["ids"].tolist()), []
+    for s in stations:
+        km = km_to(s["lat"], s["lon"], gauges["lat"], gauges["lon"])
+        if s["id"] not in have and (r := gauge_rule(km, s["name"], gauges)):
+            i, rule, reason = r
+            rows.append({"psmsl_id": s["id"], "psmsl_name": s["name"], "ar6_id": int(gauges["ids"][i]),
+                         "ar6_name": gauges["names"][i][0], "km": round(float(km[i]), 1), "rule": rule,
+                         "reason": reason})
+    return rows
 
 
 # ---- build ----
@@ -497,7 +532,8 @@ def build() -> None:
     print(f"AR6 gauges {int(gauge.sum())}, kept {int((gauge & valid).sum())}, dropped (missing values) {dropped}")
 
     # mapping
-    pn = psmsl_names()
+    ps = psmsl_stations()
+    pn = {s["id"]: s["name"] for s in ps}
     gi = np.flatnonzero(gauge & valid)
     gauges = {"ids": ids[gi], "lat": lat[gi].astype(float), "lon": lon[gi].astype(float),
               "names": [[pn.get(int(i), ar6_names[k].replace("_", " ").title()), ar6_names[k]] for k, i in zip(gi, ids[gi])]}
@@ -506,6 +542,7 @@ def build() -> None:
     stations = coops_stations()
     mapping = [match(s, gauges, cells) for s in stations]
     extra = sorted({r["ar6_id"] for r in mapping if r["rule"] == "regional_estimate"})
+    pmap = psmsl_match(ps, gauges)
 
     # pass 2: assemble the kept gauges plus the grid cells the mapping uses
     keep = np.concatenate([gi, np.flatnonzero(np.isin(ids, extra))])
@@ -534,7 +571,8 @@ def build() -> None:
             bool((np.diff(levels, axis=3) >= 0).all() and (np.diff(rates, axis=2) >= 0).all()),
         f"VLM equal across scenarios (medium {VLM_FROM['medium']} file == low {VLM_FROM['low']} file)":
             np.array_equal(vlm["medium"], vlm["low"]),
-        "every mapped AR6 location is in the file": all(r["ar6_id"] in kept_ids for r in mapping if r["ar6_id"] != ""),
+        "every mapped AR6 location is in the file":
+            all(r["ar6_id"] in kept_ids for r in mapping + pmap if r["ar6_id"] != ""),
     }
     for text, ok in checks.items():
         print(f"  {'ok  ' if ok else 'FAIL'} {text}")
@@ -590,10 +628,17 @@ def build() -> None:
         w = csv.DictWriter(f, cols, lineterminator="\n")
         w.writeheader()
         w.writerows(sorted(mapping, key=lambda r: r["coops_id"]))
+    with open(OUT / "psmsl_to_ar6.csv", "w", newline="") as f:
+        w = csv.DictWriter(f, ["psmsl_id", "psmsl_name", "ar6_id", "ar6_name", "km", "rule", "reason"],
+                           lineterminator="\n")
+        w.writeheader()
+        w.writerows(sorted(pmap, key=lambda r: r["psmsl_id"]))
     count = {r: sum(m["rule"] == r for m in mapping) for r in
              ("within_3km", "within_15km_name", "override", "regional_estimate", "none")}
     print(f"mapping: {len(mapping)} CO-OPS stations {count}")
-    print(f"wrote {npz} ({npz.stat().st_size / 1e6:.2f} MB), {len(keep)} locations; manifest; mapping")
+    print(f"PSMSL gauges AR6 doesn't list, mapped to a nearby AR6 gauge: {len(pmap)} "
+          f"{ {r: sum(m['rule'] == r for m in pmap) for r in ('within_3km', 'within_15km_name')} }")
+    print(f"wrote {npz} ({npz.stat().st_size / 1e6:.2f} MB), {len(keep)} locations; manifest; both mappings")
 
 
 if __name__ == "__main__":

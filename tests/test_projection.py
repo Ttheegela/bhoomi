@@ -1,11 +1,12 @@
 """The sea-level expert projection (earthtrends/stats/projection.py, docs/CONTRACTS.md "Sea-level expert projection
 (PR2)"), offline from fixtures and the committed AR6 file.
 
-coops_8518750_msl.json: year, month and MSL only (rows with an empty MSL dropped), from the raw response to the request
-earthtrends.data.coops.fetch makes for The Battery:
+coops_8518750_msl.json: year, month and MSL only (rows with an empty MSL dropped), from the raw response to
 https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=monthly_mean&station=8518750&datum=MSL&units=metric&time_zone=gmt&format=json&begin_date=19000101&end_date=20261122
-(fetched 2026-11-22; its last row is 2026-10)."""
-import importlib.util
+(fetched 2026-11-22; its last row is 2026-10). earthtrends.data.coops.fetch now asks from the January 198 years before
+this year (on 2026-11-22: begin_date=18280101&end_date=20261122), so its record for The Battery starts in 1856; the
+fixture keeps only the months from 1900, which is all these tests use (the baseline, `now` and the 2019-2021 check).
+"Today" is pinned to 2026-11-22 for every test here (see `today`)."""
 import json
 from pathlib import Path
 
@@ -20,9 +21,7 @@ from earthtrends.stats.baseline import anomaly, baseline, columns, fit
 from earthtrends.stats.guidance import DISCLAIMER, DISCLAIMER_PROJECTION
 
 FX = Path(__file__).parent / "fixtures"
-_spec = importlib.util.spec_from_file_location("build_ar6", Path(__file__).parent.parent / "scripts" / "build_ar6.py")
-build_ar6 = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(build_ar6)
+TODAY = "2026-11-22"
 KEYS = {"available", "kind", "source", "location", "baseline", "units", "years", "default_scenario", "scenarios",
         "drivers", "readouts", "check", "caveat", "why"}
 IDS = ["ssp126_medium", "ssp245_medium", "ssp370_medium", "ssp585_medium", "ssp126_low", "ssp245_low", "ssp585_low"]
@@ -53,6 +52,21 @@ def flat(times: list[str], level: float, last: dict | None = None) -> dict:
 MONTHS = [f"{y}-{m:02d}" for y in range(1990, 2026) for m in range(1, 13)]
 
 
+def ar6_at(gid: int, key: str, year: int, comp: str = "total") -> list[int]:
+    """AR6's stored levels (mm) at one location, scenario key ("ssp245", "ssp245_low") and decade, quantiles in order."""
+    d = ar6.load()
+    i, s, y = d["index"][gid], d["scenarios"].tolist().index(key), d["years"].tolist().index(year)
+    return d["levels"][i, d["components"].tolist().index(comp), s, :, y].tolist()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def today():
+    """more_than_today's text depends on today's month: pin it, so the fixture's record (to 2026-10) stays recent."""
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(projection, "utc_today", lambda: TODAY)
+        yield
+
+
 @pytest.fixture(scope="module")
 def battery() -> dict:
     return compute_trend(coops_series("8518750", "The Battery"))
@@ -62,6 +76,7 @@ def test_battery_observed_2019_2021_is_inside_ar6_2020(battery):
     """Spec PR2 item 8: about 80 mm against AR6 2020's likely range 66-139 (5th-95th 41-168)."""
     c = battery["projection"]["check"]
     assert (c["ar6_2020_p05"], c["ar6_2020_p95"]) == (41, 168) and c["inside"] is True
+    assert (c["kind"], c["latest"]) == ("2019-2021", None)
     assert 66 <= c["observed_2019_2021"] <= 139 and c["observed_2019_2021"] == pytest.approx(80, abs=5)
 
 
@@ -79,21 +94,23 @@ def test_battery_projection_has_the_contract_shape_and_ar6_values_unshifted(batt
                            "citation": m["citations"], "acknowledgement": m["acknowledgement"]}
     assert type(p["source"]["citation"]) is list and len(p["source"]["citation"]) == 3  # one entry per paper
     assert all(isinstance(c, str) and c for c in p["source"]["citation"])
+    d = ar6.load()
     for s in p["scenarios"]:  # every level and rate exactly as AR6 publishes it (D4), decade by decade
         key = s["id"].removesuffix("_medium")
         assert s["code"] == m["scenarios"][key]["label"] and s["confidence"] == m["scenarios"][key]["confidence"]
         assert s["outer_kind"] == "5th to 95th percentile" and s["rate"]["units"] == "mm a year"
         assert s["range_kind"] == ("17th to 83rd percentile" if s["id"].endswith("_low")
                                    else "likely range (about 2 in 3 chance)")
+        rates = d["rates"][d["index"][12], d["scenarios"].tolist().index(key)]  # tenths of a mm a year
         for k, year in enumerate(p["years"]):
-            r = ar6.lookup(12, key, year)
-            assert [s[q][k] for q in projection.Q] == r["total_mm"], (s["id"], year)
-            assert [s["rate"][q][k] for q in projection.Q] == r["rate_mm_per_year"], (s["id"], year)
+            assert [s[q][k] for q in projection.Q] == ar6_at(12, key, year), (s["id"], year)
+            assert [round(s["rate"][q][k] * 10) for q in projection.Q] == rates[:, k].tolist(), (s["id"], year)
     mid = p["scenarios"][1]
     assert (mid["code"], mid["name"], mid["p50"][3], mid["rate"]["p50"][3]) == (
         "SSP2-4.5", "intermediate emissions", 358, 8.6)
-    parts = ar6.lookup(12, "ssp245", 2050)["processes_mm"]
-    parts["land_motion"] = parts.pop("vertical_land_motion")
+    parts = {pid: ar6_at(12, "ssp245", 2050, comp) for comp, pid in (
+        ("oceandynamics", "sterodynamic"), ("GIS", "greenland"), ("AIS", "antarctica"), ("glaciers", "glaciers"),
+        ("landwaterstorage", "land_water"), ("verticallandmotion", "land_motion"))}
     d = p["drivers"]
     assert (d["year"], d["scenario"]) == (2050, p["default_scenario"]) and "don't add up" in d["note"]
     s0 = next(s for s in p["scenarios"] if s["id"] == d["scenario"])  # the page names the breakdown from this one
@@ -166,6 +183,37 @@ def test_now_is_the_mean_of_the_latest_12_monthly_anomalies_and_can_be_above_205
     assert r["more_than_today"] == {"value": -42, "text": "about 4.2 cm less than today", "approximate": True}
 
 
+def test_more_than_today_names_the_year_when_the_record_ended_over_24_months_ago(monkeypatch):
+    """CONTRACTS PR2, the page's own test (web/explain.js): `now` ends 2025-12; 24 months later it is still "today",
+    25 months later it is "in 2025". The value is the same either way."""
+    s = flat(MONTHS, 7000.0)
+    for day, text in (("2027-12-31", "about 36 cm more than today"), ("2028-01-01", "about 36 cm more than in 2025")):
+        monkeypatch.setattr(projection, "utc_today", lambda day=day: day)
+        assert compute_trend(s)["projection"]["readouts"]["more_than_today"] == {
+            "value": 358, "text": text, "approximate": True}, day
+    same = flat(MONTHS, 7000.0, {t: 7358.0 for t in MONTHS[-12:]})  # now = 358 = the 2050 median
+    assert compute_trend(same)["projection"]["readouts"]["more_than_today"]["text"] == "about the same as in 2025"
+
+
+def test_now_far_outside_ar6_is_flagged_even_when_2019_2021_is_sparse():
+    """QA B1 (Mumbai): too few 2019-2021 months for the check, but the latest 12 months are far above AR6, so the
+    check falls back to them, against AR6's 5th-95th percentile at their mid-year."""
+    last = {t: None for t in MONTHS if t[:4] in ("2019", "2021")}
+    last.update({t: 7000.0 + 250 for t in MONTHS if t[:4] in ("2020", "2024", "2025")})
+    p = compute_trend(flat(MONTHS, 7000.0, last))["projection"]
+    assert p["check"]["observed_2019_2021"] is None  # 12 of 36 months today
+    assert p["check"]["inside"] is False or p["readouts"]["more_than_today"] is None
+    c = p["check"]
+    assert c["kind"] == "latest 12 months" and c["latest"] == {"value": 250, "year": 2025.5, "ar6_p05": 60,
+                                                               "ar6_p95": 238}
+    a20, a30 = (ar6_at(12, "ssp245", y) for y in (2020, 2030))  # The Battery, SSP2-4.5 medium confidence
+    for k, got in ((0, c["latest"]["ar6_p05"]), (4, c["latest"]["ar6_p95"])):  # 2025.5: 0.55 of the way to 2030
+        assert got == pytest.approx(a20[k] + 0.55 * (a30[k] - a20[k]), abs=0.5)
+    assert p["readouts"]["more_than_today"]["value"] == 108  # kept as it is: the flag is the fix
+    inside = flat(MONTHS, 7000.0, {**last, **{t: 7100.0 for t in MONTHS[-12:]}})  # 100 mm: inside 60 to 238
+    assert compute_trend(inside)["projection"]["check"]["inside"] is True
+
+
 def test_record_without_a_baseline_keeps_the_projection_but_no_now_or_check():
     times = [t for t in MONTHS if t >= "2015"]  # starts after 2014: off the projection axis (D3), so no `now` either
     s = flat(times, 7000.0)
@@ -173,7 +221,8 @@ def test_record_without_a_baseline_keeps_the_projection_but_no_now_or_check():
     p = projection.sea_level(s, b, None)
     assert b["projection_axis"] is False and b["value"] is None and p["available"] is True
     assert p["readouts"]["now"] is None and p["readouts"]["more_than_today"] is None
-    assert p["check"] == {"observed_2019_2021": None, "ar6_2020_p05": 41, "ar6_2020_p95": 168, "inside": None}
+    assert p["check"] == {"observed_2019_2021": None, "ar6_2020_p05": 41, "ar6_2020_p95": 168, "kind": None,
+                          "latest": None, "inside": None}
 
 
 def test_coops_series_is_mm_against_1995_2014():
@@ -223,22 +272,24 @@ def test_psmsl_gauge_answers_with_its_own_ar6_location():
     p = compute_trend(s)["projection"]
     assert p["location"]["kind"] == "gauge" and p["location"]["id"] == 43 and p["location"]["km"] < 1
     assert p["location"]["name"] == "Mumbai / Bombay (Apollo Bandar)"
-    assert p["scenarios"][1]["p50"] == [ar6.lookup(43, "ssp245", y)["total_mm"][2] for y in p["years"]]
-    # 2019 and 2021 are missing at Mumbai: too few months for the check, which says so rather than guessing
-    assert p["check"]["observed_2019_2021"] is None and p["check"]["inside"] is None
+    assert p["scenarios"][1]["p50"] == [ar6_at(43, "ssp245", y)[2] for y in p["years"]]
+    # QA B1: 2019 and 2021 are missing at Mumbai, too few months for the 2019-2021 check; its latest 12 months
+    # (2024, +14 cm) are far above AR6 there (2020: +0.9 to +7.9 cm), and the fallback check says so
+    c = p["check"]
+    assert (c["observed_2019_2021"], c["ar6_2020_p05"], c["ar6_2020_p95"]) == (None, 9, 79)
+    assert (c["kind"], c["latest"], c["inside"]) == (
+        "latest 12 months", {"value": 135, "year": 2024.5, "ar6_p05": 22, "ar6_p95": 106}, False)
 
 
 def test_psmsl_gauge_without_ar6_takes_the_nearest_by_the_mapping_rules(monkeypatch):
-    monkeypatch.setattr(psmsl, "stations", lambda: psmsl.parse_stations((FX / "psmsl_filelist.txt").read_text()))
+    def down():
+        raise httpx.ConnectError("no network")
+    monkeypatch.setattr(psmsl, "stations", down)  # the build applied the rules (psmsl_to_ar6.csv): no list at run time
     s = psmsl_series(212, "Bombay (Princes Dock)", 18.95, 72.833333, MONTHS, [7000.0] * len(MONTHS))
     assert 212 not in ar6.load()["index"]
     # over 3 km, but shares BOMBAY with "Mumbai / Bombay (...)"
     loc = projection.sea_level(s, baseline(s), None)["location"]
     assert (loc["kind"], loc["id"], loc["name"], loc["km"]) == ("gauge", 43, "Mumbai / Bombay (Apollo Bandar)", 3.4)
-    def down():
-        raise httpx.ConnectError("no network")
-    monkeypatch.setattr(psmsl, "stations", down)  # AR6's own name alone ("MUMBAI") shares no word: none
-    assert projection.sea_level(s, baseline(s), None)["why"] == "There is no expert projection for this tide gauge."
     far = psmsl_series(99999, "Nowhere", 0.0, -30.0, MONTHS, [7000.0] * len(MONTHS))
     assert projection.sea_level(far, baseline(far), None) == {"available": False,
                                                               "why": "There is no expert projection for this tide gauge."}
@@ -250,7 +301,8 @@ def test_coops_regional_estimate_great_lakes_and_unknown_station():
     nola = {**s, "source": {**coops.SOURCE, "record_url": coops.record_url("8761927")}}  # New Canal, New Orleans
     loc = projection.sea_level(nola, baseline(nola), None)["location"]
     assert (loc["kind"], loc["name"], loc["km"]) == ("regional estimate", "1° area around 30°N, 90°W", 11.3)
-    assert loc["id"] >= 10**9 and "regional estimate" in loc["note"] and "local sinking" in loc["note"]
+    assert loc["id"] >= 10**9 and "regional estimate" in loc["note"]
+    assert "local sinking may differ and may be faster in places, so check the ground at the site." in loc["note"]
     lakes = {**s, "source": {**coops.SOURCE, "record_url": coops.record_url("9063020")}}  # Buffalo, Lake Erie
     assert projection.sea_level(lakes, baseline(lakes), None) == {
         "available": False, "why": "Sea level projections don't cover the Great Lakes."}
@@ -258,13 +310,6 @@ def test_coops_regional_estimate_great_lakes_and_unknown_station():
     assert projection.sea_level(new, baseline(new), None)["why"] == "There is no expert projection for this tide gauge."
     bare = {**s, "source": dict(coops.SOURCE)}  # no record_url, so no station id
     assert projection.sea_level(bare, baseline(bare), None)["available"] is False
-
-
-def test_name_rule_matches_the_build_script():
-    assert projection.GENERIC == build_ar6.GENERIC and (projection.NEAR_KM, projection.NAME_KM) == (
-        build_ar6.NEAR_KM, build_ar6.NAME_KM)
-    for name in ("Bombay (Princes Dock)", "MUMBAI / BOMBAY (APOLLO BANDAR)", "Port O'Connor", "Harbor Point"):
-        assert projection.tokens(name) == build_ar6.tokens(name)
 
 
 def test_disclaimer_names_ipcc_projections_only_when_one_is_shown(battery):

@@ -3,21 +3,25 @@ going back from today, and joins them oldest first with no gap and no duplicate 
 from datetime import date
 
 import httpx
+import pytest
 
 from earthtrends.data import coops
 
 TODAY = date.today()
 
 
-def server(monkeypatch, first_year):
+def server(monkeypatch, first_year, older=None):
     """A fake CO-OPS datagetter for a gauge with monthly means from January first_year to last December: each request
-    gets the rows in its range, or NOAA's 400 "No data was found" reply. Returns the requests' (begin, end) dates."""
+    gets the rows in its range, or NOAA's 400 "No data was found" reply; with `older` (status, body), every request
+    after the first gets that instead. Returns the requests' (begin, end) dates."""
     asked = []
 
     def get(url, params, timeout):
         b, e = date.fromisoformat(params["begin_date"]), date.fromisoformat(params["end_date"])
         assert params["datum"] == "MSL" and params["units"] == "metric" and params["product"] == "monthly_mean"
         asked.append((b, e))
+        if older and len(asked) > 1:
+            return httpx.Response(older[0], json=older[1], request=httpx.Request("GET", url))
         rows = [{"year": str(y), "month": str(m), "MSL": "0.1"} for y in range(max(first_year, b.year), min(TODAY.year - 1, e.year) + 1)
                 for m in range(1, 13)]
         body = ({"metadata": {"id": params["station"]}, "data": rows} if rows else
@@ -62,3 +66,19 @@ def test_a_record_starting_on_a_chunk_boundary_stops_at_noaas_no_data_reply(monk
     assert len(asked) == 2
     check(asked, first)
     assert times[0] == f"{first}-01" and len(times) == len(set(times)) == (TODAY.year - first) * 12
+
+
+def test_an_older_request_failing_another_way_raises_instead_of_cutting_the_record_short(monkeypatch):
+    """Only NOAA's "No data was found" ends the record early. Any other reply to an older request (a 400 with another
+    error, a 200 carrying `error`, a 200 without a data list) raises parse()'s error, as the first request's would;
+    _record makes it a provider failure, so a record cut short is never cached as the gauge's whole record."""
+    first = TODAY.year - 198  # data in the first request's first January: the second request is made
+    for n, older in enumerate([(400, {"error": {"message": "Wrong Station ID"}}),
+                               (200, {"error": {"message": "Internal error"}}), (200, {"metadata": {}})]):
+        asked = server(monkeypatch, first, older)
+        with pytest.raises(ValueError, match="^No monthly sea level at this station: "):
+            coops.fetch("8518750")
+        assert len(asked) == 2, older
+        server(monkeypatch, first, older)
+        with pytest.raises(httpx.DecodingError):
+            coops._record(f"older-fails-{n}")
