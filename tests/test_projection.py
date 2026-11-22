@@ -10,11 +10,12 @@ import json
 from pathlib import Path
 
 import httpx
+import numpy as np
 import pytest
 
 from earthtrends.data import ar6, coops, psmsl
 from earthtrends.stats import compute_trend, projection
-from earthtrends.stats.baseline import anomaly, baseline
+from earthtrends.stats.baseline import anomaly, baseline, columns, fit
 
 FX = Path(__file__).parent / "fixtures"
 _spec = importlib.util.spec_from_file_location("build_ar6", Path(__file__).parent.parent / "scripts" / "build_ar6.py")
@@ -73,7 +74,9 @@ def test_battery_projection_has_the_contract_shape_and_ar6_values_unshifted(batt
     assert p["source"] == {"name": "IPCC AR6 sea level projections (Garner et al. 2021)",
                            "dataset_id": "doi:10.5281/zenodo.6382554", "version": "20210809",
                            "record_url": "https://doi.org/10.5281/zenodo.6382554", "licence": "CC BY 4.0",
-                           "citation": " ".join(m["citations"]), "acknowledgement": m["acknowledgement"]}
+                           "citation": m["citations"], "acknowledgement": m["acknowledgement"]}
+    assert type(p["source"]["citation"]) is list and len(p["source"]["citation"]) == 3  # one entry per paper
+    assert all(isinstance(c, str) and c for c in p["source"]["citation"])
     for s in p["scenarios"]:  # every level and rate exactly as AR6 publishes it (D4), decade by decade
         key = s["id"].removesuffix("_medium")
         assert s["code"] == m["scenarios"][key]["label"] and s["confidence"] == m["scenarios"][key]["confidence"]
@@ -86,15 +89,30 @@ def test_battery_projection_has_the_contract_shape_and_ar6_values_unshifted(batt
             assert [s["rate"][q][k] for q in projection.Q] == r["rate_mm_per_year"], (s["id"], year)
     mid = p["scenarios"][1]
     assert (mid["code"], mid["name"], mid["p50"][3], mid["rate"]["p50"][3]) == (
-        "SSP2-4.5", "middle-of-the-road emissions", 358, 8.6)
+        "SSP2-4.5", "intermediate emissions", 358, 8.6)
     parts = ar6.lookup(12, "ssp245", 2050)["processes_mm"]
     parts["land_motion"] = parts.pop("vertical_land_motion")
     d = p["drivers"]
-    assert (d["year"], d["scenario"]) == (2050, "ssp245_medium") and "don't add up" in d["note"]
+    assert (d["year"], d["scenario"]) == (2050, p["default_scenario"]) and "don't add up" in d["note"]
+    s0 = next(s for s in p["scenarios"] if s["id"] == d["scenario"])  # the page names the breakdown from this one
+    assert (s0["code"], s0["name"], s0["confidence"]) == ("SSP2-4.5", "intermediate emissions", "medium")
     assert {x["id"]: [x["p17"], x["p50"], x["p83"]] for x in d["parts"]} == {k: v[1:4] for k, v in parts.items()}
     assert [x["id"] for x in d["parts"]] == ["sterodynamic", "greenland", "antarctica", "glaciers", "land_water",
                                              "land_motion"]
     assert p["caveat"] == "Faster ice-sheet loss could push this higher, outside this range."
+
+
+def test_scenarios_carry_the_ipcc_names(battery):
+    """AR6 WGI's names; the low-confidence versions share their SSP's name and are never called "likely"."""
+    got = [(s["id"], s["code"], s["name"], s["range_kind"]) for s in battery["projection"]["scenarios"]]
+    likely, pct = "likely range (about 2 in 3 chance)", "17th to 83rd percentile"
+    assert got == [("ssp126_medium", "SSP1-2.6", "low emissions", likely),
+                   ("ssp245_medium", "SSP2-4.5", "intermediate emissions", likely),
+                   ("ssp370_medium", "SSP3-7.0", "high emissions", likely),
+                   ("ssp585_medium", "SSP5-8.5", "very high emissions", likely),
+                   ("ssp126_low", "SSP1-2.6", "low emissions", pct),
+                   ("ssp245_low", "SSP2-4.5", "intermediate emissions", pct),
+                   ("ssp585_low", "SSP5-8.5", "very high emissions", pct)]
 
 
 def test_battery_readouts(battery):
@@ -146,10 +164,22 @@ def test_coops_series_is_mm_against_1995_2014():
     assert a["units"] == "mm" and a["kind"] == "difference"
     rows = [(t, v) for t, v in zip(s["times"], a["values"]) if "1995" <= t[:4] <= "2014" and v is not None]
     whole = {y for y in {t[:4] for t, _ in rows} if sum(t[:4] == y for t, _ in rows) >= 9}
-    assert len(whole) == b["years_covered"] == 19
-    for m in range(1, 13):  # in the whole baseline years, each calendar month's anomalies average to zero
-        vals = [v for t, v in rows if t[:4] in whole and int(t[5:]) == m]
-        assert sum(vals) / len(vals) == pytest.approx(0, abs=1e-3)
+    assert len(whole) == b["years_covered"] == 19  # 2002 has too few months
+    # With a year missing, each month's normal is moved along the counted years' own trend to the middle of 1995-2014
+    # (PR1 F6): normal = mean + slope x (2004.5 - that month's mean year). So in the counted years each calendar
+    # month's anomalies average slope x (its mean year - 2004.5), not 0. Nov and Dec also lack a year: other sign.
+    year, _, tm, x, use = columns(s)
+    sel = use & np.isin(year, [int(y) for y in whole])
+    line = fit(tm[sel], x[sel], True)
+    slope = float(line(np.ones(1))[0] - line(np.zeros(1))[0])
+    assert 3 < slope < 6  # mm a year: Atlantic City's sea level rise
+    means = []
+    for m in range(1, 13):
+        got = [(int(t[:4]), v) for t, v in rows if t[:4] in whole and int(t[5:]) == m]
+        mean_year = sum(y for y, _ in got) / len(got)
+        means.append(sum(v for _, v in got) / len(got))
+        assert means[-1] == pytest.approx(slope * (mean_year - 2004.5), abs=1e-3), m  # normals and anomalies: 4 dp
+    assert min(means) < -0.5 and max(means) > 0.5  # the shift is really there, both ways
 
 
 def test_psmsl_series_is_mm_against_1995_2014_with_missing_months_left_empty():

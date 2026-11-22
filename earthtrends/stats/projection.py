@@ -30,8 +30,8 @@ STATION_ID = {"coops": re.compile(r"[?&]id=([^&#]+)"), "psmsl": re.compile(r"/st
 REGIONAL = ("IPCC AR6 has no projection at a tide gauge close enough, so this is its estimate for the surrounding 1° "
             "area: the land motion in it is AR6's regional estimate, and local sinking here may differ.")
 
-NAMES = {"ssp126": "very low emissions", "ssp245": "middle-of-the-road emissions", "ssp370": "high emissions",
-         "ssp585": "very high emissions"}
+NAMES = {"ssp126": "low emissions", "ssp245": "intermediate emissions", "ssp370": "high emissions",
+         "ssp585": "very high emissions"}  # the IPCC's own names (AR6 WGI SPM)
 RANGE_KIND = {"medium": "likely range (about 2 in 3 chance)", "low": "17th to 83rd percentile"}
 OUTER_KIND = "5th to 95th percentile"
 DEFAULT = "ssp245_medium"
@@ -76,7 +76,7 @@ def sea_level(series: dict, base: dict) -> dict:
         "kind": "sea_level_ar6",
         "source": {"name": SOURCE_NAME, "dataset_id": f"doi:{m['doi']}", "version": m["version"],
                    "record_url": f"https://doi.org/{m['doi']}", "licence": "CC BY 4.0",
-                   "citation": " ".join(m["citations"]), "acknowledgement": m["acknowledgement"]},
+                   "citation": list(m["citations"]), "acknowledgement": m["acknowledgement"]},
         "location": location,
         "baseline": {"text": TEXT, "years": list(YEARS)},
         "units": "mm",
