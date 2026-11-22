@@ -40,6 +40,7 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
 
 - `url` stays the provider's home page. `record_url` opens **this** record: the exact request we made, or the station or dataset page by ID, and the page it opens names our station or coordinates (REWORK-SPEC PR1 item 2 lists the form per source).
 - `dataset_id`: a DOI (as `doi:10.…`) or the provider's catalogue name. `version`: the release or API version we read, as the provider names it, or `null` if the provider names none.
+- `reference_period` (GRACE only): `[first_year, last_year]` of the provider's own reference mean for the release we ship, as the provider documents it; the stats lane uses it as the baseline (`method` `"provider"`).
 - `retrieved`: UTC date (YYYY-MM-DD) the values were fetched from the provider (a cached value keeps its first fetch date).
 - `method`: one plain sentence on how the provider made the values we use. `cadence`: the cadence of `values` (`"monthly"` | `"annual"`). `deseasoned_upstream`: true only when the provider has already removed the seasonal cycle.
 
