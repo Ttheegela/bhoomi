@@ -116,6 +116,51 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
   - `seasons` uses the baseline's calendar-month normals (`null` for `method` `"none"` or annual data). Rainfall seasons are in mm a month (`units` "mm a month"); rainfall `fit` is in % of the 1995–2014 annual normal, like `anomaly` and `headline_rate`. `real.widened`: true when the range was widened for months that are alike (autocorrelation).
 - `guidance` changes: `outlook` and `outlook_label` are removed (D1: no future from a past trend). `ratio` and `reference` come from `world` (`null` when `world.available` is false). Hottest day of the month has no risk level: `risk` and `risk_label` are `null`, and so are `why` and `recommendation`; the verdict alone answers. A `no_clear_change` verdict is not evidence of low risk: `risk` is `null` and `risk_label` is "No clear change" (the recommendation and disclaimer stay). Every other key is unchanged and always present.
 
+### Sea-level expert projection (PR2) — stats lane fills `projection` for `sea_level`
+
+From IPCC AR6 relative sea level at the tide gauge (`earthtrends/data/ar6_gauges.npz`, built offline by `scripts/build_ar6.py`). Plotted and quoted exactly as published (D4): never shifted to meet the observations. All levels in mm against the 1995–2014 average; the page shows cm.
+
+```json
+"projection": {
+  "available": true,
+  "kind": "sea_level_ar6",
+  "source": {"name": "IPCC AR6 sea level projections (Garner et al. 2021)", "dataset_id": "doi:10.5281/zenodo.6382554", "version": "20210809", "record_url": "https://doi.org/10.5281/zenodo.6382554", "licence": "CC BY 4.0", "citation": "…", "acknowledgement": "…"},
+  "location": {"kind": "gauge", "id": 12, "name": "NEW YORK (THE BATTERY)", "km": 0.4, "note": null},
+  "baseline": {"text": "the 1995–2014 average", "years": [1995, 2014]},
+  "units": "mm",
+  "years": [2020, 2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100, 2110, 2120, 2130, 2140, 2150],
+  "default_scenario": "ssp245_medium",
+  "scenarios": [
+    {"id": "ssp245_medium", "code": "SSP2-4.5", "name": "middle-of-the-road emissions", "confidence": "medium",
+     "range_kind": "likely range (about 2 in 3 chance)", "outer_kind": "5th to 95th percentile",
+     "p05": [], "p17": [], "p50": [], "p83": [], "p95": [],
+     "rate": {"units": "mm a year", "p05": [], "p17": [], "p50": [], "p83": [], "p95": []}}
+  ],
+  "drivers": {"year": 2050, "scenario": "ssp245_medium", "parts": [
+     {"id": "sterodynamic", "name": "Ocean warming and currents", "p17": 0, "p50": 181, "p83": 0},
+     {"id": "greenland", "name": "Greenland ice", "p17": 0, "p50": 13, "p83": 0},
+     {"id": "antarctica", "name": "Antarctic ice", "p17": 0, "p50": 34, "p83": 0},
+     {"id": "glaciers", "name": "Mountain glaciers", "p17": 0, "p50": 46, "p83": 0},
+     {"id": "land_water", "name": "Water stored on land", "p17": 0, "p50": 9, "p83": 0},
+     {"id": "land_motion", "name": "Land rising or sinking here", "p17": 0, "p50": 68, "p83": 0}],
+     "note": "Each part's range is its own; the parts' ranges don't add up to the total's."},
+  "readouts": {
+    "now": {"value": 80, "text": "+8.0 cm", "kind": "12-month mean", "start": "2025-11", "end": "2026-10", "label": "the 12 months to October 2026"},
+    "by_2050": {"scenario": "ssp245_medium", "p50": 358, "low": 266, "high": 464, "range_kind": "likely range (about 2 in 3 chance)", "text": "+36 cm (likely +27 to +46 cm)"},
+    "more_than_today": {"value": 278, "text": "about 28 cm more than today", "approximate": true}},
+  "check": {"observed_2019_2021": 80, "ar6_2020_p05": 0, "ar6_2020_p95": 0, "inside": true},
+  "caveat": "Faster ice-sheet loss could push this higher, outside this range.",
+  "why": null
+}
+```
+
+- Scenarios: SSP1-2.6 ("very low emissions"), SSP2-4.5 ("middle-of-the-road emissions"), SSP3-7.0 ("high emissions"), SSP5-8.5 ("very high emissions") at medium confidence, plus SSP1-2.6, SSP2-4.5 and SSP5-8.5 at low confidence (ids end `_low`, `range_kind` "17th to 83rd percentile", never "likely"). Arrays follow `years`; `null` where AR6 has no value.
+- `location.kind`: `"gauge"` (the AR6 PSMSL gauge: the PSMSL id itself, or the CO-OPS station's row in `coops_to_psmsl.csv`) or `"regional estimate"` (the AR6 1° cell; `note` says the land motion is AR6's regional estimate and local sinking may differ). A Great Lakes station, or a place with no AR6 location: `available` false with `why` "Sea level projections don't cover the Great Lakes." / "There is no expert projection for this tide gauge."
+- `readouts.now`: the mean of the 12 latest monthly anomalies (against the same 1995–2014 baseline as the chart), with its months; `null` if fewer than 10 of those 12 months have values. `by_2050`: the default scenario's 2050 median and range. `more_than_today`: `by_2050.p50` minus `now.value`, labelled approximate (different kinds of number: a 12-month mean and a 2050 projection). Rounded for text to 2 significant figures.
+- `check`: the observed 2019–2021 mean on the baseline against AR6's 2020 5th–95th percentile at this location (`inside` false is shown in "How we calculated this", never hidden).
+- `drivers`: the default scenario's 2050 parts with their own 17th–83rd percentiles.
+- Every sea-level answer keeps `world`, `fit` and the rest of PR1 unchanged; `projection` only adds.
+
 ### World reference series — data lane, stats lane reads
 
 `earthtrends.data.world.reference(name)` returns a TimeSeries (with the full source block) from a snapshot file kept in the repo and refreshed by `scripts/update_world.py`; nothing is fetched per request.
