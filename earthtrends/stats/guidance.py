@@ -11,6 +11,7 @@ DISCLAIMER = ("This guidance isn't perfect. It is based only on past records, an
               "Not professional financial or legal advice.")
 LABEL = {"high": "High risk", "moderate": "Moderate risk", "low": "Low risk", "unknown": "Not enough data"}
 NO_CLEAR = "No clear change"  # the label for a no_clear_change verdict: no risk level, it is not evidence of low risk
+NO_COMPARE = "No world comparison"  # a clear trend whose level needs a world figure that isn't there (QA B3: Mumbai)
 DISPLAY = {"sea_level": ("cm", "0.1"), "air_temp": ("°C", "1"), "air_temp_max": ("°C", "1"),
            "precip": ("mm a year", "365.25"), "water_storage": ("cm", "1")}  # levels; rates may differ (RATE)
 # Rates in headline_rate's units: sea level mm a year (the world's unit), water storage cm of water a year.
@@ -46,11 +47,16 @@ RECOMMEND = {
         "moderate": "The sea here has been rising at least about as fast as the world average. Before you buy or "
                     "build near the shore, check the site's flood level as you would on any coast.",
         "low": "Past sea-level records here give no special reason to avoid the shore, but they say nothing about "
-               "storm floods. Check the site's flood level as you would on any coast."},
+               "storm floods. Check the site's flood level as you would on any coast.",
+        # rising with no world figure (NO_COMPARE): no level, so advice that needs none
+        "no_world": "The sea here has been rising. Before you buy or build near the shore, check the site's height "
+                    "above flood level and the official flood maps."},
     "air_temp": {
         "high": "Plan for hotter years here. For a home, a farm or outdoor work, budget for cooling, shade and water.",
         "moderate": "It has been getting warmer here. Build cooling and shade into long-term plans.",
-        "low": "Past records give no special reason to change plans here because of heat."},
+        "low": "Past records give no special reason to change plans here because of heat.",
+        "no_world": "It has been getting warmer here. Before you plan a home, a farm or outdoor work, check how hot "
+                    "the summers get and how you would keep cool."},
     "precip": {
         "high_wetter": "Rain here has been increasing strongly. Before you build or plant, check drainage and the "
                        "flood history of the site.",
@@ -151,8 +157,9 @@ def _since(period, window) -> str | None:
 
 
 def _risk(var: str, verdict: str, slopes: tuple, mean: Decimal, ratios: tuple,
-          why_none, since: str | None = None) -> tuple[str, str, str, str | None]:
-    """(lowest risk, highest risk, why, recommendation key or None) for a clear rising or falling verdict. slopes is
+          why_none, since: str | None = None) -> tuple[str | None, str | None, str, str]:
+    """(lowest risk, highest risk, why, recommendation key) for a clear rising or falling verdict; both risks None
+    when the level needs a world figure that isn't there (NO_COMPARE). slopes is
     (slope, low, high) per decade; ratios is (ratio, ratio_low, ratio_high), the ends None when not given. A 95% range
     across a threshold gives both levels; the recommendation is the lower level's. since: the world window's first
     year when it is later than the record's (climate review L6), so `why` names the years its ratio is from."""
@@ -162,8 +169,8 @@ def _risk(var: str, verdict: str, slopes: tuple, mean: Decimal, ratios: tuple,
         ratio = ratios[0]
         if not up:
             return "low", "low", HARMLESS[var], "low"
-        if ratio is None:  # no like-for-like world figure: no level
-            return "unknown", "unknown", why_none if isinstance(why_none, str) and why_none else NO_WORLD, None
+        if ratio is None:  # no like-for-like world figure: no level, and advice that needs none (QA B3)
+            return None, None, why_none if isinstance(why_none, str) and why_none else NO_WORLD, "no_world"
         low, high = _span([r for r in ratios if r is not None], (THRESHOLDS["moderate"], THRESHOLDS["high"]))
         how = (f"about {ratio:f} times as fast as" if ratio > Decimal("1.1")
                else "about as fast as" if ratio >= Decimal("0.9") else "more slowly than")
@@ -249,5 +256,4 @@ def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratios, why_none, 
         g.update(risk=None, risk_label=None, why=SCARCE, recommendation=None)
         return
     low, high, why, key = _risk(var, verdict, (slope, lo, hi), mean, ratios, why_none, since)
-    g.update(risk=low, risk_label=_label(low, high), why=why,
-             recommendation=RECOMMEND[var][key] if key else NO_RULE)
+    g.update(risk=low, risk_label=_label(low, high) if low else NO_COMPARE, why=why, recommendation=RECOMMEND[var][key])

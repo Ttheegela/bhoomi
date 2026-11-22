@@ -6,7 +6,7 @@ import json
 import pytest
 
 from earthtrends.stats import compute_trend, guidance
-from earthtrends.stats.guidance import DISCLAIMER, NO_RULE, RECOMMEND, SHORT, guidance_for
+from earthtrends.stats.guidance import DISCLAIMER, RECOMMEND, SHORT, guidance_for
 
 UNITS = {"sea_level": "mm", "air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "water_storage": "cm"}
 KEYS = ["risk", "risk_label", "why", "ratio", "reference", "rate", "display", "recommendation", "future_link",
@@ -112,12 +112,19 @@ def test_ratio_and_reference_come_from_world():
 
 
 def test_rising_with_no_world_figure_has_no_level():
+    # QA B3, Mumbai: a long record, rising very clearly, but under 20 years since 1993: no level, not "Not enough data"
     why = "This gauge has fewer than 20 years of readings since 1993, so it is not compared with the world average."
-    r = {**res("sea_level", "rising", 40.0), "world": {"available": False, "ratio": None, "why_none": why}}
+    r = {**res("sea_level", "rising", 40.0, start="1878-01"), "world": {"available": False, "ratio": None,
+                                                                         "why_none": why}}
     g = guidance_for(r)
-    assert (g["risk"], g["risk_label"], g["why"], g["recommendation"]) == ("unknown", "Not enough data", why, NO_RULE)
-    assert g["rate"]["text"] == "+4.0 mm"  # the rate is still shown
-    assert guidance_for(res("air_temp", "rising", 0.3))["why"] == "There is no matching world figure to compare with."
+    assert (g["risk"], g["risk_label"], g["why"]) == (None, "No world comparison", why)
+    assert g["recommendation"] == RECOMMEND["sea_level"]["no_world"] and g["recommendation"] is not None
+    assert g["rate"]["text"] == "+4.0 mm" and g["disclaimer"] == DISCLAIMER  # the rate is still shown
+    g = guidance_for(res("air_temp", "rising", 0.3))
+    assert (g["risk"], g["risk_label"], g["why"], g["recommendation"]) == (
+        None, "No world comparison", "There is no matching world figure to compare with.",
+        RECOMMEND["air_temp"]["no_world"])
+    assert guidance_for(r | {"period": {"start": "2010-01", "end": "2025-12"}})["risk_label"] == "Not enough data"
 
 
 @pytest.mark.parametrize("verdict,slope", [("rising", 0.5), ("falling", -0.3), ("no_clear_change", 0.1)])
@@ -345,12 +352,13 @@ def test_rain_low_advice_is_true_for_a_small_change_and_for_one_reaching_high():
 
 
 CONTRACT_LABELS = {"High risk", "Moderate risk", "Low risk", "Moderate to high risk", "Low to moderate risk",
-                   "Low to high risk", "Not enough data", "No clear change"}  # docs/CONTRACTS.md, guidance.risk_label
+                   "Low to high risk", "No world comparison", "Not enough data",
+                   "No clear change"}  # docs/CONTRACTS.md, guidance.risk_label
 
 
 def test_every_risk_label_is_in_the_contract_list():
     made = {guidance._label(a, b) for i, a in enumerate(guidance.LEVELS) for b in guidance.LEVELS[i:]}
-    assert made | set(guidance.LABEL.values()) | {guidance.NO_CLEAR} == CONTRACT_LABELS
+    assert made | set(guidance.LABEL.values()) | {guidance.NO_CLEAR, guidance.NO_COMPARE} == CONTRACT_LABELS
     seen = {guidance_for(r, 3.0)["risk_label"] for r in ALL}
     for low, mid, high in itertools.combinations_with_replacement((0.5, 1.0, 2.0), 3):  # world ratios, in order
         r = res("sea_level", "rising", 34.0, ratio=mid)

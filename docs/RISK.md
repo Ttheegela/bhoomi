@@ -137,7 +137,7 @@ The checks run in this order:
   - `risk_label` names the lowest and the highest: "Moderate to high risk", "Low to moderate risk", or "Low to high risk" when the range crosses both thresholds;
   - `risk` is the lowest, and the recommendation is the lowest level's;
   - `why` keeps the central number.
-- Sea level or air temperature rising with no world ratio (for example a gauge with under 20 years since 1993): risk `unknown` ("Not enough data"), `why` is `world.why_none`, and the recommendation is "We can't give guidance for this record." The rate is still shown.
+- Sea level or air temperature rising with no world ratio (QA B3: Mumbai, 147 years but under 20 since 1993): no risk level. `risk` is null, `risk_label` is "No world comparison", `why` is `world.why_none`, and the recommendation needs no level (table below, "No world comparison"). The rate is still shown. "Not enough data" is kept for records too short to judge. A clear fall of the sea or a cooling stays Low (rule 4): that needs no world figure.
 - One side effect of judging the ratio as shown: a ratio from 1.45 up shows as 1.5 and counts as High.
 - The rainfall share (2 significant figures) and the water fall (2 significant figures) are also judged as shown.
 - **Too little rain for a % rule.** Where the 1995–2014 annual normal is under 100 mm, a clear rain change has no risk level: `risk`, `risk_label` and `recommendation` are null, and `why` is "Rain here is too scarce for a percentage rule." The rate is still shown.
@@ -162,6 +162,10 @@ The checks run in this order:
 | precip, wetter | Rain here has been increasing strongly. Before you build or plant, check drainage and the flood history of the site. | Rain here has been increasing. Check drainage and flood history before you build or plant. | No clear change: Past records show rain here holding steady enough that it gives no special reason to change plans. A clear change whose lower level is Low (all under 5 %, or reaching higher, like Chennai's "Low to high risk"): Rain here has been increasing, though perhaps only by a small share of its usual amount. Before you build or plant, check drainage and the flood history of the site, as you would anywhere. |
 | precip, drier | Rain here has been decreasing strongly. For farming or a business that needs water, don't count on today's rainfall. | Rain here has been decreasing. Plan for less water than today if you farm or depend on rainfall. | No clear change: as above. A clear change whose lower level is Low: Rain here has been decreasing, though perhaps only by a small share of its usual amount. If you farm or depend on rainfall, check how secure your water supply is, as you would anywhere. |
 | water_storage | Water stored in this region is falling fast. Before you rely on groundwater for a farm or a new well, check local water levels and make sure of a secure supply. | Water stored in this region is falling. Before investing in a farm or a well, check local water levels and supply. | Past records give no special reason to worry about water supply in this region. |
+
+No world comparison (rising, no world ratio; no level):
+- sea_level: "The sea here has been rising. Before you buy or build near the shore, check the site's height above flood level and the official flood maps."
+- air_temp: "It has been getting warmer here. Before you plan a home, a farm or outdoor work, check how hot the summers get and how you would keep cool."
 
 The advice describes what the records show and what to check. A ratio of past rates says nothing about a site's height, storm surge or flood defences, so no level advises against a purchase. The sea-level moderate text says "at least about as fast" because a range from moderate to high gets the moderate text.
 
