@@ -443,3 +443,11 @@ def test_narrow_readout_value_column_is_capped():
     assert narrow
     cols = re.search(r"\.reads > div, \.reads > div \+ div \{[^}]*grid-template-columns: ([^;]+);", narrow[1])
     assert cols and cols[1] == "minmax(0, 1fr) fit-content(45%)", cols and cols[1]
+
+
+def test_long_risk_chip_moves_under_the_heading():
+    """Item 7: "Risk level unclear (low to high)" is shown as given. On a phone it moves under the place name instead of
+    pushing past the card and squeezing the source line to one word a line."""
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.rec \.where \{[^}]*flex-wrap: wrap;", css)
+    assert re.search(r"\.rec \.where \.risk \{[^}]*white-space: normal;", css)
