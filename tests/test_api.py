@@ -89,7 +89,7 @@ def test_rainfall_levels_in_percent_seasons_in_mm_a_month(offline):
     pct = 100 / b["value"]  # % of the 1995-2014 annual mean rate, like anomaly and headline_rate
     assert f["units"] == "%" and f["years"] == t["record"]["years"]
     for k, v in (("change", t["slope_per_decade"]), ("change_low", t["ci_low"]), ("change_high", t["ci_high"])):
-        assert f[k] == pytest.approx(v * f["years"] / 10 * pct, abs=1e-3)
+        assert f[k] == pytest.approx(v * f["years"] / 10 * pct, abs=0.02)  # fit uses the unrounded slope
     assert -100 < f["level_end"] < 100 and t["headline_rate"]["unit"] == "%"
     days = (31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
     mm = [round(v * d, 1) for v, d in zip(b["months"], days)]

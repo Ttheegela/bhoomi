@@ -98,7 +98,7 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
 
     base = baseline(s) if base is None else base
     xa = _anomalies(cols, base, monthly)
-    slope, lo, hi, p, adjusted, intercept = _mk_sen(t[ok], xa[ok])
+    slope, lo, hi, p, adjusted, widened, intercept = _mk_sen(t[ok], xa[ok])
 
     # ponytail: fixed 4 decimals suits mm, degC, mm/day; values ~1e-6 get a degenerate CI. Round to significant figures if a small-unit variable is added.
     slope_d, lo_d, hi_d = (round(float(v) * 10, 4) + 0.0 for v in (slope, lo, hi))  # + 0.0 turns -0.0 into 0.0
@@ -112,6 +112,7 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
         verdict = "no_clear_change"
 
     yrs, units, var = record["years"], series["units"], series["variable"]
+    span = (int(idx[ok][-1] - idx[ok][0]) + 1) / (12 if monthly else 1)  # unrounded: fit.change is slope x span
     # Rainfall levels are % of the 1995-2014 annual mean rate, like its anomaly and headline_rate.
     pct = var == "precip" and base["value"] is not None and base["value"] > 0
     f, fit_units = (100 / base["value"], "%") if pct else (1.0, units)
@@ -136,10 +137,11 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
         "baseline": base,
         "record": record,
         "range_kind": RANGE_KIND,
-        "headline_rate": _headline_rate(var, units, (slope_d, lo_d, hi_d), base["value"]),
+        # from the unrounded slope and range (and span), so no number is rounded twice
+        "headline_rate": _headline_rate(var, units, (slope * 10, lo * 10, hi * 10), base["value"]),
         "fit": {"start": used[0], "end": used[-1], "years": yrs,
-                **{k: round(v * yrs / 10 * f, 4) + 0.0 for k, v in (("change", slope_d), ("change_low", lo_d),
-                                                                     ("change_high", hi_d))},
+                **{k: round(v * span * f, 4) + 0.0 for k, v in (("change", slope), ("change_low", lo),
+                                                                ("change_high", hi))},
                 "level_end": level_end, "units": fit_units},
         "latest": {"month": last,
                    "text": f"Data through {calendar.month_name[int(last[5:7])]} {last[:4]}" if monthly
@@ -150,7 +152,7 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
             "data": {"n_months": n, "n_missing": int(idx[ok][-1] - idx[ok][0]) + 1 - n, "start": used[0],
                      "end": used[-1], "where": _where(series)},
             "seasons": _seasons(base, units, var == "precip"),
-            "real": {"p_value": p, "in_100": _in_100(p), "rule": RULE, "widened": adjusted},
+            "real": {"p_value": p, "in_100": _in_100(p), "rule": RULE, "widened": widened},
         },
         "caveats": caveats,
     }
@@ -178,11 +180,31 @@ def _record(var: str, idx, year, per_year: int, used: list) -> tuple[int, dict]:
     years = span / per_year
     least, full = MIN_YEARS.get(var, MIN_YEARS_OTHER)
     if span < least * per_year:
-        raise ValueError(f"The record here is too short for a trend: {years:.1f} years ({used[k]} to {used[-1]})"
-                         f"{' once its sparse earlier readings are left out' if k else ''}. "
-                         f"A trend needs at least {least} years of data.")
+        whole = int(idx[-1] - idx[0]) + 1
+        if whole >= least * per_year:  # a long record whose recent stretch is too thin
+            raise ValueError(f"Too few recent readings for a trend: the record runs from {used[0]} to {used[-1]}, "
+                             f"but only {used[k]} on ({years:.1f} years) has a value in at least 80% of its months. "
+                             f"A trend needs at least {least} such years.")
+        raise ValueError(f"The record here is too short for a trend: {whole / per_year:.1f} years ({used[0]} to "
+                         f"{used[-1]}). A trend needs at least {least} years of data.")
     return k, {"years": round(years, 1), "coverage": round((n - k) / span, 2),
                "status": "ok" if span >= full * per_year else "short", "trimmed_from": used[0] if k else None}
+
+
+def trend_problem(series: dict) -> str | None:
+    """Why compute_trend would refuse this monthly record under the D6 rules (its plain 400 sentence), or None. The
+    data lane asks it to pass over a tide gauge that cannot give a trend, so the series and the trend pick the same
+    gauge."""
+    year, month, t, _, use = columns({**series, "freq": "monthly"})
+    ok = np.flatnonzero(use)
+    ok = ok[np.argsort(t[ok], kind="stable")]
+    if not ok.size:
+        return "There are no values in this record to test."
+    try:
+        _record(series.get("variable"), (year * 12 + month - 1)[ok], year[ok], 12, [series["times"][k] for k in ok])
+    except ValueError as e:
+        return str(e)
+    return None
 
 
 def _anomalies(cols, base: dict, monthly: bool):
@@ -209,25 +231,47 @@ def _mk_sen(t, x):
     var_s = (n * (n - 1) * (2 * n + 5) - int(np.sum(ties * (ties - 1) * (2 * ties + 5)))) / 18
     slope = float(np.median(slopes))
 
-    # Lag-1 autocorrelation of residuals around the Sen trend.
-    # ponytail: r1 uses consecutive valid values, so gaps from nulls are ignored; lag by time index if gappy series matter.
-    e = x - slope * t
-    e -= e.mean()
-    denom = float(e @ e)
-    r1 = float(e[:-1] @ e[1:]) / denom if denom > 0 else 0.0
-    adjusted = r1 > 0
-    if adjusted:  # Hamed & Rao (1998) with AR(1), rho_k = r1**k. r1 > 0 means this only ever inflates Var(S).
-        k = np.arange(1, n)
-        var_s *= 1 + 2 / (n * (n - 1) * (n - 2)) * float(np.sum((n - k) * (n - k - 1) * (n - k - 2) * r1**k))
+    # Hamed & Rao (1998) on the Sen-detrended series: Var(S) times n/n*, from the rank autocorrelations. Only a
+    # factor above 1 is applied: with every lag tested, chance "significant" lags in pure noise often give a factor
+    # below 1 (median 0.85 for 480 white-noise months), which would narrow the range and call noise a clear change.
+    factor = _hamed_rao(x - slope * t)
+    adjusted = factor > 1
+    if adjusted:
+        var_s *= factor
 
     # Two-sided p with continuity correction. s != 0 implies var_s > 0.
     p = 1.0 if s == 0 else math.erfc(abs(s - math.copysign(1, s)) / math.sqrt(var_s) / math.sqrt(2))
 
-    # 95% range for Sen's slope, rank method (Gilbert 1987), 1-indexed ranks M1 and M2+1. It uses the same inflated
+    # 95% range for Sen's slope, rank method (Gilbert 1987), 1-indexed ranks M1 and M2+1. It uses the same corrected
     # Var(S) (an effective sample size), so months that are alike widen the range, not only the p-value.
     c, big_n = 1.96 * math.sqrt(var_s), len(slopes)
     lo_i, hi_i = (min(max(round(r) - 1, 0), big_n - 1) for r in ((big_n - c) / 2, (big_n + c) / 2 + 1))
-    return slope, float(slopes[lo_i]), float(slopes[hi_i]), p, adjusted, float(np.median(x - slope * t))
+    return slope, float(slopes[lo_i]), float(slopes[hi_i]), p, adjusted, adjusted, float(np.median(x - slope * t))
+
+
+def _ranks(v):
+    """Ranks 1..n, tied values sharing their mean rank."""
+    r = np.empty(len(v))
+    r[np.argsort(v, kind="mergesort")] = np.arange(1, len(v) + 1)
+    _, inv, cnt = np.unique(v, return_inverse=True, return_counts=True)
+    return (np.bincount(inv, weights=r) / cnt)[inv]
+
+
+def _hamed_rao(e) -> float:
+    """n/n* of Hamed & Rao (1998): 1 + 2/(n(n-1)(n-2)) * sum over lags i of (n-i)(n-i-1)(n-i-2) rho_s(i), where rho_s is
+    the autocorrelation of the ranks of the detrended series `e`, every lag, keeping only the lags significant at 5%
+    (|rho_s(i)| > 1.96 / sqrt(n)). 1.0 when no lag is significant.
+    ponytail: lags count consecutive valid values, so gaps from nulls are ignored; lag by time index if gappy series
+    matter."""
+    n = len(e)
+    d = _ranks(e) - (n + 1) / 2
+    denom = float(d @ d)
+    if n < 3 or denom == 0:
+        return 1.0
+    rho = np.correlate(d, d, "full")[n:] / denom  # lags 1 .. n-1
+    i = np.arange(1, n, dtype=float)
+    keep = np.abs(rho) > 1.96 / math.sqrt(n)
+    return 1 + 2 / (n * (n - 1) * (n - 2)) * float(np.sum(((n - i) * (n - i - 1) * (n - i - 2) * rho)[keep]))
 
 
 def _sig(d: Decimal, digits: int) -> Decimal:
