@@ -10,8 +10,10 @@ from earthtrends.stats.meaning import UNITS, about
 DISCLAIMER = ("This guidance isn't perfect. It is based only on past records, and the future is not certain. "
               "Not professional financial or legal advice.")
 LABEL = {"high": "High risk", "moderate": "Moderate risk", "low": "Low risk", "unknown": "Not enough data"}
+NO_CLEAR = "No clear change"  # the label for a no_clear_change verdict: no risk level, it is not evidence of low risk
 DISPLAY = {"sea_level": ("cm", "0.1"), "air_temp": ("°C", "1"), "air_temp_max": ("°C", "1"),
-           "precip": ("mm a year", "365.25"), "water_storage": ("cm", "1")}
+           "precip": ("mm a year", "365.25"), "water_storage": ("cm", "1")}  # levels; rates may differ (RATE)
+RATE = {"sea_level": ("mm", "0.1", "a year")}  # sea level rates are mm a year, the world's unit (headline_rate)
 MIN_YEARS = 20
 THRESHOLDS = {"moderate": 0.75, "high": 1.5}  # local rate / world rate, judged on the ratio as shown (1 decimal)
 
@@ -64,8 +66,8 @@ SHORT = "The record here is too short to guide a decision. Try a nearby place wi
 # Copied from earthtrends/agent/resources.py (US_BOXES): (lat min, lat max, lon min, lon max) for the US coasts,
 # Alaska and Hawaii. Copied, not imported, so the stats lane does not depend on the agent lane.
 US_BOXES = ((24.4, 49.5, -125.0, -66.9), (51.0, 71.5, -170.0, -129.9), (18.9, 22.3, -160.3, -154.8))
+# Answered 200 on 2026-11-22. Outside the US boxes there is no link (the NASA AR6 tool URL answered 404 that day).
 NOAA_SLR = "https://coast.noaa.gov/slr/#/layer/slr/0/{x}/{y}/10/satellite/none/0.8/2050/interHigh/midAccretion"
-NASA_TOOL = "https://sealevel.nasa.gov/ipcc-ar6-sea-level-projection-tool"
 
 
 def _dec(v) -> Decimal | None:
@@ -103,7 +105,7 @@ def _years(period) -> float | None:
     return (ey * 12 + em - (sy * 12 + sm) + 1) / 12
 
 
-def _future_link(place) -> dict:
+def _future_link(place) -> dict | None:
     place = place if isinstance(place, dict) else {}
     lat, lon = place.get("lat"), place.get("lon")
     if (_dec(lat) is not None and _dec(lon) is not None
@@ -111,7 +113,7 @@ def _future_link(place) -> dict:
         x = lon * 20037508.34 / 180
         y = math.log(math.tan((90 + lat) * math.pi / 360)) / (math.pi / 180) * 20037508.34 / 180
         return {"label": "Future flood map (NOAA)", "url": NOAA_SLR.format(x=round(x), y=round(y))}
-    return {"label": "Future sea level (NASA projection tool)", "url": NASA_TOOL}
+    return None
 
 
 def _risk(var: str, verdict: str, slope: Decimal, mean: Decimal, ratio: Decimal | None,
@@ -185,16 +187,15 @@ def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratio, why_none) -
         g["why"] = f"The record here covers fewer than {MIN_YEARS} years."
         g["recommendation"] = SHORT
         return
-    if verdict == "no_clear_change":
+    if verdict == "no_clear_change":  # not evidence of low risk: no level, only the label
         if var in RECOMMEND:
-            g.update(risk="low", risk_label=LABEL["low"], why="The record here shows no clear change.",
+            g.update(risk=None, risk_label=NO_CLEAR, why="The record here shows no clear change.",
                      recommendation=RECOMMEND[var]["low"])
         return
 
-    unit = g["display"]["unit"]
-    rate = sig2(slope * factor) + 0
-    g["rate"] = {"value": float(rate), "unit": unit, "text": f"{signed(rate)} {unit}", "per": "every 10 years",
-                 "note": None}
+    unit, per_unit, per = RATE.get(var, (g["display"]["unit"], factor, "every 10 years"))
+    rate = sig2(slope * Decimal(per_unit)) + 0
+    g["rate"] = {"value": float(rate), "unit": unit, "text": f"{signed(rate)} {unit}", "per": per, "note": None}
     if var == "precip":  # the big number is the share (as in `why`); the mm a year (as in meaning) goes in the note
         down = verdict == "falling"
         share = sig2(abs(slope) / mean * 100) * (-1 if down else 1)

@@ -21,16 +21,26 @@ Rework v2 (2026-11-22, `docs/REWORK-SPEC.md` D1, D5, D6) changed three things:
 
 A record of 20 to 29 years is shown with `record.status` "short" and the caveat "Short record: under 30 years of data, so this trend is less certain." Land water storage counts as "ok" from 10 years. Preliminary values (`flags`) are left out of the baseline and the fit.
 
-## Display units
+## Rates and display units
 
-| Variable | Result units | Shown as | Factor |
-|---|---|---|---|
-| sea_level | mm | cm | 0.1 |
-| air_temp, air_temp_max | degC | °C | 1 |
-| precip | mm/day | mm a year | 365.25 |
-| water_storage | cm | cm | 1 |
+Every rate shown anywhere comes from the result's `headline_rate`, in the unit people read, with its 95% range:
 
-`rate` is the slope per 10 years in display units. It has 2 significant figures, rounded half away from zero, and is always signed ("+8.3 cm", "+0.21 °C", "−1.4 cm"). It is null when there is no clear change. `rate.note` is always present and null, except for rainfall.
+| Variable | Result units | `headline_rate` | Levels (`display`) | Level factor |
+|---|---|---|---|---|
+| sea_level | mm | mm a year (the world's unit) | cm | 0.1 |
+| air_temp, air_temp_max | degC | °C per decade | °C | 1 |
+| precip | mm/day | % of the 1995–2014 average per decade | mm a year | 365.25 |
+| water_storage | cm | cm of water a year | cm | 1 |
+
+- `headline_rate` has `value`, `low` and `high` to 3 significant figures.
+- Its `text` is 2 significant figures, signed with a true minus: "+4.3 mm a year".
+- Its `range_text` shows both ends to the same decimals, with enough decimals that the ends differ: "+4.1 to +4.4 mm a year".
+- Rainfall with no 1995–2014 average above 0 has `headline_rate` null.
+- Levels (`fit`, `anomaly`) keep the series units, and the page may show them in the `display` unit.
+
+`guidance.rate` is the rate for a clear change, to 2 significant figures, rounded half away from zero and always signed. It is null when there is no clear change, and `rate.note` is always present and null, except for rainfall.
+- Sea level is in mm a year: `{"value": 4.3, "unit": "mm", "text": "+4.3 mm", "per": "a year"}`, the same number as `headline_rate.text`.
+- Temperature and water storage are per 10 years in the display unit ("+0.21 °C", "every 10 years").
 
 For rainfall the big number is the share of this place's 1995–2014 average rainfall: the same share, with the same rounding, that the `why` sentence prints. For example, `{"value": 4.8, "unit": "%", "text": "+4.8%", "per": "more rain every 10 years", "note": {"value": 60, "unit": "mm", "text": "about 60 mm more a year"}}`. When rain is falling, it reads "−4.8%" with "less rain every 10 years", and the note is `{"value": -60, ..., "text": "about 60 mm less a year"}`. The note is the slope per 10 years in mm a year, rounded the same way as `meaning.comparison`. Its `value` is signed; its text is unsigned, and a word carries the direction. `display` stays mm a year (factor 365.25) for the chart. A clear rain change with no usable average gets risk `unknown` and `rate` null.
 
@@ -44,7 +54,13 @@ For rainfall the big number is the share of this place's 1995–2014 average rai
 | precip | none | none | none | none | no: this place's own rule, printed in `world.text` |
 | water_storage | none | none | none | none | no: this region's own rule, printed in `world.text` |
 
-- Both sides use the same method: anomalies against their own 1995–2014 calendar-month normals, then Sen's slope over the same months.
+- Both sides use the same method: anomalies against their own 1995–2014 calendar-month normals, then Sen's slope over the same months. `world.window` is the first and last of those shared months, per place.
+- `world.method` names the kinds of record when they differ:
+  - air temperature from a grid (POWER, ERA5): "different datasets: a grid cell here, station-based for the world; same months, same method";
+  - air temperature from GHCN: "different datasets: one weather station here, station-based for the world; same months, same method";
+  - sea level: "different instruments: a tide gauge here (measured against the land), satellites for the world; same months, same method".
+
+  The world land series (NOAAGlobalTemp, global land) is built from station records. Other sources keep "Sen's slope of monthly anomalies, same months for both".
 - The two rates are rounded to 2 significant figures as shown.
 - **ratio** = the rate here ÷ the world rate, from those shown rates, rounded to 1 decimal place (half away from zero). The level is judged on that rounded number, so the ratio shown and the level always agree. A world rate of zero or less gives no ratio.
 - For sea level, the full-record rate stays in `slope_per_decade`, with its own years and no ratio.
@@ -64,7 +80,7 @@ The checks run in this order:
 
 1. **Unknown variable, unexpected units, or a slope or CI that isn't a finite number.** Risk `unknown`, `rate` null.
 2. **Not enough data.** If the record covers fewer than 20 years, the risk is `unknown` ("Not enough data") and the recommendation is: "The record here is too short to guide a decision. Try a nearby place with a longer record." (`compute_trend` already refuses such records; this rule guards direct callers.)
-3. **No clear change.** If the verdict is `no_clear_change`, the risk is Low and `why` is "The record here shows no clear change."
+3. **No clear change.** If the verdict is `no_clear_change`, there is no risk level: a record that cannot show a change is not evidence of low risk. `risk` is null and `risk_label` is "No clear change". `why` is "The record here shows no clear change." The Low recommendation in the table below and the disclaimer stay.
 4. **Clear change in the harmless direction** (sea falling, cooling, water storage rising). The risk is Low, and `why` says what is happening (for example "The sea here has been falling.").
 5. **Clear change in the harmful direction**, judged per variable:
 
@@ -103,4 +119,4 @@ The checks run in this order:
 
 This is for sea_level only. Every other variable gets null.
 - Inside the US coast boxes (lower 48, Alaska, Hawaii; same boxes as `US_BOXES` in `earthtrends/agent/resources.py`), the link is "Future flood map (NOAA)". It opens the NOAA Sea Level Rise Viewer centred on the place: `https://coast.noaa.gov/slr/#/layer/slr/0/{x}/{y}/10/satellite/none/0.8/2050/interHigh/midAccretion`. Here x and y are Web Mercator metres, rounded: x = lon × 20037508.34 / 180, and y = ln(tan((90 + lat) × π / 360)) / (π / 180) × 20037508.34 / 180.
-- Elsewhere, the link is "Future sea level (NASA projection tool)", https://sealevel.nasa.gov/ipcc-ar6-sea-level-projection-tool.
+- Elsewhere, `future_link` is null. The NASA AR6 projection tool page we linked before answered 404 on 2026-11-22. Every URL `future_link` carries must answer 200 when checked; the NOAA viewer did on 2026-11-22.

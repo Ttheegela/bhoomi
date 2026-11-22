@@ -9,8 +9,8 @@ from decimal import ROUND_HALF_UP, Decimal
 import numpy as np
 
 from earthtrends.stats.baseline import YEAR_MONTHS, baseline, columns, fit, normals_at, num
-from earthtrends.stats.guidance import OWN_RULE, THRESHOLDS, guidance_for, q, sig2
-from earthtrends.stats.meaning import meaning_for
+from earthtrends.stats.guidance import OWN_RULE, THRESHOLDS, guidance_for, q, sig2, signed
+from earthtrends.stats.meaning import UNITS, meaning_for
 
 MIN_DAYS_PER_MONTH = 20
 # Spec D6, in years: (no trend below, "short record" below). GRACE has its own minimum of 10 years.
@@ -40,6 +40,19 @@ WORLD = {
                            "the world average."},
 }
 WORLD_METHOD = "Sen's slope of monthly anomalies, same months for both"
+# Different kinds of record on the two sides, said in world.method. NOAAGlobalTemp's land part (the data lane's
+# land_temp) is built from GHCN-Monthly station records; its source block does not say "station" itself.
+KIND = {("air_temp", "power"): "different datasets: a grid cell here, station-based for the world; same months, "
+                               "same method",
+        ("air_temp", "ghcn"): "different datasets: one weather station here, station-based for the world; same "
+                              "months, same method"}
+KIND[("air_temp", "era5")] = KIND[("air_temp", "power")]
+SEA_KIND = ("different instruments: a tide gauge here (measured against the land), satellites for the world; "
+            "same months, same method")
+# headline_rate: variable -> (factor from units per decade, unit, per). Rainfall is a share of the baseline instead.
+HEADLINE = {"sea_level": ("0.1", "mm", "a year"), "air_temp": ("1", "°C", "per decade"),
+            "air_temp_max": ("1", "°C", "per decade"), "water_storage": ("0.1", "cm", "of water a year")}
+RAIN_PER = "of the 1995–2014 average per decade"
 WORLD_YEARS = 20  # years with at least YEAR_MONTHS shared months
 NO_REFERENCE = "The world reference series is not available."
 NO_MATCH = {"air_temp_max": "There is no matching world figure for the hottest day of the month.",
@@ -121,6 +134,7 @@ def compute_trend(series: dict) -> dict:
         "baseline": base,
         "record": record,
         "range_kind": RANGE_KIND,
+        "headline_rate": _headline_rate(var, units, (slope_d, lo_d, hi_d), base["value"]),
         "fit": {"start": used[0], "end": used[-1], "years": yrs,
                 **{k: round(v * yrs / 10, 4) + 0.0 for k, v in (("change", slope_d), ("change_low", lo_d),
                                                                  ("change_high", hi_d))},
@@ -128,7 +142,7 @@ def compute_trend(series: dict) -> dict:
         "latest": {"month": last,
                    "text": f"Data through {calendar.month_name[int(last[5:7])]} {last[:4]}" if monthly
                    else f"Data through {last[:4]}"},
-        "world": _world(var, monthly, used, t[ok], xa[ok]),
+        "world": _world(var, monthly, used, t[ok], xa[ok], (series.get("source") or {}).get("id")),
         "projection": {"available": False, "why": PROJECTION.get(var, PROJECTION_LATER)},
         "explain": {
             "data": {"n_months": n, "n_missing": int(idx[ok][-1] - idx[ok][0]) + 1 - n, "start": used[0],
@@ -214,6 +228,40 @@ def _mk_sen(t, x):
     return slope, float(slopes[lo_i]), float(slopes[hi_i]), p, adjusted, float(np.median(x - slope * t))
 
 
+def _sig(d: Decimal, digits: int) -> Decimal:
+    return d if not d else d.quantize(Decimal(1).scaleb(d.adjusted() - digits + 1), rounding=ROUND_HALF_UP) + 0
+
+
+def _at(d: Decimal, exp: int) -> Decimal:
+    return d.quantize(Decimal(1).scaleb(exp), rounding=ROUND_HALF_UP) + 0
+
+
+def _signed0(d: Decimal) -> str:
+    return "0" if not d else signed(d)
+
+
+def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict | None:
+    """The trend rate in the unit people read, with its 95% range (contract `headline_rate`): value, low and high to
+    3 significant figures; text to 2; both ends of range_text to the same decimals, enough that they differ.
+    None for rainfall without a 1995-2014 average above zero."""
+    if var == "precip" and units == UNITS["precip"]:
+        if not base_value or base_value <= 0:
+            return None
+        factor, unit, per = Decimal(100) / Decimal(repr(base_value)), "%", RAIN_PER
+    elif var in HEADLINE and units == UNITS[var]:
+        factor, unit, per = Decimal(HEADLINE[var][0]), HEADLINE[var][1], HEADLINE[var][2]
+    else:  # a measurement we have no reader's unit for: its own units per decade
+        factor, unit, per = Decimal(1), units, "per decade"
+    v, lo, hi = (Decimal(repr(float(x))) * factor for x in per_decade)
+    exp = sig2(max(abs(lo), abs(hi))).as_tuple().exponent if (lo or hi) else 0
+    while exp > -6 and lo != hi and _at(lo, exp) == _at(hi, exp):
+        exp -= 1
+    gap = "" if unit == "%" else " "
+    return {"value": float(_sig(v, 3)), "low": float(_sig(lo, 3)), "high": float(_sig(hi, 3)), "unit": unit,
+            "per": per, "text": f"{_signed0(sig2(v) + 0)}{gap}{unit} {per}",
+            "range_text": f"{_signed0(_at(lo, exp))} to {_signed0(_at(hi, exp))}{gap}{unit} {per}"}
+
+
 def _reference(name: str) -> dict | None:
     """The data lane's world reference TimeSeries, or None while that module is not there."""
     try:
@@ -227,7 +275,7 @@ def _plain(d: Decimal) -> str:
     return ("−" if d < 0 else "") + format(abs(d), "f")
 
 
-def _world(var: str, monthly: bool, used: list, t, xa) -> dict:
+def _world(var: str, monthly: bool, used: list, t, xa, source_id=None) -> dict:
     """Spec D5. used, t, xa: the fitted months, their times and their anomalies, in time order."""
     out = {"available": False, "measure": None, "local_rate": None, "world_rate": None, "unit": None, "window": None,
            "method": None, "ratio": None, "thresholds": None, "source": None, "text": OWN_RULE.get(var),
@@ -256,7 +304,8 @@ def _world(var: str, monthly: bool, used: list, t, xa) -> dict:
     start, end = used[pick[0]], used[pick[-1]]
     src = ref.get("source") or {}
     return {"available": True, "measure": cfg["measure"], "local_rate": float(local), "world_rate": float(glob),
-            "unit": cfg["unit"], "window": {"start": start, "end": end}, "method": WORLD_METHOD,
+            "unit": cfg["unit"], "window": {"start": start, "end": end},
+            "method": SEA_KIND if var == "sea_level" else KIND.get((var, source_id), WORLD_METHOD),
             "ratio": float(q(local / glob, "0.1") + 0) if glob > 0 else None,  # judged as shown, like the verdict
             "thresholds": dict(THRESHOLDS),
             "source": {k: src.get(k) for k in ("name", "dataset_id", "record_url", "retrieved")},

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from earthtrends.stats import compute_trend
+from earthtrends.stats import compute_trend, guidance
 from earthtrends.stats.guidance import DISCLAIMER, NO_RULE, RECOMMEND, SHORT, guidance_for
 
 UNITS = {"sea_level": "mm", "air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "water_storage": "cm"}
@@ -92,10 +92,13 @@ def test_why(r, mean, why):
 
 
 @pytest.mark.parametrize("var", [v for v in UNITS if v != "air_temp_max"])
-def test_no_clear_change_is_low(var):
+def test_no_clear_change_has_no_risk_level(var):
     g = guidance_for(res(var, "no_clear_change", 1.0, lo=-1.0, hi=3.0), 3.0)
-    assert (g["risk"], g["why"], g["rate"], g["ratio"]) == ("low", "The record here shows no clear change.", None, None)
-    assert g["recommendation"] == RECOMMEND[var]["low"]
+    assert (g["risk"], g["risk_label"], g["why"], g["rate"], g["ratio"]) == (
+        None, "No clear change", "The record here shows no clear change.", None, None)
+    assert g["recommendation"] == RECOMMEND[var]["low"] and g["disclaimer"] == DISCLAIMER
+    assert guidance_for(res(var, "falling", -1.0, lo=-1.2, hi=-0.8) if var != "water_storage"
+                        else res(var, "rising", 1.0), 3.0)["risk_label"] in ("Low risk", "High risk", "Moderate risk")
 
 
 def test_ratio_and_reference_come_from_world():
@@ -111,7 +114,7 @@ def test_rising_with_no_world_figure_has_no_level():
     r = {**res("sea_level", "rising", 40.0), "world": {"available": False, "ratio": None, "why_none": why}}
     g = guidance_for(r)
     assert (g["risk"], g["risk_label"], g["why"], g["recommendation"]) == ("unknown", "Not enough data", why, NO_RULE)
-    assert g["rate"]["text"] == "+4.0 cm"  # the rate is still shown
+    assert g["rate"]["text"] == "+4.0 mm"  # the rate is still shown
     assert guidance_for(res("air_temp", "rising", 0.3))["why"] == "There is no matching world figure to compare with."
 
 
@@ -135,10 +138,13 @@ def test_harmless_direction_is_low(var, verdict, slope, why):
 
 
 def test_rate_text():
-    assert guidance_for(res("sea_level", "rising", 83.0))["rate"] == {
-        "value": 8.3, "unit": "cm", "text": "+8.3 cm", "per": "every 10 years", "note": None}
-    assert guidance_for(res("air_temp", "rising", 0.21))["rate"]["text"] == "+0.21 °C"
-    assert guidance_for(res("sea_level", "falling", -14.0))["rate"]["text"] == "−1.4 cm"
+    # sea level: mm a year, the world's unit (as headline_rate); levels stay in cm through display
+    g = guidance_for(res("sea_level", "rising", 83.0))
+    assert g["rate"] == {"value": 8.3, "unit": "mm", "text": "+8.3 mm", "per": "a year", "note": None}
+    assert g["display"] == {"unit": "cm", "factor": 0.1}
+    assert guidance_for(res("air_temp", "rising", 0.21))["rate"] == {
+        "value": 0.21, "unit": "°C", "text": "+0.21 °C", "per": "every 10 years", "note": None}
+    assert guidance_for(res("sea_level", "falling", -14.0))["rate"]["text"] == "−1.4 mm"
 
 
 def test_short_record_is_unknown():
@@ -170,11 +176,17 @@ def test_future_link():
     # lon -74.0, lat 40.7 in Web Mercator metres: x = -74 * 20037508.34 / 180, y from ln(tan((90 + lat) * pi / 360))
     assert us["url"] == ("https://coast.noaa.gov/slr/#/layer/slr/0/-8237642/4968192/10/satellite/none/0.8/2050/"
                          "interHigh/midAccretion")
-    assert guidance_for(res(place=VIZAG))["future_link"] == {
-        "label": "Future sea level (NASA projection tool)",
-        "url": "https://sealevel.nasa.gov/ipcc-ar6-sea-level-projection-tool"}
-    assert guidance_for(res(place={"name": "X"}))["future_link"]["label"] == "Future sea level (NASA projection tool)"
+    assert guidance_for(res(place=VIZAG))["future_link"] is None  # outside the US: no link
+    assert guidance_for(res(place={"name": "X"}))["future_link"] is None
     assert guidance_for(res("air_temp", slope=0.3, place=BATTERY))["future_link"] is None
+
+
+def test_no_dead_link_in_guidance():
+    # The NASA AR6 projection tool URL answered 404 on 2026-11-22 (also with ?psmsl_id=12).
+    dead = "sealevel.nasa.gov/ipcc-ar6-sea-level-projection-tool"
+    strings = [v for v in vars(guidance).values() if isinstance(v, str)]
+    assert strings and not any(dead in s for s in strings)
+    assert all(dead not in json.dumps(guidance_for(res(place=p))) for p in (VIZAG, BATTERY, {"name": "X"}))
 
 
 ALL = ([res(v, d, s, ratio=w) for v, d, s, _, w, *_ in LEVELS] + [r for r, *_ in WHY]

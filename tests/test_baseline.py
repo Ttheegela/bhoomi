@@ -366,7 +366,65 @@ def test_sea_level_compares_1993_on_in_mm_a_year(refs):
     assert w["available"] and w["window"] == {"start": "1993-01", "end": "2025-12"} and w["unit"] == "mm a year"
     assert (w["local_rate"], w["world_rate"]) == (float(rate(s, months, 1)), float(rate(gmsl_ref(), months, 1)))
     assert w["text"].startswith("Over the same months, 1993 to 2025, global average sea level measured by satellites rose")
+    assert w["method"] == ("different instruments: a tide gauge here (measured against the land), satellites for the "
+                           "world; same months, same method")
     assert r["period"]["start"] == "1950-01"  # the full-record rate stays in slope_per_decade, with no ratio of its own
+
+
+def test_sea_level_window_is_exactly_the_months_both_have(refs):
+    x = blank(synth(71, start=1950, per_decade=30, sd=5, level=7000.0), 1950, [1993], [1, 2, 3])  # to 2020-12
+    x[-6:] = np.nan  # the gauge ends in 2020-06; the satellite record runs to 2025-12
+    s = ts(x, start=1950, variable="sea_level", source={"id": "coops", "name": "CO-OPS", "url": "https://x.org/"})
+    w = compute_trend(s)["world"]
+    months = [t for t, v in zip(s["times"], s["values"]) if v is not None and t >= "1993-01"]
+    assert w["window"] == {"start": "1993-04", "end": "2020-06"} == {"start": months[0], "end": months[-1]}
+    assert (w["local_rate"], w["world_rate"]) == (float(rate(s, months, 1)), float(rate(gmsl_ref(), months, 1)))
+
+
+@pytest.mark.parametrize("src,method", [
+    ("power", "different datasets: a grid cell here, station-based for the world; same months, same method"),
+    ("era5", "different datasets: a grid cell here, station-based for the world; same months, same method"),
+    ("ghcn", "different datasets: one weather station here, station-based for the world; same months, same method"),
+    ("other", "Sen's slope of monthly anomalies, same months for both"),
+])
+def test_temperature_world_method_names_the_kinds_of_record(refs, src, method):
+    w = compute_trend(ts(synth(45), source={**POWER, "id": src}))["world"]
+    assert w["available"] and w["method"] == method
+
+
+# ---- headline_rate: the rate in the reader's unit ----
+
+def test_headline_rate_matches_the_contract_example():
+    assert trend._headline_rate("sea_level", "mm", (42.5046, 41.0706, 43.9508), None) == {
+        "value": 4.25, "low": 4.11, "high": 4.4, "unit": "mm", "per": "a year", "text": "+4.3 mm a year",
+        "range_text": "+4.1 to +4.4 mm a year"}
+    assert trend._headline_rate("sea_level", "mm", (42.1, 42.05, 42.14), None)["range_text"] == (
+        "+4.205 to +4.214 mm a year")  # enough decimals that the two ends differ
+    assert trend._headline_rate("precip", "mm/day", (0.1, 0.0, 0.2), None) is None  # no 1995-2014 average
+
+
+@pytest.mark.parametrize("var,level,unit,per", [
+    ("sea_level", 7000.0, "mm", "a year"),
+    ("air_temp", 15.0, "°C", "per decade"),
+    ("air_temp_max", 30.0, "°C", "per decade"),
+    ("precip", 3.0, "%", "of the 1995–2014 average per decade"),
+    ("water_storage", 0.0, "cm", "of water a year"),
+])
+def test_headline_rate_per_measurement(var, level, unit, per):
+    src = GRACE if var == "water_storage" else POWER
+    r = compute_trend(ts(synth(40, level=level, per_decade=-8.0 if var == "water_storage" else 0.3, sd=0.2,
+                               season=SEASON / 10), variable=var, source=src))
+    h, d = r["headline_rate"], r["slope_per_decade"]
+    per_decade = {"sea_level": 0.1, "water_storage": 0.1}.get(var, 1) * (
+        100 / r["baseline"]["value"] if var == "precip" else 1)
+    assert (h["unit"], h["per"]) == (unit, per)
+    assert h["value"] == pytest.approx(d * per_decade, rel=5e-3)
+    assert h["low"] == pytest.approx(r["ci_low"] * per_decade, rel=5e-3)
+    assert h["high"] == pytest.approx(r["ci_high"] * per_decade, rel=5e-3)
+    assert h["text"].endswith(f"{unit} {per}") and h["range_text"].endswith(f"{unit} {per}")
+    if var == "sea_level":  # guidance shows the same rate: mm a year, not cm every 10 years
+        g = r["guidance"]["rate"]
+        assert (g["unit"], g["per"], f"{g['text']} {g['per']}") == ("mm", "a year", h["text"])
 
 
 @pytest.mark.parametrize("last,available", [(2011, False), (2012, True)])
