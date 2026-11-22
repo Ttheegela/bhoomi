@@ -1,11 +1,24 @@
 # Risk guidance: the rules
 
-Every trend result carries a `guidance` object, computed in code by `earthtrends/stats/guidance.py` from the rules below and tested in `tests/test_guidance.py`. The page and the Ask agent show its strings as they are. Nobody else does the arithmetic.
+Every trend result carries a `guidance` object, computed in code by `earthtrends/stats/guidance.py` from the rules below and tested in `tests/test_guidance.py`. The world comparison it reads is the result's own `world` object, built in `earthtrends/stats/trend.py` and tested in `tests/test_baseline.py`. The page and the Ask agent show these strings as they are. Nobody else does the arithmetic.
+
+Rework v2 (2026-11-22, `docs/REWORK-SPEC.md` D1, D5, D6) changed three things:
+- the "If the past trend continues" ranges (`outlook`, `outlook_label`) are gone;
+- the world comparison is like for like;
+- hottest day of the month has no risk level.
 
 ## What guidance is not
 
-- **Not a forecast.** The "If the past trend continues" ranges just carry the past rate forward. They ignore speed-ups, slow-downs and anything else the future may bring.
+- **Not a forecast.** Guidance never gives a future value. No future number is made from a past trend. Future values will come only from published expert projections, in the result's `projection` object (added in later work).
 - **Not professional advice.** It is not financial, legal, engineering or insurance advice. Every guidance object ends with this disclaimer: "This guidance isn't perfect. It is based only on past records, and the future is not certain. Not professional financial or legal advice."
+
+## Before guidance: the record must support a trend
+
+`compute_trend` gives no result at all (a 400 with a plain message) when the record is too short or too gappy (D6):
+- under 20 years from the first value to the last (land water storage: under 10 years);
+- or under 80% of the months in that span with a value.
+
+A record of 20 to 29 years is shown with `record.status` "short" and the caveat "Short record: under 30 years of data, so this trend is less certain." Land water storage counts as "ok" from 10 years. Preliminary values (`flags`) are left out of the baseline and the fit.
 
 ## Display units
 
@@ -16,50 +29,62 @@ Every trend result carries a `guidance` object, computed in code by `earthtrends
 | precip | mm/day | mm a year | 365.25 |
 | water_storage | cm | cm | 1 |
 
-`rate` is the slope per 10 years in display units: 2 significant figures, rounded half away from zero, always signed ("+8.3 cm", "+0.21 °C", "−1.4 cm"). It is null when there is no clear change. `rate.note` is always present and null, except for rainfall.
+`rate` is the slope per 10 years in display units. It has 2 significant figures, rounded half away from zero, and is always signed ("+8.3 cm", "+0.21 °C", "−1.4 cm"). It is null when there is no clear change. `rate.note` is always present and null, except for rainfall.
 
-For rainfall the big number is the share of this place's usual rainfall: the same share, with the same rounding, that the `why` sentence prints. For example, `{"value": 4.8, "unit": "%", "text": "+4.8%", "per": "more rain every 10 years", "note": {"value": 60, "unit": "mm", "text": "about 60 mm more a year"}}`. When rain is falling, it reads "−4.8%" with "less rain every 10 years", and the note is `{"value": -60, ..., "text": "about 60 mm less a year"}`. The note is the slope per 10 years in mm a year, rounded the same way as `meaning.comparison`. Its `value` is signed; its text is unsigned, and a word carries the direction. `display` stays mm a year (factor 365.25) for the chart. A clear rain change with no usable average gets risk `unknown` and `rate` null.
+For rainfall the big number is the share of this place's 1995–2014 average rainfall: the same share, with the same rounding, that the `why` sentence prints. For example, `{"value": 4.8, "unit": "%", "text": "+4.8%", "per": "more rain every 10 years", "note": {"value": 60, "unit": "mm", "text": "about 60 mm more a year"}}`. When rain is falling, it reads "−4.8%" with "less rain every 10 years", and the note is `{"value": -60, ..., "text": "about 60 mm less a year"}`. The note is the slope per 10 years in mm a year, rounded the same way as `meaning.comparison`. Its `value` is signed; its text is unsigned, and a word carries the direction. `display` stays mm a year (factor 365.25) for the chart. A clear rain change with no usable average gets risk `unknown` and `rate` null.
+
+## World comparison (`world`), like for like (D5)
+
+| Variable | Numerator (here) | Denominator (world) | Window | Unit | Ratio |
+|---|---|---|---|---|---|
+| air_temp | Sen's slope of this record's monthly anomalies | Sen's slope of the global land-only monthly series (`earthtrends.data.world.reference("land_temp")`), rebased the same way | exactly the months both records have | °C per decade | yes |
+| sea_level | Sen's slope of the gauge's monthly anomalies | Sen's slope of satellite global mean sea level (`reference("gmsl")`), rebased the same way | the months from 1993 to the gauge's last month that both records have; needs at least 20 years with 9 or more such months | mm a year | yes |
+| air_temp_max | none | none | none | none | no: "There is no matching world figure for the hottest day of the month." |
+| precip | none | none | none | none | no: this place's own rule, printed in `world.text` |
+| water_storage | none | none | none | none | no: this region's own rule, printed in `world.text` |
+
+- Both sides use the same method: anomalies against their own 1995–2014 calendar-month normals, then Sen's slope over the same months.
+- The two rates are rounded to 2 significant figures as shown.
+- **ratio** = the rate here ÷ the world rate, from those shown rates, rounded to 1 decimal place (half away from zero). The level is judged on that rounded number, so the ratio shown and the level always agree. A world rate of zero or less gives no ratio.
+- For sea level, the full-record rate stays in `slope_per_decade`, with its own years and no ratio.
+- Without the world reference series (the data lane's module is missing or fails), `world.available` is false and `why_none` reads "The world reference series is not available."
+- When `world.available` is false, every number in `world` is null and `why_none` is one plain sentence.
+- `guidance.ratio` is `world.ratio`. `guidance.reference` is `{"text": world.text, "source": {"name": world.source.name, "url": world.source.record_url}}`. Both are null when `world.available` is false.
+
+`world.text` as shown:
+- air_temp: "Over the same years, the average for all land areas warmed {world} °C per decade. Here: {here} °C per decade."
+- sea_level: "Over the same months, {first year} to {last year}, global average sea level measured by satellites rose {world} mm a year. Here: {here} mm a year."
+- precip: "Our rule: a change of 10% or more of this place's 1995–2014 average rainfall every 10 years is high; 5 to 10% is moderate."
+- water_storage: "Our rule: a fall of 1 cm of water a year or more is high; 0.5 to 1 cm is moderate."
 
 ## Risk levels
 
 The checks run in this order:
 
-1. **Unknown variable, unexpected units, or a slope or CI that isn't a finite number.** Risk `unknown`, `rate` null, `outlook` [].
-2. **Not enough data.** If the record covers fewer than 20 years, the risk is `unknown` ("Not enough data") and the recommendation is: "The record here is too short to guide a decision. Try a nearby place with a longer record."
+1. **Unknown variable, unexpected units, or a slope or CI that isn't a finite number.** Risk `unknown`, `rate` null.
+2. **Not enough data.** If the record covers fewer than 20 years, the risk is `unknown` ("Not enough data") and the recommendation is: "The record here is too short to guide a decision. Try a nearby place with a longer record." (`compute_trend` already refuses such records; this rule guards direct callers.)
 3. **No clear change.** If the verdict is `no_clear_change`, the risk is Low and `why` is "The record here shows no clear change."
-4. **Clear change in the harmless direction** (sea falling, cooling, hottest days less hot, water storage rising). The risk is Low, and `why` says what is happening (for example "The sea here has been falling.").
+4. **Clear change in the harmless direction** (sea falling, cooling, water storage rising). The risk is Low, and `why` says what is happening (for example "The sea here has been falling.").
 5. **Clear change in the harmful direction**, judged per variable:
 
 | Variable | Harmful direction | Compared with | High | Moderate | Low |
 |---|---|---|---|---|---|
-| sea_level | rising | world average (ratio) | ≥ 1.5 | 0.75 to 1.5 | < 0.75 |
-| air_temp, air_temp_max | rising | world average (ratio) | ≥ 1.5 | 0.75 to 1.5 | < 0.75 |
-| precip | both (wetter means flooding, drier means drought) | change per 10 years as a share of this place's own average rainfall | ≥ 10 % | 5 to 10 % | < 5 % |
+| sea_level | rising | `world.ratio` | ≥ 1.5 | 0.75 to 1.5 | < 0.75 |
+| air_temp | rising | `world.ratio` | ≥ 1.5 | 0.75 to 1.5 | < 0.75 |
+| precip | both (wetter means flooding, drier means drought) | change per 10 years as a share of this place's 1995–2014 average rainfall | ≥ 10 % | 5 to 10 % | < 5 % |
 | water_storage | falling | our fixed levels, cm of water a year | ≥ 1 | 0.5 to 1 | < 0.5 |
 
-- **ratio** is the local rate ÷ the world rate, rounded to 1 decimal place (half away from zero). The level is judged on that rounded number, so the ratio shown and the level always agree. One side effect: a ratio from 1.45 up shows as 1.5 and counts as High.
+- Sea level or air temperature rising with no world ratio (for example a gauge with under 20 years since 1993): risk `unknown` ("Not enough data"), `why` is `world.why_none`, and the recommendation is "We can't give guidance for this record." The rate is still shown.
+- One side effect of judging the ratio as shown: a ratio from 1.45 up shows as 1.5 and counts as High.
 - The rainfall share (2 significant figures) and the water fall (2 significant figures) are also judged as shown.
-- For rainfall, the average is the mean of the raw series over the record, before the seasons are removed. `compute_trend` passes it in. If there is no average above 0, the risk is `unknown`.
-- For rainfall and water storage, `ratio` is null and `reference.source` is null.
+- For rainfall, the average is the 1995–2014 baseline value: the mean of the twelve calendar-month normals, in mm/day (`baseline.value`). `compute_trend` passes it in. With no baseline, or none above 0, the risk is `unknown`.
 
-## References
-
-| Used for | Figure | Period | Source | Checked |
-|---|---|---|---|---|
-| sea_level | 0.13 inches (3.4 mm) a year, world average from satellites | 1993 to present | NASA Sea Level Change Portal, FAQ "Is the rate of sea-level rise increasing?", https://sealevel.nasa.gov/faq/8/is-the-rate-of-sea-level-rise-increasing/ | 2026-11-15 |
-| air_temp, air_temp_max | 0.20 °C (0.36 °F) per decade, combined land and ocean | since 1975 | NOAA Climate.gov, "Climate Change: Global Temperature", https://www.climate.gov/news-features/understanding-climate/climate-change-global-temperature | 2026-11-15 |
-
-Note on temperature: the Climate.gov page (published 2025-05-29, archived 2025-06-25) gives 0.20 °C per decade in two places. The body text says "combined land and ocean temperature … per decade since 1975". The highlights box says "since 1982". We use the body text, because it is the one that names land and ocean together.
-
-Reference texts as shown:
-- sea_level: "World average: about 3.4 mm a year (NASA, satellites since 1993)."
-- air_temp, air_temp_max: "World average for land and ocean together: about 0.20 °C every 10 years since 1975."
-- precip: "Our rule: a change of 10% of this place's usual rainfall every 10 years or more is high; 5 to 10% is moderate."
-- water_storage: "Our rule: a fall of 1 cm of water a year or more is high; 0.5 to 1 cm is moderate."
+**Hottest day of the month (air_temp_max) has no risk level.** `risk`, `risk_label`, `why` and `recommendation` are null; the verdict alone answers. `rate`, `display`, `disclaimer` and every other key are unchanged and always present. The Ask agent inserts no guidance for it.
 
 ## Why (one sentence, plain words)
 
-- sea_level, air_temp, air_temp_max: "{subject} about {ratio} times faster than the world average." Between 0.9 and 1.1 it says "about as fast as the world average". Below 0.9 it says "more slowly than the world average". The subjects are "The sea here is rising", "It is getting warmer here" and "The hottest days here are getting hotter".
+- sea_level: "The sea here is rising about {ratio} times faster than the world average over the same years." Between 0.9 and 1.1 it says "about as fast as", and below 0.9 "more slowly than".
+- air_temp: "It is getting warmer here about {ratio} times faster than the average for all land areas over the same years." The same 0.9 and 1.1 rule applies.
 - precip: "Rain here has been increasing (decreasing) by about {share}% of its usual amount every 10 years."
 - water_storage: "Water stored in this region is falling by about {x} cm a year."
 
@@ -69,16 +94,9 @@ Reference texts as shown:
 |---|---|---|---|
 | sea_level | For a long-term home or investment near the shore here, we'd advise against it unless the site sits well above flood level. | For a long-term home or investment near the shore here, check how high the site sits above flood level before you commit. | Past records give no special reason to avoid the shore here. Check the site's flood level as you would on any coast. |
 | air_temp | Plan for hotter years here. For a home, a farm or outdoor work, budget for cooling, shade and water. | It has been getting warmer here. Build cooling and shade into long-term plans. | Past records give no special reason to change plans here because of heat. |
-| air_temp_max | The hottest days here are getting hotter fast. For outdoor work, older relatives or crops, plan for stronger heat than today's. | The hottest days here have been getting hotter. Plan for somewhat stronger heat than today's. | Past records give no special reason to plan for hotter extremes here. |
 | precip, wetter | Rain here has been increasing strongly. Before you build or plant, check drainage and the flood history of the site. | Rain here has been increasing. Check drainage and flood history before you build or plant. | No clear change: Past records show rain here holding steady enough that it gives no special reason to change plans. A clear change under 5 %: Rain here has changed, but only by a small share of its usual amount. Past records give no special reason to change plans. |
 | precip, drier | Rain here has been decreasing strongly. For farming or a business that needs water, don't count on today's rainfall. | Rain here has been decreasing. Plan for less water than today if you farm or depend on rainfall. | (same as above) |
 | water_storage | Water stored in this region is falling fast. For farming or a new well, we'd advise against relying on groundwater here without a secure supply. | Water stored in this region is falling. Before investing in a farm or a well, check local water levels and supply. | Past records give no special reason to worry about water supply in this region. |
-
-## If the past trend continues (`outlook`)
-
-The outlook is given only when the verdict is rising or falling and the record covers at least 20 years; otherwise it is []. A record of 20 to 29 years gets 2035 and 2050 only, and 30 years or more also gets 2075, because a look-ahead should not reach much further than the record is long. For 2035, 2050 and 2075 (years after the last data year only), each end of the range is (year − last data year) ÷ 10 × `ci_low` (or × `ci_high`), in display units, measured from today. Both ends are whole numbers when the larger end is 10 or more, and otherwise have 1 decimal. The text reads "+18 to +21 cm by 2050". When both ends round to the same number, it reads "about +5 cm by 2050". For rainfall the numbers are unsigned and a word carries the direction: "64 to 239 mm more rain a year by 2050", "183 to 365 mm less rain a year by 2050", "about 60 mm more rain a year by 2050" (`low`/`high` keep their signs). The word comes from the verdict (falling → "less", rising → "more"), never from a rounded number. A year whose two ends both round to 0 is left out; if every year is left out, `outlook` is []. The word "forecast" is never used.
-
-Worked example: a trend of 8.3 cm per 10 years (CI 7.6 to 8.9), last data year 2026. 2050 is 2.4 decades on, giving 18.24 to 21.36, shown as "+18 to +21 cm by 2050".
 
 ## Future map link (`future_link`)
 

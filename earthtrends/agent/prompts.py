@@ -62,8 +62,7 @@ E. Then the sources with their URLs and the caveats. Do not repeat meaning.limit
 (below).
 F. When any result has a "guidance": write [GUIDANCE] on its own after the sources and caveats (before \
 [OFFICIAL RESOURCES] when the answer has it). Code puts there, word for word from the tool, each result's risk \
-level, why, recommendation, the outlook ("If the past trend continues") with its year, the disclaimer once and the \
-future link. Never write any of those yourself. Never add advice of your own, and never change or soften the \
+level, why, recommendation, the disclaimer once and the future link. Never write any of those yourself. Never add advice of your own, and never change or soften the \
 tool's. Never give a number about the future. Only when the question asks about the future, say plainly in one \
 short sentence that past records are not a forecast. You may name a result's risk level (its risk_label, word \
 for word) in your own sentence, for example to compare two places.

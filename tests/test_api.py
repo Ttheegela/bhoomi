@@ -12,10 +12,10 @@ from earthtrends.app import CACHE, app, mount_web
 from earthtrends.data import coops, power
 
 FX = Path(__file__).parent / "fixtures"
-SERIES_KEYS = {"variable", "units", "freq", "place", "times", "values", "source", "notes"}
+SERIES_KEYS = {"variable", "units", "freq", "place", "times", "values", "source", "notes", "anomaly"}
 TREND_KEYS = {"variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
-              "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "caveats", "meaning",
-              "guidance"}
+              "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "baseline", "record",
+              "range_kind", "fit", "latest", "world", "projection", "explain", "caveats", "meaning", "guidance"}
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 client = TestClient(app)
 
@@ -26,8 +26,10 @@ def load(name):
 
 @pytest.fixture
 def offline(monkeypatch, coops_long):
+    # From 1990 on only: the fixture's two real years from 1911-12 would leave the record under 80% covered.
+    dense = {**coops_long, "data": [r for r in coops_long["data"] if int(r["year"]) >= 1990]}
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: load("power_monthly.json"))
-    monkeypatch.setattr(coops, "fetch", lambda sid: coops_long)
+    monkeypatch.setattr(coops, "fetch", lambda sid: dense)
     monkeypatch.setattr(coops, "stations", lambda: load("coops_stations.json")["stations"])
 
 
@@ -45,21 +47,31 @@ def test_series_and_trend_shapes(offline, variable, src):
     q = {"variable": variable, "lat": 39.36, "lon": -74.42, "source": src}
     r = client.get("/api/series", params=q)
     assert r.status_code == 200, r.text
-    assert set(r.json()) == SERIES_KEYS and r.json()["source"]["id"] == src
+    s = r.json()
+    assert SERIES_KEYS <= set(s) and s["source"]["id"] == src  # <=: the data lane may add fields such as flags
+    assert len(s["anomaly"]["values"]) == len(s["values"]) and s["anomaly"]["baseline"]["years"] == [1995, 2014]
     assert r.headers["cache-control"] == CACHE
 
     r = client.get("/api/trend", params=q)
     assert r.status_code == 200, r.text
     assert set(r.json()) == TREND_KEYS and r.json()["source"]["id"] == src
     assert r.json()["verdict"] in {"rising", "falling", "no_clear_change"}
+    assert r.json()["baseline"] == s["anomaly"]["baseline"]  # one baseline for the chart and the card
     assert r.headers["cache-control"] == CACHE
 
 
 def test_start_end_passed_through(offline):
-    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "start": "1990-03", "end": "1999"}
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "start": "1990-03", "end": "2019"}
     s = client.get("/api/series", params=q).json()
-    assert (s["times"][0], s["times"][-1]) == ("1990-03", "1999-12")
-    assert client.get("/api/trend", params=q).json()["period"] == {"start": "1990-03", "end": "1999-12"}
+    assert (s["times"][0], s["times"][-1]) == ("1990-03", "2019-12")
+    t = client.get("/api/trend", params=q).json()
+    assert t["period"] == {"start": "1990-03", "end": "2019-12"} and t["record"]["status"] == "short"  # 29.8 years
+
+
+def test_too_short_a_window_is_a_plain_400(offline):
+    r = client.get("/api/trend", params={"variable": "air_temp", "lat": 39.36, "lon": -74.42, "start": "2010"})
+    assert r.status_code == 400 and "too short for a trend" in r.json()["detail"]
+    assert "cache-control" not in r.headers
 
 
 @pytest.mark.parametrize("params,match", [
