@@ -3,11 +3,12 @@ import time
 from datetime import date, datetime
 from functools import lru_cache
 from math import cos, isfinite, radians
+from urllib.parse import quote
 
 import httpx
 
 from .coops import haversine_km
-from .upstream import LIMIT, NAME, fit, readable, text
+from .upstream import LIMIT, NAME, fit, readable, source_block, text
 
 SEARCH = "https://www.ncei.noaa.gov/access/services/search/v1/data"
 DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
@@ -28,6 +29,23 @@ PLAIN_NAME = {"air_temp": "air temperature", "air_temp_max": "daily high tempera
               "sea_level": "sea level"}
 HOW = {"air_temp": "mean", "air_temp_max": "max", "precip": "mean"}  # daily -> monthly rule
 NOTES = {"air_temp_max": "Each monthly value is the hottest single day of that month, not the average of the daily highs."}
+DATASET_ID = "doi:10.7289/V5D21VHZ"  # GHCN-Daily, Version 3
+_QC = "leaving out readings that failed NOAA's quality checks"
+METHOD = {  # by the data types used
+    ("TAVG",): f"Each month is the mean of the station's daily average temperatures in NOAA's GHCN-Daily, {_QC}.",
+    ("TMAX", "TMIN"): f"Each month is the mean of the station's daily (highest + lowest) / 2 temperatures in NOAA's GHCN-Daily, {_QC}.",
+    ("TMAX",): f"Each month is the highest of the station's daily maximum temperatures in NOAA's GHCN-Daily, {_QC}.",
+    ("PRCP",): f"Each month is the mean of the station's daily precipitation totals in NOAA's GHCN-Daily, in mm a day, {_QC}.",
+}
+
+
+def record_url(station_id: str) -> str:
+    """NOAA's station record page (Climate Data Online), which names the station, its id and its coordinates."""
+    return f"https://www.ncei.noaa.gov/cdo-web/datasets/GHCND/stations/GHCND:{quote(station_id, safe='')}/detail"
+
+
+def source(station_id: str, types: tuple[str, ...], retrieved: str) -> dict:
+    return source_block(SOURCE, DATASET_ID, "Version 3", record_url(station_id), retrieved, METHOD[types])
 
 
 def last_day() -> str:

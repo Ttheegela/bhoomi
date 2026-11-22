@@ -352,7 +352,7 @@ def test_era5_series(offline2):
     s = data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="1991", source="era5")
     assert s["freq"] == "monthly" and s["source"]["id"] == "era5" and s["times"][0] == "1990-01" and len(s["times"]) == 24
     assert len(s["times"]) == len(s["values"]) and all(isinstance(v, float) for v in s["values"])
-    assert s["source"] == era5.SOURCE and any("25 km" in n for n in s["notes"]) and era5.NOTES["air_temp_max"] in s["notes"]
+    assert s["source"].items() >= era5.SOURCE.items() and any("25 km" in n for n in s["notes"]) and era5.NOTES["air_temp_max"] in s["notes"]
     daily = dict(zip(*era5.parse(load_gz("era5_daily_tmax_delhi.json.gz"), "temperature_2m_max")))
     assert s["values"][4] == max(v for d, v in daily.items() if d.startswith("1990-05"))  # May: hottest day
 
@@ -1146,15 +1146,15 @@ def _gauges(monkeypatch, replies):
 
 def test_coops_nearest_long_gauge_is_used_with_rule_note(monkeypatch):
     fetched = _gauges(monkeypatch, [LONG, LONG])
-    times, values, place, notes = coops.series(40.0, -74.0)
-    assert fetched == ["C1"] and place == {"name": "Gauge 1", "lat": 40.01, "lon": -74.0} and len(times) == len(values) == 480
+    times, values, place, notes, src = coops.series(40.0, -74.0)
+    assert fetched == ["C1"] and src["record_url"] == "https://tidesandcurrents.noaa.gov/stationhome.html?id=C1" and place == {"name": "Gauge 1", "lat": 40.01, "lon": -74.0} and len(times) == len(values) == 480
     assert notes == ["Tide gauge Gauge 1 (C1), 1 km from the point you asked about.",
                      "Sea level relative to the land at the gauge, so land sinking or rising is included.", psmsl.RULE]
 
 
 def test_coops_short_gauge_is_skipped_for_the_next(monkeypatch):
     fetched = _gauges(monkeypatch, [_msl_rows(2020, 17), LONG])
-    _, _, place, notes = coops.series(40.0, -74.0)
+    _, _, place, notes, _ = coops.series(40.0, -74.0)
     assert fetched == ["C1", "C2"] and place["name"] == "Gauge 2" and "Gauge 2 (C2), 2 km" in notes[0]
 
 
@@ -1237,7 +1237,7 @@ def test_coops_gives_up_after_6_tries(monkeypatch):
 
 def test_coops_seventh_gauge_is_not_claimed_unusable_but_the_note_says_so(monkeypatch):
     fetched = _gauges(monkeypatch, [_msl_rows(2020, 12)] * 6 + [LONG, LONG])  # 8 gauges within 8 km; the 7th would qualify
-    monkeypatch.setattr(psmsl, "series", lambda la, lo: (["2000-01"], [1.0], {"name": "P"}, ["psmsl note"]))
+    monkeypatch.setattr(psmsl, "series", lambda la, lo: (["2000-01"], [1.0], {"name": "P"}, ["psmsl note"], dict(psmsl.SOURCE)))
     s = data.get_series("sea_level", 40.0, -74.0)
     assert fetched == [f"C{i}" for i in range(1, 7)] and s["notes"][-1] == (
         "None of the 6 nearest NOAA CO-OPS tide gauges within 100 km of this point has a long enough record, so the nearest PSMSL gauge was used.")
@@ -1275,3 +1275,99 @@ def test_coops_deadline_is_a_provider_failure(monkeypatch):
     with pytest.raises(httpx.HTTPError) as e:
         coops.series(40.0, -74.0)
     assert not isinstance(e.value, ValueError) and fetched == ["C1", "C2"]
+
+
+# ---- Rework v2: the full source block, record_url, flags, retrieved ----
+SOURCE_KEYS = {"id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "method", "cadence", "deseasoned_upstream"}
+
+
+def _captured_get(module, monkeypatch, reply):
+    """Replace module.httpx.get with one that records the URL it was asked for and answers `reply`."""
+    asked = []
+
+    def get(url, **kw):
+        asked.append(str(httpx.Request("GET", url, params=kw.get("params")).url))
+        return httpx.Response(200, json=reply, request=httpx.Request("GET", url))
+    monkeypatch.setattr(module.httpx, "get", get)
+    return asked
+
+
+def test_power_record_url_is_the_request_made(monkeypatch):
+    asked = _captured_get(power, monkeypatch, load("power_monthly.json"))
+    src = data.get_series("air_temp", 40.35, -74.66)["source"]  # Princeton
+    assert asked == [src["record_url"]] == [
+        "https://power.larc.nasa.gov/api/temporal/monthly/point?parameters=T2M&community=RE&latitude=40.35&longitude=-74.66"
+        f"&start=1981&end={date.today().year - 1}&format=JSON"]
+    assert set(src) == SOURCE_KEYS and src["version"] == "POWER Monthly and Annual API v2.10.0"  # from the reply's header
+    assert src["dataset_id"] == "NASA POWER monthly point data, parameter T2M (MERRA-2)" and src["cadence"] == "monthly"
+    assert src["deseasoned_upstream"] is False and "50 km" in src["method"]
+    assert data.get_series("air_temp_max", 40.35, -74.66)["source"]["record_url"].startswith(
+        "https://power.larc.nasa.gov/api/temporal/monthly/point?parameters=T2M_MAX&")
+
+
+def test_era5_record_url_is_the_request_made_and_has_no_key(monkeypatch):
+    asked = _captured_get(era5, monkeypatch, load_gz("era5_daily_tmax_delhi.json.gz"))
+    src = data.get_series("air_temp_max", 28.61, 77.21, source="era5")["source"]
+    assert asked == [src["record_url"]]
+    assert src["record_url"].startswith("https://archive-api.open-meteo.com/v1/archive?latitude=28.61&longitude=77.21&daily=temperature_2m_max&models=era5")
+    assert "key" not in src["record_url"].lower() and src["dataset_id"] == "doi:10.24381/cds.adbb2d47" and set(src) == SOURCE_KEYS
+
+
+def test_station_record_urls(offline, offline2, psmsl_offline):
+    assert data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")["source"]["record_url"] == (
+        "https://www.ncei.noaa.gov/cdo-web/datasets/GHCND/stations/GHCND:IN022021900/detail")
+    co = data.get_series("sea_level", 39.36, -74.42)["source"]
+    assert co["record_url"] == "https://tidesandcurrents.noaa.gov/stationhome.html?id=8534720" and set(co) == SOURCE_KEYS
+    ps = data.get_series("sea_level", 18.95, 72.83, source="psmsl")["source"]
+    assert ps["record_url"] == "https://psmsl.org/data/obtaining/stations/43.php" and set(ps) == SOURCE_KEYS
+    assert ghcn.record_url("A B/C") == "https://www.ncei.noaa.gov/cdo-web/datasets/GHCND/stations/GHCND:A%20B%2FC/detail"
+    assert coops.record_url("1&x=2") == "https://tidesandcurrents.noaa.gov/stationhome.html?id=1%26x%3D2"  # an id is never a second parameter
+
+
+def test_ghcn_method_follows_the_data_types_used():
+    assert "(highest + lowest) / 2" in ghcn.source("X", ("TMAX", "TMIN"), "2026-01-01")["method"]
+    assert "highest of the station's daily maximum" in ghcn.source("X", ("TMAX",), "2026-01-01")["method"]
+
+
+def test_grace_source_names_the_file_and_the_reference_period():
+    src = data.get_series("water_storage", 28.61, 77.21)["source"]
+    assert set(src) == SOURCE_KEYS | {"reference_period"} and src["reference_period"] == [2004, 2009]
+    assert src["record_url"] == "https://earth.gsfc.nasa.gov/geo/data/grace-mascons" and grace.ZIP in src["dataset_id"]
+    assert src["retrieved"] == "2026-11-14" and src["version"] == "RL06 v2.0"
+
+
+def test_flags_match_values_for_every_source(offline, offline2, psmsl_offline):
+    for variable, lat, lon, source in (("air_temp", 39.36, -74.42, "power"), ("air_temp_max", 28.58, 77.21, "era5"),
+                                       ("air_temp_max", 28.58, 77.21, "ghcn"), ("sea_level", 39.36, -74.42, "coops"),
+                                       ("sea_level", 18.95, 72.83, "psmsl"), ("water_storage", 28.61, 77.21, "grace")):
+        s = data.get_series(variable, lat, lon, source=source)
+        assert len(s["flags"]) == len(s["values"]) and set(s["flags"]) <= {None, "preliminary"}, source
+        s = data.get_series(variable, lat, lon, start="2009", end="2010-06", source=source)
+        assert len(s["flags"]) == len(s["values"]) == 18, source
+
+
+def test_era5_recent_months_are_preliminary(monkeypatch):
+    # ERA5T may change for 2 to 3 months: a month that ends less than 3 months before the fetch is flagged
+    assert era5.flags(["2026-09", "2026-10", "2026-12"], "2027-01-15") == [None, "preliminary", "preliminary"]
+    assert era5.flags(["2025-12"], "2026-11-22") == [None]
+    days = [f"2026-{m:02d}-{d:02d}" for m in (8, 9) for d in range(1, 29)]
+    monkeypatch.setattr(era5, "fetch", lambda p, la, lo: {"daily": {"time": days, "temperature_2m_max": [30.0] * len(days)}})
+    monkeypatch.setattr(upstream, "utc_today", lambda: "2026-12-05")
+    assert data.get_series("air_temp_max", 28.61, 77.21, source="era5")["flags"] == [None, "preliminary"]
+
+
+def test_retrieved_is_the_first_fetch_date(counted, monkeypatch):
+    monkeypatch.setattr(upstream, "utc_today", lambda: "2026-01-01")
+    assert data.get_series("air_temp", 39.36, -74.42)["source"]["retrieved"] == "2026-01-01"
+    monkeypatch.setattr(upstream, "utc_today", lambda: "2026-01-02")
+    assert data.get_series("air_temp", 39.36, -74.42)["source"]["retrieved"] == "2026-01-01"  # served from the cache
+    data._cache.clear()
+    assert data.get_series("air_temp", 39.36, -74.42)["source"]["retrieved"] == "2026-01-02" and len(counted) == 2
+
+
+def test_coops_retrieved_is_the_gauge_records_first_fetch_date(monkeypatch):
+    fetched = _gauges(monkeypatch, [LONG])
+    monkeypatch.setattr(upstream, "utc_today", lambda: "2026-01-01")
+    assert coops.series(40.0, -74.0)[4]["retrieved"] == "2026-01-01"
+    monkeypatch.setattr(upstream, "utc_today", lambda: "2026-01-02")
+    assert coops.series(40.0, -74.0)[4]["retrieved"] == "2026-01-01" and fetched == ["C1"]  # the record is cached by id

@@ -4,10 +4,12 @@ import time
 from datetime import date
 from functools import lru_cache
 from math import asin, cos, isfinite, radians, sin, sqrt
+from urllib.parse import quote
 
 import httpx
 
-from .upstream import LIMIT, NAME, fit, rule, text, why_not
+from . import upstream
+from .upstream import LIMIT, NAME, fit, rule, source_block, text, why_not
 
 BASE = "https://api.tidesandcurrents.noaa.gov"
 SOURCE = {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"}
@@ -17,6 +19,14 @@ TIMEOUT = httpx.Timeout(30, connect=5, write=10)  # the station-list fetch: at m
 MAX_TRIES = 6  # gauges whose monthly means are fetched at most
 DEADLINE_S = 40  # no new request after this; one request can still take up to 30 s
 RULE = rule(MAX_KM)
+DATASET_ID = "NOAA CO-OPS verified monthly mean water level (API product monthly_mean)"
+METHOD = ("NOAA's verified monthly mean sea level at the tide gauge, relative to the station's mean sea level (MSL) datum, "
+          "converted by us from metres to mm.")
+
+
+def record_url(station_id: str) -> str:
+    """The station's home page on NOAA Tides and Currents (the page fills in the station's name from its id)."""
+    return f"https://tidesandcurrents.noaa.gov/stationhome.html?id={quote(station_id, safe='')}"
 
 
 def haversine_km(lat1, lon1, lat2, lon2) -> float:
@@ -114,21 +124,22 @@ class NoUsableGauge(ValueError):
 
 
 @lru_cache(maxsize=256)  # ponytail: no expiry; the record stays until the instance restarts (monthly data)
-def _record(station_id: str) -> tuple[tuple[str, ...], tuple[float | None, ...], str | None]:
-    """One gauge's monthly record and, if it fails the shared rule, why. A provider failure raises, so it is not cached."""
+def _record(station_id: str) -> tuple[tuple[str, ...], tuple[float | None, ...], str | None, str]:
+    """One gauge's monthly record, why it fails the shared rule (or None) and the UTC date it was fetched.
+    A provider failure raises, so it is not cached."""
     try:
-        reply = fetch(station_id)
+        reply, retrieved = fetch(station_id), upstream.utc_today()
     except (ValueError, RecursionError) as e:  # fetch raises these only while reading the JSON: the provider's failure, not "no data"
         raise httpx.DecodingError("NOAA CO-OPS' monthly data was not in the documented format.") from e
     try:
         times, values = parse(reply)
     except ValueError:  # this gauge has no usable monthly values; httpx errors are not caught here
-        return (), (), "no monthly values"
-    return tuple(times), tuple(values), why_not(times, values)
+        return (), (), "no monthly values", retrieved
+    return tuple(times), tuple(values), why_not(times, values), retrieved
 
 
-def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str]]:
-    """Nearest gauge within MAX_KM that meets the shared minimum-record rule -> (times, values, place, notes)."""
+def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str], dict]:
+    """Nearest gauge within MAX_KM that meets the shared minimum-record rule -> (times, values, place, notes, source block)."""
     gauges = stations()
     deadline = time.monotonic() + DEADLINE_S
     near = sorted(((haversine_km(lat, lon, float(s["lat"]), float(s["lng"])), s["id"], s) for s in gauges), key=lambda t: t[:2])
@@ -140,11 +151,12 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
     for km, s in tried:
         if time.monotonic() >= deadline:
             raise httpx.TimeoutException("NOAA CO-OPS is slow right now. Try again in a minute.")
-        times, values, why = _record(s["id"])
+        times, values, why, retrieved = _record(s["id"])
         if why is None:
             notes = [f"Tide gauge {s['name']} ({s['id']}), {km:.0f} km from the point you asked about.",
                      "Sea level relative to the land at the gauge, so land sinking or rising is included.", RULE]
-            return list(times), list(values), {"name": s["name"], "lat": float(s["lat"]), "lon": float(s["lng"])}, notes
+            src = source_block(SOURCE, DATASET_ID, None, record_url(s["id"]), retrieved, METHOD)
+            return list(times), list(values), {"name": s["name"], "lat": float(s["lat"]), "lon": float(s["lng"])}, notes, src
         skipped.append(f"{s['name']}, {km:.0f} km away: {why}")
     more = len(close) > len(tried)  # do not claim "no usable gauge" about gauges that were never looked at
     head = (f"None of the {len(tried)} nearest NOAA tide gauges within {MAX_KM} km of this place has a long enough record"

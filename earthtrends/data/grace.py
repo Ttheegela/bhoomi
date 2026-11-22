@@ -10,9 +10,25 @@ from pathlib import Path
 
 import numpy as np
 
+from .upstream import source_block
+
 FILE = Path(__file__).resolve().parent / "grace_gsfc_land.npz"  # relative to this module, not the working directory
 SOURCE = {"id": "grace", "name": "NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0 (OBP-ICE6GD)",
           "url": "https://earth.gsfc.nasa.gov/geo/data/grace-mascons"}
+# The provider file FILE was built from (scripts/build_grace.py) and the day it was downloaded: change both with a rebuild.
+# The dataset page (record_url) lists this file for download by name.
+ZIP = "GSFC.glb_.200204_202606_RL06v2.0_OBP-ICE6GD.zip"
+RETRIEVED = "2026-11-14"
+# The dataset page, "Important notes about RL06v2.0": "Mean removed: 2004.0 – 2010.0", i.e. January 2004 to December 2009.
+REFERENCE_PERIOD = [2004, 2009]
+METHOD = ("NASA GSFC's monthly mascon solution from GRACE and GRACE-FO gravity data (GIA correction ICE-6G_D), in cm of "
+          "equivalent water height; we average, weighted by area, the land cells in a box about 440 km wide around the place.")
+
+
+def source() -> dict:
+    return {**source_block(SOURCE, f"NASA GSFC GRACE/GRACE-FO mascons, file {ZIP}", "RL06 v2.0",
+                           SOURCE["url"], RETRIEVED, METHOD),
+            "reference_period": list(REFERENCE_PERIOD)}
 HALF_BOX_DEG = 2.0  # the box is 4 degrees of latitude tall (about 444 km) and as wide on the ground
 # A box holds about 16 one-degree cells (cells are equal-area, so this holds at every latitude). At least 8 must be land:
 # below half, ocean (or ice sheet) cells outweigh the land and the value would be mostly not land water.
@@ -47,8 +63,8 @@ def _axis(months: list[str]) -> list[str]:
     return [f"{k // 12:04d}-{k % 12 + 1:02d}" for k in range(k0, k1 + 1)]
 
 
-def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str]]:
-    """Land cells in the box around the point -> (times, cm or None, place, notes). No land cells: ValueError."""
+def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str], dict]:
+    """Land cells in the box around the point -> (times, cm or None, place, notes, source block). No land cells: ValueError."""
     if any(s <= lat <= n and w <= lon <= e for s, n, w, e in GLACIER_BOXES):
         raise ValueError(GLACIER)
     d = load()
@@ -75,4 +91,4 @@ def series(lat: float, lon: float) -> tuple[list[str], list[float | None], dict,
              "Near coasts, ocean signal can leak into land values.",
              f"Average of {len(inside)} land cells (each about 110 km across, weighted by area) whose centres lie in a box "
              f"about {km:.0f} km tall and as wide."]
-    return times, values, place, notes
+    return times, values, place, notes, source()
