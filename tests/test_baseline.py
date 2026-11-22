@@ -591,14 +591,14 @@ def test_the_shipped_world_reference_is_used():
 
 
 def test_sea_level_world_source_keeps_the_gia_sentence():
-    """The shipped NASA-SSH snapshot says its figure is not corrected for glacial isostatic adjustment; world.source
-    carries that method through (climate recheck)."""
+    """The shipped NASA GSFC GMSL v5.2 snapshot says its figure is corrected for glacial isostatic adjustment;
+    world.source carries that method through (climate recheck)."""
     s = ts(synth(40, start=1986, per_decade=40, sd=5, level=7000.0), start=1986, variable="sea_level",
            source={"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"})
     w = compute_trend(s)["world"]
     assert w["available"] and w["source"]["method"] == data.world.reference("gmsl")["source"]["method"]
-    assert "not corrected for the slow sinking of the ocean floor" in w["source"]["method"]
-    assert "glacial isostatic adjustment, about 0.3 mm a year" in w["source"]["method"]
+    assert "is corrected for the slow sinking of the ocean floor" in w["source"]["method"]
+    assert "glacial isostatic adjustment, which adds about 0.24 mm a year" in w["source"]["method"]
 
 
 @pytest.mark.parametrize("var,why", [

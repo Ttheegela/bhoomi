@@ -63,7 +63,7 @@ def main() -> None:
         rows.append((f"{place}: era5 (not fetched)", era5.request_url(era5.PARAMS["air_temp_max"], lat, lon), "-", "the fetcher's own request"))
     check("ERA5 dataset DOI", "https://doi.org/" + era5.DATASET_ID[4:], ["ERA5 hourly data on single levels"])
     check("GHCN-Daily DOI", "https://doi.org/10.7289/V5D21VHZ", ["GHCN", "Global Historical Climatology Network"])
-    for name, want in (("land_temp", ["Global Land Average Temperature"]), ("gmsl", ["NASA_SSH_GMSL_INDICATOR"])):
+    for name, want in (("land_temp", ["Global Land Average Temperature"]), ("gmsl", ["MERGED_TP_J1_OSTM_OST_GMSL_ASCII_V52"])):
         src = world.reference(name)["source"]
         check(f"world {name}", src["record_url"], want)
         check(f"world {name} DOI", "https://doi.org/" + src["dataset_id"][4:], [])
