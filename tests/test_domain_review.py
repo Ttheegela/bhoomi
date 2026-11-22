@@ -189,8 +189,31 @@ def test_too_little_rain_for_a_percentage_rule():
     r = compute_trend(ts(x, variable="precip"))
     assert r["baseline"]["annual_total_mm"] < 100 and r["verdict"] == "rising"
     assert (r["world"]["text"], r["world"]["why_none"]) == (None, SCARCE)
-    assert (r["guidance"]["risk"], r["guidance"]["risk_label"], r["guidance"]["why"]) == (None, None, SCARCE)
+    g = r["guidance"]
+    assert (g["risk"], g["risk_label"], g["why"], g["recommendation"]) == (None, None, SCARCE, None)
     assert r["headline_rate"]["unit"] == "%"  # the rate itself is still shown
+
+
+@pytest.mark.parametrize("mm,label", [(99.9, None), (100.1, "High risk")])
+def test_the_rain_rule_starts_at_100_mm_a_year(mm, label):
+    t = 1981 + (np.arange(540) + 0.5) / 12  # +10% a decade on a 1995-2014 normal of mm a year
+    r = compute_trend(ts(mm / 365.25 * (1 + 0.01 * (t - 2005)), variable="precip"))
+    assert r["baseline"]["annual_total_mm"] == mm and r["verdict"] == "rising"
+    assert (r["world"]["why_none"] == SCARCE, r["guidance"]["risk_label"]) == (label is None, label)
+
+
+def test_too_little_rain_with_no_clear_change_still_says_so():
+    r = compute_trend(ts(0.1 + np.random.default_rng(0).normal(0, 0.01, 480), variable="precip"))
+    g = r["guidance"]
+    assert r["verdict"] == "no_clear_change" and r["world"]["why_none"] == SCARCE
+    assert (g["risk"], g["risk_label"]) == (None, "No clear change") and g["recommendation"]
+
+
+def test_a_rain_normal_of_zero_is_not_enough_data():
+    # contrived (rain can't go below zero): a clear rise whose 1995-2014 months average exactly 0, so there is no %
+    r = compute_trend(ts(0.25 * (1981 + np.arange(540) // 12 - 2004.5), variable="precip"))
+    assert (r["baseline"]["value"], r["verdict"], r["headline_rate"]) == (0.0, "rising", None)
+    assert r["world"]["why_none"] == SCARCE and r["guidance"]["risk_label"] == "Not enough data"
 
 
 # ---- L6: the sea-level why names the years its world ratio is from ----

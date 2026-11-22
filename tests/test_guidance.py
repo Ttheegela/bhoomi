@@ -6,7 +6,7 @@ import json
 import pytest
 
 from earthtrends.stats import compute_trend, guidance
-from earthtrends.stats.guidance import DISCLAIMER, RECOMMEND, SHORT, guidance_for
+from earthtrends.stats.guidance import DISCLAIMER, RECOMMEND, SCARCE, SHORT, guidance_for
 
 UNITS = {"sea_level": "mm", "air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "water_storage": "cm"}
 KEYS = ["risk", "risk_label", "why", "ratio", "reference", "rate", "display", "recommendation", "future_link",
@@ -307,12 +307,13 @@ def test_rain_level_from_its_own_95_range(verdict, slope, lo, hi, risk, label, k
 
 
 def test_too_little_rain_for_a_percentage_rule():
-    mean = 99.9 / 365.25  # an annual normal just under 100 mm
-    g = guidance_for(res("precip", "rising", 0.1 * mean, lo=0.05 * mean, hi=0.15 * mean), mean)
+    # trend.py judges the 100 mm (tests/test_domain_review.py) and marks it in world.why_none; guidance reads the mark
+    mean = 99.9 / 365.25
+    r = res("precip", "rising", 0.1 * mean, lo=0.05 * mean, hi=0.15 * mean)
+    g = guidance_for(r | {"world": {"available": False, "why_none": SCARCE}}, mean)
     assert (g["risk"], g["risk_label"], g["recommendation"]) == (None, None, None)
-    assert g["why"] == "Rain here is too scarce for a percentage rule." and g["rate"]["text"] == "+10%"
-    assert guidance_for(res("precip", "rising", 0.1 * mean, lo=0.05 * mean, hi=0.15 * mean), 100.1 / 365.25)[
-        "risk_label"] == "Moderate to high risk"
+    assert g["why"] == SCARCE == "Rain here is too scarce for a percentage rule." and g["rate"]["text"] == "+10%"
+    assert guidance_for(r, mean)["risk_label"] == "Moderate to high risk"  # no mark, no second rule here
 
 
 def test_advice_describes_the_evidence_and_what_to_check():

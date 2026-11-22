@@ -308,8 +308,19 @@ def test_widening_factor_over_many_series():
     red = [trend._widen(ar1(480, seed=s)[0]) for s in range(200)]
     assert all(f >= 1 for f in white + red)
     assert np.median(white) < 1.3 and 3.5 < np.median(red) < 5.5, (np.median(white), np.median(red))
-    yearly = ar1(40, seed=2)[0]  # yearly values (rain totals): the lag-1 AR(1) factor alone
-    assert trend._widen(yearly, 1) == max(trend._ar1_factor(40, trend._lag1(yearly)), 1.0) > 1
+
+
+def test_widening_factor_by_hand():
+    # Yearly (rain totals), the lag-1 AR(1) factor alone: 1 + 2/(n(n-1)(n-2)) sum (n-k)(n-k-1)(n-k-2) r^k.
+    # 1 2 3 3 2 1: mean 2, deviations -1 0 1 1 0 -1, sum of squares 4, lag-1 products 0+0+1+0+0 = 1, so r = 1/4.
+    # n = 6: 1 + 2/120 (5*4*3 r + 4*3*2 r^2 + 3*2*1 r^3) = 1 + (15 + 1.5 + 0.09375)/60 = 1.2765625.
+    assert trend._widen(np.array([1.0, 2, 3, 3, 2, 1]), 1) == pytest.approx(1.2765625, rel=1e-12)
+    # Monthly, 36 values: three blocks of 12 at -1, 0, 1, each with +0.5 -0.5 alternating on top.
+    # var = (12*(1+0+1) + 36*0.25)/36 = 33/36; lag-1 r = (22 - 35*0.25 - 2*0.5)/33 = 12.25/33, AR(1) factor about 2.03.
+    # Block means -1 0 1: var 2/3, ratio 12 * (2/3) / (33/36) = 96/11, about 8.73, which wins. Three block means
+    # leave no term in the AR(1) sum (n-k-2 = 0), so their factor is 1. n/n* = 96/11.
+    e = np.repeat([-1.0, 0, 1], 12) + np.tile([0.5, -0.5], 18)
+    assert trend._widen(e) == pytest.approx(96 / 11, rel=1e-12)
 
 
 def test_values_that_alternate_never_narrow_the_range():
@@ -530,6 +541,18 @@ def test_sea_level_needs_20_years_since_1993(refs, last, available):
         assert all(w[k] is None for k in ("local_rate", "world_rate", "ratio", "window", "source", "thresholds"))
         assert r["verdict"] == "rising" and r["guidance"]["ratio"] is None and r["guidance"]["reference"] is None
         assert r["guidance"]["risk"] is None and r["guidance"]["risk_label"] == "No world comparison" and r["guidance"]["why"] == w["why_none"]
+
+
+@pytest.mark.parametrize("world", [np.zeros(76 * 12), 0.2 - 0.025 * np.arange(76 * 12) / 12])  # flat, falling
+def test_a_world_figure_that_did_not_rise_gives_no_ratio_and_says_why(monkeypatch, world):
+    monkeypatch.setattr(trend, "_reference", lambda name: ts(world, start=1950, source=LAND_SRC))
+    r = compute_trend(ts(synth(45)))
+    w, g = r["world"], r["guidance"]
+    why = "The world figure did not rise over these years, so there is no ratio."
+    assert r["verdict"] == "rising" and w["available"] and w["world_rate"] <= 0
+    assert (w["ratio"], w["ratio_low"], w["ratio_high"], w["why_none"]) == (None, None, None, why)
+    assert (g["risk"], g["risk_label"], g["why"], g["ratio"]) == (None, "No world comparison", why, None)
+    assert g["reference"]["text"] == w["text"]  # the world sentence is still shown
 
 
 def raise_oserror(name):
