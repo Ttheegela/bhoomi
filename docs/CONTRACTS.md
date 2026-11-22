@@ -102,7 +102,7 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
 ```
 
   - Air temperature: local Sen slope against the global land-only Sen slope over exactly the same months. `method` names the method and then the kinds of record, e.g. "Sen's slope of monthly anomalies, same months for both; different datasets: a grid cell here, station-based for the world". Sea level: the gauge's Sen slope over 1993 to its last month against satellite global mean sea level over the same months, in mm a year; needs at least 20 of those years. The full-record rate stays in `slope_per_decade` with no ratio.
-  - `ratio_low`, `ratio_high` (domain review F2): the ratio of the local rate's 95% range ends to the world rate over the same window. When they fall on different sides of a threshold (0.75 or 1.5), `guidance.risk_label` names both levels ("Moderate to high risk", "Low to moderate risk", or "Risk between low and high (wide range)" when the range spans both thresholds, so it reads as one idea next to a clear verdict (owner, 2026-11-22)), `guidance.risk` is the lower of the two, and the recommendation is the lower level's. `ratio` and both ends are `null` unless the verdict is rising or falling (no ratio for an unclear trend). Rainfall has no world ratio; its levels come from its own 95% range of the % rate against the rain thresholds, with the same two-level labels.
+  - `ratio_low`, `ratio_high` (domain review F2): the ratio of the local rate's 95% range ends to the world rate over the same window. *(Superseded 2026-11-22 by "Facts, not advice": no risk levels; the ratio and its range are shown as facts.)* When they fall on different sides of a threshold (0.75 or 1.5), `guidance.risk_label` names both levels ("Moderate to high risk", "Low to moderate risk", or "Risk between low and high (wide range)" when the range spans both thresholds, so it reads as one idea next to a clear verdict (owner, 2026-11-22)), `guidance.risk` is the lower of the two, and the recommendation is the lower level's. `ratio` and both ends are `null` unless the verdict is rising or falling (no ratio for an unclear trend). Rainfall has no world ratio; its levels come from its own 95% range of the % rate against the rain thresholds, with the same two-level labels.
   - `available: false` (with every number `null` and `why_none` one plain sentence) for hottest day ("There is no matching world figure for the hottest day of the month."), rainfall and water storage (own-place rules, printed in `text`), and a sea-level gauge with under 20 years since 1993.
   - `available: true` with `why_none` set (rising or falling verdict only): the world rate over the same months is zero or negative, so `ratio`, `ratio_low` and `ratio_high` are `null` and `why_none` is "The world figure did not rise over these years, so there is no ratio." Both rates and `text` still show. Step 6 and the compare caption show `why_none` whenever it is set, not only when `available` is false.
 - `projection` (PR2/PR3): the expert projection for this place. Until then `{"available": false, "why": "…"}`. For water storage it stays so, with `why` "There is no standard expert projection for total water storage, so we don't show one."
@@ -117,7 +117,7 @@ Build brief: `docs/REWORK-SPEC.md` (decisions D1–D8). These shapes replace the
 ```
 
   - `seasons` uses the baseline's calendar-month normals (`null` for `method` `"none"` or annual data). Rainfall's trend, verdict and `headline_rate` come from yearly totals (calendar years with at least 11 valid months), as % of the 1995–2014 annual normal per decade (domain review F4: monthly ranks overweight dry months); where the 1995–2014 annual normal is under 100 mm there is no % rule and no risk level (`world.why_none` says so). Rainfall seasons are in mm a month (`units` "mm a month"); rainfall `fit` is in % of the 1995–2014 annual normal, like `anomaly` and `headline_rate`, when there is a baseline; without one it stays in mm/day with `level_end` `null`. Rainfall also carries `yearly`: the values the test used, oldest first, `[{"year": 1981, "value": 3.2}]` in `fit.units` (% of the 1995–2014 annual normal, or mm/day without a baseline); the chart plots these for rain, with `fit` drawn through them. Other measurements have no `yearly` key. For rainfall, `n` counts calendar years, and `explain.data` adds `n_years` and `n_missing_years`; fewer than 20 calendar years with 11 or more valid months is a 400 with a plain message. Where the annual normal is under 100 mm, a clear change gets no % rule: guidance `risk`, `risk_label` and `recommendation` are `null` (an unclear trend still says "No clear change"; a 1995–2014 normal of zero has no % at all and gives "Not enough data") and `world.why_none` is "Rain here is too scarce for a percentage rule." `real.widened`: true when the factor on Var(S) is at least 1.2 (range about 10% or more wider). The factor is the larger of the lag-1 AR(1) factor and the variance ratio of 12-value block means, times the AR(1) factor of those block means, each floored at 1 (chosen by simulation: 95–99% coverage for short memory, about 90% for tide-gauge-like records; annual series use the lag-1 factor alone).
-- `guidance` changes: `outlook` and `outlook_label` are removed (D1: no future from a past trend). `ratio` and `reference` come from `world` (`null` when `world.available` is false). Hottest day of the month has no risk level: `risk` and `risk_label` are `null`, and so are `why` and `recommendation`; the verdict alone answers. A `no_clear_change` verdict is not evidence of low risk: `risk` is `null` and `risk_label` is "No clear change" (the recommendation and disclaimer stay). A clear rising verdict for a measurement compared with the world (a falling sea or cooling is "Low risk" without the world figure), when `world.available` is false (QA B3: Mumbai, 147 years but under 20 since 1993): `risk` is `null`, `risk_label` is "No world comparison", `why` comes from `world.why_none`, and the recommendation is one that doesn't depend on a level. "Not enough data" is kept for records too short to judge. Every other key is unchanged and always present.
+- *(Superseded 2026-11-22 by "Facts, not advice" for `risk`, `risk_label`, `why` and `recommendation`.)* `guidance` changes: `outlook` and `outlook_label` are removed (D1: no future from a past trend). `ratio` and `reference` come from `world` (`null` when `world.available` is false). Hottest day of the month has no risk level: `risk` and `risk_label` are `null`, and so are `why` and `recommendation`; the verdict alone answers. A `no_clear_change` verdict is not evidence of low risk: `risk` is `null` and `risk_label` is "No clear change" (the recommendation and disclaimer stay). A clear rising verdict for a measurement compared with the world (a falling sea or cooling is "Low risk" without the world figure), when `world.available` is false (QA B3: Mumbai, 147 years but under 20 since 1993): `risk` is `null`, `risk_label` is "No world comparison", `why` comes from `world.why_none`, and the recommendation is one that doesn't depend on a level. "Not enough data" is kept for records too short to judge. Every other key is unchanged and always present.
 
 ### Sea-level expert projection (PR2) — stats lane fills `projection` for `sea_level`
 
@@ -164,6 +164,54 @@ From IPCC AR6 relative sea level at the tide gauge (`earthtrends/data/ar6_gauges
 - `check.kind`: `"2019-2021"` when that check ran; `"latest 12 months"` when 2019–2021 has fewer than 24 months and the check falls back to `now` (QA B1, e.g. Mumbai): `latest` is then `{"value": now in whole mm, "year": the 12-month window's mid-year (2 decimals), "ar6_p05", "ar6_p95"}`, AR6's 5th–95th percentile for the default scenario linearly interpolated to that year; `null` when neither could run (no `now`, off the projection axis, or a mid-year before 2020). `inside` comes from whichever check ran.
 - `drivers`: the default scenario's 2050 parts with their own 17th–83rd percentiles.
 - Every sea-level answer keeps `world`, `fit` and the rest of PR1 unchanged; `projection` only adds. One exception: when `projection.available` is true, `guidance.disclaimer` says the future values are IPCC projections that depend on emission scenarios and are not predictions (domain review of the PR2 design); without a projection it stays as in PR1. `readouts.now` equals the TrendResult's `now` (the same 12-month mean, same keys). Like the baseline, `now` and `projection` always come from the whole series, whatever `start` and `end` the request asks for: "now" means the latest 12 months, never the end of a window. `more_than_today.value` is whole mm. Charts break the axis at 2100: AR6 values after 2100 come from a different set of model runs.
+
+### Facts, not advice (owner, 2026-11-22) — stats lane fills it; UI, agent and MCP show it
+
+Tarun's decision: "Remove both, state facts". Bhoomi is not a house-buying or investment tool. Nothing anywhere (page, agent, MCP, voice, evals) gives a risk level, a recommendation, or buy, build, avoid or invest advice. This supersedes the risk levels in `docs/RISK.md`, "Keep 'advise against'" and the PR4 "span or none" risk rule.
+
+```json
+"guidance": {
+  "fact": "Rising about 1.5 times as fast as the world average (1993 to April 2025; 95% range 1.0 to 2.0 times).",
+  "ratio": 1.5,
+  "reference": {"text": "…", "source": {"name": "…", "url": "…"}},
+  "rate": {"value": 3.2, "unit": "mm", "text": "+3.2 mm", "per": "a year", "note": null},
+  "display": {"unit": "mm", "factor": 1},
+  "look_next": [
+    {"label": "Official flood maps (FEMA Flood Map Service Center)", "url": "https://msc.fema.gov/portal/home"},
+    {"label": "Your local planning office", "url": null}
+  ],
+  "future_link": {"label": "…", "url": "…"},
+  "disclaimer": "This shows past measurements and IPCC projections, which depend on how much the world emits. It is not a prediction and not professional advice."
+}
+```
+
+- **Removed:** `risk`, `risk_label`, `why`, `recommendation`, and `world.thresholds`. No other key replaces them.
+- `fact`: one plain sentence saying what the records show. It uses only numbers already in `headline_rate`, `world`, `fit` and `record`, so the invented-numbers guard passes. It ends with the years in brackets.
+  - Rising or falling, with a world ratio:
+    - "Rising about {ratio} times as fast as {world.measure} ({window}; 95% range {ratio_low} to {ratio_high} times)."
+    - Sea level reads "the world average"; air temperature reads "the average for all land areas".
+    - Ratios are shown to 2 significant figures, as `world.ratio` is.
+  - Falling while the world rose (a ratio below 0, e.g. Juneau): "Falling here, while {world.measure} rose {world_rate} {unit} over the same years ({window})."
+  - `world.why_none` set, or `world.available` false: "{Rising|Falling} about {headline_rate.text} ({fit.start year} to {fit.end year})."
+    - Rainfall reads, e.g., "Rising about +5.6% of the usual yearly rain every 10 years (1981 to 2025)."
+  - No clear change: "No clear change ({fit.start year} to {fit.end year})."
+  - Hottest day of the month: the verdict sentence, with no world clause.
+- `look_next`: neutral pointers, in order. A label never says what to do with a property. Every non-null `url` must answer 200 when checked.
+  - Sea level, US place or CO-OPS gauge: "Official flood maps (FEMA Flood Map Service Center)" (https://msc.fema.gov/portal/home), then "Your local planning office" (`url` null).
+  - Sea level elsewhere: "Your local planning office" only. Add a national agency link only once it is on a reviewed list.
+  - Air temperature, hottest day, rainfall: "Your national weather service" (`url` null).
+  - Water storage: "Your local water authority" (`url` null).
+- `disclaimer`, always present:
+  - Without a projection: "This shows past measurements only. It is not a prediction and not professional advice."
+  - With a projection: "This shows past measurements and IPCC projections, which depend on how much the world emits. It is not a prediction and not professional advice."
+- `world` keeps `ratio`, `ratio_low` and `ratio_high` as facts. Step 6 shows them without any threshold.
+- **Page:**
+  - The "Our recommendation" box goes; the card shows `fact`, then a "Where to look next" line built from `look_next`, then `disclaimer`.
+  - Risk chips go from the sidebar and the compare table. The table's last column becomes "Compared with the world", showing the ratio and its range, or "—".
+- **Agent, MCP and voice:**
+  - Tool outputs carry `fact`, `look_next` and `disclaimer` instead of the removed keys.
+  - Prompts never state a risk level or advice.
+  - The voice prompt's "Say the risk level, the recommendation and the closing disclaimer" becomes "Say the fact, where to look next, and the closing disclaimer". It is listed in the PR body; the coordinator applies it.
 
 ### World reference series — data lane, stats lane reads
 
@@ -258,7 +306,7 @@ time,value_degC,anomaly_degC,flag
   - `comparison`: the rate per 10 years in familiar units, rounded to 1 significant figure (2 when the first digit is 1), half away from zero; sea level is shown in mm a year and water storage in cm of water a year (Rework v2, matching `headline_rate`), rainfall as mm a year. It is `""` when there is no clear change, the variable is unknown, the units are not the catalog's for that variable, the slope is 0 or not a finite number, or the slope's sign would contradict the verdict.
   - `limit`: one sentence on what past data cannot tell.
   - All four are strings and are always present. Show them as text; add no number of your own to them.
-- `guidance` (added 2026-11-15, after `meaning`, always the last field): a risk level and a recommendation worded for decisions, computed in code (`earthtrends/stats/guidance.py`) from the fields above by the rules in `docs/RISK.md`. The page, the agent and outside clients show these strings as they are; nobody else works out a risk, a recommendation or a future figure.
+- *(Superseded 2026-11-22: see "Facts, not advice" above. `risk`, `risk_label`, `why` and `recommendation` are removed; `fact` and `look_next` are added; the example above shows the old shape.)* `guidance` (added 2026-11-15, after `meaning`, always the last field): a risk level and a recommendation worded for decisions, computed in code (`earthtrends/stats/guidance.py`) from the fields above by the rules in `docs/RISK.md`. The page, the agent and outside clients show these strings as they are; nobody else works out a risk, a recommendation or a future figure.
   - `risk`: `"high"` | `"moderate"` | `"low"` | `"unknown"` | `null`; `risk_label`: `"High risk"` | `"Moderate risk"` | `"Low risk"` | `"Moderate to high risk"` | `"Low to moderate risk"` | `"Risk between low and high (wide range)"` | `"No world comparison"` | `"Not enough data"` | `"No clear change"` | `null` (Rework v2: `null` risk with "No clear change" for an unclear trend; both `null` for the hottest day).
   - `why`: one plain sentence on the reason. `ratio`: the trend against the reference rate (a number), or `null` where the rule uses no world rate. `reference`: `{"text", "source": {"name", "url"} | null}` naming what the trend was compared with, or `null`.
   - `rate` (Rework v2: sea level and water storage read "a year", matching `headline_rate`): the change per 10 years in familiar units (`value`, `unit`, signed `text`, `per`, `note`), or `null` when there is no clear change. For rainfall it is the share of the place's usual rainfall, with the amount in `note`: `{"value": 4.8, "unit": "%", "text": "+4.8%", "per": "more rain every 10 years", "note": {"value": 60, "unit": "mm", "text": "about 60 mm more a year"}}` (falling: `"−4.8%"`, `"less rain every 10 years"`, a negative `note.value`, `"about 60 mm less a year"`). `note` is `null` for every other measurement. `display`: the familiar unit and the factor that turns values in `units` into it.
