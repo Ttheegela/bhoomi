@@ -200,7 +200,7 @@
     if (sw) {
       var rp, u = sw.available && sw.source && httpsOnly(sw.source.record_url);
       if (sw.available) {
-        rp = h('p', 'cmp-cap', 'World figure for ' + selPin.label + ': ' + (sw.text || ''));
+        rp = h('p', 'cmp-cap', 'World figure for ' + selPin.label + ': ' + (o.imperial ? X.metric(sw.text) : sw.text || ''));
         if (u) {
           var a = h('a', 'cmp-src', (sw.source.name || u) + ' ↗');
           a.href = u; a.target = '_blank'; a.rel = 'noopener';
@@ -217,7 +217,7 @@
       return {
         at: /[^\d\s.,;°+\-−NSEWnsew]/.test(name) ? name : (t.source && t.source.name) || '—',
         record: t.period && t.latest ? X.Y(t.period.start) + '–' + X.Mo(t.latest.month) : '—',
-        rate: (f.rate && f.rate(t) && (clear || (g && g.risk_label))) ? f.rate(t) : 'No clear change',
+        rate: (f.rate && f.rate(t) && (clear || (g && g.risk_label))) ? f.rate(t) : clear ? X.card(t, o.imperial).word : 'No clear change',
         here: wp ? wp.here + ' ' + wp.since.toLowerCase() : '—',
         ratio: wp ? wp.ratio + ' (world ' + wp.world + ')' : '—',
         risk: g && g.risk_label ? g : null

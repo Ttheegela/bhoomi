@@ -28,8 +28,15 @@
     var s = fixed(x, d);
     return signed && x > 0 ? '+' + s : s;
   }
-  // three significant figures, signed: the rate inside a sum, so the sum checks out
-  function sig3(x) { var s = Math.abs(x).toPrecision(3); return (x > 0 ? '+' : x < 0 ? MINUS : '') + (/e/.test(s) ? String(Math.abs(x)) : s); }
+  // A rate as the API gives it, signed, with no digit added or lost: ÷10 when `tenth` (a decade's rate a year) shifts the
+  // point; in °F or inches the converted value to 6 significant figures.
+  function given(imp, x, u, tenth) {
+    var k = imp && RATE_K[normU(u)], a = Math.abs(x), txt;
+    if (k) txt = String(Number((a * k[0] / (tenth ? 10 : 1)).toPrecision(6)));
+    else if (/e/.test(String(a))) txt = String(tenth ? a / 10 : a);
+    else txt = (a / (tenth ? 10 : 1)).toFixed((String(a).split('.')[1] || '').length + (tenth ? 1 : 0)).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+    return (x > 0 ? '+' : x < 0 ? MINUS : '') + txt;
+  }
   function mi(t) { var p = String(t).split('-'); return +p[0] * 12 + (p.length > 1 ? +p[1] - 1 : 0); }
   function M(t) { var m = mi(t); return MONTHS_LONG[m % 12] + ' ' + Math.floor(m / 12); }
   function Mo(t) { var m = mi(t); return MONTHS[m % 12] + ' ' + Math.floor(m / 12); }
@@ -87,7 +94,7 @@
   function rate(t, imp) {
     var h = t.headline_rate;
     if (!h || typeof h.text !== 'string') { // null only for rain where the 1995-2014 average is zero: the rate in mm a day
-      if (!isNum(t.slope_per_decade) || !isNum(t.ci_low) || !isNum(t.ci_high)) return null;
+      if (oldAnswer(t) || !isNum(t.slope_per_decade) || !isNum(t.ci_low) || !isNum(t.ci_high)) return null;
       var c = function (x) { return conv(t, imp, x, t.units).v; }, cu = conv(t, imp, 0, t.units).unit;
       return { text: withUnit(fmtNum(c(t.slope_per_decade), true), cu) + ' per decade', range: fmtNum(c(t.ci_low), true) + ' to ' + withUnit(fmtNum(c(t.ci_high), true), cu) + ' per decade',
         value: c(t.slope_per_decade), low: c(t.ci_low), high: c(t.ci_high), unit: cu, per: 'per decade' };
@@ -110,6 +117,8 @@
     if (imp && /^mm\b/.test(unit)) return { v: x / 25.4, unit: unit.replace(/^mm/, 'in') };
     return { v: x, unit: unit };
   }
+  // the API's world sentence carries metric numbers: say so when the page shows °F or inches
+  function metric(text) { return str(text).replace(/\.?\s*$/, ' (in metric).'); }
   function ratio(r) { return isNum(r) ? fixed(r, 1) + '×' : '—'; }
   function hasWorld(w) { return !!w && w.available === true && isNum(w.local_rate) && isNum(w.world_rate) && !!w.window; }
   // the local and world rates over the same window, next to their ratio
@@ -143,7 +152,10 @@
   }
 
   // The answer card's words and readouts (section 3).
+  function oldAnswer(t) { return !t.fit || !t.baseline; }
   function card(t, imp) {
+    if (oldAnswer(t)) return { old: true, word: verdictWord(t), shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈',
+      conf: str(t.meaning && t.meaning.confidence), why: str(t.meaning && t.meaning.headline), chip: '' };
     var f = F(t, imp), b = t.baseline || {}, fit = t.fit || {}, rec = t.record || {}, m = t.meaning || {}, r = rate(t, imp);
     var clear = clearV(t), short = rec.status === 'short', rk = t.range_kind || '95% range';
     var conf = (clear && m.confidence ? m.confidence + ' · ' : '') + (isNum(rec.years) ? Math.round(rec.years) + ' years of records' : '') + (short ? ' (short record)' : '');
@@ -248,6 +260,8 @@
     var ex = t.explain || {}, dat = ex.data || {}, sea = ex.seasons, real = ex.real || {}, rec = t.record || {}, m = t.meaning || {}, a = s.anomaly || {};
     var r = rate(t, imp) || { text: '—', range: '—', per: '', value: NaN }, rk = t.range_kind || '95% range', measure = MEASURE[t.variable] || ctx.name.toLowerCase();
     var clear = clearV(t), pct = a.kind === 'percent', yrs = yrsOf(b), url = recordUrl(src), isSea = t.variable === 'sea_level';
+    // the change over the record in the rate's own unit (mm for sea level, not cm), the same in steps 2 and 4
+    var cu = rconv(imp, 0, fit.units).unit, ch = function (x) { return withUnit(fmtNum(rconv(imp, x, fit.units).v, true), cu); };
     var nPre = (s.flags || []).filter(function (x, i) { return x === 'preliminary' && s.values[i] != null; }).length;
     var out = [];
 
@@ -276,7 +290,7 @@
         p2 = 'Here ' + measure + ' is usually ' + (LEVELS[t.variable] ? f.lvl(sea.high, sea.units) + ' in ' + hi + ' and ' + f.lvl(sea.low, sea.units) + ' in ' + lo
           : 'highest in ' + hi + ' and lowest in ' + lo) + ': a seasonal swing of ' + swing + '.';
       }
-      p2 += ' The change we look for is ' + f.val(fit.change, fit.units) + ' over ' + Math.round(fit.years) + ' years. So we compare each month with its own ' + own(b.text) + ' first'
+      p2 += ' The change we look for is ' + ch(fit.change) + ' over ' + Math.round(fit.years) + ' years. So we compare each month with its own ' + own(b.text) + ' first'
         + (pct ? ', and write the difference as a share of the usual rain' : '') + '.';
       s2.words = [p2, { text: "Check it yourself: the CSV's anomaly column is " + (pct ? "each value's difference from its month's " + yrs + ' average, as a % of the ' + yrs + ' average rate.'
         : "each value minus its month's " + yrs + ' average.'), csv: true }];
@@ -284,8 +298,9 @@
       for (var i = s.times.length - 1; i >= 0 && k < 0; i--) if (s.values[i] != null && a.values[i] != null && !(s.flags && s.flags[i] === 'preliminary')) k = i;
       if (k >= 0) {
         var mon = mi(s.times[k]) % 12, v = s.values[k], nrm = b.months[mon], an = a.values[k];
-        s2.work = [pct ? M(s.times[k]) + ': (' + f.lvl(v, s.units) + ' − ' + f.lvl(nrm, s.units) + ', the usual ' + MONTHS_LONG[mon] + ') ÷ ' + f.lvl(b.value, s.units) + ', the usual rate = ' + f.val(an, a.units)
-          : M(s.times[k]) + ': ' + f.lvl(v, s.units) + ' − ' + f.lvl(nrm, s.units) + ' (the usual ' + MONTHS_LONG[mon] + ') = ' + f.val(an, a.units)];
+        var sub = function (x) { var q = f.lvl(x, s.units); return q.charAt(0) === MINUS ? '(' + q + ')' : q; }; // "− (−10.6 cm)"
+        s2.work = [pct ? M(s.times[k]) + ': (' + f.lvl(v, s.units) + ' − ' + sub(nrm) + ', the usual ' + MONTHS_LONG[mon] + ') ÷ ' + f.lvl(b.value, s.units) + ', the usual rate = ' + f.val(an, a.units)
+          : M(s.times[k]) + ': ' + f.lvl(v, s.units) + ' − ' + sub(nrm) + ' (the usual ' + MONTHS_LONG[mon] + ') = ' + f.val(an, a.units)];
         if (isSea) s2.work.push("Heights are against the gauge's own zero.");
         s2.fig = true;
       }
@@ -321,10 +336,13 @@
       + ' The data support anything from ' + r.range + ': that is the ' + rk + '.',
       "We use Sen's slope: the middle of the slopes between every pair of months. One odd month can't pull it far."];
     if (rec.status === 'short') s4.words.push('This is a short record (' + Math.round(rec.years) + ' years). Its trend can move when new years arrive.');
-    var cu = rconv(imp, 0, fit.units).unit, ch = function (x) { return withUnit(fmtNum(rconv(imp, x, fit.units).v, true), cu); };
+    // fit.change is slope_per_decade × fit.years / 10, so the sum multiplies those numbers as the API gives them (a rate a
+    // year is the decade's rate ÷ 10: unit display). Rain's % rate exists only in headline_rate.
+    var mul = normU(t.units) === normU(fit.units) && isNum(t.slope_per_decade) ? given(imp, t.slope_per_decade, fit.units, !dec)
+      : r.unit === cu && isNum(r.value) && r.unit === '%' ? (r.value > 0 ? '+' : '') + fixed(r.value, (String(r.value).split('.')[1] || '').length) : '';
     s4.work = [];
-    if (isNum(r.value) && isNum(fit.change) && cu === r.unit) {
-      s4.work.push('Over the record: ' + withUnit(sig3(r.value), r.unit) + ' ' + r.per + ' × ' + (dec ? fixed(fit.years / 10, 2) + ' decades' : fixed(fit.years, 1) + ' years') + ' = ' + ch(fit.change)
+    if (mul && isNum(fit.change)) {
+      s4.work.push('Over the record: ' + withUnit(mul, cu) + ' ' + r.per + ' × ' + (dec ? fixed(fit.years / 10, 2) + ' decades' : fixed(fit.years, 1) + ' years') + ' = ' + ch(fit.change)
         + ' (' + rk + ' ' + fmtNum(rconv(imp, fit.change_low, fit.units).v, true) + ' to ' + ch(fit.change_high) + ').');
     }
     if (isNum(fit.level_end)) s4.work.push('The trend line ends at ' + f.val(fit.level_end, fit.units) + ' compared with ' + b.text + ', in ' + M(fit.end) + '. That is the first number on the card.');
@@ -343,7 +361,7 @@
     if (wp) {
       var th = w.thresholds || {};
       s6.short = worldLine(t, imp);
-      s6.words = [str(w.text)];
+      s6.words = [imp ? metric(w.text) : str(w.text)];
       s6.work = [fmtNum(wp.a, false) + ' ÷ ' + fmtNum(wp.b, false) + ' = ' + wp.ratio + ' · ' + M(w.window.start) + ' to ' + M(w.window.end) + ' · ' + stop(str(w.method)),
         '1× is the same as the world. ' + th.high + '× or more: high risk. ' + th.moderate + '× to ' + th.high + '×: moderate risk. Under ' + th.moderate + '×: low risk. Here: '
         + (str(g.risk_label) ? g.risk_label.toLowerCase() : 'no risk level') + '.'];
@@ -375,7 +393,13 @@
 
   /* CSV (section 8): built from the fields, values in the record's own units. */
   function slug(x) { return String(x).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'place'; }
-  function csvField(x) { var s = String(x); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  // A text cell: one that starts with = + - @ tab or CR would run as a formula in a spreadsheet, so it gets a ' first;
+  // then quotes when it holds a comma, a quote or a line break. Number cells never come through here.
+  function csvField(x) {
+    var s = String(x);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
   function cell(v) { return v == null ? '' : String(v); }
   function baseLine(b, pct, withMethod) {
     if (!b || b.method === 'none') return 'none (too few years from 1995 to 2014)';
@@ -394,7 +418,8 @@
     var head = ['# Bhoomi: ' + ctx.name + ' at ' + ctx.label, '# Source: ' + str(src.name),
       '# Dataset: ' + str(src.dataset_id) + '; version: ' + (src.version || 'not named by the provider'), '# Record: ' + recordUrl(src),
       '# Baseline: ' + baseLine(t.baseline, a.kind === 'percent', true), '# Method: ' + str(src.method), '# Retrieved: ' + str(src.retrieved),
-      '# Built with AI assistance. bhoomi.earth', 'time,value_' + s.units + ',anomaly_' + (a.units || s.units) + ',flag'];
+      '# Built with AI assistance. bhoomi.earth'].map(csvField);
+    head.push('time,value_' + s.units + ',anomaly_' + (a.units || s.units) + ',flag');
     return { name: 'bhoomi-' + ctx.slug + '-' + slug(ctx.label) + '.csv', text: head.concat(rows(s)).join('\n') + '\n' };
   }
   // list: [{label, t, s}], the plotted places in pin order
@@ -406,6 +431,7 @@
       head.push('# Place: ' + p.label + '; Source: ' + str(src.name) + '; Dataset: ' + str(src.dataset_id) + '; version: ' + (src.version || 'not named by the provider')
         + '; Record: ' + recordUrl(src) + '; Method: ' + str(src.method) + '; Retrieved: ' + str(src.retrieved));
     });
+    head = head.map(csvField);
     head.push('place,time,value_' + s0.units + ',anomaly_' + (a0.units || s0.units) + ',flag');
     var body = [];
     list.forEach(function (p) { body = body.concat(rows(p.s, p.label)); });
@@ -464,7 +490,7 @@
   }
   function csvButton(get) { var b = h('button', { type: 'button', class: 'btn' }, 'Download CSV'); b.addEventListener('click', function () { download(get()); }); return b; }
   function vkey(t) { return t.verdict === 'rising' ? 'rising' : t.verdict === 'falling' ? 'falling' : 'none'; }
-  function key(cls, art, text) { return h('span', { class: 'lg' }, art, text); }
+  function key(art, text) { return h('span', { class: 'lg' }, art, text); }
   function swatch(draw) { var s = sv('svg', { width: 28, height: 12, 'aria-hidden': 'true' }); draw.forEach(function (d) { s.append(sv(d[0], d[1])); }); return s; }
 
   var cur = null; // the place chart on screen: { pin, ctx, T, box, ro }
@@ -480,14 +506,14 @@
     sec.append(box);
     if (T.noneNote) sec.append(h('p', { class: 'note' }, T.noneNote));
     var lg = h('div', { class: 'legend' }, h('span', { class: 'grp' }, 'From the records:'),
-      key('', swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-month' }]]), T.legend.monthly));
-    if (T.hasPre) lg.append(key('', swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-pre' }]]), 'Preliminary month (may still change)'));
-    lg.append(h('span', { class: 'grp' }, 'Our calculation:'), key('', swatch([['circle', { cx: 14, cy: 6, r: 3.4, class: 's-year' }]]), 'Yearly average'));
+      key(swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-month' }]]), T.legend.monthly));
+    if (T.hasPre) lg.append(key(swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-pre' }]]), 'Preliminary month (may still change)'));
+    lg.append(h('span', { class: 'grp' }, 'Our calculation:'), key(swatch([['circle', { cx: 14, cy: 6, r: 3.4, class: 's-year' }]]), 'Yearly average'));
     if (T.drawn) {
-      lg.append(key('', swatch([['line', { x1: 2, y1: 6, x2: 26, y2: 6, class: 's-trend' }]]), 'Trend line'),
-        key('', swatch([['rect', { x: 1, y: 1, width: 26, height: 10, class: 's-fan' }], ['line', { x1: 1, y1: 1, x2: 27, y2: 1, class: 's-edge' }], ['line', { x1: 1, y1: 11, x2: 27, y2: 11, class: 's-edge' }]]), T.legend.range));
+      lg.append(key(swatch([['line', { x1: 2, y1: 6, x2: 26, y2: 6, class: 's-trend' }]]), 'Trend line'),
+        key(swatch([['rect', { x: 1, y: 1, width: 26, height: 10, class: 's-fan' }], ['line', { x1: 1, y1: 1, x2: 27, y2: 1, class: 's-edge' }], ['line', { x1: 1, y1: 11, x2: 27, y2: 11, class: 's-edge' }]]), T.legend.range));
     }
-    if (!T.none) lg.append(key('', swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 'c-zero' }]]), T.legend.zero));
+    if (!T.none) lg.append(key(swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 'c-zero' }]]), T.legend.zero));
     var ro = h('p', { class: 'readout', 'aria-live': 'polite' }, 'Hover, tap or use the arrow keys to read a month.');
     sec.append(lg, ro, h('p', { class: 'summary' }, T.summary), dataTable(T, s));
     sec.hidden = false;
@@ -684,12 +710,13 @@
       pc.hidden = false;
       return;
     }
+    if (oldAnswer(pin.trend)) { pc.hidden = true; how.hidden = true; cur = null; return; }
     try { showPlace(pin, ctx); showHow(pin, ctx, fresh); }
     catch (e) { pc.hidden = true; how.hidden = true; cur = null; console.error(e); } // an answer without the v2 fields: the card still shows
   }
   // redraw the chart when its box changes width
   function redraw() { if (cur && Math.round(cur.box.clientWidth) !== cur.W) draw(); }
 
-  window.TDX = { show: show, redraw: redraw, card: card, rate: rate, worldParts: worldParts, srcText: srcText, plain: function (id) { return PLAIN[id] || ''; },
-    recordUrl: recordUrl, csvCompare: csvCompare, download: download, M: M, Mo: Mo, Y: Y, fixed: fixed, fmtNum: fmtNum, ratio: ratio, conv: conv };
+  window.TDX = { show: show, redraw: redraw, card: card, rate: rate, worldParts: worldParts, srcText: srcText, recordUrl: recordUrl,
+    csvCompare: csvCompare, download: download, Mo: Mo, Y: Y, conv: conv, metric: metric };
 })();
