@@ -237,3 +237,33 @@ def test_caveats_by_kind_of_record(var, sid, want):
     x = (3 if var == "precip" else 15) + SEASON[np.arange(480) % 12] / 5 + np.random.default_rng(0).normal(0, 0.2, 480)
     r = compute_trend(ts(x, variable=var, source={**POWER, "id": sid}))
     assert [c for c in r["caveats"] if c in (trend.POWER_T_CAVEAT, trend.GHCN_CAVEAT)] == want
+
+
+# ---- headline_rate: a rain range end never reads on the other side of a threshold from how guidance judged it ----
+
+RAIN = "% of the 1995–2014 average per decade"
+
+
+def rain_range(lo, hi):
+    """range_text for a rain rate whose 95% range is lo to hi % a decade (a 1995-2014 average of 1 mm a day)."""
+    return trend._headline_rate("precip", "mm/day", ((lo + hi) / 200, lo / 100, hi / 100), 1.0)["range_text"]
+
+
+@pytest.mark.parametrize("lo,hi,want", [
+    (4.51, 17, "+4.5 to +17"),  # Mumbai: judged 4.5, low; "+5" would read moderate
+    (-17, -4.51, "−17 to −4.5"),  # the same, drier
+    (9.6, 23, "+9.6 to +23"),  # judged 9.6, moderate; "+10" would read high
+])
+def test_a_rain_end_near_a_threshold_reads_as_it_was_judged(lo, hi, want):
+    assert rain_range(lo, hi) == f"{want}{RAIN}"
+
+
+def test_a_rain_end_just_over_5_never_reads_below_5():
+    text = rain_range(5.04, 17)
+    assert text == f"+5.0 to +17{RAIN}"  # not "+5", which could be anything from 4.5
+    assert float(text.split()[0]) >= 5
+
+
+def test_a_rain_end_away_from_a_threshold_keeps_its_usual_rounding():
+    assert rain_range(4.51, 23.4) == f"+4.5 to +23{RAIN}"  # the far end is not "+23.4"
+    assert rain_range(2.3, 23.4) == f"+2 to +23{RAIN}"  # no end near a threshold: unchanged
