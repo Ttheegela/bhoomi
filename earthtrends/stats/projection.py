@@ -3,7 +3,6 @@ the tide gauge, from the file shipped with the package (earthtrends/data/ar6_gau
 published (spec D4: never shifted to meet the observations). The readouts and the check put the observed record on the
 same 1995-2014 baseline (baseline.py). numpy + stdlib only; no network."""
 
-import calendar
 import csv
 import re
 from decimal import Decimal
@@ -30,8 +29,8 @@ STATION_ID = {"coops": re.compile(r"[?&]id=([^&#]+)"), "psmsl": re.compile(r"/st
 REGIONAL = ("IPCC AR6 has no projection at a tide gauge close enough, so this is its estimate for the surrounding 1° "
             "area: the land motion in it is AR6's regional estimate, and local sinking here may differ.")
 
-NAMES = {"ssp126": "very low emissions", "ssp245": "middle-of-the-road emissions", "ssp370": "high emissions",
-         "ssp585": "very high emissions"}
+NAMES = {"ssp126": "low emissions", "ssp245": "intermediate emissions", "ssp370": "high emissions",
+         "ssp585": "very high emissions"}  # the IPCC's own names (AR6 WGI SPM)
 RANGE_KIND = {"medium": "likely range (about 2 in 3 chance)", "low": "17th to 83rd percentile"}
 OUTER_KIND = "5th to 95th percentile"
 DEFAULT = "ssp245_medium"
@@ -42,13 +41,13 @@ PARTS = (("oceandynamics", "sterodynamic", "Ocean warming and currents"), ("GIS"
          ("verticallandmotion", "land_motion", "Land rising or sinking here"))
 PARTS_NOTE = "Each part's range is its own; the parts' ranges don't add up to the total's."
 CAVEAT = "Faster ice-sheet loss could push this higher, outside this range."
-NOW_MONTHS = 10  # of the 12 latest months, for readouts.now
 CHECK_MONTHS = 24  # of the 36 months of 2019-2021, for check.observed_2019_2021
 SOURCE_NAME = "IPCC AR6 sea level projections (Garner et al. 2021)"
 
 
-def sea_level(series: dict, base: dict) -> dict:
-    """A sea-level TimeSeries and its whole-record baseline -> the contract's `projection` object."""
+def sea_level(series: dict, base: dict, now: dict | None) -> dict:
+    """A sea-level TimeSeries, its whole-record baseline and the TrendResult's `now` (readouts.now is that same
+    object) -> the contract's `projection` object."""
     loc = _location(series)
     if isinstance(loc, str):
         return {"available": False, "why": loc}
@@ -69,14 +68,14 @@ def sea_level(series: dict, base: dict) -> dict:
     parts = [{"id": pid, "name": name, **dict(zip(Q[1:4], ar6._values(d["levels"][i, comps.index(c), sd, 1:4, y50])))}
              for c, pid, name in PARTS]
     p50, low, high = (scenarios[sd][k][y50] for k in ("p50", "p17", "p83"))
-    now, observed = _observed(series, base)
+    observed = _observed(series, base)
     p05, p95 = scenarios[sd]["p05"][y20], scenarios[sd]["p95"][y20]
     return {
         "available": True,
         "kind": "sea_level_ar6",
         "source": {"name": SOURCE_NAME, "dataset_id": f"doi:{m['doi']}", "version": m["version"],
                    "record_url": f"https://doi.org/{m['doi']}", "licence": "CC BY 4.0",
-                   "citation": " ".join(m["citations"]), "acknowledgement": m["acknowledgement"]},
+                   "citation": list(m["citations"]), "acknowledgement": m["acknowledgement"]},
         "location": location,
         "baseline": {"text": TEXT, "years": list(YEARS)},
         "units": "mm",
@@ -89,7 +88,7 @@ def sea_level(series: dict, base: dict) -> dict:
             "by_2050": {"scenario": DEFAULT, "p50": p50, "low": low, "high": high,
                         "range_kind": scenarios[sd]["range_kind"],
                         "text": f"{_cm(p50)} (likely {_cm(low)[:-3]} to {_cm(high)})"},
-            "more_than_today": None if now is None else _more(p50 - now["value"])},
+            "more_than_today": None if now is None else _more(_mm(p50 - now["value"]))},
         "check": {"observed_2019_2021": observed, "ar6_2020_p05": p05, "ar6_2020_p95": p95,
                   "inside": None if observed is None else p05 <= observed <= p95},
         "caveat": CAVEAT,
@@ -160,25 +159,14 @@ def _psmsl_location(gid: int, place: dict) -> tuple[int, dict] | str:
 
 # ---- the observed record on the same baseline ----
 
-def _observed(series: dict, base: dict) -> tuple[dict | None, int | None]:
-    """-> (readouts.now, the 2019-2021 mean in mm), both from the monthly anomalies against the 1995-2014 baseline;
-    None where the record is off the projection axis or has too few months."""
+def _observed(series: dict, base: dict) -> int | None:
+    """-> the 2019-2021 mean in mm of the monthly anomalies against the 1995-2014 baseline, for the check; None where
+    the record is off the projection axis or has too few of those months."""
     if not base.get("projection_axis") or series.get("freq") != "monthly":
-        return None, None
-    have = {int(t[:4]) * 12 + int(t[5:7]) - 1: v
-            for t, v in zip(series["times"], anomaly(series, base)["values"]) if v is not None}
-    if not have:
-        return None, None
-    end = max(have)
-    last = [have[k] for k in range(end - 11, end + 1) if k in have]
-    now = None
-    if len(last) >= NOW_MONTHS:
-        value = _mm(sum(last) / len(last))
-        (y0, m0), (y1, m1) = divmod(end - 11, 12), divmod(end, 12)
-        now = {"value": value, "text": _cm(value), "kind": "12-month mean", "start": f"{y0:04d}-{m0 + 1:02d}",
-               "end": f"{y1:04d}-{m1 + 1:02d}", "label": f"the 12 months to {calendar.month_name[m1 + 1]} {y1}"}
-    window = [have[k] for k in range(2019 * 12, 2022 * 12) if k in have]
-    return now, _mm(sum(window) / len(window)) if len(window) >= CHECK_MONTHS else None
+        return None
+    window = [v for t, v in zip(series["times"], anomaly(series, base)["values"])
+              if v is not None and "2019" <= t[:4] <= "2021"]
+    return _mm(sum(window) / len(window)) if len(window) >= CHECK_MONTHS else None
 
 
 def _mm(v: float) -> int:

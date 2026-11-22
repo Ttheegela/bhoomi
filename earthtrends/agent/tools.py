@@ -2,7 +2,6 @@
 from earthtrends import data
 from earthtrends.stats import compute_trend
 from earthtrends.stats.baseline import anomaly, baseline
-from earthtrends.stats.projection import sea_level
 
 
 def list_variables() -> list[dict]:
@@ -30,6 +29,7 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
                  end: str | None = None, source: str | None = None) -> dict:
     s, full, base = _windowed(variable, lat, lon, start, end, source)
     r = compute_trend(s, base=base)
-    if full is not s and r["variable"] == "sea_level":  # "now" and the check read the whole record, whatever the window
-        r["projection"] = sea_level(full, base)
+    if full is not s and r["variable"] == "sea_level":  # "now" and the projection: the whole record, not the window
+        whole = compute_trend(full, base=base)
+        r["now"], r["projection"] = whole["now"], whole["projection"]
     return r

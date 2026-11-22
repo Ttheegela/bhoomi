@@ -68,7 +68,7 @@ def main() -> None:
         s = {"variable": "sea_level", "units": "mm", "freq": "monthly", "place": {"name": name, "lat": lat, "lon": lon},
              "times": times, "values": values, "source": {"id": src, "record_url": url}}
         base = baseline(s)
-        p = sea_level(s, base)
+        p = sea_level(s, base, None)  # only the check is read: no `now` needed
         c = p["check"] if p["available"] else None
         if c is None or c["observed_2019_2021"] is None:
             why = "no projection" if c is None else "no baseline" if base["value"] is None else "few 2019-2021 months"
