@@ -18,7 +18,7 @@ The climate-scientist review of PR1 (2026-11-22) added:
 ## What guidance is not
 
 - **Not a forecast.** Guidance never gives a future value. No future number is made from a past trend. Future values come only from published expert projections, in the result's `projection` object (sea level since PR2; see below).
-- **Not professional advice.** It is not financial, legal, engineering or insurance advice. Every guidance object ends with this disclaimer: "This guidance isn't perfect. It is based only on past records, and the future is not certain. Not professional financial or legal advice."
+- **Not professional advice.** It is not financial, legal, engineering or insurance advice. Every guidance object ends with this disclaimer: "This guidance isn't perfect. It is based only on past records, and the future is not certain. Not professional financial or legal advice." When the result shows an expert projection (`projection.available` true), "based only on past records" is no longer true, so it reads instead: "This guidance isn't perfect. The past comes from measurements here; the future values are IPCC projections, which depend on how much the world emits and are not predictions. Not professional financial or legal advice."
 
 ## Expert projections and the risk level
 

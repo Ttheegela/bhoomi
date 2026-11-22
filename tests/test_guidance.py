@@ -6,7 +6,7 @@ import json
 import pytest
 
 from earthtrends.stats import compute_trend, guidance
-from earthtrends.stats.guidance import DISCLAIMER, RECOMMEND, SCARCE, SHORT, guidance_for
+from earthtrends.stats.guidance import DISCLAIMER, DISCLAIMER_PROJECTION, RECOMMEND, SCARCE, SHORT, guidance_for
 
 UNITS = {"sea_level": "mm", "air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "water_storage": "cm"}
 KEYS = ["risk", "risk_label", "why", "ratio", "reference", "rate", "display", "recommendation", "future_link",
@@ -221,6 +221,17 @@ def test_all_keys_always_present_and_finite(r):
     assert g["disclaimer"] == DISCLAIMER
     assert (g["why"] and g["recommendation"]) if r.get("variable") != "air_temp_max" else g["why"] is None
     assert set(g["display"]) == {"unit", "factor"}
+
+
+
+def test_disclaimer_with_and_without_a_projection():
+    shown = {"available": True}
+    assert guidance_for({**res(place=BATTERY), "projection": shown})["disclaimer"] == DISCLAIMER_PROJECTION
+    no = {"available": False, "why": "There is no expert projection for this tide gauge."}
+    assert guidance_for({**res(place=BATTERY), "projection": no})["disclaimer"] == DISCLAIMER  # PR1 text
+    assert guidance_for(res("air_temp", slope=0.3, ratio=1.0, place=BATTERY))["disclaimer"] == DISCLAIMER
+    assert "based only on past records" not in DISCLAIMER_PROJECTION and "IPCC projections" in DISCLAIMER_PROJECTION
+    assert " will " not in DISCLAIMER_PROJECTION  # no future tense about the place
 
 
 def test_compute_trend_attaches_guidance_last():
