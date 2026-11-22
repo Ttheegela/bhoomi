@@ -182,7 +182,7 @@
     // R3 with an expert projection (design 11 §3): the chosen scenario's 2050 value, its range and how far that is above today
     var r3f = fx ? { label: 'By 2050, ' + fx.name, value: fx.t50, line: fx.code + fx.lc + ', IPCC AR6. ' + fx.rkShort + ' ' + fx.trng + '.'
       + (fx.more ? ' ' + cap(fx.more) + '.' : '') + (fx.regional ? ' Regional estimate: local sinking may differ.' : '')
-      + (fx.outside ? " The measured level here is outside the experts' range; step 7 explains." : '') } : null; // either check.kind
+      + (fx.outside ? " The measured level here is outside the experts' range for recent years; step 7 explains." : '') } : null; // either check.kind
     return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, why: why(t, imp),
       world: worldLine(t, imp, /^Since \d{4}\b/.test(str(g.why))), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f,
       chip: str(g.risk_label) === word ? '' : str(g.risk_label) }; // the headline already says "No clear change"
@@ -1014,6 +1014,13 @@
       root.append(sv('line', { x1: X(F0.x0), y1: Yp(F0.lo0), x2: X(F0.x1), y2: Yp(F0.lo1), class: 's-edge' }));
       root.append(sv('line', { x1: X(F0.x0), y1: Yp(F0.hi0), x2: X(F0.x1), y2: Yp(F0.hi1), class: 's-edge' }));
     }
+    // casings (design 11 §9), one layer over the band and the trend's range and under every observed mark: the medians
+    // meet at 2020, so casing each line in turn would hide the trend line's tail and the months under them
+    var tl = F0 ? { x1: X(F0.x0), y1: Yp(F0.y0), x2: X(F0.x1), y2: Yp(F0.y1) } : null;
+    var meds = !fm ? [] : fm.others.map(function (o) { return { d: pathOf(fxs, yy(o.p50)), cls: 'f-med k' + o.k, cs: 'c-case thin' }; })
+      .concat([{ d: pathOf(fxs, yy(fm.sel.p50)), cls: 'f-sel' + sk + (fx.low ? ' low' : ''), cs: 'c-case' }]);
+    if (fut && tl) root.append(sv('line', Object.assign({ class: 'c-case' }, tl)));
+    meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cs })); });
     // monthly values (regular months; a gap or a preliminary month breaks the line), then preliminary months joined to the last regular one
     var d = '', dp = '', pen = false, lastReg = null;
     md.ys.forEach(function (v, i) {
@@ -1033,20 +1040,15 @@
     if (avg) root.append(sv('path', { d: pathOf(md.ms.map(X), avg.map(function (v) { return v == null ? null : Yp(f.num(v, (s.anomaly || {}).units)); })), class: 's-avg' }));
     else md.dots.forEach(function (q) { root.append(sv('circle', { cx: X(q.x).toFixed(1), cy: Yp(q.v).toFixed(1), r: 3.4, class: 's-year' })); });
     var xr = ml + pw + 12;
-    if (F0) {
-      var tl = { x1: X(F0.x0), y1: Yp(F0.y0), x2: X(F0.x1), y2: Yp(F0.y1) };
-      // casing (design 11 §9): over the bands and its own range, the pixels next to the trend line are --surface
-      if (fut) root.append(sv('line', Object.assign({ class: 'c-case' }, tl)));
+    if (tl && !fut) { // PR1's chart: the trend line and its end label (with projections it is drawn after the medians)
       root.append(sv('line', Object.assign({ class: 's-trend' }, tl)));
-      if (!fut) {
-        root.append(sv('circle', { cx: X(F0.x1), cy: Yp(F0.y1), r: 5, class: 's-end' }));
-        // the end label moves away from the zero label when they would touch; the zero label never moves
-        var ey = Yp(F0.y1) + 5;
-        if (Math.abs(ey - Yp(0)) < 40) ey = ey <= Yp(0) ? Yp(0) - 40 : Yp(0) + 44;
-        ey = Math.min(H - mb - (narrow ? 0 : 15), Math.max(mt + 10, ey));
-        root.append(sv('text', { x: xr, y: ey, class: 'pc-end' }, T.endLabel));
-        if (!narrow) root.append(sv('text', { x: xr, y: ey + 15, class: 'pc-t' }, T.endSub));
-      }
+      root.append(sv('circle', { cx: X(F0.x1), cy: Yp(F0.y1), r: 5, class: 's-end' }));
+      // the end label moves away from the zero label when they would touch; the zero label never moves
+      var ey = Yp(F0.y1) + 5;
+      if (Math.abs(ey - Yp(0)) < 40) ey = ey <= Yp(0) ? Yp(0) - 40 : Yp(0) + 44;
+      ey = Math.min(H - mb - (narrow ? 0 : 15), Math.max(mt + 10, ey));
+      root.append(sv('text', { x: xr, y: ey, class: 'pc-end' }, T.endLabel));
+      if (!narrow) root.append(sv('text', { x: xr, y: ey + 15, class: 'pc-t' }, T.endSub));
     }
     if (F0 || (fut && !md.none)) {
       // narrow: "0 = the" over the years (the 96 px margin can't hold "0 = the 1995–2014" on one line)
@@ -1060,11 +1062,8 @@
         root.append(sv('line', { x1: tx, x2: tx, y1: mt - 4, y2: mt + ph, class: 'c-today' }));
         root.append(sv('text', { x: tx, y: mt - 10, 'text-anchor': 'middle', class: 'pc-t' }, 'Today'));
       }
-      // the medians on one casing layer, so they cut the band, the trend's range and the trend line but not each other
-      var meds = fm.others.map(function (o) { return { d: pathOf(fxs, yy(o.p50)), cls: 'f-med k' + o.k, cs: 'c-case thin' }; })
-        .concat([{ d: pathOf(fxs, yy(fm.sel.p50)), cls: 'f-sel' + sk + (fx.low ? ' low' : ''), cs: 'c-case' }]);
-      meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cs })); });
       meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cls })); });
+      if (tl) root.append(sv('line', Object.assign({ class: 's-trend' }, tl))); // the record's trend line on top of the lines
       var i50 = fm.years.indexOf(2050), v50 = i50 < 0 ? null : fm.sel.p50[i50];
       if (v50 != null) { // the card's 2050 number, on its line
         root.append(sv('circle', { cx: fxs[i50], cy: Yp(v50), r: 4.5, class: 'f-dot' + sk }));

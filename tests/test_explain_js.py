@@ -462,7 +462,7 @@ assert.strictEqual(commas(1266), '1,266'); assert.strictEqual(slug('São Paulo, 
 
 // ---------- PR2: sea-level expert projections (web/design/11-sea-level-future.md) ----------
 var TODAY = 2026 * 12 + 10; // November 2026
-var OUT = " The measured level here is outside the experts' range; step 7 explains."; // R3 when check.inside is false (this synthetic Battery)
+var OUT = " The measured level here is outside the experts' range for recent years; step 7 explains."; // R3 when check.inside is false (this synthetic Battery)
 function pc2(d, label, imp, sel) { return Object.assign(ctx(d, label, imp), { today: TODAY, sel: sel || null }); }
 function sp(x) { return String(x).replace(/\u00a0/g, ' '); } // the server's texts use a plain space
 // cm(): 2 significant figures, half away from zero, a true minus: the server's sig2 (9 mm is +0.90 cm, 1036 mm is +100 cm)
@@ -821,16 +821,22 @@ def test_scenario_colours_never_colour_text():
 
 def test_future_chart_cases_the_trend_line_and_the_medians():
     """QA6: over a band and the trend's own 95% range, the light orange fell to 2.48:1 and the dark falling blue to
-    2.29:1. In the sea-level future chart a --surface casing, 1.5 px each side, lies right under the trend line and
-    under the medians (one layer, so the medians never cut each other)."""
+    1.97:1. In the sea-level future chart a --surface casing, 1.5 px each side, lies under the trend line and the
+    medians. Review: the medians meet at 2020, so the casings are one layer over the band and the range and under
+    every observed mark; then the medians, then the record's trend line on top."""
     draw = re.search(r"\n  function draw\(c\) \{(.*?)\n  \}\n", SRC, re.S)[1]
-    case_t = draw.index("if (fut) root.append(sv('line', Object.assign({ class: 'c-case' }, tl)));")
-    assert draw.index("root.append(sv('line', Object.assign({ class: 's-trend' }, tl)));") > case_t
-    assert draw.index("class: 'f-band'") < draw.index("class: 's-fan'") < case_t  # the casing lies over the band and the range
+    at = lambda x: draw.index(x)
+    trend = "root.append(sv('line', Object.assign({ class: 's-trend' }, tl)));"
+    case_t = at("if (fut && tl) root.append(sv('line', Object.assign({ class: 'c-case' }, tl)));")
+    case_m = at("meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cs })); });")
+    meds = at("meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cls })); });")
+    fut_trend = at("if (tl) " + trend)
+    assert at("class: 'f-edge'") < at("class: 's-edge'") < case_t < case_m  # over the band, the range and their edges
+    assert case_m < at("class: 's-month'") < at("class: 'c-zero'") < at("class: 's-avg'") < meds < fut_trend  # nothing observed under a casing
+    assert at("if (tl && !fut) { // PR1") < at(trend) < meds  # PR1's chart draws its own trend line, uncased
+    assert draw.count(trend) == 2 and "class: 'c-case'" not in draw[fut_trend:]
     assert "cls: 'f-med k' + o.k, cs: 'c-case thin' }" in draw and "cls: 'f-sel' + sk + (fx.low ? ' low' : ''), cs: 'c-case' }" in draw
-    cases = draw.index("meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cs })); });")
-    lines = draw.index("meds.forEach(function (m) { root.append(sv('path', { d: m.d, class: m.cls })); });")
-    assert case_t < cases < lines and "class: 'f-med" not in draw and "class: 'f-sel" not in draw  # every median goes through meds
+    assert "class: 'f-med" not in draw and "class: 'f-sel" not in draw  # every median goes through meds
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
     width = lambda sel: float(re.search(r"(?:^|\n)%s \{[^}]*stroke-width: ([\d.]+);" % re.escape(sel), css)[1])
     assert re.search(r"\n\.c-case \{[^}]*stroke: var\(--surface\);", css)
