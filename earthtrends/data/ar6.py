@@ -15,8 +15,6 @@ import numpy as np
 FILE = Path(__file__).resolve().parent / "ar6_gauges.npz"  # relative to this module, not the working directory
 MANIFEST = FILE.with_suffix(".json")
 FILL = -32768
-PROCESSES = {"oceandynamics": "sterodynamic", "GIS": "greenland", "AIS": "antarctica", "glaciers": "glaciers",
-             "landwaterstorage": "land_water", "verticallandmotion": "vertical_land_motion"}
 
 
 @lru_cache(maxsize=1)
@@ -28,32 +26,8 @@ def load() -> dict:
     return d
 
 
-def _values(a: np.ndarray, scale: float = 1) -> list:
+def values(a: np.ndarray, scale: float = 1) -> list:
+    """Stored int16 values -> AR6's published ones: levels as they are (scale 1, mm), rates times 0.1 (mm a year);
+    None for FILL."""
     return [None if v == FILL else (int(v) if scale == 1 else round(int(v) * scale, 1)) for v in a]
 
-
-def lookup(location_id: int, scenario: str, year: int) -> dict:
-    """AR6 at one location, scenario ("ssp245", or "ssp245_low" for low confidence) and decade (2020 to 2150).
-    -> levels and rates at the quantiles 0.05, 0.167, 0.5, 0.833, 0.95, against the 1995-2014 mean, plus the parts."""
-    d = load()
-    m = d["manifest"]
-    if location_id not in d["index"]:
-        raise ValueError(f"No AR6 projection for location {location_id}.")
-    scenarios, years = d["scenarios"].tolist(), d["years"].tolist()
-    if scenario not in scenarios:
-        raise ValueError(f"Unknown scenario {scenario!r}; one of {', '.join(scenarios)}.")
-    if year not in years:
-        raise ValueError(f"AR6 gives decades {years[0]} to {years[-1]}, not {year}.")
-    i, s, y = d["index"][location_id], scenarios.index(scenario), years.index(year)
-    comps = d["components"].tolist()
-    conf = m["scenarios"][scenario]["confidence"]
-    return {
-        "location_id": location_id, "name": str(d["names"][i]), "lat": float(d["lat"][i]), "lon": float(d["lon"][i]),
-        "regional_estimate": location_id >= 10**9,
-        "scenario": scenario, "label": m["scenarios"][scenario]["label"], "confidence": conf, "year": year,
-        "baseline": m["baseline"], "baseline_years": m["baseline_years"], "quantiles": d["quantiles"].tolist(),
-        "range_names": m["range_names"][conf],
-        "total_mm": _values(d["levels"][i, comps.index("total"), s, :, y]),
-        "rate_mm_per_year": _values(d["rates"][i, s, :, y], 0.1),
-        "processes_mm": {PROCESSES[c]: _values(d["levels"][i, comps.index(c), s, :, y]) for c in PROCESSES},
-    }

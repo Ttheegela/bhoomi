@@ -8,26 +8,21 @@ import re
 from decimal import Decimal
 from functools import lru_cache
 
-import httpx
 import numpy as np
 
-from earthtrends.data import ar6, psmsl
+from earthtrends.data import ar6
 from earthtrends.data.coops import haversine_km
-from earthtrends.data.upstream import readable
+from earthtrends.data.upstream import utc_today
 from earthtrends.stats.baseline import TEXT, YEARS, anomaly
 from earthtrends.stats.guidance import q, sig2, signed
 
 GREAT_LAKES = "Sea level projections don't cover the Great Lakes."
 NONE = "There is no expert projection for this tide gauge."
 GRID = 10**9  # AR6 location ids from here up are 1-degree cells, below are PSMSL gauge ids
-NEAR_KM, NAME_KM = 3.0, 15.0  # the mapping rules of scripts/build_ar6.py
-# Same as scripts/build_ar6.py GENERIC (tests check): words too common in gauge names to say two names are one place.
-GENERIC = set("""THE AND OF AT ON IN BAY PORT POINT PIER HARBOR HARBOUR ISLAND ISLE RIVER CITY BEACH INLET CREEK SOUND
-STATION LAKE NORTH SOUTH EAST WEST NEW FORT CAPE KEY SAINT YACHT CLUB USCG COAST GUARD LIGHT ENTRANCE MOUTH MARINA DOCK
-BRIDGE ROAD STATE PARK TIDE GAUGE SAN SANTA PASS CHANNEL LANDING HEAD HAVEN SPRINGS OCEAN GULF LOWER UPPER""".split())
 STATION_ID = {"coops": re.compile(r"[?&]id=([^&#]+)"), "psmsl": re.compile(r"/stations/(\d+)\.php")}
 REGIONAL = ("IPCC AR6 has no projection at a tide gauge close enough, so this is its estimate for the surrounding 1° "
-            "area: the land motion in it is AR6's regional estimate, and local sinking here may differ.")
+            "area: the land motion in it is AR6's regional estimate, and local sinking may differ and may be faster "
+            "in places, so check the ground at the site.")
 
 NAMES = {"ssp126": "low emissions", "ssp245": "intermediate emissions", "ssp370": "high emissions",
          "ssp585": "very high emissions"}  # the IPCC's own names (AR6 WGI SPM)
@@ -42,6 +37,7 @@ PARTS = (("oceandynamics", "sterodynamic", "Ocean warming and currents"), ("GIS"
 PARTS_NOTE = "Each part's range is its own; the parts' ranges don't add up to the total's."
 CAVEAT = "Faster ice-sheet loss could push this higher, outside this range."
 CHECK_MONTHS = 24  # of the 36 months of 2019-2021, for check.observed_2019_2021
+OLD_MONTHS = 24  # a record that ended more months ago than this says "than in {year}", not "than today"
 SOURCE_NAME = "IPCC AR6 sea level projections (Garner et al. 2021)"
 
 
@@ -61,15 +57,13 @@ def sea_level(series: dict, base: dict, now: dict | None) -> dict:
         scenarios.append({
             "id": key if key.endswith("_low") else f"{key}_medium", "code": info["label"], "name": NAMES[info["ssp"]],
             "confidence": info["confidence"], "range_kind": RANGE_KIND[info["confidence"]], "outer_kind": OUTER_KIND,
-            **{k: ar6._values(d["levels"][i, comps.index("total"), s, j]) for j, k in enumerate(Q)},
-            "rate": {"units": "mm a year", **{k: ar6._values(d["rates"][i, s, j], 0.1) for j, k in enumerate(Q)}}})
+            **{k: ar6.values(d["levels"][i, comps.index("total"), s, j]) for j, k in enumerate(Q)},
+            "rate": {"units": "mm a year", **{k: ar6.values(d["rates"][i, s, j], 0.1) for j, k in enumerate(Q)}}})
     sd = next(k for k, s in enumerate(scenarios) if s["id"] == DEFAULT)
-    y20, y50 = years.index(2020), years.index(2050)
-    parts = [{"id": pid, "name": name, **dict(zip(Q[1:4], ar6._values(d["levels"][i, comps.index(c), sd, 1:4, y50])))}
+    y50 = years.index(2050)
+    parts = [{"id": pid, "name": name, **dict(zip(Q[1:4], ar6.values(d["levels"][i, comps.index(c), sd, 1:4, y50])))}
              for c, pid, name in PARTS]
     p50, low, high = (scenarios[sd][k][y50] for k in ("p50", "p17", "p83"))
-    observed = _observed(series, base)
-    p05, p95 = scenarios[sd]["p05"][y20], scenarios[sd]["p95"][y20]
     return {
         "available": True,
         "kind": "sea_level_ar6",
@@ -88,9 +82,8 @@ def sea_level(series: dict, base: dict, now: dict | None) -> dict:
             "by_2050": {"scenario": DEFAULT, "p50": p50, "low": low, "high": high,
                         "range_kind": scenarios[sd]["range_kind"],
                         "text": f"{_cm(p50)} (likely {_cm(low)[:-3]} to {_cm(high)})"},
-            "more_than_today": None if now is None else _more(_mm(p50 - now["value"]))},
-        "check": {"observed_2019_2021": observed, "ar6_2020_p05": p05, "ar6_2020_p95": p95,
-                  "inside": None if observed is None else p05 <= observed <= p95},
+            "more_than_today": None if now is None else _more(_mm(p50 - now["value"]), now["end"])},
+        "check": _check(series, base, now, years, scenarios[sd]),
         "caveat": CAVEAT,
         "why": None,
     }
@@ -126,38 +119,55 @@ def _location(series: dict) -> tuple[int, dict] | str:
     return aid, {"kind": "regional estimate", "id": aid, "name": f"1° area around {where}", "km": km, "note": REGIONAL}
 
 
-def tokens(name: str) -> set[str]:
-    """Same as scripts/build_ar6.py tokens (tests check)."""
-    return {w for w in re.sub(r"[^A-Z]+", " ", name.upper()).split() if len(w) >= 3 and w not in GENERIC}
+@lru_cache(maxsize=1)
+def _psmsl_rows() -> dict[int, dict]:
+    with open(ar6.FILE.parent / "psmsl_to_ar6.csv", newline="") as f:
+        return {int(r["psmsl_id"]): r for r in csv.DictReader(f)}
 
 
 def _psmsl_location(gid: int, place: dict) -> tuple[int, dict] | str:
-    """The PSMSL gauge itself when AR6 has it; else the nearest AR6 gauge within 3 km, or within 15 km sharing a name
-    word (the CO-OPS mapping's rules)."""
+    """The PSMSL gauge itself when AR6 has it; else its row in psmsl_to_ar6.csv: the AR6 gauge within 3 km, or within
+    15 km sharing a name word (the CO-OPS mapping's rules, applied by scripts/build_ar6.py)."""
     d = ar6.load()
-    km = np.array([haversine_km(float(place["lat"]), float(place["lon"]), float(a), float(b))
-                   for a, b in zip(d["lat"], d["lon"])])
     if gid in d["index"]:
-        return gid, {"kind": "gauge", "id": gid, "name": place.get("name"), "km": round(float(km[d["index"][gid]]), 1),
-                     "note": None}
-    try:  # PSMSL names, as the build matched them; the list is in memory whenever the series came from PSMSL
-        names = {s["id"]: s["name"] for s in psmsl.stations()}
-    except httpx.HTTPError:
-        names = {}
-    mine = tokens(place.get("name") or "")
-    for k in np.argsort(km, kind="stable"):
-        aid = int(d["ids"][k])
-        if km[k] > NAME_KM:
-            break
-        if aid < GRID and (km[k] <= NEAR_KM or mine & tokens(f"{names.get(aid, '')} {d['names'][k]}")):
-            name = names.get(aid) or readable(str(d["names"][k]).replace("_", " "))
-            return aid, {"kind": "gauge", "id": aid, "name": name, "km": round(float(km[k]), 1), "note": None}
-    # ponytail: no regional estimate for PSMSL; the file holds only the 1-degree cells the CO-OPS mapping uses, so the
-    # nearest valid cell elsewhere is unknown. Add cells to scripts/build_ar6.py if PSMSL gauges far from AR6 matter.
-    return NONE
+        i = d["index"][gid]
+        km = haversine_km(float(place["lat"]), float(place["lon"]), float(d["lat"][i]), float(d["lon"][i]))
+        return gid, {"kind": "gauge", "id": gid, "name": place.get("name"), "km": round(km, 1), "note": None}
+    row = _psmsl_rows().get(gid)
+    if row is None:
+        # ponytail: no regional estimate for PSMSL; the file holds only the 1-degree cells the CO-OPS mapping uses, so
+        # the nearest valid cell elsewhere is unknown. Add cells to scripts/build_ar6.py if PSMSL gauges far from AR6 matter.
+        return NONE
+    aid = int(row["ar6_id"])
+    return aid, {"kind": "gauge", "id": aid, "name": row["ar6_name"], "km": float(row["km"]), "note": None}
 
 
 # ---- the observed record on the same baseline ----
+
+def _check(series: dict, base: dict, now: dict | None, years: list[int], s: dict) -> dict:
+    """The contract's `check`, against the default scenario `s`: the 2019-2021 mean inside AR6's 2020 5th to 95th
+    percentile; when 2019-2021 has too few months, the latest 12 months (`now`) inside that range at their mid-year,
+    read straight-line between AR6's decades (QA B1: a record far off the projection is never left unflagged)."""
+    y20 = years.index(2020)
+    obs, p05, p95 = _observed(series, base), s["p05"][y20], s["p95"][y20]
+    out = {"observed_2019_2021": obs, "ar6_2020_p05": p05, "ar6_2020_p95": p95, "kind": None, "latest": None,
+           "inside": None}
+    if obs is not None:
+        return {**out, "kind": "2019-2021", "inside": p05 <= obs <= p95}
+    if now is None or not base.get("projection_axis"):
+        return out
+    mid = (_month(now["start"]) + _month(now["end"]) + 1) / 24  # Jan to Dec 2024 -> 2024.5
+    if not years[0] <= mid <= years[-1]:  # AR6 starts in 2020
+        return out
+    v, lo, hi = _mm(now["value"]), _mm(np.interp(mid, years, s["p05"])), _mm(np.interp(mid, years, s["p95"]))
+    return {**out, "kind": "latest 12 months", "latest": {"value": v, "year": round(mid, 2), "ar6_p05": lo,
+                                                          "ar6_p95": hi}, "inside": lo <= v <= hi}
+
+
+def _month(t: str) -> int:
+    """"YYYY-MM" -> months since year 0."""
+    return int(t[:4]) * 12 + int(t[5:7]) - 1
+
 
 def _observed(series: dict, base: dict) -> int | None:
     """-> the 2019-2021 mean in mm of the monthly anomalies against the 1995-2014 baseline, for the check; None where
@@ -179,7 +189,11 @@ def _cm(mm: int) -> str:
     return f"{signed(d) if d else '0'} cm"
 
 
-def _more(diff: int) -> dict:
-    text = (f"about {_cm(abs(diff))[1:]} {'more' if diff > 0 else 'less'} than today" if diff
-            else "about the same as today")
+def _more(diff: int, end: str) -> dict:
+    """`end`: now's last month, "YYYY-MM". The page's old test (web/explain.js): a record that ended more than
+    OLD_MONTHS months before this month (UTC) says "than in {its year}"."""
+    old = _month(utc_today()) - _month(end) > OLD_MONTHS
+    when = f"in {end[:4]}" if old else "today"
+    text = (f"about {_cm(abs(diff))[1:]} {'more' if diff > 0 else 'less'} than {when}" if diff
+            else f"about the same as {when}")
     return {"value": diff, "text": text, "approximate": True}
