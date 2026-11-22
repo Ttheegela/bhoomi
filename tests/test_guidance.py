@@ -157,6 +157,13 @@ def test_short_record_is_unknown():
     assert guidance_for(res("sea_level", "rising", 81.6, start="2006-01", end="2025-12", ratio=2.4))["risk"] == "high"
 
 
+def test_water_storage_guides_from_10_years_like_its_trend_minimum():
+    g = guidance_for(res("water_storage", "falling", -12.0, start="2014-01", end="2025-12"))  # 12 years of GRACE
+    assert (g["risk"], g["recommendation"]) == ("high", RECOMMEND["water_storage"]["high"])
+    g = guidance_for(res("water_storage", "falling", -12.0, start="2017-01", end="2025-12"))  # 9 years
+    assert (g["risk"], g["why"], g["recommendation"]) == ("unknown", "The record here covers fewer than 10 years.", SHORT)
+
+
 @pytest.mark.parametrize("r", [
     res("ozone"), res("sea_level", units="m"), res("sea_level", slope=float("nan")),
     res("precip", "rising", 0.3),  # no mean to compare with

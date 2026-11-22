@@ -15,7 +15,7 @@ Rework v2 (2026-11-22, `docs/REWORK-SPEC.md` D1, D5, D6) changed three things:
 ## Before guidance: the record must support a trend
 
 `compute_trend` checks the record first (D6):
-- **Coverage.** The fit window must have at least 80% of its months with a value. When the whole record falls short, the window starts at the first value of the earliest calendar year from which the record to its last value reaches 80%. Sparse early readings are then left out. `record.trimmed_from` names the record's first month, and the caveats say "Readings before {Month YYYY} are too sparse, so the trend starts there." `period`, `fit`, `record` and `explain.data` describe the window. The baseline still uses the whole series.
+- **Coverage.** The fit window must have at least 80% of its months with a value. When the whole record falls short, the window starts at the first value of the earliest calendar year from which the record to its last value reaches 80%. Sparse early readings are then left out. `record.trimmed_from` names the record's first month, and the caveats say "Readings before {Month YYYY} are too sparse, so the trend starts there." `period`, `fit`, `record` and `explain.data` describe the window. The baseline still uses the whole series, and it never depends on the request's `start` or `end` either: a windowed request reads the whole record for it.
 - **Length.** The window then needs at least 20 years from its first value to its last (land water storage: 10 years).
 - If no window meets both rules, there is no result at all: a 400 with a plain message.
 
@@ -57,12 +57,12 @@ For rainfall the big number is the share of this place's 1995–2014 average rai
 | water_storage | none | none | none | none | no: this region's own rule, printed in `world.text` |
 
 - Both sides use the same method: anomalies against their own 1995–2014 calendar-month normals, then Sen's slope over the same months. `world.window` is the first and last of those shared months, per place.
-- `world.method` names the kinds of record when they differ:
-  - air temperature from a grid (POWER, ERA5): "different datasets: a grid cell here, station-based for the world; same months, same method";
-  - air temperature from GHCN: "different datasets: one weather station here, station-based for the world; same months, same method";
-  - sea level: "different instruments: a tide gauge here (measured against the land), satellites for the world; same months, same method".
+- `world.method` names the method, "Sen's slope of monthly anomalies, same months for both", then, after "; ", the kinds of record when they differ:
+  - air temperature from a grid (POWER, ERA5): "different datasets: a grid cell here, station-based for the world";
+  - air temperature from GHCN: "different datasets: one weather station here, station-based for the world";
+  - sea level: "different instruments: a tide gauge here (measured against the land), satellites for the world".
 
-  The world land series (NOAAGlobalTemp, global land) is built from station records. Other sources keep "Sen's slope of monthly anomalies, same months for both".
+  The world land series (NOAAGlobalTemp, global land) is built from station records. Other sources get the method alone.
 - The two rates are rounded to 2 significant figures as shown.
 - **ratio** = the rate here ÷ the world rate, from those shown rates, rounded to 1 decimal place (half away from zero). The level is judged on that rounded number, so the ratio shown and the level always agree. A world rate of zero or less gives no ratio.
 - For sea level, the full-record rate stays in `slope_per_decade`, with its own years and no ratio.
@@ -81,7 +81,7 @@ For rainfall the big number is the share of this place's 1995–2014 average rai
 The checks run in this order:
 
 1. **Unknown variable, unexpected units, or a slope or CI that isn't a finite number.** Risk `unknown`, `rate` null.
-2. **Not enough data.** If the record covers fewer than 20 years, the risk is `unknown` ("Not enough data") and the recommendation is: "The record here is too short to guide a decision. Try a nearby place with a longer record." (`compute_trend` already refuses such records; this rule guards direct callers.)
+2. **Not enough data.** If the record covers fewer than 20 years (land water storage: fewer than 10, its trend minimum), the risk is `unknown` ("Not enough data") and the recommendation is: "The record here is too short to guide a decision. Try a nearby place with a longer record." (`compute_trend` already refuses such records; this rule guards direct callers.)
 3. **No clear change.** If the verdict is `no_clear_change`, there is no risk level: a record that cannot show a change is not evidence of low risk. `risk` is null and `risk_label` is "No clear change". `why` is "The record here shows no clear change." The Low recommendation in the table below and the disclaimer stay.
 4. **Clear change in the harmless direction** (sea falling, cooling, water storage rising). The risk is Low, and `why` says what is happening (for example "The sea here has been falling.").
 5. **Clear change in the harmful direction**, judged per variable:
@@ -96,7 +96,7 @@ The checks run in this order:
 - Sea level or air temperature rising with no world ratio (for example a gauge with under 20 years since 1993): risk `unknown` ("Not enough data"), `why` is `world.why_none`, and the recommendation is "We can't give guidance for this record." The rate is still shown.
 - One side effect of judging the ratio as shown: a ratio from 1.45 up shows as 1.5 and counts as High.
 - The rainfall share (2 significant figures) and the water fall (2 significant figures) are also judged as shown.
-- For rainfall, the average is the 1995–2014 baseline value: the mean of the twelve calendar-month normals, in mm/day (`baseline.value`). `compute_trend` passes it in. With no baseline, or none above 0, the risk is `unknown`.
+- For rainfall, the average is the 1995–2014 baseline value: the mean of the twelve calendar-month normals, in mm/day (`baseline.value`; `baseline.annual_total_mm` is the same in mm a year). `compute_trend` passes it in. With no baseline, or none above 0, the risk is `unknown`. Rainfall levels (`fit`, `anomaly`) are % of that average, and `explain.seasons` gives each month's usual rain in mm a month.
 
 **Hottest day of the month (air_temp_max) has no risk level.** `risk`, `risk_label`, `why` and `recommendation` are null; the verdict alone answers. `rate`, `display`, `disclaimer` and every other key are unchanged and always present. The Ask agent inserts no guidance for it.
 
