@@ -215,6 +215,18 @@ assert.strictEqual(bS[5].work[0].indexOf(fmtNum(bw.local_rate, false) + ' ÷ '),
 assert.ok(/not corrected for the slow sinking of the ocean floor/.test(bw.source.method));
 assert.strictEqual(bS[5].work[3], 'The world figure: ' + lc1(stop(bw.source.method)));
 assert.strictEqual(pS[5].work.length, 2); // air temperature: no world-method line
+// QA N6: the inches working rounds the rate like the metric one, and still adds up
+var bic = ctx(B, 'New York, NY', true), biW = steps(B.trend, B.series, bic)[3].work[0];
+assert.ok(biW.indexOf(given(true, B.trend.slope_per_decade, B.trend.fit.units, true) + NB + 'in a year × ') > 0, biW);
+assert.ok(!/\d\.\d{5}/.test(biW), biW);
+sumAddsUp(B, bic, NB + 'in', 1 / 25.4);
+// QA N6: a version that already says "Version" is printed once
+var RV = load('riverside_no_baseline'), rvc = ctx(RV, 'Riverside'); RV.trend.source.version = 'Version 3';
+var rvS = steps(RV.trend, RV.series, rvc);
+assert.ok(rvS[8].words[0].list[0].text.indexOf(', Version 3. Retrieved ') > 0 && !/version Version/i.test(JSON.stringify(rvS)), rvS[8].words[0].list[0].text);
+assert.ok(/ Version 3\. Retrieved /.test(rvS[0].work[1]), rvS[0].work[1]);
+RV.trend.source.version = '2.1';
+assert.ok(steps(RV.trend, RV.series, rvc)[8].words[0].list[0].text.indexOf(', version 2.1. ') > 0);
 // step 6, sea level: satellites vs a gauge against the land, in plain words (the owner's domain review)
 var SEA6 = 'Satellites measure the height of the sea surface itself. The tide gauge measures the sea against the land, so if the land here is sinking, that adds to the local number.';
 assert.deepStrictEqual(bS[5].words, [B.trend.world.text, SEA6]);
@@ -430,7 +442,9 @@ assert.deepStrictEqual(OPEN_STEPS.map(function (n) { return pS[n - 1].title; }),
 // formatting
 assert.strictEqual(fmtNum(0.4, true), '+0.40'); assert.strictEqual(fmtNum(-12.34, true), '−12.3');
 assert.strictEqual(given(false, 30.5059, 'mm', true), '+3.05059'); assert.strictEqual(given(false, -0.37, 'degC', false), '−0.37');
-assert.strictEqual(given(false, 50, 'mm', true), '+5'); assert.strictEqual(given(true, 0.37, 'degC', false), '+0.666');
+assert.strictEqual(given(false, 50, 'mm', true), '+5'); assert.strictEqual(given(true, 0.37, 'degC', false), '+0.67');
+// QA N6: °F and inches keep the metric decimals (+3.1812 mm a year is +0.1252 in, not +0.125244)
+assert.strictEqual(given(true, 31.812, 'mm', true), '+0.1252'); assert.strictEqual(given(true, 0.004, 'mm', false), '+0.000157');
 assert.strictEqual(D('2026-11-22'), '22 November 2026'); assert.strictEqual(M('2025-12'), 'December 2025'); assert.strictEqual(Mo('2025-08'), 'Aug 2025');
 assert.strictEqual(commas(1266), '1,266'); assert.strictEqual(slug('São Paulo, SP'), 'sao-paulo-sp');
 """
@@ -461,6 +475,18 @@ def test_review_fixes_outside_the_pure_block():
     assert "const offer = pin.none && sourceFor(curWin) && def && prev && prev.status === 'ok';" in app
     assert "b.addEventListener('click', () => pickSource(def));" in app
     assert "pin.none && curWin === 'sea_level' && !offer" in app
+
+
+def test_card_meta_and_focus():
+    """QA N4: "Data through {month}" never splits across lines. QA N5: a re-render that removes the focused control
+    (the station button) puts focus on the new card's heading, not on <body>."""
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    assert "meta.append(' · ', el('span', { class: 'nw' }, t.latest.text));" in app
+    assert re.search(r"\.rec \.meta \.nw \{ white-space: nowrap; \}", css)
+    rec = re.search(r"function renderRec\(\) \{(.*?)\n\}", app, re.S)
+    assert rec and "had = box.contains(document.activeElement)" in rec[1] and "drawRec(box);" in rec[1]
+    assert "if (had && !box.contains(document.activeElement)) { const h = box.querySelector('h2'); if (h) h.focus({ preventScroll: true }); }" in rec[1]
 
 
 def test_how_clears_the_sticky_top_bar():

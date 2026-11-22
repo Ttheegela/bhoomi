@@ -380,8 +380,14 @@ function renderSidebar() {
 
 /* ---------- the answer card (web/design/10-foundation.md section 3) ---------- */
 
+// A re-render removes whatever had focus in the card (a button that switched the source, a link): focus then goes to the
+// new card's heading, not to <body> (QA N5).
 function renderRec() {
-  const box = $('rec');
+  const box = $('rec'), had = box.contains(document.activeElement);
+  drawRec(box);
+  if (had && !box.contains(document.activeElement)) { const h = box.querySelector('h2'); if (h) h.focus({ preventScroll: true }); }
+}
+function drawRec(box) {
   clear(box);
   const pin = selectedPin(curWin), w = winOf(curWin);
   box.setAttribute('aria-busy', String(!!pin && pin.status === 'loading'));
@@ -416,7 +422,7 @@ function renderRec() {
 
   const t = pin.trend, g = t.guidance || {}, X = window.TDX, C = X.card(t, imperial()), url = X.recordUrl(t.source);
   const meta = el('p', { class: 'meta' }, url ? el('a', { href: url, target: '_blank', rel: 'noopener' }, `${X.srcText(t)} ↗`) : X.srcText(t));
-  if (t.latest && t.latest.text) meta.append(` · ${t.latest.text}`);
+  if (t.latest && t.latest.text) meta.append(' · ', el('span', { class: 'nw' }, t.latest.text)); // never split (QA N4)
   box.append(el('div', { class: 'where' }, el('div', {}, h2(pin.label), meta), C.chip ? el('span', { class: `risk ${riskClass(g)}` }, C.chip) : ''));
   box.append(el('div', { class: 'verdict' }, el('b', {}, el('span', { class: 'shape', 'aria-hidden': 'true' }, C.shape), C.word), el('span', {}, C.conf)));
   if (C.why) box.append(el('p', { class: 'say' }, C.why));

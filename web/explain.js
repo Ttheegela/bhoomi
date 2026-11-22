@@ -33,11 +33,16 @@
   // point; in °F or inches the converted value to 6 significant figures.
   function given(imp, x, u, tenth) {
     var k = imp && RATE_K[normU(u)], a = Math.abs(x), txt;
-    if (k) txt = String(Number((a * k[0] / (tenth ? 10 : 1)).toPrecision(6)));
-    else if (/e/.test(String(a))) txt = String(tenth ? a / 10 : a);
-    else txt = (a / (tenth ? 10 : 1)).toFixed((String(a).split('.')[1] || '').length + (tenth ? 1 : 0)).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+    var dp = (String(a).split('.')[1] || '').length + (tenth ? 1 : 0); // the decimals the metric value prints with
+    if (k) { // °F and inches keep the metric decimals (QA N6); a value that would read 0 keeps 3 significant digits
+      var v = a * k[0] / (tenth ? 10 : 1);
+      txt = Number(v.toFixed(dp)) === 0 && v !== 0 ? String(Number(v.toPrecision(3))) : String(Number(v.toFixed(dp)));
+    } else if (/e/.test(String(a))) txt = String(tenth ? a / 10 : a);
+    else txt = (a / (tenth ? 10 : 1)).toFixed(dp).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
     return (x > 0 ? '+' : x < 0 ? MINUS : '') + txt;
   }
+  // "Version 3" as given, never "version Version 3" (QA N6)
+  function ver(v, label) { return /^version\b/i.test(String(v)) ? String(v) : label + v; }
   function mi(t) { var p = String(t).split('-'); return +p[0] * 12 + (p.length > 1 ? +p[1] - 1 : 0); }
   function M(t) { var m = mi(t); return MONTHS_LONG[m % 12] + ' ' + Math.floor(m / 12); }
   function Mo(t) { var m = mi(t); return MONTHS[m % 12] + ' ' + Math.floor(m / 12); }
@@ -318,7 +323,7 @@
     out.push({ title: 'The data',
       short: byYear ? commas(dat.n_years) + ' years from ' + srcIn(t) + ', ' + Y(dat.start) + ' to ' + Y(dat.end) : commas(dat.n_months) + ' months from ' + srcIn(t) + ', ' + M(dat.start) + ' to ' + M(dat.end),
       words: s1.concat(nPre ? [months(nPre) + ' preliminary: the provider may still change ' + (nPre === 1 ? 'it, so the trend leaves it out.' : 'them, so the trend leaves them out.')] : []),
-      work: ['How the provider made them: ' + lc1(str(src.method)), 'Dataset: ' + str(src.dataset_id) + '.' + (src.version ? ' Version: ' + src.version + '.' : '') + ' Retrieved ' + D(src.retrieved) + '.'],
+      work: ['How the provider made them: ' + lc1(str(src.method)), 'Dataset: ' + str(src.dataset_id) + '.' + (src.version ? ' ' + ver(src.version, 'Version: ') + '.' : '') + ' Retrieved ' + D(src.retrieved) + '.'],
       link: url ? { text: 'Open this exact record ↗', href: url } : null });
 
     var s2 = { title: 'Seasons removed' };
@@ -452,7 +457,7 @@
     out.push({ title: 'Things to keep in mind', short: notes.length ? notes[0] + (notes.length > 1 ? ' And ' + (notes.length - 1) + ' more' : '') : last,
       words: [{ list: notes.concat([last]) }] });
 
-    var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', version ' + src.version : '') + '. Retrieved ' + D(src.retrieved) + '. ',
+    var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', ' + ver(src.version, 'version ') : '') + '. Retrieved ' + D(src.retrieved) + '. ',
       link: url ? { text: 'Open this exact record ↗', href: url } : null }];
     if (wp && w.source) list.push({ text: 'World figure: ' + w.source.name + '. Retrieved ' + D(w.source.retrieved) + '. ', link: https(w.source.record_url) ? { text: 'Open it ↗', href: w.source.record_url } : null });
     list.push({ text: "Our calculation: the Mann-Kendall test and Sen's slope on " + (byYear ? 'yearly rain' : 'monthly values with seasons removed') + (b.method === 'none' ? '.' : ', against ' + b.text + '.') });
