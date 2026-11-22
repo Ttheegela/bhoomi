@@ -51,27 +51,30 @@ RECOMMEND = {
         # rising with no world figure (NO_COMPARE): no level, so advice that needs none
         "no_world": "The sea here has been rising. Before you buy or build near the shore, check the site's height "
                     "above flood level and the official flood maps."},
-    "air_temp": {
-        "high": "Plan for hotter years here. For a home, a farm or outdoor work, budget for cooling, shade and water.",
-        "moderate": "It has been getting warmer here. Build cooling and shade into long-term plans.",
+    "air_temp": {  # as sea level: what the records show, then what to check now; no future from the past (D1)
+        "high": "It has been getting warmer here faster than the average for all land areas. Before you plan a home, "
+                "a farm or outdoor work, check how hot the summers get and how you would keep cool, with shade and "
+                "water.",
+        "moderate": "It has been getting warmer here at least about as fast as the average for all land areas. Before "
+                    "you plan a home, a farm or outdoor work, check how hot the summers get and how you would keep "
+                    "cool.",
         "low": "Past records give no special reason to change plans here because of heat.",
         "no_world": "It has been getting warmer here. Before you plan a home, a farm or outdoor work, check how hot "
                     "the summers get and how you would keep cool."},
+    # what was found, then what to check now; never a future amount (D1: decades of rain in one place can swing back)
     "precip": {
         "high_wetter": "Rain here has been increasing strongly. Before you build or plant, check drainage and the "
                        "flood history of the site.",
-        "high_drier": "Rain here has been decreasing strongly. For farming or a business that needs water, don't count "
-                      "on today's rainfall.",
-        "moderate_wetter": "Rain here has been increasing. Check drainage and flood history before you build or plant.",
-        "moderate_drier": "Rain here has been decreasing. Plan for less water than today if you farm or depend on "
-                          "rainfall.",
-        "low": "Past records show rain here holding steady enough that it gives no special reason to change plans.",
-        # a clear change whose lower level is low: the whole range under 5%, or reaching up to 10% or more (Chennai)
-        "low_wetter": "Rain here has been increasing, though perhaps only by a small share of its usual amount. "
-                      "Before you build or plant, check drainage and the flood history of the site, as you would "
-                      "anywhere.",
-        "low_drier": "Rain here has been decreasing, though perhaps only by a small share of its usual amount. If you "
-                     "farm or depend on rainfall, check how secure your water supply is, as you would anywhere."},
+        "high_drier": "Rain here has been decreasing strongly. If you farm or run a business that needs water, check "
+                      "how secure your water supply would be in dry years.",
+        "moderate_wetter": "Rain here has been increasing. Before you build or plant, check drainage and the flood "
+                           "history of the site.",
+        "moderate_drier": "Rain here has been decreasing. If you farm or depend on rainfall, check how secure your "
+                          "water supply would be in dry years.",
+        # no clear change only (a clear change gets low_wetter or low_drier): not evidence that rain is steady
+        "low": "The rain record here shows no clear change, but that is not proof that rain is steady. Before you "
+               "build or plant, check drainage and how secure your water supply would be in dry years, as you would "
+               "anywhere."},
     "water_storage": {
         "high": "Water stored in this region is falling fast. Before you rely on groundwater for a farm or a new well, "
                 "check local water levels and make sure of a secure supply.",
@@ -79,6 +82,9 @@ RECOMMEND = {
                     "levels and supply.",
         "low": "Past records give no special reason to worry about water supply in this region."},
 }
+# a clear rain change whose lower level is low (the whole range under 5%, or reaching 10% or more: Chennai, Mumbai
+# +11%) gets the moderate text, one per direction. No size claim (QA B11: "a small share" understated Mumbai).
+RECOMMEND["precip"].update({f"low_{w}": RECOMMEND["precip"][f"moderate_{w}"] for w in ("wetter", "drier")})
 SHORT = "The record here is too short to guide a decision. Try a nearby place with a longer record."
 
 # Copied from earthtrends/agent/resources.py (US_BOXES): (lat min, lat max, lon min, lon max) for the US coasts,
@@ -142,7 +148,10 @@ def _span(values, cuts) -> tuple[str, str]:
 
 
 def _label(low: str, high: str) -> str:
-    """"Moderate risk", or for a 95% range across a threshold both levels: "Moderate to high risk"."""
+    """"Moderate risk", or for a 95% range across a threshold both levels: "Moderate to high risk". A range over
+    every level says so plainly (QA B11): "Risk level unclear (low to high)"."""
+    if (low, high) == ("low", "high"):
+        return "Risk level unclear (low to high)"
     return LABEL[low] if low == high else f"{low.capitalize()} to {high} risk"
 
 
@@ -252,7 +261,7 @@ def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratios, why_none, 
                      "note": {"value": float(-mm if down else mm), "unit": "mm", "text": f"about {mm:f} mm {more} a year"}}
     if var not in RECOMMEND:  # hottest day of the month: no risk level (D5)
         return
-    if var == "precip" and mean * Decimal("365.25") < RAIN_MIN_MM:  # a % of a tiny normal is no guide: no level
+    if var == "precip" and why_none == SCARCE:  # a % of a tiny normal is no guide: no level (trend.py decides)
         g.update(risk=None, risk_label=None, why=SCARCE, recommendation=None)
         return
     low, high, why, key = _risk(var, verdict, (slope, lo, hi), mean, ratios, why_none, since)

@@ -11,7 +11,7 @@ import pytest
 from earthtrends import data
 from earthtrends.agent import tools
 from earthtrends.stats import compute_trend, trend
-from earthtrends.stats.baseline import FITTED, PROVIDER, anomaly, baseline
+from earthtrends.stats.baseline import FITTED, MONTH_DAYS, PROVIDER, anomaly, baseline
 from earthtrends.stats.guidance import OWN_RULE, q, sig2
 
 UNITS = {"air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "sea_level": "mm", "water_storage": "cm"}
@@ -198,9 +198,27 @@ def test_rainfall_anomaly_is_a_percent_of_the_annual_mean_rate():
     _, month = cal(1981, x.size)
     a = anomaly(ts(x, variable="precip"))
     n, rate = a["baseline"]["months"], a["baseline"]["value"]
-    assert (a["kind"], a["units"]) == ("percent", "%") and rate == pytest.approx(np.mean(n), abs=1e-4)
+    assert (a["kind"], a["units"]) == ("percent", "%") and rate == pytest.approx(np.average(n, weights=MONTH_DAYS),
+                                                                              abs=1e-4)
     assert all(v == pytest.approx((x[k] - n[month[k] - 1]) / rate * 100, abs=1e-3) for k, v in enumerate(a["values"]))
     assert all(v is None for v in anomaly(ts([0.0] * 540, variable="precip"))["values"])  # no rain: no percent
+
+
+def test_rain_normal_weights_each_month_by_its_days():
+    """Climate recheck: the denominator of every rain % is the 1995-2014 annual normal, each month's normal mm/day
+    weighted by its days (February 28.25), not the plain mean of 12 rates (0.4% off at Chennai)."""
+    normals = np.array([0.9, 0.3, 0.2, 0.4, 1.2, 1.5, 2.7, 4.5, 4.2, 10.1, 13.3, 5.4])  # a monsoon coast, mm/day
+    b = baseline(ts(np.tile(normals, 45), variable="precip"))
+    days = np.array(MONTH_DAYS)
+    assert b["months"] == pytest.approx(normals) and days.sum() == 365.25
+    assert b["value"] == pytest.approx(days @ normals / days.sum(), abs=5e-5)
+    assert abs(b["value"] - normals.mean()) > 0.01  # the months differ, so the weighting matters
+    assert b["annual_total_mm"] == pytest.approx(days @ normals, abs=0.1)  # the sum of the twelve monthly totals
+    r = compute_trend(ts(np.tile(normals, 45) * (1 + 0.01 * np.repeat(np.arange(45) - 24, 12)), variable="precip"))
+    rb = r["baseline"]  # the rising series' own normal: the % rate is a share of the day-weighted value
+    assert rb["value"] == pytest.approx(days @ np.array(rb["months"]) / days.sum(), abs=5e-5)
+    assert r["headline_rate"]["value"] == pytest.approx(r["slope_per_decade"] / rb["value"] * 100, abs=0.06)  # 3 s.f.
+    assert baseline(ts(np.tile(normals, 45)))["value"] == round(float(normals.mean()), 4)  # temperature: plain mean
 
 
 def test_get_series_carries_the_anomaly(monkeypatch):
@@ -308,8 +326,19 @@ def test_widening_factor_over_many_series():
     red = [trend._widen(ar1(480, seed=s)[0]) for s in range(200)]
     assert all(f >= 1 for f in white + red)
     assert np.median(white) < 1.3 and 3.5 < np.median(red) < 5.5, (np.median(white), np.median(red))
-    yearly = ar1(40, seed=2)[0]  # yearly values (rain totals): the lag-1 AR(1) factor alone
-    assert trend._widen(yearly, 1) == max(trend._ar1_factor(40, trend._lag1(yearly)), 1.0) > 1
+
+
+def test_widening_factor_by_hand():
+    # Yearly (rain totals), the lag-1 AR(1) factor alone: 1 + 2/(n(n-1)(n-2)) sum (n-k)(n-k-1)(n-k-2) r^k.
+    # 1 2 3 3 2 1: mean 2, deviations -1 0 1 1 0 -1, sum of squares 4, lag-1 products 0+0+1+0+0 = 1, so r = 1/4.
+    # n = 6: 1 + 2/120 (5*4*3 r + 4*3*2 r^2 + 3*2*1 r^3) = 1 + (15 + 1.5 + 0.09375)/60 = 1.2765625.
+    assert trend._widen(np.array([1.0, 2, 3, 3, 2, 1]), 1) == pytest.approx(1.2765625, rel=1e-12)
+    # Monthly, 36 values: three blocks of 12 at -1, 0, 1, each with +0.5 -0.5 alternating on top.
+    # var = (12*(1+0+1) + 36*0.25)/36 = 33/36; lag-1 r = (22 - 35*0.25 - 2*0.5)/33 = 12.25/33, AR(1) factor about 2.03.
+    # Block means -1 0 1: var 2/3, ratio 12 * (2/3) / (33/36) = 96/11, about 8.73, which wins. Three block means
+    # leave no term in the AR(1) sum (n-k-2 = 0), so their factor is 1. n/n* = 96/11.
+    e = np.repeat([-1.0, 0, 1], 12) + np.tile([0.5, -0.5], 18)
+    assert trend._widen(e) == pytest.approx(96 / 11, rel=1e-12)
 
 
 def test_values_that_alternate_never_narrow_the_range():
@@ -420,7 +449,7 @@ def test_temperature_compares_the_same_months_with_the_land_average(refs):
     assert w["ratio"] == float(q(here / world, "0.1"))  # judged as shown
     assert (w["unit"], w["measure"], w["thresholds"]) == ("°C per decade", "average for all land areas",
                                                           {"moderate": 0.75, "high": 1.5})
-    assert w["source"] == {k: LAND_SRC[k] for k in ("name", "dataset_id", "record_url", "retrieved")}
+    assert w["source"] == {k: LAND_SRC.get(k) for k in ("name", "dataset_id", "record_url", "retrieved", "method")}
     assert w["text"] == (f"Over the same years, the average for all land areas warmed {world:f} °C per decade. "
                          f"Here: {here:f} °C per decade.") and w["why_none"] is None
     g = r["guidance"]
@@ -532,6 +561,18 @@ def test_sea_level_needs_20_years_since_1993(refs, last, available):
         assert r["guidance"]["risk"] is None and r["guidance"]["risk_label"] == "No world comparison" and r["guidance"]["why"] == w["why_none"]
 
 
+@pytest.mark.parametrize("world", [np.zeros(76 * 12), 0.2 - 0.025 * np.arange(76 * 12) / 12])  # flat, falling
+def test_a_world_figure_that_did_not_rise_gives_no_ratio_and_says_why(monkeypatch, world):
+    monkeypatch.setattr(trend, "_reference", lambda name: ts(world, start=1950, source=LAND_SRC))
+    r = compute_trend(ts(synth(45)))
+    w, g = r["world"], r["guidance"]
+    why = "The world figure did not rise over these years, so there is no ratio."
+    assert r["verdict"] == "rising" and w["available"] and w["world_rate"] <= 0
+    assert (w["ratio"], w["ratio_low"], w["ratio_high"], w["why_none"]) == (None, None, None, why)
+    assert (g["risk"], g["risk_label"], g["why"], g["ratio"]) == (None, "No world comparison", why, None)
+    assert g["reference"]["text"] == w["text"]  # the world sentence is still shown
+
+
 def raise_oserror(name):
     raise OSError("snapshot missing")
 
@@ -547,6 +588,17 @@ def test_a_broken_world_reference_is_never_an_error(monkeypatch, broken):
 def test_the_shipped_world_reference_is_used():
     w = compute_trend(ts(synth(45)))["world"]  # the data lane's snapshot of global land (NOAAGlobalTemp)
     assert w["available"] and w["source"]["name"].startswith("NOAA NCEI Climate at a Glance")
+
+
+def test_sea_level_world_source_keeps_the_gia_sentence():
+    """The shipped NASA-SSH snapshot says its figure is not corrected for glacial isostatic adjustment; world.source
+    carries that method through (climate recheck)."""
+    s = ts(synth(40, start=1986, per_decade=40, sd=5, level=7000.0), start=1986, variable="sea_level",
+           source={"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"})
+    w = compute_trend(s)["world"]
+    assert w["available"] and w["source"]["method"] == data.world.reference("gmsl")["source"]["method"]
+    assert "not corrected for the slow sinking of the ocean floor" in w["source"]["method"]
+    assert "glacial isostatic adjustment, about 0.3 mm a year" in w["source"]["method"]
 
 
 @pytest.mark.parametrize("var,why", [

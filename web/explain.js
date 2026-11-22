@@ -12,6 +12,7 @@
   var STATION = { coops: 1, ghcn: 1, psmsl: 1 };
   var MEASURE = { sea_level: 'sea level', air_temp: 'air temperature', air_temp_max: 'the hottest day of the month', precip: 'rain', water_storage: 'water storage' };
   var LEVELS = { air_temp: 1, air_temp_max: 1, precip: 1 }; // measurements whose own levels mean something to a visitor
+  var OPEN_STEPS = [3, 4, 5, 6]; // steps that start open on a new answer, at every width
   var NO_FUTURE = 'We never stretch the past trend into the future. Future values on this page come only from published expert projections.';
 
   function isNum(x) { return typeof x === 'number' && isFinite(x); }
@@ -32,11 +33,16 @@
   // point; in °F or inches the converted value to 6 significant figures.
   function given(imp, x, u, tenth) {
     var k = imp && RATE_K[normU(u)], a = Math.abs(x), txt;
-    if (k) txt = String(Number((a * k[0] / (tenth ? 10 : 1)).toPrecision(6)));
-    else if (/e/.test(String(a))) txt = String(tenth ? a / 10 : a);
-    else txt = (a / (tenth ? 10 : 1)).toFixed((String(a).split('.')[1] || '').length + (tenth ? 1 : 0)).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+    var dp = (String(a).split('.')[1] || '').length + (tenth ? 1 : 0); // the decimals the metric value prints with
+    if (k) { // °F and inches keep the metric decimals (QA N6); a value that would read 0 keeps 3 significant digits
+      var v = a * k[0] / (tenth ? 10 : 1);
+      txt = Number(v.toFixed(dp)) === 0 && v !== 0 ? String(Number(v.toPrecision(3))) : String(Number(v.toFixed(dp)));
+    } else if (/e/.test(String(a))) txt = String(tenth ? a / 10 : a);
+    else txt = (a / (tenth ? 10 : 1)).toFixed(dp).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
     return (x > 0 ? '+' : x < 0 ? MINUS : '') + txt;
   }
+  // "Version 3" as given, never "version Version 3" (QA N6)
+  function ver(v, label) { return /^version\b/i.test(String(v)) ? String(v) : label + v; }
   function mi(t) { var p = String(t).split('-'); return +p[0] * 12 + (p.length > 1 ? +p[1] - 1 : 0); }
   function M(t) { var m = mi(t); return MONTHS_LONG[m % 12] + ' ' + Math.floor(m / 12); }
   function Mo(t) { var m = mi(t); return MONTHS[m % 12] + ' ' + Math.floor(m / 12); }
@@ -119,19 +125,19 @@
   }
   // the API's world sentence carries metric numbers: say so when the page shows °F or inches
   function metric(text) { return str(text).replace(/\.?\s*$/, ' (in metric).'); }
-  function ratio(r) { return isNum(r) ? fixed(r, 1) + '×' : '—'; }
   function hasWorld(w) { return !!w && w.available === true && isNum(w.local_rate) && isNum(w.world_rate) && !!w.window; }
-  // the local and world rates over the same window, next to their ratio
+  // the local and world rates over the same window, next to their ratio; no ratio without a clear trend (only the two rates)
   function worldParts(t, imp) {
     var w = t.world;
     if (!hasWorld(w)) return null;
-    var a = wconv(imp, w.local_rate, str(w.unit)), b = wconv(imp, w.world_rate, str(w.unit));
+    var a = wconv(imp, w.local_rate, str(w.unit)), b = wconv(imp, w.world_rate, str(w.unit)), has = isNum(w.ratio) && clearV(t);
     return { since: 'Since ' + Y(w.window.start), here: withUnit(fmtNum(a.v, true), a.unit), world: withUnit(fmtNum(b.v, true), b.unit),
-      ratio: ratio(w.ratio), a: a.v, b: b.v };
+      ratio: has ? fixed(w.ratio, 1) + '×' : '', a: a.v, b: b.v };
   }
-  function worldLine(t, imp) {
+  // noSince: the sentence above already starts "Since 1993, …", so the line doesn't say it again
+  function worldLine(t, imp, noSince) {
     var p = worldParts(t, imp);
-    return p ? p.since + ': here ' + p.here + ', world ' + p.world + ' (' + p.ratio + ')' : '';
+    return p ? (noSince ? 'Here ' : p.since + ': here ') + p.here + ', world ' + p.world + (p.ratio ? ' (' + p.ratio + ')' : '') : '';
   }
 
   function srcText(t) {
@@ -153,40 +159,66 @@
 
   // The answer card's words and readouts (section 3).
   function oldAnswer(t) { return !t.fit || !t.baseline; }
+  // The measured level today (trend.now), never the end of the trend line: its own text, converted only for the Units setting.
+  function nowOf(t, imp) {
+    var nw = t.now;
+    if (!nw || typeof nw.text !== 'string' || !str(nw.label)) return null;
+    return { value: imp && isNum(nw.value) ? F(t, imp).val(nw.value, nw.units) : nw.text, label: nw.label, rain: nw.kind === '12-month total' };
+  }
   function card(t, imp) {
     if (oldAnswer(t)) return { old: true, word: verdictWord(t), shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈',
       conf: str(t.meaning && t.meaning.confidence), why: str(t.meaning && t.meaning.headline), chip: '' };
-    var f = F(t, imp), b = t.baseline || {}, fit = t.fit || {}, rec = t.record || {}, m = t.meaning || {}, r = rate(t, imp);
+    var b = t.baseline || {}, fit = t.fit || {}, rec = t.record || {}, m = t.meaning || {}, r = rate(t, imp);
     var clear = clearV(t), short = rec.status === 'short', rk = t.range_kind || '95% range';
     var conf = (clear && m.confidence ? m.confidence + ' · ' : '') + (isNum(rec.years) ? Math.round(rec.years) + ' years of records' : '') + (short ? ' (short record)' : '');
-    var r1 = { label: 'Now, compared with ' + str(b.text) };
-    if (isNum(fit.level_end)) {
-      r1.value = f.val(fit.level_end, fit.units);
-      r1.line = (fit.units === '%' ? 'Of the usual rain. ' : '') + 'Trend line, ' + M(fit.end) + (b.method === 'fitted' ? '. Baseline estimated from the fitted trend.' : '');
-    } else {
-      r1.value = '—';
-      r1.line = 'This record has too few years from 1995 to 2014 to make that average.';
-    }
+    var nw = nowOf(t, imp), r1 = null; // no "Now" readout without trend.now
+    if (nw) r1 = { label: 'Now, compared with ' + str(b.text), value: nw.value,
+      line: (nw.rain ? 'Rain in ' + nw.label + ", % above or below a usual year" : 'Average of ' + nw.label) + (b.method === 'fitted' ? '. Baseline estimated from the fitted trend.' : '') };
     var r2 = { label: 'Rate, ' + Y(fit.start) + '–' + Y(fit.end), value: r ? bare(r) : '—', per: r ? r.per : '', line: r ? rk + ' ' + r.range : '' };
     if (r && !clear && isNum(r.low) && isNum(r.high) && r.low <= 0 && r.high >= 0) r2.line += ', which includes no change';
     if (short) r2.line += '. Short record.';
-    var g = t.guidance || {};
-    return { word: verdictWord(t), shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, why: why(t, imp),
-      world: worldLine(t, imp), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), chip: str(g.risk_label) };
+    var g = t.guidance || {}, word = verdictWord(t);
+    return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, why: why(t, imp),
+      world: worldLine(t, imp, /^Since \d{4}\b/.test(str(g.why))), r1: r1, r2: r2, r3: str(t.projection && t.projection.why),
+      chip: str(g.risk_label) === word ? '' : str(g.risk_label) }; // the headline already says "No clear change"
+  }
+  // The NASA POWER grid against the nearest weather station (QA B10). other: this place's POWER answer the page
+  // already has (or null); nothing is fetched for it.
+  // The grid size comes from explain.data.where ("a grid cell about 50 km wide").
+  function modelNote(t, other) {
+    var id = (t.source || {}).id, size = /\babout \d[\d,.]* km\b/.exec(str(((t.explain || {}).data || {}).where));
+    if (id === 'power' && (t.variable === 'air_temp' || t.variable === 'air_temp_max')) {
+      return { line: 'This comes from a weather model grid' + (size ? ' ' + size[0] + ' wide' : '') + '. A weather station nearby can tell a different story.', offer: 'ghcn' };
+    }
+    if (id !== 'ghcn' || !other || (other.source || {}).id !== 'power' || !other.verdict) return null;
+    if (other.verdict === t.verdict) return { line: 'The weather station and the model agree here.' };
+    return { line: 'The weather station and the model disagree here.', strong: true,
+      next: 'For the heat you feel day to day, the station is closer to the ground; the model covers a wider area.' };
   }
 
+  // Rain's trend runs on yearly values (trend.yearly, in fit.units): the chart plots those. An answer without them, or
+  // without a baseline, keeps the monthly plot.
+  function yearlyOf(t, s) {
+    var a = s.anomaly || {};
+    return Array.isArray(t.yearly) && t.yearly.length && (t.baseline || {}).method !== 'none' && a.values ? t.yearly : null;
+  }
   // The place chart's words (section 5).
   function chartText(t, s, ctx) {
     var imp = ctx.imperial, f = F(t, imp), b = t.baseline || {}, a = s.anomaly || {}, src = t.source || {}, fit = t.fit || {};
     var none = b.method === 'none' || !a.values, yrs = yrsOf(b), place = placeName(t, ctx.label), r = rate(t, imp), rk = t.range_kind || '95% range';
-    var drawn = fitOnAxis(t, s, imp);
+    var drawn = fitOnAxis(t, s, imp), yearly = !!yearlyOf(t, s);
     var seasons = !none && src.cadence !== 'annual' && !src.deseasoned_upstream;
-    var sub = seasons ? 'Seasons removed: each month is compared with its own ' + own(b.text) + (a.kind === 'percent' ? ', as a share of the usual rain.' : '.') : '';
+    var sub = yearly ? "Each dot is one year's rain, compared with " + b.text + '.'
+      : seasons ? 'Seasons removed: each month is compared with its own ' + own(b.text) + (a.kind === 'percent' ? ', as a share of the usual rain.' : '.') : '';
     if (t.variable === 'sea_level') sub += (sub ? ' ' : '') + 'Measured against the land, so land sinking adds to the rise.';
     var u = none ? f.unit(s.units) : f.unit(a.units);
+    var uw = u + (t.variable === 'water_storage' ? ' of water' : '');
     var ytitle = none ? u + ', as measured'
+      : yearly ? "Each year's rain, % above or below " + b.text
       : a.kind === 'percent' ? '% of the usual rain, compared with ' + b.text
-      : u + (t.variable === 'water_storage' ? ' of water' : '') + ' compared with ' + b.text;
+      : uw + ' compared with ' + b.text;
+    // a chart under 600 px: at most about 40 characters, so the title is never cut (QA B9)
+    var ytitleNarrow = none ? ytitle : a.kind === 'percent' ? '% above or below the ' + yrs + ' average' : uw + ' compared with ' + yrs;
     var summary = ctx.name + ' at ' + place + ', ' + M(t.period.start) + ' to ' + M(t.period.end) + (none ? ', as measured.' : ', compared with ' + b.text + '.');
     if (r) {
       var line = drawn ? 'The trend line' : 'The trend';
@@ -206,18 +238,27 @@
     var cols = ['Month', ctx.name + ' (' + normU(s.units) + ')'];
     if (!none) cols.push('Compared with ' + b.text + ' (' + normU(a.units) + ')');
     cols.push('Note');
+    if (yearly) cols = ['Year', "Each year's rain, compared with " + b.text]; // the rows the chart plots (yearRows)
     return {
       title: ctx.name + ' at ' + place + ', ' + Y(t.period.start) + ' to ' + Y(t.period.end), sub: sub, src: srcText(t), url: recordUrl(src),
-      latest: str(t.latest && t.latest.text), ytitle: ytitle, summary: summary, none: none, hasPre: pre.length > 0,
+      latest: str(t.latest && t.latest.text), ytitle: ytitle, ytitleNarrow: ytitleNarrow, summary: summary, none: none, hasPre: pre.length > 0, yearly: yearly,
+      hint: 'Hover, tap or use the arrow keys to read ' + (yearly ? 'a year.' : 'a month.'),
       noneNote: none ? 'This record has too few years from 1995 to 2014 for an average, so the chart shows the values as measured, with no trend line. The rate on the card still holds.' : '',
-      legend: { monthly: none ? 'Monthly value, as measured' : 'Monthly value, seasons removed', range: rk + ' of the trend', zero: yrs + ' average (zero)', yrs: yrs },
+      legend: { monthly: yearly ? "Each year's rain" : none ? 'Monthly value, as measured' : 'Monthly value, seasons removed', range: rk + ' of the trend', zero: yrs + ' average (zero)', yrs: yrs },
       drawn: drawn, endLabel: drawn ? f.val(fit.level_end, fit.units) : '', endSub: fit.end ? 'trend line, ' + Mo(fit.end) : '',
-      cols: cols, caption: 'Records: ' + srcText(t) + '. ' + str(t.latest && t.latest.text) + '.',
+      cols: cols, caption: 'Records: ' + srcText(t) + '. ' + str(t.latest && t.latest.text) + '.' + (yearly ? ' One row a year, as the chart shows; the CSV has every month.' : ''),
     };
   }
-  // the readout for month i
+  // rain on yearly values: the table's rows, printed as the chart's readout prints them
+  function yearRows(t, imp) {
+    var f = F(t, imp);
+    return t.yearly.map(function (q) { return [String(q.year), isNum(q.value) ? f.val(q.value, t.fit.units) : 'no data']; });
+  }
+  // the readout for point i: a month, or a year for rain on yearly values
   function readout(t, s, ctx, i) {
-    var f = F(t, ctx.imperial), a = s.anomaly || {}, b = t.baseline || {}, tm = s.times[i], v = s.values[i], an = a.values ? a.values[i] : null;
+    var f = F(t, ctx.imperial), a = s.anomaly || {}, b = t.baseline || {}, yr = yearlyOf(t, s);
+    if (yr) return yr[i].year + ': ' + (isNum(yr[i].value) ? f.val(yr[i].value, t.fit.units) + ' compared with the usual year (' + yrsOf(b) + ').' : 'no data.');
+    var tm = s.times[i], v = s.values[i], an = a.values ? a.values[i] : null;
     var pre = s.flags && s.flags[i] === 'preliminary' ? ' Preliminary.' : '';
     if (v == null) return M(tm) + ': no data.';
     if (b.method === 'none' || an == null) return M(tm) + ': ' + f.lvl(v, s.units) + ', as measured.' + pre;
@@ -245,6 +286,14 @@
     var dots = Object.keys(by).filter(function (y) { return by[y].length >= 9; })
       .map(function (y) { return { x: +y * 12 + 6, v: by[y].reduce(function (p, q) { return p + q; }, 0) / by[y].length }; });
     var out = { none: none, ms: ms, ys: ys, pre: pre, dots: dots, x0: ms[0], x1: ms[ms.length - 1] + 1, fit: null, band: null };
+    var yr = yearlyOf(t, s);
+    if (yr) { // one point a year at mid-year (drawn at ms + 0.5), the axis from the first January to the last December
+      out.ms = yr.map(function (q) { return q.year * 12 + 5.5; });
+      out.ys = yr.map(function (q) { return isNum(q.value) ? f.num(q.value, fit.units) : null; });
+      out.pre = yr.map(function () { return false; });
+      out.dots = yr.filter(function (q) { return isNum(q.value); }).map(function (q) { return { x: q.year * 12 + 6, v: f.num(q.value, fit.units) }; });
+      out.x0 = yr[0].year * 12; out.x1 = (yr[yr.length - 1].year + 1) * 12;
+    }
     if (fitOnAxis(t, s, imp) && isNum(fit.change) && isNum(fit.change_low) && isNum(fit.change_high)) {
       var mid = fit.level_end - fit.change / 2, c = function (x) { return f.num(x, fit.units); };
       out.fit = { x0: mi(fit.start) + 0.5, x1: mi(fit.end) + 0.5, y0: c(fit.level_end - fit.change), y1: c(fit.level_end),
@@ -260,17 +309,21 @@
     var ex = t.explain || {}, dat = ex.data || {}, sea = ex.seasons, real = ex.real || {}, rec = t.record || {}, m = t.meaning || {}, a = s.anomaly || {};
     var r = rate(t, imp) || { text: '—', range: '—', per: '', value: NaN }, rk = t.range_kind || '95% range', measure = MEASURE[t.variable] || ctx.name.toLowerCase();
     var clear = clearV(t), pct = a.kind === 'percent', yrs = yrsOf(b), url = recordUrl(src), isSea = t.variable === 'sea_level';
-    // the change over the record in the rate's own unit (mm for sea level, not cm), the same in steps 2 and 4
+    var byYear = isNum(dat.n_years); // rain: the trend runs on calendar years
+    // a change is shown like a level (cm for sea level), a rate in its own unit (mm a year): cu is the rate's unit
     var cu = rconv(imp, 0, fit.units).unit, ch = function (x) { return withUnit(fmtNum(rconv(imp, x, fit.units).v, true), cu); };
     var nPre = (s.flags || []).filter(function (x, i) { return x === 'preliminary' && s.values[i] != null; }).length;
     var out = [];
 
+    var nMiss = dat.n_missing_years, s1 = byYear
+      ? ['We used ' + commas(dat.n_years) + ' yearly values of rain from ' + str(src.name) + ', for ' + str(dat.where) + ', built from ' + commas(dat.n_months) + ' monthly values. They run from '
+        + Y(dat.start) + ' to ' + Y(dat.end) + '. A year counts when at least 11 of its months have data. ' + (nMiss ? (nMiss === 1 ? '1 year is' : commas(nMiss) + ' years are') + ' left out.' : 'No year is left out.')]
+      : ['We used ' + commas(dat.n_months) + ' monthly values of ' + measure + ' from ' + str(src.name) + ', for ' + str(dat.where) + '. They run from ' + M(dat.start) + ' to ' + M(dat.end) + '. '
+        + (dat.n_missing ? months(dat.n_missing) + ' missing.' : 'No months are missing.')];
     out.push({ title: 'The data',
-      short: commas(dat.n_months) + ' months from ' + srcIn(t) + ', ' + M(dat.start) + ' to ' + M(dat.end),
-      words: ['We used ' + commas(dat.n_months) + ' monthly values of ' + measure + ' from ' + str(src.name) + ', for ' + str(dat.where) + '. They run from ' + M(dat.start) + ' to ' + M(dat.end) + '. '
-        + (dat.n_missing ? months(dat.n_missing) + ' missing.' : 'No months are missing.')]
-        .concat(nPre ? [months(nPre) + ' preliminary: the provider may still change ' + (nPre === 1 ? 'it, so the trend leaves it out.' : 'them, so the trend leaves them out.')] : []),
-      work: ['How the provider made them: ' + lc1(str(src.method)), 'Dataset: ' + str(src.dataset_id) + '.' + (src.version ? ' Version: ' + src.version + '.' : '') + ' Retrieved ' + D(src.retrieved) + '.'],
+      short: byYear ? commas(dat.n_years) + ' years from ' + srcIn(t) + ', ' + Y(dat.start) + ' to ' + Y(dat.end) : commas(dat.n_months) + ' months from ' + srcIn(t) + ', ' + M(dat.start) + ' to ' + M(dat.end),
+      words: s1.concat(nPre ? [months(nPre) + ' preliminary: the provider may still change ' + (nPre === 1 ? 'it, so the trend leaves it out.' : 'them, so the trend leaves them out.')] : []),
+      work: ['How the provider made them: ' + lc1(str(src.method)), 'Dataset: ' + str(src.dataset_id) + '.' + (src.version ? ' ' + ver(src.version, 'Version: ') + '.' : '') + ' Retrieved ' + D(src.retrieved) + '.'],
       link: url ? { text: 'Open this exact record ↗', href: url } : null });
 
     var s2 = { title: 'Seasons removed' };
@@ -290,7 +343,7 @@
         p2 = 'Here ' + measure + ' is usually ' + (LEVELS[t.variable] ? f.lvl(sea.high, sea.units) + ' in ' + hi + ' and ' + f.lvl(sea.low, sea.units) + ' in ' + lo
           : 'highest in ' + hi + ' and lowest in ' + lo) + ': a seasonal swing of ' + swing + '.';
       }
-      p2 += ' The change we look for is ' + ch(fit.change) + ' over ' + Math.round(fit.years) + ' years. So we compare each month with its own ' + own(b.text) + ' first'
+      p2 += ' The change we look for is ' + f.val(fit.change, fit.units) + ' over ' + Math.round(fit.years) + ' years. So we compare each month with its own ' + own(b.text) + ' first'
         + (pct ? ', and write the difference as a share of the usual rain' : '') + '.';
       s2.words = [p2, { text: "Check it yourself: the CSV's anomaly column is " + (pct ? "each value's difference from its month's " + yrs + ' average, as a % of the ' + yrs + ' average rate.'
         : "each value minus its month's " + yrs + ' average.'), csv: true }];
@@ -317,13 +370,13 @@
     } else if (b.method === 'none') {
       s3.short = 'No 1995–2014 average for this record';
       s3.words = ['This record has too few years from 1995 to 2014 to make that average, so this page shows no levels for it, only the rate.'];
-      s3.work = [b.years_covered + ' of the 20 years have at least 9 months of data. We need at least 15, or a record of 30 years or more that runs from 1995 or earlier to 2014 or later.'];
+      s3.work = [b.years_covered + ' of the 20 years have at least 9 months of data. We need at least 15, or a record of 30 years or more with at least 5 of the 20 years counted and data both before 1995 and after 2014.'];
     } else {
       s3.short = 'Every level is compared with ' + b.text + (lvl3 ? ' here, ' + lvl3 : '');
       s3.words = ['Every level on this page is compared with ' + b.text + ' at this place' + (lvl3 ? ', ' + lvl3 : '') + ', so 0 means that average. '
         + 'The card, the chart, the table and the CSV all use it. Expert projections from the IPCC use the same years, so past and future can share one axis.'];
       s3.work = [b.method === 'fitted'
-        ? b.years_covered + ' of the 20 years have at least 9 months of data; we need 15. The record spans ' + Math.round(rec.years) + " years and runs from 1995 or earlier to 2014 or later, so we fit the trend and the seasons together and take the line's 1995–2014 average (" + b.label + ').'
+        ? b.years_covered + ' of the 20 years have at least 9 months of data; we need 15. The record spans ' + Math.round(rec.years) + " years, at least 5 of the 20 years are counted, and it has data both before 1995 and after 2014, so we fit the trend and the seasons together and take the line's 1995–2014 average (" + b.label + ').'
         : b.years_covered + ' of the 20 years from 1995 to 2014 have at least 9 months of data. We need at least 15.'];
     }
     out.push(s3);
@@ -333,19 +386,23 @@
     s4.words = [(clear
       ? 'From ' + Y(fit.start) + ' to ' + Y(fit.end) + ', ' + measure + ' here ' + (t.verdict === 'rising' ? 'rose' : 'fell') + ' by about ' + unsign(r.text) + (dec ? ' (every 10 years).' : '.')
       : 'From ' + Y(fit.start) + ' to ' + Y(fit.end) + ', ' + measure + ' here changed by ' + r.text + (dec ? ' (every 10 years)' : '') + ", which we can't tell apart from no change.")
-      + ' The data support anything from ' + r.range + ': that is the ' + rk + '.',
-      "We use Sen's slope: the middle of the slopes between every pair of months. One odd month can't pull it far."];
+      + ' The trend is very likely between ' + r.range.replace(' to ', ' and ') + ' (' + rk + ').',
+      "We use Sen's slope: the middle of the slopes between every pair of " + (byYear ? "years. One odd year can't pull it far." : "months. One odd month can't pull it far.")];
     if (rec.status === 'short') s4.words.push('This is a short record (' + Math.round(rec.years) + ' years). Its trend can move when new years arrive.');
     // fit.change is slope_per_decade × fit.years / 10, so the sum multiplies those numbers as the API gives them (a rate a
     // year is the decade's rate ÷ 10: unit display). Rain's % rate exists only in headline_rate.
     var mul = normU(t.units) === normU(fit.units) && isNum(t.slope_per_decade) ? given(imp, t.slope_per_decade, fit.units, !dec)
       : r.unit === cu && isNum(r.value) && r.unit === '%' ? (r.value > 0 ? '+' : '') + fixed(r.value, (String(r.value).split('.')[1] || '').length) : '';
     s4.work = [];
-    if (mul && isNum(fit.change)) {
-      s4.work.push('Over the record: ' + withUnit(mul, cu) + ' ' + r.per + ' × ' + (dec ? fixed(fit.years / 10, 2) + ' decades' : fixed(fit.years, 1) + ' years') + ' = ' + ch(fit.change)
-        + ' (' + rk + ' ' + fmtNum(rconv(imp, fit.change_low, fit.units).v, true) + ' to ' + ch(fit.change_high) + ').');
+    // the span fit.change uses: its months, first to last (fit.years is rounded to 0.1, so 105.7 × the rate can miss by a digit)
+    var span = /-/.test(str(fit.start)) && /-/.test(str(fit.end)) ? (mi(fit.end) - mi(fit.start) + 1) / 12 : fit.years;
+    if (mul && isNum(fit.change)) { // the sum in the rate's unit; a change in another unit (sea level: cm) then says it in that unit too
+      s4.work.push('Over the record: ' + withUnit(mul, cu) + ' ' + r.per + ' × ' + (dec ? fixed(span / 10, 2) + ' decades' : Number(span.toFixed(3)) + ' years') + ' = ' + ch(fit.change)
+        + (f.unit(fit.units) !== cu ? ', which is ' + f.val(fit.change, fit.units) : '') + ' (' + rk + ' ' + f.rng(fit.change_low, fit.change_high, fit.units) + ').');
     }
-    if (isNum(fit.level_end)) s4.work.push('The trend line ends at ' + f.val(fit.level_end, fit.units) + ' compared with ' + b.text + ', in ' + M(fit.end) + '. That is the first number on the card.');
+    if (isNum(fit.level_end)) s4.work.push('The trend line ends at ' + f.val(fit.level_end, fit.units) + ' compared with ' + b.text + ', in ' + M(fit.end) + '.');
+    var nw = nowOf(t, imp);
+    if (nw) s4.work.push('The card’s “Now”, ' + nw.value + ', is ' + (nw.rain ? 'the rain measured in ' : 'the measured average of ') + nw.label + ', not a point on the line.');
     out.push(s4);
 
     var pv = isNum(real.p_value) ? real.p_value : t.p_value, conf = str(m.confidence);
@@ -354,18 +411,35 @@
     if (!clear) s5.words.push("That does not mean nothing changed. The data can't rule out anything from " + r.range + '.');
     s5.work = ['p-value ' + (pv < 0.001 ? 'under 0.001' : fixed(pv, 3)) + ', so ' + (pv < 0.05 ? 'below' : 'not below') + ' 0.05 · ' + rk + ' ' + r.range + ', '
       + (r.low > 0 ? 'all above zero' : r.high < 0 ? 'all below zero' : 'which includes zero') + ' → ' + conf.toLowerCase() + '.'];
-    if (real.widened) s5.work.push('Months next to each other tend to be alike, so we widened the range to allow for that.');
+    // what we did, not what the data are (white noise can come out widened too)
+    if (real.widened) s5.work.push(byYear ? 'Years next to each other can be alike. We allow for that, so this range is wider than ' + commas(dat.n_years) + ' separate years would give.'
+      : 'Months next to each other can be alike, and so can whole years in a row. We allow for that, so this range is wider than ' + commas(dat.n_months) + ' separate months would give.');
+    if (isSea) s5.work.push('Slow swings in the ocean that last a decade or more can still make this range a little too narrow.');
+    if (t.variable === 'water_storage') s5.work.push('Slow swings in rain and groundwater that last several years can still make this range a little too narrow.');
     out.push(s5);
 
     var wp = worldParts(t, imp), s6 = { title: 'Compared with the world' };
     if (wp) {
-      var th = w.thresholds || {};
+      var th = w.thresholds || {}, lbl = str(g.risk_label), two = / to /.test(lbl), unclear = /^Risk level unclear\b/.test(lbl);
+      // the ratio's 95% range, unless the API's sentence already gives it
+      var rr = wp.ratio && isNum(w.ratio_low) && isNum(w.ratio_high) ? fixed(w.ratio_low, 1) + ' to ' + fixed(w.ratio_high, 1) : '';
+      if (rr && str(w.text).indexOf(rr) >= 0) rr = '';
+      // the division in metric, like the API's sentence above it ("(in metric)" in °F or inches): one unit in the step (B5)
+      var wm = worldParts(t, false);
       s6.short = worldLine(t, imp);
       s6.words = [imp ? metric(w.text) : str(w.text)];
-      s6.work = [fmtNum(wp.a, false) + ' ÷ ' + fmtNum(wp.b, false) + ' = ' + wp.ratio + ' · ' + M(w.window.start) + ' to ' + M(w.window.end) + ' · ' + stop(str(w.method)),
-        '1× is the same as the world. ' + th.high + '× or more: high risk. ' + th.moderate + '× to ' + th.high + '×: moderate risk. Under ' + th.moderate + '×: low risk. Here: '
-        + (str(g.risk_label) ? g.risk_label.toLowerCase() : 'no risk level') + '.'];
+      if (str(w.why_none)) s6.words.push(w.why_none); // a world figure that did not rise: no ratio, and why
+      // the owner's domain review: say how the two figures are measured, in plain words
+      if (isSea) s6.words.push('Satellites measure the height of the sea surface itself. The tide gauge measures the sea against the land, so if the land here is sinking, that adds to the local number.');
+      if (t.variable === 'air_temp') s6.words.push('The world figure is built from weather stations on land.'
+        + (src.id === 'power' || src.id === 'era5' ? ' The number here comes from a weather model, so the two are measured in different ways.' : ''));
+      s6.work = [(wp.ratio ? fmtNum(wm.a, false) + ' ÷ ' + fmtNum(wm.b, false) + ' = ' + wp.ratio + ' · ' + (rr ? rr + ' times (' + rk + ') · ' : '') : '')
+        + M(w.window.start) + ' to ' + M(w.window.end) + ' · ' + stop(str(w.method)),
+        '1× is the same as the world. ' + th.high + '× or more: high risk. ' + th.moderate + '× to ' + th.high + '×: moderate risk. Under ' + th.moderate + '×: low risk. '
+        + (unclear ? 'Here the ' + rk + ' spans every level, so the risk level is unclear.'
+          : 'Here: ' + (lbl ? lbl.toLowerCase() : 'no risk level') + (two && rr ? ', because the ' + rk + ' spans more than one level.' : '.'))];
       if (isSea) s6.work.push('The full record, ' + Y(fit.start) + ' to ' + Y(fit.end) + ': ' + r.text + '. It gets no world ratio, because satellites only start in 1993.');
+      if (isSea && w.source && str(w.source.method)) s6.work.push('The world figure: ' + lc1(stop(w.source.method))); // it names what the satellites don't correct for
       s6.link = w.source && https(w.source.record_url) ? { text: w.source.name + ' ↗', href: w.source.record_url } : null;
     } else {
       s6.short = str(w.why_none) || str(w.text);
@@ -383,10 +457,10 @@
     out.push({ title: 'Things to keep in mind', short: notes.length ? notes[0] + (notes.length > 1 ? ' And ' + (notes.length - 1) + ' more' : '') : last,
       words: [{ list: notes.concat([last]) }] });
 
-    var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', version ' + src.version : '') + '. Retrieved ' + D(src.retrieved) + '. ',
+    var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', ' + ver(src.version, 'version ') : '') + '. Retrieved ' + D(src.retrieved) + '. ',
       link: url ? { text: 'Open this exact record ↗', href: url } : null }];
     if (wp && w.source) list.push({ text: 'World figure: ' + w.source.name + '. Retrieved ' + D(w.source.retrieved) + '. ', link: https(w.source.record_url) ? { text: 'Open it ↗', href: w.source.record_url } : null });
-    list.push({ text: "Our calculation: the Mann-Kendall test and Sen's slope on monthly values with seasons removed" + (b.method === 'none' ? '.' : ', against ' + b.text + '.') });
+    list.push({ text: "Our calculation: the Mann-Kendall test and Sen's slope on " + (byYear ? 'yearly rain' : 'monthly values with seasons removed') + (b.method === 'none' ? '.' : ', against ' + b.text + '.') });
     out.push({ title: 'Sources', short: str(src.name) + (wp && w.source ? '; world figure from ' + lc1(str(w.source.name)) : ''), words: [{ list: list }], csv: true });
     return out;
   }
@@ -399,6 +473,17 @@
     var s = String(x);
     if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  // A header line starts with "#" and is never quoted, so tools that skip "#" lines skip it. A spreadsheet still splits
+  // it at commas (some imports at tabs too): a piece that would start a formula there gets a ' first; quotes, tabs and
+  // line breaks can't open a cell.
+  function headLine(x) { return String(x).replace(/[\r\n\t]+/g, ' ').replace(/"/g, "'").replace(/,(\s*)(?=[=+\-@])/g, ",$1'"); }
+  // "Station: The Battery, lat 40.7006, lon -74.0142" from trend.place; a grid source names only its point
+  function placeLine(t) {
+    var p = t.place || {}, nm = str(p.name), at = 'lat ' + p.lat + ', lon ' + p.lon;
+    if (!isNum(p.lat) || !isNum(p.lon)) return '';
+    if (STATION[(t.source || {}).id]) return 'Station: ' + (nm ? nm + ', ' : '') + at;
+    return 'Grid point: ' + (nm && !/^-?[\d.]+, ?-?[\d.]+$/.test(nm) ? nm + ', ' : '') + at;
   }
   function cell(v) { return v == null ? '' : String(v); }
   function baseLine(b, pct, withMethod) {
@@ -414,11 +499,12 @@
     });
   }
   function csvPlace(t, s, ctx) {
-    var src = t.source || {}, a = s.anomaly || {};
+    var src = t.source || {}, a = s.anomaly || {}, pl = placeLine(t), thru = str(t.latest && t.latest.text).replace(/^Data through /, '');
+    // no "# Datum:" line: the API has no datum field (source.method names it in words)
     var head = ['# Bhoomi: ' + ctx.name + ' at ' + ctx.label, '# Source: ' + str(src.name),
-      '# Dataset: ' + str(src.dataset_id) + '; version: ' + (src.version || 'not named by the provider'), '# Record: ' + recordUrl(src),
-      '# Baseline: ' + baseLine(t.baseline, a.kind === 'percent', true), '# Method: ' + str(src.method), '# Retrieved: ' + str(src.retrieved),
-      '# Built with AI assistance. bhoomi.earth'].map(csvField);
+      '# Dataset: ' + str(src.dataset_id) + '; version: ' + (src.version || 'not named by the provider'), '# Record: ' + recordUrl(src)]
+      .concat(pl ? ['# ' + pl] : [], ['# Baseline: ' + baseLine(t.baseline, a.kind === 'percent', true), '# Method: ' + str(src.method), '# Retrieved: ' + str(src.retrieved)],
+        thru ? ['# Data through: ' + thru] : [], ['# Built with AI assistance. bhoomi.earth']).map(headLine);
     head.push('time,value_' + s.units + ',anomaly_' + (a.units || s.units) + ',flag');
     return { name: 'bhoomi-' + ctx.slug + '-' + slug(ctx.label) + '.csv', text: head.concat(rows(s)).join('\n') + '\n' };
   }
@@ -431,7 +517,7 @@
       head.push('# Place: ' + p.label + '; Source: ' + str(src.name) + '; Dataset: ' + str(src.dataset_id) + '; version: ' + (src.version || 'not named by the provider')
         + '; Record: ' + recordUrl(src) + '; Method: ' + str(src.method) + '; Retrieved: ' + str(src.retrieved));
     });
-    head = head.map(csvField);
+    head = head.map(headLine);
     head.push('place,time,value_' + s0.units + ',anomaly_' + (a0.units || s0.units) + ',flag');
     var body = [];
     list.forEach(function (p) { body = body.concat(rows(p.s, p.label)); });
@@ -506,31 +592,33 @@
     sec.append(box);
     if (T.noneNote) sec.append(h('p', { class: 'note' }, T.noneNote));
     var lg = h('div', { class: 'legend' }, h('span', { class: 'grp' }, 'From the records:'),
-      key(swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-month' }]]), T.legend.monthly));
-    if (T.hasPre) lg.append(key(swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-pre' }]]), 'Preliminary month (may still change)'));
-    lg.append(h('span', { class: 'grp' }, 'Our calculation:'), key(swatch([['circle', { cx: 14, cy: 6, r: 3.4, class: 's-year' }]]), 'Yearly average'));
+      key(swatch(T.yearly ? [['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-month' }], ['circle', { cx: 14, cy: 6, r: 3.4, class: 's-year' }]]
+        : [['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-month' }]]), T.legend.monthly));
+    if (T.hasPre && !T.yearly) lg.append(key(swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 's-pre' }]]), 'Preliminary month (may still change)'));
+    lg.append(h('span', { class: 'grp' }, 'Our calculation:'));
+    if (!T.yearly) lg.append(key(swatch([['circle', { cx: 14, cy: 6, r: 3.4, class: 's-year' }]]), 'Yearly average'));
     if (T.drawn) {
       lg.append(key(swatch([['line', { x1: 2, y1: 6, x2: 26, y2: 6, class: 's-trend' }]]), 'Trend line'),
         key(swatch([['rect', { x: 1, y: 1, width: 26, height: 10, class: 's-fan' }], ['line', { x1: 1, y1: 1, x2: 27, y2: 1, class: 's-edge' }], ['line', { x1: 1, y1: 11, x2: 27, y2: 11, class: 's-edge' }]]), T.legend.range));
     }
     if (!T.none) lg.append(key(swatch([['line', { x1: 1, y1: 6, x2: 27, y2: 6, class: 'c-zero' }]]), T.legend.zero));
-    var ro = h('p', { class: 'readout', 'aria-live': 'polite' }, 'Hover, tap or use the arrow keys to read a month.');
-    sec.append(lg, ro, h('p', { class: 'summary' }, T.summary), dataTable(T, s));
+    var ro = h('p', { class: 'readout', 'aria-live': 'polite' }, T.hint);
+    sec.append(lg, ro, h('p', { class: 'summary' }, T.summary), dataTable(T, function () { return T.yearly ? yearRows(t, ctx.imperial) : tableRows(s); }));
     sec.hidden = false;
     cur = { pin: pin, ctx: ctx, T: T, box: box, ro: ro };
     draw();
   }
 
-  function dataTable(T, s) {
+  function dataTable(T, rows) { // rows: a function, called when the table is first opened
     var body = h('tbody'), det = h('details', { class: 'pc-table' }, h('summary', {}, h('span', { class: 'mark', 'aria-hidden': 'true' }), 'Show the data as a table'));
     var head = h('tr');
     T.cols.forEach(function (c) { head.append(h('th', { scope: 'col' }, c)); });
-    det.append(h('div', { class: 'table-scroll', tabindex: '0', role: 'region', 'aria-label': 'Monthly data table' },
+    det.append(h('div', { class: 'table-scroll', tabindex: '0', role: 'region', 'aria-label': T.yearly ? 'Yearly data table' : 'Monthly data table' },
       h('table', {}, h('caption', {}, T.caption), h('thead', {}, head), body)));
     det.addEventListener('toggle', function () { // built when first opened: a century of months is a long table
       if (!det.open || body.firstChild) return;
       var frag = document.createDocumentFragment();
-      tableRows(s).forEach(function (r) { var tr = h('tr'); r.forEach(function (c) { tr.append(h('td', {}, c)); }); frag.append(tr); });
+      rows().forEach(function (r) { var tr = h('tr'); r.forEach(function (c) { tr.append(h('td', {}, c)); }); frag.append(tr); });
       body.append(frag);
     });
     return det;
@@ -550,7 +638,7 @@
     var X = function (m) { return ml + (m - md.x0) / (md.x1 - md.x0) * pw; };
     var Yp = function (v) { return mt + (tk.hi - v) / (tk.hi - tk.lo) * ph; };
     var root = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, role: 'img', tabindex: '0', 'aria-label': T.summary, class: 'pc-svg' });
-    root.append(sv('text', { x: 0, y: 14, class: 'pc-ytitle' }, T.ytitle));
+    root.append(sv('text', { x: 0, y: 14, class: 'pc-ytitle' }, narrow ? T.ytitleNarrow : T.ytitle));
     if (md.band) {
       var bx0 = Math.max(ml, X(md.band[0])), bx1 = Math.min(ml + pw, X(md.band[1]));
       if (bx1 > bx0) {
@@ -614,7 +702,7 @@
     var select = function (i) {
       sel = i;
       cur.ro.classList.toggle('sel', i != null);
-      if (i == null) { rule.setAttribute('visibility', 'hidden'); cur.ro.textContent = 'Hover, tap or use the arrow keys to read a month.'; return; }
+      if (i == null) { rule.setAttribute('visibility', 'hidden'); cur.ro.textContent = T.hint; return; }
       var x = X(ms[i] + 0.5);
       rule.setAttribute('x1', x); rule.setAttribute('x2', x); rule.setAttribute('visibility', 'visible');
       cur.ro.textContent = readout(t, s, cur.ctx, i);
@@ -654,10 +742,10 @@
       g.append(sv('path', { d: d, 'vector-effect': 'non-scaling-stroke' }));
       return g;
     };
-    var au = a.kind === 'percent' ? '% of the usual rain' : f.unit(a.units);
+    var au = a.kind === 'percent' ? '% above or below the usual rain' : f.unit(a.units) + ' compared with ' + yrsOf(t.baseline); // the chart's words
     return h('div', { class: 'fig', 'aria-hidden': 'true' },
       h('p', { class: 'fig-l' }, 'As measured (' + f.unit(s.units) + '), last 10 years'), strip(s.values.slice(from)),
-      h('p', { class: 'fig-l' }, 'Seasons removed (' + au + ' compared with ' + yrsOf(t.baseline) + ')'), strip(a.values.slice(from)));
+      h('p', { class: 'fig-l' }, 'Seasons removed (' + au + ')'), strip(a.values.slice(from)));
   }
 
   function wordsNode(item, t, s, ctx) {
@@ -677,7 +765,7 @@
     clear(ol);
     $('how-lead').textContent = 'For ' + ctx.label + '. Every number below is the one the card and the chart use.';
     steps(t, s, ctx).forEach(function (st, i) {
-      var open = fresh ? i === 3 || i === 4 : !!keep[i];
+      var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 : !!keep[i];
       var det = h('details', open ? { open: '' } : {}, h('summary', {},
         h('span', { class: 'step-n' }, String(i + 1)), h('span', { class: 'step-t' }, st.title), h('span', { class: 'step-s' }, st.short), h('span', { class: 'step-c', 'aria-hidden': 'true' })));
       var words = h('div', { class: 'words' }), side = h('div', { class: 'step-w' });
@@ -718,5 +806,5 @@
   function redraw() { if (cur && Math.round(cur.box.clientWidth) !== cur.W) draw(); }
 
   window.TDX = { show: show, redraw: redraw, card: card, rate: rate, worldParts: worldParts, srcText: srcText, recordUrl: recordUrl,
-    csvCompare: csvCompare, download: download, Mo: Mo, Y: Y, conv: conv, metric: metric };
+    csvCompare: csvCompare, download: download, Mo: Mo, Y: Y, conv: conv, metric: metric, modelNote: modelNote };
 })();

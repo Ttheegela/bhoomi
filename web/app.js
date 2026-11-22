@@ -88,7 +88,7 @@ const VARIABLE_ALIASES = { precipitation: 'precip', rain: 'precip', temperature:
 
 const WINDOWS = [
   { id: 'sea_level', slug: 'sea-level', name: 'Sea level', search: 'Search a coastal town or city',
-    question: 'Is the sea rising where you live, build or invest? Tide gauges have measured it for up to 125 years.', units: ['cm', 'inches'] },
+    question: 'Is the sea rising where you live, build or invest? Some tide gauges have measured it for more than a century.', units: ['cm', 'inches'] },
   { id: 'air_temp', slug: 'air-temperature', name: 'Air temperature', search: 'Search a town or city',
     question: 'Is the air getting warmer where you live? Our records start in 1981 and come from weather models and weather stations.', units: ['°C', '°F'] },
   { id: 'air_temp_max', slug: 'hottest-days', name: 'Hottest days', search: 'Search a town or city',
@@ -248,7 +248,7 @@ function pinList(win) {
   if (!e) return [];
   return e.pins.map((p) => {
     const key = pinKeyOf(p.lat, p.lon), r = results[resKey(win, p)] || { status: 'loading', trend: null, series: null, error: null };
-    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, trend: r.trend, series: r.series, link: !!p.link, started: r.t0 || 0 };
+    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, none: !!r.none, trend: r.trend, series: r.series, link: !!p.link, started: r.t0 || 0 };
   });
 }
 function selectedPin(win) { return pinList(win).find((p) => p.selected) || null; }
@@ -308,7 +308,8 @@ const fmt = {
   // the rate every view prints: headline_rate ("+3.1 mm a year", "+0.31 °C per decade"), in the Units setting
   rate(t) { const r = t && window.TDX.rate(t, imperial()); return r ? r.text : ''; },
 };
-const riskShort = (g) => (g && g.risk_label ? g.risk_label.replace(/ risk$/, '') : '');
+// the sidebar chip's short form: "Moderate to high", "Unclear" (for "Risk level unclear (low to high)")
+const riskShort = (g) => (g && g.risk_label ? (/^Risk level unclear\b/.test(g.risk_label) ? 'Unclear' : g.risk_label.replace(/ risk$/, '')) : '');
 // High, Moderate, Low; anything else ("Not enough data", "No clear change") is drawn like Low
 const riskClass = (g) => (g && ['high', 'moderate', 'low'].includes(g.risk) ? g.risk : 'unknown');
 
@@ -343,13 +344,18 @@ function renderControls() {
   $('src-field').hidden = !many;
   if (many) {
     const cur = sourceFor(curWin) || v.sources[0];
-    buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, (s) => {
-      wsrc[curWin] = s === v.sources[0] ? null : s;
-      ensureLoaded(curWin);
-      renderControls(); changed(); renderFoot();
-    });
+    buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, pickSource);
     $('src-help').textContent = SOURCE_HELP[cur] || '';
   }
+}
+
+// Measure the current window with another source (the sidebar's "Measured by", or a button on the card).
+function pickSource(s) {
+  const v = varById(curWin);
+  if (!v || !Array.isArray(v.sources) || !v.sources.includes(s)) return;
+  wsrc[curWin] = s === v.sources[0] ? null : s;
+  ensureLoaded(curWin);
+  renderControls(); changed(); renderFoot();
 }
 
 function renderSidebar() {
@@ -374,8 +380,14 @@ function renderSidebar() {
 
 /* ---------- the answer card (web/design/10-foundation.md section 3) ---------- */
 
+// A re-render removes whatever had focus in the card (a button that switched the source, a link): focus then goes to the
+// new card's heading, not to <body> (QA N5).
 function renderRec() {
-  const box = $('rec');
+  const box = $('rec'), had = box.contains(document.activeElement);
+  drawRec(box);
+  if (had && !box.contains(document.activeElement)) { const h = box.querySelector('h2'); if (h) h.focus({ preventScroll: true }); }
+}
+function drawRec(box) {
   clear(box);
   const pin = selectedPin(curWin), w = winOf(curWin);
   box.setAttribute('aria-busy', String(!!pin && pin.status === 'loading'));
@@ -391,23 +403,50 @@ function renderRec() {
     return;
   }
   if (pin.status === 'error') {
-    box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."), el('p', { class: 'say' }, 'Try another place.'));
+    box.append(h2(pin.label), el('p', { class: 'say' }, pin.error || "We couldn't check this place."));
+    // "no record here" from a source picked by hand: offer the measurement's default only when the page already holds a
+    // working answer for this place from it (a US coast where CO-OPS worked, then PSMSL picked by hand); anything else
+    // would be a dead end (QA B7, review)
+    const v = varById(curWin), def = v && Array.isArray(v.sources) ? v.sources[0] : null, prev = results[`${curWin}||${pin.key}`];
+    const offer = pin.none && sourceFor(curWin) && def && prev && prev.status === 'ok';
+    if (offer) {
+      const b = el('button', { type: 'button', class: 'btn' }, `Try ${SOURCE_SEG[def] || sourceShort(def)} instead`);
+      b.addEventListener('click', () => pickSource(def));
+      box.append(el('div', { class: 'acts' }, b));
+    }
+    box.append(el('p', { class: 'say' }, pin.none && curWin === 'sea_level' && !offer
+      ? "Without a usable tide gauge nearby, our records can't tell you about this coast. For property here, check local flood maps and whether the land is sinking."
+      : 'Try another place.'));
     return;
   }
 
   const t = pin.trend, g = t.guidance || {}, X = window.TDX, C = X.card(t, imperial()), url = X.recordUrl(t.source);
   const meta = el('p', { class: 'meta' }, url ? el('a', { href: url, target: '_blank', rel: 'noopener' }, `${X.srcText(t)} ↗`) : X.srcText(t));
-  if (t.latest && t.latest.text) meta.append(` · ${t.latest.text}`);
+  if (t.latest && t.latest.text) meta.append(' · ', el('span', { class: 'nw' }, t.latest.text)); // never split (QA N4)
   box.append(el('div', { class: 'where' }, el('div', {}, h2(pin.label), meta), C.chip ? el('span', { class: `risk ${riskClass(g)}` }, C.chip) : ''));
   box.append(el('div', { class: 'verdict' }, el('b', {}, el('span', { class: 'shape', 'aria-hidden': 'true' }, C.shape), C.word), el('span', {}, C.conf)));
   if (C.why) box.append(el('p', { class: 'say' }, C.why));
   if (C.old) return; // a cached answer from before the rework: the verdict only, until it is asked again
   if (C.world) box.append(el('p', { class: 'world' }, `${C.world}.`));
+  // NASA POWER's grid against the nearest weather station (QA B10): the line, the switch, and after it whether they
+  // disagree, from the POWER answer this page already has (the default source's result)
+  const v = varById(curWin), prev = results[`${curWin}||${pin.key}`];
+  const note = X.modelNote(t, prev && prev.status === 'ok' ? prev.trend : null);
+  if (note) {
+    const box2 = el('div', { class: note.strong ? 'model strong' : 'model' }, el('p', {}, note.line));
+    if (note.offer && v && Array.isArray(v.sources) && v.sources.includes(note.offer)) {
+      const b = el('button', { type: 'button', class: 'btn' }, 'Compare with the nearest weather station');
+      b.addEventListener('click', () => pickSource(note.offer));
+      box2.append(b);
+    }
+    box.append(box2);
+    if (note.next) box.append(el('div', { class: 'model' }, el('p', {}, note.next))); // a plain next step under the strong line
+  }
   const r3 = el('div', {}, el('p', { class: 'rl' }, 'What experts project'), el('p', { class: 'rt' }, C.r3));
   const fl = g.future_link;
   if (fl && typeof fl.url === 'string' && fl.url.startsWith('https://') && fl.label) r3.append(el('p', { class: 'rt' }, el('a', { href: fl.url, target: '_blank', rel: 'noopener' }, `${fl.label} ↗`)));
   box.append(el('div', { class: 'reads' },
-    el('div', {}, el('p', { class: 'rl' }, C.r1.label), el('p', { class: 'rv' }, C.r1.value), el('p', { class: 'rs' }, C.r1.line)),
+    C.r1 ? el('div', {}, el('p', { class: 'rl' }, C.r1.label), el('p', { class: 'rv' }, C.r1.value), el('p', { class: 'rs' }, C.r1.line)) : '',
     el('div', {}, el('p', { class: 'rl' }, C.r2.label), el('p', { class: 'rv' }, C.r2.value, C.r2.per ? ' ' : '', C.r2.per ? el('small', {}, C.r2.per) : ''), el('p', { class: 'rs' }, C.r2.line)),
     r3));
   if (g.recommendation) box.append(el('div', { class: 'advice' }, el('p', { class: 'al' }, 'Our recommendation'), el('p', {}, g.recommendation)));

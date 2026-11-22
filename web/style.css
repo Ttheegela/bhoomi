@@ -12,6 +12,7 @@
   --p1: #1B3F73; --p2: #7A5195; --p3: #2A9D8F; --p4: #8C6D31; --p5: #4E79A7; --p6: #9A9A9A;
   --s1: 4px; --s2: 8px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
   --map-h: 440px;
+  --top-h: 64px; /* the sticky top bar's height; the narrow queries below set the tallest it gets there */
   /* data colours: trend line and range, per verdict (charts only) */
   --up-bg: #D4620A; --dn-bg: #1B3F73; --nc-bg: #6B6B6B;
   --font-head: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -62,7 +63,7 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus { outl
 span.srclink { color: var(--ink-2); }
 
 /* top bar */
-.top { height: 64px; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 28px; padding: 0 32px; position: sticky; top: 0; z-index: 10; }
+.top { height: var(--top-h); background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 28px; padding: 0 32px; position: sticky; top: 0; z-index: 10; }
 .brand { font-weight: 700; font-size: 20px; letter-spacing: -.2px; margin-right: 12px; white-space: nowrap; }
 .nav { display: flex; gap: 4px; height: 100%; min-width: 0; }
 .nav a { display: flex; align-items: center; padding: 0 14px; font-weight: 500; color: var(--ink-2); border-bottom: 3px solid transparent; text-decoration: none; white-space: nowrap; }
@@ -119,16 +120,25 @@ span.srclink { color: var(--ink-2); }
 /* the answer card (10-foundation.md section 3) */
 .rec { container-type: inline-size; }
 .rec h2 { font-size: 24px; }
-.rec .where { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.rec .where { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px 12px; }
+/* a long chip ("Risk level unclear (low to high)") moves under the heading on a phone instead of squeezing it */
+.rec .where > div { flex: 1 1 14em; min-width: 0; }
+.rec .where .risk { max-width: 100%; white-space: normal; }
 .rec .meta { color: var(--ink-2); font-size: 14px; margin: 4px 0 0; }
 .rec .meta a { color: var(--ink-2); }
+.rec .meta .nw { white-space: nowrap; }
 .verdict { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin: 18px 0 6px; }
 .verdict b { font-family: var(--font-head); font-size: 40px; font-weight: 700; line-height: 1.1; }
 .verdict .shape { font-size: 30px; margin-right: 8px; position: relative; top: -3px; }
 .verdict > span { color: var(--ink-2); font-size: 15px; }
 .rec .say { font-size: 18px; line-height: 1.45; margin: 0 0 14px; max-width: none; }
 .rec .world { font-size: 15px; color: var(--ink-2); margin: -6px 0 16px; max-width: none; }
-.reads { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 0 18px; }
+/* the model grid against the nearest weather station (QA B10): a grey line and its button; a disagreement in ink */
+.rec .model { margin: -6px 0 16px; }
+.rec .model p { font-size: 15px; color: var(--ink-2); margin: 0 0 8px; max-width: none; }
+.rec .model.strong p { font-size: 16px; font-weight: 600; color: var(--ink); }
+.rec .model .btn { white-space: normal; text-align: left; padding: 8px 16px; max-width: 100%; } /* wraps on a phone */
+.reads { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 0 18px; }
 .reads > div { padding: 14px 14px 14px 0; min-width: 0; }
 .reads > div + div { padding-left: 14px; border-left: 1px solid var(--line); }
 .reads p { margin: 0; max-width: none; }
@@ -139,8 +149,9 @@ span.srclink { color: var(--ink-2); }
 .reads .rt { margin-top: 8px; }
 .reads .rt a { color: var(--ink); }
 @container (max-width: 519px) {
-  .reads { grid-template-columns: minmax(0, 1fr); }
-  .reads > div, .reads > div + div { padding: 12px 0; border-left: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; align-items: center; }
+  .reads { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); }
+  /* the value column takes at most 45%, so a long unit wraps under its number, never squeezing the label (QA B9) */
+  .reads > div, .reads > div + div { padding: 12px 0; border-left: 0; display: grid; grid-template-columns: minmax(0, 1fr) fit-content(45%); column-gap: 16px; align-items: center; }
   .reads > div + div { border-top: 1px solid var(--line); }
   .reads .rl { min-height: 0; grid-column: 1; }
   .reads .rv { grid-column: 2; grid-row: 1 / span 2; margin: 0; font-size: 24px; text-align: right; }
@@ -211,7 +222,7 @@ th, td { text-align: left; padding: var(--s1) var(--s2); border-bottom: 1px soli
 thead th { position: sticky; top: 0; background: var(--surface); }
 
 /* "How we calculated this" (section 6) */
-#how { scroll-margin-top: 80px; }
+#how { scroll-margin-top: calc(var(--top-h) + 16px); } /* its heading lands below the sticky bar */
 .how h2 { font-size: 20px; }
 .how .lead { color: var(--ink-2); margin: 4px 0 0; }
 .steps { list-style: none; margin: 16px 0 0; padding: 0; border-top: 1px solid var(--line); }
@@ -255,6 +266,7 @@ thead th { position: sticky; top: 0; background: var(--surface); }
 /* narrower windows: the sidebar stacks above the main column, the nav scrolls sideways */
 @media (max-width: 1179px) { .row { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 899px) {
+  :root { --top-h: 117px; } /* brand and Settings on one row, the nav under them */
   .top { height: auto; flex-wrap: wrap; gap: var(--s2) var(--s4); padding: var(--s2) var(--s4); }
   .brand { margin-right: 0; }
   .top .right { order: 2; }
@@ -273,6 +285,7 @@ thead th { position: sticky; top: 0; background: var(--surface); }
   .chead { flex-wrap: wrap; }
 }
 @media (max-width: 599px) { .step-b { padding-left: 0; } }
+@media (max-width: 399px) { :root { --top-h: 149px; } } /* the brand and Settings wrap onto two rows */
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media print {

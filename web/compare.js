@@ -58,13 +58,16 @@
     return Number(s) === 0 ? '0' : (v < 0 ? '−' : '+') + s;
   }
 
-  // Everything the chart needs, from plain data. pins: [{label, slot, selected, status, trend, series}];
-  // conv(trend, value, units) -> the value in the unit shown.
-  function buildModel(pins, conv) {
+  // Everything the chart needs, from plain data. pins: [{label, slot, selected, status, none, trend, series}];
+  // conv(trend, value, units) -> the value in the unit shown; win: the measurement (a "no record here" answer says why).
+  function buildModel(pins, conv, win) {
     var lines = [], out = { left: [], lines: lines };
     (pins || []).forEach(function (p) {
       if (p.status === 'loading' || (!p.status && !p.series)) { out.left.push({ label: p.label, why: 'still loading' }); return; }
-      if (p.status === 'error') { out.left.push({ label: p.label, why: 'could not be loaded' }); return; }
+      if (p.status === 'error') { // a 400 is "no record here"; only a real failure (5xx, network) could not be loaded
+        out.left.push({ label: p.label, why: !p.none ? 'could not be loaded' : win === 'sea_level' ? 'no tide gauge near enough' : 'no usable record here' });
+        return;
+      }
       var a = p.series && p.series.anomaly, b = p.trend && p.trend.baseline;
       if (!a || !Array.isArray(a.values) || !b || b.method === 'none') { out.left.push({ label: p.label, why: 'no 1995–2014 average for its record' }); return; }
       var pts = smooth(yearly(p.series.times, a.values));
@@ -133,7 +136,7 @@
     hd.appendChild(h('h3', 'cmp-h', 'How ' + (HEADS[o.window] || 'things') + (o.window === 'air_temp_max' ? ' have' : ' has') + ' changed at your places'));
     head.appendChild(hd);
     g.appendChild(head);
-    var m = buildModel(pins, function (t, v, u) { return X.conv(t, o.imperial, v, u).v; });
+    var m = buildModel(pins, function (t, v, u) { return X.conv(t, o.imperial, v, u).v; }, o.window);
     if (!m.lines.length) {
       hd.appendChild(h('p', 'cmp-cap', m.left.length ? 'Waiting for the records to arrive.' : 'Add a place to see how it compares.'));
       leftOut(g, m.left);
@@ -200,7 +203,7 @@
     if (sw) {
       var rp, u = sw.available && sw.source && httpsOnly(sw.source.record_url);
       if (sw.available) {
-        rp = h('p', 'cmp-cap', 'World figure for ' + selPin.label + ': ' + (o.imperial ? X.metric(sw.text) : sw.text || ''));
+        rp = h('p', 'cmp-cap', 'World figure for ' + selPin.label + ': ' + (o.imperial ? X.metric(sw.text) : sw.text || '') + (sw.why_none ? ' ' + sw.why_none : ''));
         if (u) {
           var a = h('a', 'cmp-src', (sw.source.name || u) + ' ↗');
           a.href = u; a.target = '_blank'; a.rel = 'noopener';
@@ -219,7 +222,7 @@
         record: t.period && t.latest ? X.Y(t.period.start) + '–' + X.Mo(t.latest.month) : '—',
         rate: (f.rate && f.rate(t) && (clear || (g && g.risk_label))) ? f.rate(t) : clear ? X.card(t, o.imperial).word : 'No clear change',
         here: wp ? wp.here + ' ' + wp.since.toLowerCase() : '—',
-        ratio: wp ? wp.ratio + ' (world ' + wp.world + ')' : '—',
+        ratio: wp ? (wp.ratio ? wp.ratio + ' (world ' + wp.world + ')' : 'world ' + wp.world) : '—', // no ratio without a clear trend
         risk: g && g.risk_label ? g : null
       };
     });
@@ -248,7 +251,7 @@
       tr.appendChild(h('td', 'n', c.rate));
       if (hasW) { tr.appendChild(h('td', 'w', c.here)); tr.appendChild(h('td', 'w', c.ratio)); }
       if (hasRisk) {
-        var cr = h('td');
+        var cr = h('td', 'rk');
         if (c.risk) cr.appendChild(h('span', 'risk ' + (/^(high|moderate|low)$/.test(c.risk.risk) ? c.risk.risk : 'unknown'), c.risk.risk_label));
         else cr.textContent = '—';
         tr.appendChild(cr);
