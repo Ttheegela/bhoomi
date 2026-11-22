@@ -479,7 +479,7 @@ assert.strictEqual(bk2.r1.label, 'Now, compared with the 1995–2014 average');
 ['battery_sea_level', 'lewes_sea_level_short', 'kolkata_sea_level_fitted', 'mumbai_sea_level_no_world'].map(load).forEach(function (d) {
   var p = d.trend.projection, fx = futOf(d.trend, null, false, TODAY), ro = p.readouts;
   assert.strictEqual(sp(fx.p50 === ro.by_2050.p50 && cmv(fx.p50) + ' (likely ' + rngc(fx.lo, fx.hi) + ')'), ro.by_2050.text); // QA: cm() equals by_2050.text
-  assert.strictEqual(sp(fx.more.replace(/ in \d{4}$/, ' today')), ro.more_than_today.text);
+  assert.strictEqual(sp(fx.more), ro.more_than_today.text); // as given: the server says "than today" or "than in {year}"
   assert.deepStrictEqual(ro.now, d.trend.now);
   clean(d, pc2(d, 'X')); clean(d, pc2(d, 'X', true)); clean(d, pc2(d, 'X', false, { ssp: 'ssp585', low: true })); clean(d, pc2(d, 'X', false, { ssp: 'ssp370', low: true }));
 });
@@ -543,13 +543,15 @@ assert.strictEqual(bR.outside, "Here the measured level for 2019 to 2021 is outs
 var b7 = steps(B.trend, B.series, b2)[6], bad = b7.work.filter(function (x) { return x.bad; });
 assert.ok(b7.open && / · Check: outside the experts' 2020 range$/.test(b7.short), b7.short);
 assert.strictEqual(bad.length, 1);
-assert.strictEqual(bad[0].text, 'Check: +2.9' + NB + "cm is outside the experts' 2020 range for SSP2-4.5 (5th to 95th percentile +4.1 to +17" + NB + 'cm). About 1 in 7 tide gauges fall outside, mostly for real reasons such as an earthquake, fast land uplift or a recent regional surge. Read the projection here with extra care.');
+assert.strictEqual(bad[0].text, 'Check: +2.9' + NB + "cm is outside the experts' 2020 range for SSP2-4.5 (5th to 95th percentile +4.1 to +17" + NB + "cm). Some tide gauges fall outside the experts' 2020 range, often because of earthquakes, land rising after the ice age, or a recent surge. Read the projection here with extra care.");
+// review: no share of gauges ("1 in 7", "15%") that no field backs; the only numbers are this gauge's own
+assert.ok(!/\d+ (in|of|out of) \d+|\d\s*%|\d+ (gauges|tide gauges)/.test(bad[0].text), bad[0].text);
 assert.ok(b7.work.indexOf('One 12-month “Now” can swing by about 3 cm from year to year at a gauge, so a single year can sit above or below the line.') > b7.work.indexOf(bad[0]));
 assert.strictEqual(b7.work[0], 'Now: the 12 months to August 2025 average ' + B.trend.now.text + ' compared with the 1995–2014 average.');
 assert.strictEqual(b7.work[1], '2050, SSP2-4.5: +36' + NB + 'cm − ' + B.trend.now.text + ' = about 29' + NB + 'cm more than today. Approximate: it takes a 12-month average from a projection.');
 assert.strictEqual(b7.work[2], "2020: the experts' middle estimate is +10" + NB + 'cm; the measured average for 2019 to 2021 is +2.9' + NB + 'cm. We plot the projection as published, so the gap of 7.3' + NB + 'cm shows on the chart.');
 assert.strictEqual(b7.short.indexOf('+36' + NB + 'cm by 2050 under intermediate emissions (SSP2-4.5), from the IPCC'), 0);
-assert.ok(/^For the future we use only published expert projections: the IPCC's sea level projections \(AR6, 2021\) at the tide gauge New York \(The Battery\), 0\.4 km from this one\./.test(b7.words[0]), b7.words[0]);
+assert.ok(/^For the future we use only published expert projections: the IPCC's sea level projections \(AR6, 2021\) at this tide gauge\. They use /.test(b7.words[0]), b7.words[0]);
 assert.strictEqual(b7.words[2].indexOf("The experts' scenarios are low (SSP1-2.6), intermediate (SSP2-4.5), high (SSP3-7.0) and very high (SSP5-8.5) emissions. They are possible paths for the world's emissions, not predictions."), 0, b7.words[2]);
 assert.strictEqual(b7.words[3], 'We never stretch the past trend into the future.');
 assert.deepStrictEqual(b7.links.map(function (l) { return l.href; }), ['https://doi.org/10.5281/zenodo.6382554', B.trend.guidance.future_link.url]);
@@ -565,11 +567,24 @@ var b9 = steps(B.trend, B.series, b2)[8];
 assert.ok(/; future from IPCC AR6$/.test(b9.short) && b9.csv && b9.csvFut);
 assert.ok(b9.words[0].list.some(function (x) { return x.text === 'Future: IPCC AR6 sea level projections (Garner et al. 2021), doi:10.5281/zenodo.6382554, version 20210809, CC BY 4.0. ' && x.link.href === 'https://doi.org/10.5281/zenodo.6382554'; }));
 assert.deepStrictEqual(b9.words[1].cite, BP.source.citation);
+assert.strictEqual(b9.words[0].list[1].text, 'World figure: NASA Global Mean Sea Level Trend from Integrated Multi-Mission Ocean Altimeters, Version 5.2, doi:10.5067/GMSLM-TJ152. Retrieved 22 November 2026. ');
 assert.strictEqual(b9.words[1].ack, 'Acknowledgement: ' + BP.source.acknowledgement);
 // "What experts project": the drivers for SSP2-4.5 only, every decade for the chosen scenario
 var bC = futCard(B.trend, b2);
 assert.strictEqual(bC.title, 'What experts project for New York, NY');
-assert.strictEqual(bC.sub, 'IPCC AR6 sea level projections at the tide gauge New York (The Battery), 0.4 km from this one, compared with the 1995–2014 average. Source: ');
+assert.strictEqual(bC.sub, 'IPCC AR6 sea level projections at this tide gauge, compared with the 1995–2014 average. Source: ');
+// review: "at this tide gauge" when the AR6 gauge is under 1 km away or, for a PSMSL record, has the record's own id;
+// otherwise its name and distance (never "0 km from this one")
+var BF = copy(B); BF.trend.projection.location.km = 2.5;
+assert.strictEqual(futCard(BF.trend, b2).sub, 'IPCC AR6 sea level projections at the tide gauge New York (The Battery), 2.5 km from this one, compared with the 1995–2014 average. Source: ');
+assert.ok(steps(BF.trend, BF.series, b2)[6].words[0].indexOf(' (AR6, 2021) at the tide gauge New York (The Battery), 2.5 km from this one. ') > 0);
+var KP = copy(K), kp2 = pc2(KP, 'Kolkata');
+assert.ok(futOf(KP.trend, null, false, TODAY).same && /^IPCC AR6 sea level projections at this tide gauge, /.test(futCard(KP.trend, kp2).sub)); // 0 km
+KP.trend.projection.location.km = 1.2; // the same id (543, from the station page), over 1 km: still this gauge
+assert.ok(futOf(KP.trend, null, false, TODAY).same && steps(KP.trend, KP.series, kp2)[6].words[0].indexOf(' at this tide gauge. ') > 0);
+KP.trend.projection.location.id = 544; // a nearby AR6 gauge
+assert.ok(!futOf(KP.trend, null, false, TODAY).same && futCard(KP.trend, kp2).sub.indexOf(' at the tide gauge DIAMOND HARBOUR, 1.2 km from this one, ') > 0);
+assert.ok(all(K, pc2(K, 'Kolkata')).every(function (x) { return !/ 0(\.0)? km from this/.test(x); }));
 assert.strictEqual(bC.srcTail, ', version 20210809, CC BY 4.0.');
 assert.strictEqual(bC.dh, 'What drives the rise by 2050');
 assert.ok(/^Intermediate emissions \(SSP2-4\.5\), the one scenario this breakdown comes in\./.test(bC.dsub));
@@ -617,7 +632,9 @@ clean(RE, rec2);
 // an old record (Mumbai ends in 2010): "Latest" and "in 2010" for "Now" and "today"
 var MBk = card(MB.trend, false, null, TODAY), mfx = futOf(MB.trend, null, false, TODAY);
 assert.ok(mfx.old && MBk.r1.label === 'Latest, compared with the 1995–2014 average', MBk.r1.label);
-assert.ok(/ About 18\scm more than in 2010\.$/.test(MBk.r3f.line), MBk.r3f.line);
+var MBY = copy(MB); MBY.trend.projection.readouts.more_than_today.text = 'about 18 cm more than in 2010'; // the server's text for an old record
+assert.ok(/ About 18\scm more than in 2010\.$/.test(card(MBY.trend, false, null, TODAY).r3f.line), card(MBY.trend, false, null, TODAY).r3f.line);
+assert.ok(/ more than in 2010\.$/.test(card(MB.trend, false, { ssp: 'ssp585' }, TODAY).r3f.line)); // another scenario: computed, "in 2010"
 assert.ok(/^Latest: the 12 months to December 2010 average /.test(steps(MB.trend, MB.series, pc2(MB, 'Mumbai'))[6].work[0]));
 assert.strictEqual(steps(MB.trend, MB.series, pc2(MB, 'Mumbai'))[6].work.filter(function (x) { return /^Check: /.test(x); })[0], 'Check: not possible here. The record has fewer than 24 of the 36 months from 2019 to 2021.');
 assert.ok(!futOf(B.trend, null, false, 2025 * 12 + 7 + 24).old && futOf(B.trend, null, false, 2025 * 12 + 7 + 25).old);
@@ -650,8 +667,8 @@ assert.ok(bg7.short.indexOf('+37' + NB + 'cm by 2050') === 0 && bg7.words[1].ind
 assert.ok(bg7.work.indexOf('2050, SSP2-4.5: +37' + NB + 'cm − ' + B.trend.now.text + ' = about 30' + NB + 'cm more than today. Approximate: it takes a 12-month average from a projection.') >= 0);
 assert.strictEqual(card(BG.trend, false, { ssp: 'ssp585' }, TODAY).r3f.value, cmv(s585.p50[3])); // not the default: computed
 assert.strictEqual(card(BG.trend, true, null, TODAY).r3f.value, cmv(358, true)); // inches: computed
-var MG = copy(MB); MG.trend.projection.readouts.more_than_today.text = 'about 99 cm more than today'; // an old record: "in 2010"
-assert.ok(/ About 99\scm more than in 2010\.$/.test(card(MG.trend, false, null, TODAY).r3f.line));
+var MG = copy(MB); MG.trend.projection.readouts.more_than_today.text = 'about 99 cm more than today'; // as given: the page never rewrites "today"
+assert.ok(/ About 99\scm more than today\.$/.test(card(MG.trend, false, null, TODAY).r3f.line), card(MG.trend, false, null, TODAY).r3f.line);
 // QA (New Orleans): a fit trimmed of sparse early readings; the chart's title and summary start at the first year drawn,
 // the trend line says where it starts (legend and summary)
 var NO = copy(B); NO.trend.record.trimmed_from = '1920-01'; NO.trend.period.start = NO.trend.fit.start = '2005-01';
@@ -758,6 +775,19 @@ def test_scenario_colours_never_colour_text():
         if ("var(--k)" in body or "var(--scen-" in body) and ":root" not in sel:
             assert not re.search(r"(^|[;\s])color:", body), sel
     assert re.search(r"\.pc-r \{[^}]*fill: var\(--ink-2\);", css) and re.search(r"\.pc-lab \{[^}]*fill: var\(--ink\);", css)
+
+
+def test_scenario_lines_draw_at_full_colour():
+    """Design 11 §9: lines need 3:1, so no scenario line is faded (the low median at 75% was about 2.5:1 on white); the
+    other medians are lighter by a thinner stroke than the chosen one."""
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    lines = [(sel, body) for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css) if re.search(r"\.f-(med|edge|sel|lead|sw)\b", sel)]
+    assert len(lines) >= 5, lines
+    for sel, body in lines:
+        for v in re.findall(r"(?:^|[;\s])(?:stroke-)?opacity:\s*([\d.]+)", body):
+            assert float(v) >= 1, sel
+    width = lambda c: float(re.search(r"\.%s \{[^}]*stroke-width: ([\d.]+);" % c, css)[1])
+    assert width("f-med") < width("f-sel")
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")

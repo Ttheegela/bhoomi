@@ -101,6 +101,11 @@
     if (left.some(function (x) { return x.why === 'still loading'; })) return 'Waiting for the records to arrive.';
     return 'Nothing to draw: ' + left.map(function (x) { return x.label + ' (' + x.why + ')'; }).join('; ') + '.';
   }
+  // The table's caption with no world figure: why_none, then world.text (rain and water storage give their own rule there)
+  function noWorld(label, w) {
+    var x = [w.why_none, w.text].filter(Boolean).join(' ');
+    return x ? label + ': ' + x : '';
+  }
 
   // Path "M..L.." per run of consecutive years; runs of one point are dropped (a gap breaks the line).
   function segments(pts, px, py) {
@@ -218,7 +223,7 @@
           a.href = u; a.target = '_blank'; a.rel = 'noopener';
           rp.appendChild(document.createTextNode(' Source: ')); rp.appendChild(a);
         }
-      } else if (sw.why_none || sw.text) rp = h('p', 'cmp-cap', selPin.label + ': ' + (sw.why_none || sw.text));
+      } else if (noWorld(selPin.label, sw)) rp = h('p', 'cmp-cap', noWorld(selPin.label, sw));
       if (rp) box.appendChild(rp);
     }
     // each row's own window and world rate (windows differ from gauge to gauge)
@@ -292,5 +297,5 @@
   if (window.TD && window.TD.ready) window.TD.ready.then(start);
   else document.addEventListener('td:ready', start, { once: true });
 
-  window.TDCompare = { yearly: yearly, smooth: smooth, niceTicks: niceTicks, buildModel: buildModel, emptyCaption: emptyCaption };
+  window.TDCompare = { yearly: yearly, smooth: smooth, niceTicks: niceTicks, buildModel: buildModel, emptyCaption: emptyCaption, noWorld: noWorld };
 })();
