@@ -181,7 +181,8 @@
     var g = t.guidance || {}, word = verdictWord(t);
     // R3 with an expert projection (design 11 §3): the chosen scenario's 2050 value, its range and how far that is above today
     var r3f = fx ? { label: 'By 2050, ' + fx.name, value: fx.t50, line: fx.code + fx.lc + ', IPCC AR6. ' + fx.rkShort + ' ' + fx.trng + '.'
-      + (fx.more ? ' ' + cap(fx.more) + '.' : '') + (fx.regional ? ' Regional estimate: local sinking may differ.' : '') } : null;
+      + (fx.more ? ' ' + cap(fx.more) + '.' : '') + (fx.regional ? ' Regional estimate: local sinking may differ.' : '')
+      + (fx.outside ? " The measured level here is outside the experts' range; step 7 explains." : '') } : null; // either check.kind
     return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, why: why(t, imp),
       world: worldLine(t, imp, /^Since \d{4}\b/.test(str(g.why))), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f,
       chip: str(g.risk_label) === word ? '' : str(g.risk_label) }; // the headline already says "No clear change"
@@ -599,9 +600,10 @@
         : "Here the measured level for 2019 to 2021 is outside the experts' 2020 range. ",
       noLow: fx.noLow ? fx.short + ' (' + fx.code + ') has no low-confidence version, so this shows its medium-confidence projection.' : '' };
   }
-  // the chart's summary: the four middle estimates for 2100 and the shaded range
+  // the chart's summary: the four middle estimates drawn for 2100 (a low-confidence S in place of its medium twin) and the shaded range
   function mids(fx, imp) {
-    return ' Middle estimates for 2100: ' + fx.med.map(function (x) { return x.name + ' (' + x.code + ') ' + cmv(atY(fx.p, x, 'p50', 2100), imp); }).join(', ') + '.'
+    var drawn = fx.med.map(function (x) { return sspOf(x.id) === sspOf(fx.S.id) ? fx.S : x; });
+    return ' Middle estimates for 2100: ' + drawn.map(function (x) { return x.name + ' (' + x.code + ')' + (x === fx.S ? fx.lc : '') + ' ' + cmv(atY(fx.p, x, 'p50', 2100), imp); }).join(', ') + '.'
       + ' Shaded: the ' + fx.rk + ' for ' + fx.name + fx.lc + ', ' + rngc(atY(fx.p, fx.S, 'p17', 2100), atY(fx.p, fx.S, 'p83', 2100), imp) + ' in 2100.';
   }
   // the projection on its own chart (a record off the 1995-2014 axis, design 11 §8)

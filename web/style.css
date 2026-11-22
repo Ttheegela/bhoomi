@@ -16,7 +16,7 @@
   /* data colours: trend line and range, per verdict (charts only) */
   --up-bg: #D4620A; --dn-bg: #1B3F73; --nc-bg: #6B6B6B;
   /* emissions scenarios, low to very high (web/design/11-sea-level-future.md section 9): lines and fills only, never text */
-  --scen-1: #2B9877; --scen-2: #5A5FD0; --scen-3: #A0307E; --scen-4: #6A0F36; --scen-band: .15;
+  --scen-1: #1D8E6E; --scen-2: #5A5FD0; --scen-3: #A0307E; --scen-4: #6A0F36; --scen-band: .15;
   --font-head: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 :root[data-theme="dark"] {
@@ -26,7 +26,7 @@
   --focus: #FFFFFF; --chart-faint: #8C8C8C;
   --p1: #6BA8F0; --p2: #B993DB; --p3: #4CC2B2; --p4: #D2A860; --p5: #86AEDB; --p6: #A8ACB0;
   --up-bg: #F2A04E; --dn-bg: #2F6FC4; --nc-bg: #BDBDBD;
-  --scen-1: #A6E8CB; --scen-2: #B8B4FA; --scen-3: #D271CB; --scen-4: #E5487C; --scen-band: .22;
+  --scen-1: #A6E8CB; --scen-2: #B8B4FA; --scen-3: #D271CB; --scen-4: #E5487C; --scen-band: .16;
 }
 
 * { box-sizing: border-box; }
