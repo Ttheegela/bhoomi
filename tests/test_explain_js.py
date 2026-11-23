@@ -1118,7 +1118,7 @@ def test_compare_table_fits_wide_screens():
 def test_narrow_readout_value_column_is_capped():
     """QA B9: at 375 px rain's long unit filled an `auto` value column and squeezed the label to one word a line."""
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
-    narrow = re.search(r"@container \(max-width: 519px\) \{(.*?)\n\}", css, re.S)
+    narrow = re.search(r"@container \(max-width: 479px\) \{(.*?)\n\}", css, re.S)
     assert narrow
     cols = re.search(r"\.reads > div, \.reads > div \+ div \{[^}]*grid-template-columns: ([^;]+);", narrow[1])
     assert cols and cols[1] == "minmax(0, 1fr) fit-content(45%)", cols and cols[1]

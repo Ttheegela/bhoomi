@@ -114,9 +114,9 @@ assert.deepStrictEqual(s8.work[1].table.rows, [
   ['By chance, in 100', '9', '2', 'less than 1'],
   ['Trend', 'no clear change', 'falling, clear', 'rising, very clear']]);
 assert.strictEqual(s8.work[2], 'Drift, month by month, each record against its own 1995–2014 average: NASA POWER minus ERA5 ' + MN + '0.39' + NB + '°C per decade (95% range ' + MN + '0.52 to ' + MN
-  + '0.25); NASA POWER minus the weather station ' + MN + '0.41' + NB + '°C per decade (' + MN + '0.6 to ' + MN + '0.22). We flag a model when it drifts the same way against every other record.');
+  + '0.25); NASA POWER minus the weather station ' + MN + '0.41' + NB + '°C per decade (' + MN + '0.60 to ' + MN + '0.22). We flag a model when it drifts the same way against every other record.');
 var f8 = steps(t0, H.series, Object.assign({}, dc, { imperial: true }))[7].work[2]; // °F: × 1.8, the metric digits (0.39 → 0.70)
-assert.ok(f8.indexOf(' minus ERA5 ' + MN + '0.7' + NB + '°F per decade (95% range ' + MN + '0.94 to ' + MN + '0.45)') > 0, f8);
+assert.ok(f8.indexOf(' minus ERA5 ' + MN + '0.70' + NB + '°F per decade (95% range ' + MN + '0.94 to ' + MN + '0.45)') > 0, f8);
 nothingBanned(S);
 // §8 naming the main record: the lead, step 3, step 10 with each other record and the Copernicus line
 assert.strictEqual(howLead(t0, dc), 'For Delhi, India. Steps 1 to 7 use the main record, ERA5; step 8 sets the other records beside it. Every number below is the one the card and the chart use.');
@@ -199,7 +199,7 @@ assert.deepStrictEqual(sb.agree, ['All three records agree: no clear change.', S
 assert.deepStrictEqual(sb.limits, [LIMIT]);
 var cS = steps(CT, C.series, sc), c8 = cS[7];
 assert.ok(c8.short === 'All three agree: no clear change; NASA POWER has been drifting drier' && c8.open === true, c8.short);
-assert.ok(/^Drift, year by year, each record against its own 1995–2014 average: NASA POWER minus ERA5 −5\.8% per decade \(95% range −9\.1 to −2\.4\); NASA POWER minus the weather station −8\.2% per decade \(−13 to −3\.1\)\. /.test(c8.work[c8.work.length - 1]), c8.work[c8.work.length - 1]);
+assert.ok(/^Drift, year by year, each record against its own 1995–2014 average: NASA POWER minus ERA5 −5\.8% per decade \(95% range −9\.1 to −2\.4\); NASA POWER minus the weather station −8\.2% per decade \(−13 to −3\)\. /.test(c8.work[c8.work.length - 1]), c8.work[c8.work.length - 1]);
 assert.strictEqual(cS[8].words[0].list[0], LIMIT); // step 9: the main record's source.limit first
 assert.ok(csvPlace(CT, C.series, sc).text.split('\n').indexOf('# Drift: ' + SYD) > 0);
 assert.ok(/; -5\.4% of the 1995–2014 average per decade \(95% range -11\.8 to \+1\.3% of the 1995–2014 average per decade\); no clear change; /.test(csvOther(CT.comparisons[0])));
@@ -245,8 +245,8 @@ assert.strictEqual(steps(t1, P.series, pc)[7].short, 'Only ERA5 has a trend here
 
 // §5 the compare call pending, then failed: the main row from the card's own numbers, then the line or the retry
 var tp = mergeOthers(copy(PT), null), WAIT = recWait(['era5', 'power', 'ghcn'], 'era5');
-assert.strictEqual(WAIT, 'Reading the other records for this place: NASA POWER and the nearest weather station within 25 km. A weather station takes 5 to 20 seconds the first time.'); // the seconds: the page's aria-hidden span
-assert.strictEqual(recWait(['power', 'era5', 'ghcn'], 'power'), 'Reading the other records for this place: ERA5 and the nearest weather station within 25 km. A weather station takes 5 to 20 seconds the first time.');
+assert.strictEqual(WAIT, 'Reading the other records for this place: NASA POWER and the nearest weather station within 25 km. A weather station can take a minute or more the first time.'); // the seconds: the page's aria-hidden span
+assert.strictEqual(recWait(['power', 'era5', 'ghcn'], 'power'), 'Reading the other records for this place: ERA5 and the nearest weather station within 25 km. A weather station can take a minute or more the first time.');
 assert.strictEqual(recWait(['era5', 'power', 'ghcn'], 'ghcn'), 'Reading the other records for this place: ERA5 and NASA POWER.');
 var wb = recBlock(tp, Object.assign({}, pc, { cmp: 'loading', wait: WAIT }));
 assert.deepStrictEqual(wb.rows, [{ main: true, label: 'ERA5', href: SRC.era5.record_url, sub: 'Main record', shape: '▲', word: 'Rising', rate: card(tp, false).r2.value, years: '1981–2025', miss: '', note: '', thin: false }]);
@@ -302,9 +302,9 @@ assert.ok(rb.link && rb.dis.line === 'The records disagree here.' && rb.dis.reas
 assert.deepStrictEqual(rb.dis.reasons, RD.t.disagree.reasons.map(function (x) { return x.text; }));
 assert.strictEqual(rs[7].short, 'They disagree: NASA POWER rising, ERA5 no clear change, weather station rising');
 assert.ok(rs[7].open === true);
-var dr = RD.t.drift, sg = function (x) { return (x > 0 ? '+' : x < 0 ? MN : '') + Math.abs(x); };
-assert.strictEqual(rs[7].work[rs[7].work.length - 1], 'Drift, month by month, each record against its own 1995–2014 average: ERA5 minus NASA POWER ' + sg(dr.pairs[0].rate) + NB + '°C per decade (95% range '
-  + sg(dr.pairs[0].low) + ' to ' + sg(dr.pairs[0].high) + '); ERA5 minus the weather station ' + sg(dr.pairs[1].rate) + NB + '°C per decade (' + sg(dr.pairs[1].low) + ' to ' + sg(dr.pairs[1].high)
+var dr = RD.t.drift; // each pair with the shared rounding: the rate to 2 significant figures, the range's ends to the same decimals
+assert.strictEqual(rs[7].work[rs[7].work.length - 1], 'Drift, month by month, each record against its own 1995–2014 average: ERA5 minus NASA POWER ' + sig2Text(dr.pairs[0].rate) + NB + '°C per decade (95% range '
+  + spanText(dr.pairs[0].low, dr.pairs[0].high) + '); ERA5 minus the weather station ' + sig2Text(dr.pairs[1].rate) + NB + '°C per decade (' + spanText(dr.pairs[1].low, dr.pairs[1].high)
   + '). We flag a model when it drifts the same way against every other record.');
 var rl = csvPlace(RD.t, RD.s, RD.c).text.split('\n'), ascii = function (s) { return s.replace(/−/g, '-'); };
 assert.ok(rl.indexOf('# Main record: NASA POWER (MERRA-2) (chart, trend and projection baseline)') > 0);
@@ -341,6 +341,9 @@ assert.deepStrictEqual(sb2.agree, ['All three records agree: no clear change.', 
 assert.deepStrictEqual(rowsText(sb2).map(function (r) { return r[3]; }), [MN + '6.6%', MN + '0.78%', '+1.3%']);
 assert.ok(ss2[7].short === 'All three agree: no clear change; NASA POWER has been drifting drier' && ss2[7].open === true, ss2[7].short);
 nothingBanned([sb2, ss2]);
+var syd = copy(RS.t); syd.drift.pairs = [{ against: 'era5', rate: -5.66, low: -9.4, high: -1.05 }, { against: 'ghcn', rate: -8.09, low: -14.18, high: -4 }];
+var sydW = steps(syd, RS.s, RS.c)[7].work, sydL = sydW[sydW.length - 1];
+assert.ok(sydL.indexOf('NASA POWER minus ERA5 −5.7% per decade (95% range −9.4 to −1.1); NASA POWER minus the weather station −8.1% per decade (−14 to −4).') > 0, sydL);
 // both models flagged: drift.source null, the server's "drifted apart" text, no pair line and no "drifting" in the short
 var R2 = copy(RS.t); R2.drift = Object.assign({}, R2.drift, { source: null, label: null, text: 'Weather models can drift over decades at some places; at this spot ERA5 and NASA POWER have drifted apart.' });
 var r2s = steps(R2, RS.s, RS.c)[7];
@@ -553,7 +556,7 @@ def test_narrow_card_turns_rows_into_blocks():
     """§12: under 520 px (container query) the header row is visually hidden and each row is a grid block: name left,
     verdict right, then the rate with " per decade" and the years; the main row keeps its ink rule; the global sticky
     header never applies to this table."""
-    blocks = re.findall(r"@container \(max-width: 519px\) \{(.*?)\n\}", CSS, re.S)
+    blocks = re.findall(r"@container \(max-width: 479px\) \{(.*?)\n\}", CSS, re.S)
     oth = [b for b in blocks if ".oth tr {" in b]
     assert len(oth) == 1, "no block layout for the records under 520 px"
     for rule in (".oth thead { position: absolute;", ".oth table, .oth tbody { display: block; }",
@@ -566,9 +569,10 @@ def test_narrow_card_turns_rows_into_blocks():
     assert re.search(r"\.oth col\.c1 \{ width: 34%; \} \.oth col\.c2 \{ width: 30%; \} \.oth col\.c3 \{ width: 18%; \} \.oth col\.c4 \{ width: 18%; \}", CSS)
     assert ".oth .pd { display: none; }" in CSS
     # a thin station is muted, and its note sits under the row (full width at every size)
-    assert ".oth tr.thin > td { color: var(--ink-2); }" in CSS and ".oth tr.nt td { font-size: 14px; color: var(--ink-2);" in CSS
+    assert ".oth tr.thin > td, .oth tr.thin a { color: var(--ink-2); }" in CSS and ".oth tr.nt td { font-size: 14px; color: var(--ink-2);" in CSS
     assert ".oth tr.nt { display: block; padding: 0 0 10px; }" in oth[0] and ".oth tr.with-note { border-bottom: 0;" in oth[0]
-    # the first 519 px block is still the readouts' (test_narrow_readout_value_column_is_capped reads the first one)
+    assert "#rec-oth { scroll-margin-top: calc(var(--top-h) + 16px); }" in CSS
+    # the first 479 px block is still the readouts' (test_narrow_readout_value_column_is_capped reads the first one)
     assert ".reads > div, .reads > div + div {" in blocks[0]
 
 
@@ -582,7 +586,9 @@ assert.ok(FX.trend.comparisons[0].main && FX.trend.comparisons[0].source.id === 
 answer = function (u, others) {
   var src = u.searchParams.get('source'), princeton = u.searchParams.get('lat') === '40.35';
   if (u.pathname === '/api/variables') return { status: 200, body: VARS };
-  if (u.pathname === '/api/series') { // ERA5, the default, can't be read: New York's series fails; Princeton's comes from an old ERA5 cache
+  // ERA5, the default, can't be read: New York's series fails with the 502 that app.py gives any httpx.HTTPError (ConnectError
+  // included); Princeton's comes from an old ERA5 cache
+  if (u.pathname === '/api/series') {
     if (src === 'power') return { status: 200, body: copy(FX.series) };
     return princeton ? { status: 200, body: Object.assign(copy(FX.series), { source: Object.assign(copy(FX.series.source), { id: 'era5', name: 'ERA5 reanalysis via Open-Meteo archive' }) }) }
       : { status: 502, body: { detail: 'upstream' } };

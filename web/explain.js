@@ -288,7 +288,7 @@
   function recWait(sources, main) {
     var o = (sources || []).filter(function (x) { return x !== main; });
     return 'Reading the other records for this place: ' + andList(o.map(function (x) { return x === 'ghcn' ? 'the nearest weather station within 25 km' : PLAIN[x] || x; })) + '.'
-      + (o.indexOf('ghcn') >= 0 ? ' A weather station takes 5 to 20 seconds the first time.' : '');
+      + (o.indexOf('ghcn') >= 0 ? ' A weather station can take a minute or more the first time.' : '');
   }
   // the sidebar's help under "Main record" (§6); '' for a measurement without records side by side
   var REC_HELP = { era5: 'ERA5: a European weather model of past weather, on a grid about 25 km wide.', power: 'NASA POWER: a NASA weather model on a grid about 50 km wide.',
@@ -493,9 +493,10 @@
     // drift, pair by pair, in the Units setting with the server's digits
     var other = function (id) { var x = rows.filter(function (y) { return (y.source || {}).id === id; })[0]; return !x ? id : x.station || x.kind === 'station' ? 'the ' + lc1(str(x.label)) : str(x.label); };
     var pairs = dr && str(dr.label) && Array.isArray(dr.pairs) ? dr.pairs.filter(function (q) { return q && isNum(q.rate) && isNum(q.low) && isNum(q.high); }) : [];
-    var du = dr ? rconv(imp, 0, dr.unit).unit : '';
+    // the shared rounding (as headline_rate): the rate to 2 significant figures, a range's ends to the same decimals; °F or inches converted first
+    var du = dr ? rconv(imp, 0, dr.unit).unit : '', dv = function (x) { return rconv(imp, x, dr.unit).v; };
     work.push(pairs.length ? 'Drift, ' + (rain ? 'year by year' : 'month by month') + ', each record against its own 1995–2014 average: ' + pairs.map(function (q, i) {
-      return dr.label + ' minus ' + other(q.against) + ' ' + withUnit(given(imp, q.rate, dr.unit), du) + (str(dr.per) ? ' ' + dr.per : '') + ' (' + (i ? '' : '95% range ') + given(imp, q.low, dr.unit) + ' to ' + given(imp, q.high, dr.unit) + ')';
+      return dr.label + ' minus ' + other(q.against) + ' ' + withUnit(sig2Text(dv(q.rate)), du) + (str(dr.per) ? ' ' + dr.per : '') + ' (' + (i ? '' : '95% range ') + spanText(dv(q.low), dv(q.high)) + ')';
     }).join('; ') + '. We flag a model when it drifts the same way against every other record.' : dr && str(dr.text) ? dr.text : 'No drift flagged at this spot.');
     return { title: title, short: short, words: words, work: work, one: true, open: !!(d && d.any) || !!dr };
   }
