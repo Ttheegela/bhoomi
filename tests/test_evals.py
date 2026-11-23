@@ -552,6 +552,7 @@ def test_expect_source_among_those_called_and_its_verdict_scored():
     assert run.check(case, fake_run(DISAGREE, multi([POWER, ERA5])))["source"] is False
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_verdict_without_expect_source_uses_default_source():
     case = {**DELHI_CASE, "expect_verdict": "falling", "must_say": []}
     assert run.check(case, fake_run(DISAGREE, multi([ERA5, GHCN, POWER])))["verdict"]  # power: first in the catalog
@@ -559,6 +560,7 @@ def test_verdict_without_expect_source_uses_default_source():
     assert out["verdict"] is False
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_agreeing_sources_use_single_verdict_wording():
     era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
     answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 "
@@ -583,6 +585,7 @@ def test_differently_is_not_disagree():
     assert run.DISAGREE.search("they differ") and not run.DISAGREE.search("different grids, differently")
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_false_disagree_when_sources_agree_fails():
     era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
     answer = ("The sources disagree. Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to "
@@ -709,6 +712,7 @@ def test_same_gauge_claim_fails_wording():
     assert run.check(NY_CASE, fake_run(answer, multi([CO_OPS, PSMSL])))["wording"] is False
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_agree_answer_may_repeat_caveat_numbers():
     era5 = {**ERA5, "verdict": "falling"}
     ghcn = {**GHCN, "verdict": "falling", "caveats": ["Weather station X (id), 6 km from the point you asked about."]}
@@ -807,6 +811,7 @@ def test_own_record_misattributed_or_shared_gauge_fails(sentence):
 POWER_LINK = "Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/."
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_default_source_link_added_when_all_agree():
     rising = [{**r, "verdict": "rising"} for r in (POWER, ERA5, GHCN)]
     calls = multi(rising)

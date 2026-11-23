@@ -60,7 +60,7 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
     elif source == "ghcn":
         st, km, types, days, vals = ghcn.load(lat, lon, variable)
         times, values = monthly.daily_to_monthly(days, vals, ghcn.HOW[variable])
-        place = {"name": st["name"], "lat": st["lat"], "lon": st["lon"]}
+        place = {"name": st["name"], "lat": st["lat"], "lon": st["lon"], "km": round(km, 1)}
         src = ghcn.source(st["id"], types, today)
         notes = [f"Weather station {st['name']} ({st['id']}), {km:.0f} km from the point you asked about.",
                  f"Station records have gaps: a month with fewer than {monthly.MIN_DAYS} valid days is left empty."]

@@ -441,6 +441,7 @@ LEAKS = ("It could warm another 1.5 °C by mid-century.",  # fit.change
          "July is about 24 °C.")  # baseline.months
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_rework_fields_stay_out_of_the_model_view_and_the_number_check(monkeypatch):
     import json
     from pathlib import Path
