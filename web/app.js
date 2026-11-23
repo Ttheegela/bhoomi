@@ -704,6 +704,7 @@ function renderFoot() {
   p.append(`. Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed against ${curWin === 'water_storage' ? "the provider's own reference period" : 'the 1995–2014 average'}).`);
   const cop = t ? window.TDX.attribution(t) : ''; // ERA5 and the CMIP6 files are Copernicus products: once, as the server words it
   if (cop) p.append(` ${cop}`);
+  p.append(' ', el('a', { href: '/sources/', class: 'srclink' }, 'All data sources and licences')); // design 17 §1, every window
   // the Open-Meteo attribution travels with its data: on every tab that sets ERA5 beside the main record too (design 12 §15)
   const ul = $('footer-sources');
   let li = Array.prototype.find.call(ul.children, (x) => x.dataset.credit === 'era5');

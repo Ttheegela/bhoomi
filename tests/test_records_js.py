@@ -755,3 +755,31 @@ def test_single_note_with_the_main_record_fallback():
     r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env, timeout=60)
     assert r.returncode == 0, r.stderr + r.stdout
 
+
+FOOT_TEST = r"""
+window.TDX.show = function () {}; window.TDX.others = function () {}; window.TDX.redraw = function () {};
+function settle() { return new Promise(function (r) { (function w() { setTimeout(function () { if (!flight && !queue.length) r(); else w(); }, 10); })(); }); }
+(async function () {
+  docOn.DOMContentLoaded[0]();
+  await settle();
+  for (var id of ['sea_level', 'air_temp', 'air_temp_max', 'precip', 'water_storage']) {
+    showWindow(id); await settle();
+    var k = ids['foot-data'].kids, a = k[k.length - 1];
+    assert.strictEqual(k[k.length - 2], ' ', id);
+    assert.ok(a.tagName === 'A' && a.attrs.href === '/sources/' && !('target' in a.attrs), id + ' ' + JSON.stringify(a && a.attrs));
+    assert.deepStrictEqual(a.kids, ['All data sources and licences']);
+  }
+  process.exit(0);
+})().catch(function (e) { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_footer_ends_with_the_sources_link():
+    """Design 17 §1: on every window the footer's data line ends with "All data sources and licences", to /sources/, in
+    the same tab."""
+    js = APP_DOM + SRC + "\n" + APP + FOOT_TEST
+    env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env, timeout=60)
+    assert r.returncode == 0, r.stderr + r.stdout
+

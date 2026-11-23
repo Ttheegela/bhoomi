@@ -1538,3 +1538,46 @@ assert.deepStrictEqual(opened(), [3, 4, 5, 6]); says('Open all steps');
     env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
     r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_steps_6_and_9_link_to_the_sources_pages():
+    """Design 17 §1: step 6 ends with "About the world figures we compare with", to the measurement's column on
+    /sources/world/ (sea level keeps its column with no world figure; hottest day, rain and water go to #none); step 9's
+    last item is "All our data sources, with licences and credits", to the main record's card. Both are on our own site,
+    so they open in the same tab; provider links still open a new one."""
+    js = PURE + r"""
+var assert = require('assert'), fs = require('fs'), path = require('path');
+function load(n) { return JSON.parse(fs.readFileSync(path.join(process.env.FIX, n + '.json'), 'utf8')); }
+var got = {};
+['princeton_air_temp', 'battery_sea_level', 'mumbai_sea_level_no_world', 'delhi_hottest_day', 'chennai_rain', 'grace_water_storage'].forEach(function (n) {
+  var d = load(n), S = steps(d.trend, d.series, { label: 'X', name: 'X', slug: 'x', imperial: false });
+  var s6 = S.filter(function (s) { return s.title === 'Compared with the world'; })[0], s9 = S[S.length - 1];
+  assert.strictEqual(s9.title, 'Sources');
+  assert.deepStrictEqual(s6.links.map(function (l) { return l.text; }), ['About the world figures we compare with']);
+  var list = s9.words[0].list, last = list[list.length - 1];
+  assert.strictEqual(last.text, '');
+  assert.strictEqual(last.link.text, 'All our data sources, with licences and credits');
+  got[n] = [s6.links[0].href, last.link.href];
+});
+console.log(JSON.stringify(got));
+"""
+    env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == {
+        "princeton_air_temp": ["/sources/world/#air-temperature", "/sources/#power"],
+        "battery_sea_level": ["/sources/world/#sea-level", "/sources/#coops"],
+        "mumbai_sea_level_no_world": ["/sources/world/#sea-level", "/sources/#psmsl"],
+        "delhi_hottest_day": ["/sources/world/#none", "/sources/#power"],
+        "chennai_rain": ["/sources/world/#none", "/sources/#power"],
+        "grace_water_storage": ["/sources/world/#none", "/sources/#grace"],
+    }
+    # the anchors exist: the world table's two columns and #none, and one card per source id
+    world = (ROOT / "web" / "sources" / "world" / "index.html").read_text(encoding="utf-8")
+    cards = (ROOT / "web" / "sources" / "index.html").read_text(encoding="utf-8")
+    assert all(f'id="{a}"' in world for a in ("air-temperature", "sea-level", "none"))
+    assert all(f'<article class="card src-card" id="{a}"' in cards for a in ("era5", "power", "ghcn", "coops", "psmsl", "grace"))
+    # the same tab for our own pages, a new tab for a provider's
+    assert ("function ext(text, href) { return href ? h('a', href.charAt(0) === '/' ? { href: href, class: 'srclink' } "
+            ": { href: href, target: '_blank', rel: 'noopener', class: 'srclink' }, text)") in SRC

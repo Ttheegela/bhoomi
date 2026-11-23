@@ -13,6 +13,7 @@
   var MEASURE = { sea_level: 'sea level', air_temp: 'air temperature', air_temp_max: 'the hottest day of the month', precip: 'rain', water_storage: 'water storage' };
   var LEVELS = { air_temp: 1, air_temp_max: 1, precip: 1 }; // measurements whose own levels mean something to a visitor
   var OPEN_STEPS = [3, 4, 5, 6]; // steps that start open on a new answer, at every width
+  var WORLD_COL = { air_temp: 'air-temperature', sea_level: 'sea-level' }; // /sources/world/: each world figure's column
   var NO_FUTURE = 'We never stretch the past trend into the future. Future values on this page come only from published expert projections.';
 
   function isNum(x) { return typeof x === 'number' && isFinite(x); }
@@ -661,6 +662,8 @@
       s6.short = str(w.why_none);
       s6.words = s6.short ? [s6.short] : [];
     }
+    // the world figures page (design 17 §1): the measurement's column, or why some have none
+    s6.links = [{ text: 'About the world figures we compare with', href: '/sources/world/#' + (WORLD_COL[t.variable] || 'none') }];
     out.push(s6);
 
     var pj = str(t.projection && t.projection.why), fl = g.future_link, flink = fl && https(fl.url) && str(fl.label) ? { text: fl.label + ' ↗', href: fl.url } : null;
@@ -693,6 +696,7 @@
     }
     list.push({ text: "Our calculation: the Mann-Kendall test and Sen's slope on " + (byYear ? 'yearly rain' : 'monthly values with seasons removed') + (b.method === 'none' ? '.' : ', against ' + b.text + '.') });
     if (attribution(t)) list.push({ text: attribution(t) });
+    list.push({ text: '', link: { text: 'All our data sources, with licences and credits', href: '/sources/' + (str(src.id) ? '#' + src.id : '') } }); // design 17 §1: the main record's card
     out.push({ title: 'Sources', short: [str(src.name)].concat(oth.map(function (x) { return str((x.source || {}).name); })).filter(Boolean).join('; ') + (wp && w.source ? '; world figure from ' + lc1(str(w.source.name)) : '') + (ps ? (fx.cm ? '; future from the IPCC AR6 Atlas (CMIP6)' : '; future from IPCC AR6') : ''),
       words: s9, csv: true, csvFut: !!ps });
     return out;
@@ -1187,7 +1191,8 @@
     return n;
   }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  function ext(text, href) { return href ? h('a', { href: href, target: '_blank', rel: 'noopener', class: 'srclink' }, text) : text.replace(/\s*↗$/, ''); }
+  // a link on our own site (it starts with "/") opens in the same tab
+  function ext(text, href) { return href ? h('a', href.charAt(0) === '/' ? { href: href, class: 'srclink' } : { href: href, target: '_blank', rel: 'noopener', class: 'srclink' }, text) : text.replace(/\s*↗$/, ''); }
   function download(c) {
     var url = URL.createObjectURL(new Blob(['﻿' + c.text], { type: 'text/csv;charset=utf-8' })); // the mark tells spreadsheets it is UTF-8
     var a = h('a', { href: url, download: c.name });
