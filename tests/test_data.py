@@ -190,10 +190,10 @@ def test_ghcn_station_rule():
     assert ghcn.ranked(28.58, 77.21, found, "air_temp")[0][2] == ("TAVG",)
     with pytest.raises(ValueError, match=r"has 30 years of daily high temperature data since 1981\. The nearest is New Delhi Safdarjun, IN, \d+ km away"):
         ghcn.ranked(29.2, 77.2, found, "air_temp_max")[0]
-    with pytest.raises(ValueError, match=r"^No weather station within 50 km has 30 years of rainfall data since 1981\.$"):
+    with pytest.raises(ValueError, match=r"^No weather station within 25 km has 30 years of rainfall data since 1981\.$"):
         ghcn.ranked(0, -30, [], "precip")[0]
     palam_only = [s for s in found if s["id"] == "IN022023000"]
-    with pytest.raises(ValueError, match=r"The nearest weather station, New Delhi Palam, IN \(0 km away\), does not have 30 years of .* and no other station within 50 km does either\."):
+    with pytest.raises(ValueError, match=r"The nearest weather station, New Delhi Palam, IN \(0 km away\), does not have 30 years of .* and no other station within 25 km does either\."):
         ghcn.ranked(28.567, 77.117, palam_only, "air_temp_max")[0]
 
 
@@ -360,7 +360,7 @@ def test_era5_series(offline2):
 def test_ghcn_series(offline2):
     s = data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="1991", source="ghcn")
     assert s["freq"] == "monthly" and s["source"]["id"] == "ghcn" and len(s["times"]) == len(s["values"]) == 24
-    assert s["place"] == {"name": "New Delhi Safdarjun, IN", "lat": 28.583, "lon": 77.2}
+    assert s["place"] == {"name": "New Delhi Safdarjun, IN", "lat": 28.583, "lon": 77.2, "km": 1.0}  # km: 1 decimal
     assert "IN022021900" in s["notes"][0] and "km from the point" in s["notes"][0]
     assert any("fewer than 20 valid days" in n for n in s["notes"])
 
@@ -769,7 +769,7 @@ def test_no_data_message_uses_a_new_measurements_own_name(offline, monkeypatch):
     with pytest.raises(ValueError, match=r"^No sea level data for that place and period\.$"):
         data.get_series("sea_level", 39.36, -74.42, start="1850", end="1851")
     # a station measurement with no plain name must not crash the error
-    assert str(ghcn._no_station("ground_water", None)).startswith("No weather station within 50 km has 30 years of ground water data")
+    assert str(ghcn._no_station("ground_water", None)).startswith("No weather station within 25 km has 30 years of ground water data")
 
 
 def test_no_data_message_uses_plain_names(offline):
@@ -907,7 +907,7 @@ def test_station_error_wording_is_the_same_for_every_measurement():
                             ("air_temp_max", "daily high temperature")):
         with pytest.raises(ValueError) as e:
             ghcn.ranked(28.58, 77.21, [far], variable)
-        assert str(e.value).startswith(f"No weather station within 50 km has 30 years of {plain} data since 1981. The nearest is FARAWAY, ")
+        assert str(e.value).startswith(f"No weather station within 25 km has 30 years of {plain} data since 1981. The nearest is FARAWAY, ")
         assert "air_temp" not in str(e.value) and "PRCP" not in str(e.value)  # no raw ids
 
 
@@ -1063,12 +1063,12 @@ def test_grace_glacier_regions_give_the_error_and_land_still_answers():
 
 def test_ghcn_station_sentence_at_the_edge_of_range():
     st = {"id": "X", "name": "EDGE", "lat": 0.0, "lon": 0.0, "types": {}}
-    m = str(ghcn._no_station("precip", (50.3, st)))  # prints "50 km": must not follow "within 50 km"
-    assert m.startswith("The nearest weather station, EDGE (50 km away), does not have")
-    assert str(ghcn._no_station("precip", (50.6, st))).startswith("No weather station within 50 km has")
-    lat = 50.3 / 111.195  # a full record, 50.3 km north of (0, 0): shown as "50 km", so it must be checked and used
+    m = str(ghcn._no_station("precip", (25.3, st)))  # prints "25 km": must not follow "within 25 km"
+    assert m.startswith("The nearest weather station, EDGE (25 km away), does not have")
+    assert str(ghcn._no_station("precip", (25.6, st))).startswith("No weather station within 25 km has")
+    lat = 25.3 / 111.195  # a full record, 25.3 km north of (0, 0): shown as "25 km", so it must be checked and used
     full = {"id": "FULL", "name": "FULL", "lat": lat, "lon": 0.0, "types": {"PRCP": ("1950-01-01", "2026-01-01", 100.0)}}
-    assert 50 < ghcn.haversine_km(0, 0, full["lat"], 0) < 50.5
+    assert 25 < ghcn.haversine_km(0, 0, full["lat"], 0) < 25.5
     assert [s["id"] for s, _, _ in ghcn.ranked(0, 0, [full], "precip")] == ["FULL"]
 
 

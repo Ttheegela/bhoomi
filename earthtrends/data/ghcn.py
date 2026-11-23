@@ -13,7 +13,7 @@ from .upstream import LIMIT, NAME, fit, readable, source_block, text
 SEARCH = "https://www.ncei.noaa.gov/access/services/search/v1/data"
 DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
 SOURCE = {"id": "ghcn", "name": "NOAA NCEI GHCN-Daily", "url": "https://www.ncei.noaa.gov/"}
-MAX_KM = 50
+MAX_KM = 25  # the nearest-station radius everywhere (docs/CONTRACTS.md, PR4a)
 MIN_YEARS = 30  # of the needed data type, since 1981
 FIRST_DAY = "1981-01-01"  # the data requests start here
 # The agent gives one question 120 s. One lookup stops starting requests after DEADLINE_S. httpx timeouts are per
@@ -156,7 +156,7 @@ def ranked(lat: float, lon: float, candidates: list[dict], variable: str) -> lis
     seen = sorted(((haversine_km(lat, lon, s["lat"], s["lon"]), s) for s in candidates), key=lambda t: t[0])
     out = []
     for km, s in seen:
-        if round(km) > MAX_KM:  # the same rounding the message prints, so a station shown as "50 km" was checked
+        if round(km) > MAX_KM:  # the same rounding the message prints, so a station shown as "25 km" was checked
             break
         for group in NEED[variable]:
             if all(t in s["types"] and _years(s["types"][t]) >= MIN_YEARS for t in group):

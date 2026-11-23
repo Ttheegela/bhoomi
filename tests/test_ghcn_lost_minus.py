@@ -33,7 +33,7 @@ def test_search_box_reaches_where_noaa_lists_them(monkeypatch):
         return httpx.Response(200, json=LONDON, request=httpx.Request("GET", url))
     monkeypatch.setattr(ghcn, "_get", get)
     found = ghcn.search.__wrapped__(51.24, -0.57, ("TMAX",))  # Guildford: Wisley is 10 km away, listed at +0.4744
-    assert asked[-1][1] < -1.3 and asked[-1][3] == 1.0  # the box would end at 0.19 E
+    assert asked[-1][3] == pytest.approx(-asked[-1][1], abs=1e-3) and asked[-1][3] > 0.4744  # mirrored; it would end at 0.19 W
     st, km, _ = ghcn.ranked(51.24, -0.57, found, "air_temp_max")[0]
     assert st["id"] == "UKE00156884" and round(km) == 10
     ghcn.search.__wrapped__(47.61, -122.33, ("TMAX",))  # far from Greenwich: the box is unchanged
