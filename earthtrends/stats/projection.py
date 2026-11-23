@@ -1,7 +1,9 @@
-"""Sea-level expert projection (docs/CONTRACTS.md, "Sea-level expert projection (PR2)"): IPCC AR6 relative sea level at
-the tide gauge, from the file shipped with the package (earthtrends/data/ar6_gauges.npz), plotted and quoted exactly as
-published (spec D4: never shifted to meet the observations). The readouts and the check put the observed record on the
-same 1995-2014 baseline (baseline.py). numpy + stdlib only; no network."""
+"""Expert projections, from files shipped with the package, plotted and quoted exactly as published (spec D4: never
+shifted to meet the observations). Sea level (docs/CONTRACTS.md, "Sea-level expert projection (PR2)"): IPCC AR6
+relative sea level at the tide gauge (earthtrends/data/ar6_gauges.npz). Air temperature, hottest day and rain ("CMIP6
+expert projection (PR3)"): the IPCC AR6 Interactive Atlas's CMIP6 change at the place's 1-degree cell
+(earthtrends/data/cmip6.py). The readouts and the check put the observed record on the same 1995-2014 baseline
+(baseline.py). numpy + stdlib only; no network."""
 
 import csv
 import re
@@ -11,10 +13,11 @@ from functools import lru_cache
 import numpy as np
 
 from earthtrends.data import ar6
+from earthtrends.data import cmip6 as atlas
 from earthtrends.data.coops import haversine_km
 from earthtrends.data.upstream import utc_today
 from earthtrends.stats.baseline import TEXT, YEARS, anomaly
-from earthtrends.stats.guidance import q, sig2, signed
+from earthtrends.stats.guidance import ends, q, sig2, signed
 
 GREAT_LAKES = "Sea level projections don't cover the Great Lakes."
 NONE = "There is no expert projection for this tide gauge."
@@ -39,6 +42,26 @@ CAVEAT = "Faster ice-sheet loss could push this higher, outside this range."
 CHECK_MONTHS = 24  # of the 36 months of 2019-2021, for check.observed_2019_2021
 OLD_MONTHS = 24  # a record that ended more months ago than this says "than in {year}", not "than today"
 SOURCE_NAME = "IPCC AR6 sea level projections (Garner et al. 2021)"
+
+# ---- CMIP6 (PR3) ----
+CMIP6_VARIABLES = tuple(atlas.VARIABLES)  # air_temp, air_temp_max, precip
+CMIP6_SOURCE = {"name": "IPCC AR6 Interactive Atlas, CMIP6 projections", "version": "v2.0-final", "licence": "CC BY 4.0"}
+CMIP6_KEYS = ("kind", "source", "location", "baseline", "units", "change_kind", "windows", "default_scenario",
+              "scenarios", "readouts", "caveat")
+CMIP6_DEFAULT = "ssp245"
+CODES = {"ssp126": "SSP1-2.6", "ssp245": "SSP2-4.5", "ssp370": "SSP3-7.0", "ssp585": "SSP5-8.5"}
+SPREAD = "range across climate models (10th–90th percentile)"
+BY_2050 = (2041, 2060)
+AGREE = 0.8  # rain: under this share of models agreeing on wetter or drier, the models disagree
+NO_AXIS = "This record has no 1995–2014 average to start the projection from, so we don't show one."
+NO_VALUE = "The climate models have no value for this place."
+CELL_NOTE = {"land cell": None,
+             "nearest land cell": "The place's own grid cell is mostly ocean, so this uses the nearest land cell.",
+             "regional estimate (mostly ocean cell)": "The models' grid cell here is mostly ocean, which warms less "
+                                                      "than land."}
+GRID_CAVEAT = "A 1° grid cell is about 100 km wide, so hills or a coast nearby can make the change here differ."
+RAIN_CAVEAT = ("Climate models disagree more about rain than about temperature, and a 1° grid cell is about 100 km "
+               "wide, so hills or a coast nearby can make the change here differ.")
 
 
 def sea_level(series: dict, base: dict, now: dict | None) -> dict:
@@ -189,11 +212,89 @@ def _cm(mm: int) -> str:
     return f"{signed(d) if d else '0'} cm"
 
 
-def _more(diff: int, end: str) -> dict:
-    """`end`: now's last month, "YYYY-MM". The page's old test (web/explain.js): a record that ended more than
+def _more(diff, end: str, size: str | None = None) -> dict:
+    """`diff`: the projection minus `now` (sea level: whole mm); `size`: its size as text, no sign (default: sea level's
+    cm). `end`: now's last month, "YYYY-MM". The page's old test (web/explain.js): a record that ended more than
     OLD_MONTHS months before this month (UTC) says "than in {its year}"."""
     old = _month(utc_today()) - _month(end) > OLD_MONTHS
     when = f"in {end[:4]}" if old else "today"
-    text = (f"about {_cm(abs(diff))[1:]} {'more' if diff > 0 else 'less'} than {when}" if diff
+    text = (f"about {size or _cm(abs(diff))[1:]} {'more' if diff > 0 else 'less'} than {when}" if diff
             else f"about the same as {when}")
     return {"value": diff, "text": text, "approximate": True}
+
+
+# ---- CMIP6: air temperature, hottest day of the month, rain (PR3) ----
+
+def cmip6(series: dict, base: dict, now: dict | None) -> dict:
+    """An air_temp, air_temp_max or precip TimeSeries, its whole-record baseline and the TrendResult's `now` -> the
+    contract's `projection` object. Delta method (D4): the projected level is this place's observed 1995-2014 mean plus
+    the Atlas's change, so on the 1995-2014 anomaly axis it is the change itself, as published."""
+    var, place = series["variable"], series.get("place") or {}
+    # rain with a 1995-2014 normal of 0 has no % of normal (no headline_rate), so no % axis to put the change on
+    if not base.get("projection_axis") or var == "precip" and not (base.get("value") or 0) > 0:
+        return _cmip6_none(NO_AXIS)
+    a = atlas.at(var, place["lat"], place["lon"]) if None not in (place.get("lat"), place.get("lon")) else None
+    w = a["windows"].index(list(BY_2050)) if a else None
+    if a is None or a["scenarios"][CMIP6_DEFAULT]["p50"][w] is None:
+        return _cmip6_none(NO_VALUE)
+    rain = var == "precip"
+    scenarios = [{"id": k, "code": CODES[k], "name": NAMES[k], "range_kind": SPREAD,
+                  **{p: s[p] for p in ("p10", "p50", "p90", "models")}, **_agree(s)}
+                 for k, s in a["scenarios"].items()]
+    d = next(s for s in scenarios if s["id"] == CMIP6_DEFAULT)
+    p50, low, high = d["p50"][w], d["p10"][w], d["p90"][w]
+    more = None
+    if not rain and now is not None:  # rain: one year's rain swings more than the change
+        diff = _dec(p50) - _dec(now["value"])
+        diff = sig2(diff) if q(diff, "0.01") else Decimal(0)  # p50 has 2 decimals: closer than that is the same
+        more = _more(float(diff), now["end"], f"{abs(diff):f} °C")
+    return {
+        "available": True,
+        "kind": "cmip6_atlas",
+        "source": {**a["source"], **CMIP6_SOURCE},
+        "location": {**a["cell"], "note": CELL_NOTE[a["cell"]["kind"]]},
+        "baseline": {"text": TEXT, "years": list(YEARS)},
+        "units": a["units"],
+        "change_kind": "percent" if rain else "difference",
+        "windows": [{"start": s, "end": e, "mid": (s + e) // 2} for s, e in a["windows"]],
+        "default_scenario": CMIP6_DEFAULT,
+        "scenarios": scenarios,
+        "readouts": {
+            "now": now,
+            "by_2050": {"scenario": CMIP6_DEFAULT, "window": list(BY_2050), "p50": p50, "low": low, "high": high,
+                        "range_kind": SPREAD, "text": spread_text(p50, low, high, a["units"]),
+                        "disagree": d["disagree"][w] if rain else None},
+            "more_than_today": more},
+        "caveat": RAIN_CAVEAT if rain else GRID_CAVEAT,
+        "why": None,
+    }
+
+
+def _cmip6_none(why: str) -> dict:
+    return {"available": False, **dict.fromkeys(CMIP6_KEYS), "why": why}
+
+
+def _agree(s: dict) -> dict:
+    """Rain: per window, the share of models agreeing on wetter or drier (2 decimals), and whether it is under AGREE;
+    both None for temperature (no `wetter` counts)."""
+    if s["wetter"] is None:
+        return {"agree": None, "disagree": None}
+    agree = [None if w is None or not n else float(q(Decimal(max(w, n - w)) / n, "0.01"))
+             for w, n in zip(s["wetter"], s["models"])]
+    return {"agree": agree, "disagree": [None if g is None else g < AGREE for g in agree]}
+
+
+def _dec(v) -> Decimal:
+    return Decimal(repr(float(v)))
+
+
+def _sign0(d: Decimal) -> str:
+    return signed(d) if d else "0"
+
+
+def spread_text(p50, low, high, units: str) -> str:
+    """"+1.9 °C (range across climate models +1.2 to +2.3 °C)"; rain "+11% (range across climate models −3 to +24%)":
+    the median to 2 significant figures and the range's ends as headline_rate.range_text rounds them, true minus."""
+    u = "%" if units == "%" else " °C"
+    lo, hi = ends(_dec(low), _dec(high))
+    return f"{_sign0(sig2(_dec(p50)))}{u} (range across climate models {_sign0(lo)} to {_sign0(hi)}{u})"

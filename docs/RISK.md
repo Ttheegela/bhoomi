@@ -17,7 +17,7 @@ The climate-scientist review of PR1 (2026-11-22) added:
 
 ## What guidance is not
 
-- **Not a forecast.** Guidance never gives a future value. No future number is made from a past trend. Future values come only from published expert projections, in the result's `projection` object (sea level since PR2).
+- **Not a forecast.** Guidance never gives a future value. No future number is made from a past trend. Future values come only from published expert projections, in the result's `projection` object: sea level since PR2 (IPCC AR6 at the tide gauge); air temperature, hottest day of the month and rainfall since PR3 (the IPCC AR6 Interactive Atlas's CMIP6 change at the place's 1° cell, its 10th–90th percentile across climate models, never a raw model value). Both are quoted as published, never shifted to meet the observations, and the disclaimer below then names them.
 - **Not advice.** It is not financial, legal, engineering or insurance advice, and it never says what to do with a property. Every guidance object ends with a disclaimer (below).
 
 ## The guidance object
