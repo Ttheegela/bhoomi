@@ -1304,7 +1304,8 @@ def test_coops_deadline_is_a_provider_failure(monkeypatch):
 
 
 # ---- Rework v2: the full source block, record_url, flags, retrieved ----
-SOURCE_KEYS = {"id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "method", "cadence", "deseasoned_upstream", "limit", "attribution"}
+SOURCE_KEYS = {"id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "method", "cadence", "deseasoned_upstream", "limit", "attribution",
+               "licence", "credit"}
 
 
 def _captured_get(module, monkeypatch, reply):
@@ -1395,6 +1396,20 @@ def test_copernicus_attribution_on_era5_and_the_cmip6_atlas_only(offline, offlin
     assert era5.SOURCE["attribution"] == cmip6.at("air_temp", 28.61, 77.21)["source"]["attribution"] == copernicus
     t = tools.detect_trend("air_temp_max", 28.58, 77.21, source="era5")
     assert t["source"]["attribution"] == t["projection"]["source"]["attribution"] == copernicus  # stats passes both on
+
+
+def test_every_source_states_its_licence_and_credit(offline, offline2, psmsl_offline):
+    """PR6: each provider's licence and credit, from its own terms page, reach the API's source block unchanged."""
+    mods = {"power": power, "era5": era5, "ghcn": ghcn, "coops": coops, "psmsl": psmsl, "grace": grace}
+    for variable, lat, lon, source in (("air_temp", 39.36, -74.42, "power"), ("air_temp_max", 28.58, 77.21, "era5"),
+                                       ("air_temp_max", 28.58, 77.21, "ghcn"), ("sea_level", 39.36, -74.42, "coops"),
+                                       ("sea_level", 18.95, 72.83, "psmsl"), ("water_storage", 28.61, 77.21, "grace")):
+        src = data.get_series(variable, lat, lon, source=source)["source"]
+        assert src["licence"] == mods[source].SOURCE["licence"] and src["licence"].strip(), source
+        assert src["credit"] == mods[source].SOURCE["credit"] and src["credit"].strip(), source
+    assert era5.SOURCE["licence"] == "CC BY 4.0" and era5.SOURCE["credit"] == "Weather data by Open-Meteo.com"
+    assert coops.SOURCE["licence"].startswith("Public domain")
+    assert ghcn.source("X", ("TMAX",), "2026-01-01")["version"] == "Version 3.35" and "Version 3.35." in ghcn.SOURCE["credit"]
 
 
 def test_era5_recent_months_are_preliminary(monkeypatch):

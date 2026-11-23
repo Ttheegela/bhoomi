@@ -418,14 +418,21 @@ def test_one_source_errors_two_answer(fake, monkeypatch):
 from earthtrends.data import coops as coops_src, psmsl as psmsl_src  # noqa: E402
 
 NY = {"variable": "sea_level", "lat": 40.70, "lon": -74.01}
+
+
+def seen(m):
+    """A module's SOURCE as the model reads it (loop.SOURCE_FIELDS): id, name and url, never licence or credit."""
+    return {k: m.SOURCE[k] for k in loop.SOURCE_FIELDS}
+
+
 NY_COOPS = {"variable": "sea_level", "units": "mm", "place": {"name": "The Battery", "lat": 40.7, "lon": -74.01},
             "period": {"start": "1900-01", "end": "2026-10"}, "n": 1520, "deseasonalized": True,
             "method": "mann_kendall_sen", "slope_per_decade": 31.787, "ci_low": 30.616, "ci_high": 32.9559,
-            "p_value": 1e-12, "autocorrelation_adjusted": True, "verdict": "rising", "source": coops_src.SOURCE,
+            "p_value": 1e-12, "autocorrelation_adjusted": True, "verdict": "rising", "source": seen(coops_src),
             "caveats": ["Tide gauge The Battery (8518750), 0 km from the point you asked about."]}
 NY_PSMSL = {**NY_COOPS, "place": {"name": "NEW YORK (THE BATTERY)", "lat": 40.7, "lon": -74.01},
             "period": {"start": "1856-01", "end": "2025-12"}, "n": 1980, "slope_per_decade": 29.6154,
-            "ci_low": 28.7611, "ci_high": 30.4702, "p_value": 3e-11, "source": psmsl_src.SOURCE,
+            "ci_low": 28.7611, "ci_high": 30.4702, "p_value": 3e-11, "source": seen(psmsl_src),
             "caveats": ["Tide gauge NEW YORK (THE BATTERY) (PSMSL id 12), 1 km from the point you asked about."]}
 NY_SENT = ("Permanent Service for Mean Sea Level (PSMSL) agrees: 29.62 mm per decade (95% range 28.76 to 30.47), over "
            "its own record, January 1856 to December 2025.")
@@ -477,9 +484,15 @@ def test_two_sources_agree_code_writes_the_sentence(fake, monkeypatch, model_tex
     coops_seen, psmsl_seen = (x["content"] for x in fake.results[0])
     assert coops_seen == NY_COOPS  # the default source: full result
     assert no_trend_numbers(psmsl_seen)
-    assert psmsl_seen["source"] == psmsl_src.SOURCE and psmsl_seen["caveats"] == NY_PSMSL["caveats"]
+    assert psmsl_seen["source"] == seen(psmsl_src) and psmsl_seen["caveats"] == NY_PSMSL["caveats"]
     assert loop.MARKER in psmsl_seen["note"]
     assert [c["result"] for c in r["tool_calls"]] == [NY_COOPS, NY_PSMSL]  # the caller gets full results
+
+
+def test_model_never_reads_licence_or_credit():
+    # PR6: credit lines carry years and page numbers; the number check must never take them for stated numbers
+    for m in (coops_src, psmsl_src, ghcn_src):
+        assert loop.model_view({**NY_COOPS, "source": m.SOURCE})["source"] == seen(m)
 
 
 def test_marker_in_prompt_is_the_one_the_code_replaces():

@@ -13,8 +13,13 @@ import numpy as np
 from .upstream import source_block
 
 FILE = Path(__file__).resolve().parent / "grace_gsfc_land.npz"  # relative to this module, not the working directory
+# licence and credit: https://earth.gsfc.nasa.gov/geo/data/grace-mascons ("When using the monthly data please cite:";
+# no licence named), read 2026-11-23
 SOURCE = {"id": "grace", "name": "NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0 (OBP-ICE6GD)",
-          "url": "https://earth.gsfc.nasa.gov/geo/data/grace-mascons"}
+          "url": "https://earth.gsfc.nasa.gov/geo/data/grace-mascons",
+          "licence": "No licence stated; NASA GSFC asks users of the monthly data to cite Loomis et al. (2019)",
+          "credit": "Loomis, B.D., Luthcke, S.B. & Sabaka, T.J. (2019) Regularization and error characterization of "
+                    "GRACE mascons. J Geod 93, 1381–1398. https://doi.org/10.1007/s00190-019-01252-y"}
 # The provider file FILE was built from (scripts/build_grace.py) and the day it was downloaded: change both with a rebuild.
 # The dataset page (record_url) lists this file for download by name.
 ZIP = "GSFC.glb_.200204_202606_RL06v2.0_OBP-ICE6GD.zip"
