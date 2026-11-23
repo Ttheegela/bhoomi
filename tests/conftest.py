@@ -36,9 +36,10 @@ def empty_cache():
 
 @pytest.fixture
 def power_first_for_heat(monkeypatch):
-    """The catalog order these agent, eval and meaning tests were written for: NASA POWER first (the default and the
-    reference record) for air temperature and the hottest day. PR4a makes ERA5 first there (earthtrends/data/catalog.py);
-    the agent lane re-baselines these tests for that order and then drops this fixture."""
+    """The catalog order a test was written for: NASA POWER first (the default and the reference record) for air
+    temperature and the hottest day. PR4a makes ERA5 first there (earthtrends/data/catalog.py). The agent and eval
+    tests are re-baselined to that order (PR6); tests/test_meaning.py::test_model_sees_meaning_of_full_results_only
+    still uses this, and the fixture goes once that test is moved too."""
     monkeypatch.setattr(data, "CATALOG", [dict(v, sources=["power", "era5", "ghcn"]) if v["id"] in ("air_temp", "air_temp_max")
                                           else v for v in data.CATALOG])
 

@@ -40,7 +40,10 @@ def test_model_view_has_the_compact_sea_level_projection():
     assert view["projection"] == {
         "available": True, "kind": "sea_level_ar6", "source": "IPCC AR6 sea level projections (Garner et al. 2021)",
         "scenario": "intermediate emissions (SSP2-4.5)", "when": "2050", "baseline": "the 1995–2014 average",
-        "text": "+36 cm (likely +27 to +46 cm)", "range_kind": AR6, "more_than_today": "about 29 cm more than today"}
+        "text": "+36 cm (likely +27 to +46 cm)", "range_kind": AR6, "more_than_today": "about 29 cm more than today",
+        # design 16 §4: check.text (and location.note, null here) reach Ask; this synthetic record is below the range
+        "check": "Measured levels here are already below the experts' range for recent years."}
+    assert guidance.projection_line(BATTERY, "Sea level").endswith(view["projection"]["check"])
     assert loop.model_results([ok(BATTERY)]) == [view]  # the number check pools what the model read
 
 
@@ -170,7 +173,9 @@ def test_loop_sends_the_projection_and_ends_with_it_then_the_disclaimer(monkeypa
     sent = Fake.results[0][0]["content"]["projection"]
     assert sent["text"] == "+36 cm (likely +27 to +46 cm)" and "scenarios" not in sent
     a = r["answer"]
-    assert a.startswith(body) and a.index(AR6) < a.index(DISCLAIMER_PROJECTION)
+    # the plain lines first (code), then the model's text, then the guidance with the projection and the disclaimer
+    assert a.startswith(guidance.lead(r["tool_calls"]) + "\n\n" + body) and BATTERY["plain"][0] in a
+    assert a.index(AR6) < a.index(DISCLAIMER_PROJECTION)
 
 
 # ---- MCP passes the whole projection on ----

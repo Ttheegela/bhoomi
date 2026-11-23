@@ -3,6 +3,7 @@ only place these words are written. With a projection they use only the projecti
 spoken form: no dashes, brackets or signs (the direction word carries the sign), a no-break space before a unit, and
 the server's own rounding (sig2 for a value, ends() for a range, as readouts and the chart readout show them)."""
 
+import re
 from decimal import Decimal
 
 from earthtrends.stats.guidance import ends, q, sig2
@@ -24,6 +25,12 @@ HOW = {"Very clear": "A change this steady would be very unlikely if nothing wer
        "Clear": "A change like this would be unlikely if nothing were really changing.",
        "Not clear": "The data do not show a clear change: the ups and downs are too large to tell."}
 NO_PROJECTION = "Expert projections for this measurement are not added yet."  # as trend.PROJECTION_LATER
+
+
+def spoken(text: str) -> str:
+    """A year range in spoken form, for text passed through into the lines: "no 1995–2014 average" -> "no 1995 to
+    2014 average" (§0.4: no dashes). The source string itself (projection.why) keeps its dash."""
+    return re.sub(r"\b(\d{4})\s*[–—-]\s*(\d{4})\b", r"\1 to \2", text)
 
 
 def _d(v) -> Decimal:
@@ -110,4 +117,5 @@ def plain_lines(result: dict) -> list[str]:
     if p.get("available"):
         row = next(s for s in p["scenarios"] if s["id"] == p["default_scenario"])
         return scenario_lines(result["variable"], p, row)
-    return [p.get("why") or NO_PROJECTION, HOW[m["confidence"]], *([m["comparison"]] if m["comparison"] else [])]
+    return [spoken(p.get("why") or NO_PROJECTION), HOW[m["confidence"]],
+            *([m["comparison"]] if m["comparison"] else [])]

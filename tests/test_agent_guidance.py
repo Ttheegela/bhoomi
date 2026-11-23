@@ -437,32 +437,35 @@ def test_scorer_uses_the_loops_number_check():
 
 # ---- the model reads, and the number check pools, only the fields the prompt uses ----
 
-LEAKS = ("It could warm another 1.5 °C by mid-century.",  # fit.change
-         "July is about 24 °C.")  # baseline.months
-
-
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_rework_fields_stay_out_of_the_model_view_and_the_number_check(monkeypatch):
+    """ERA5 is air temperature's main record (PR4a): Princeton's recorded ERA5 series, with NASA POWER beside it (the
+    station can't be read offline). Numbers only the page uses (fit.change, the July normal) stay out of the view."""
     import json
     from pathlib import Path
 
-    from earthtrends.data import power
-    fx = json.loads((Path(__file__).parent / "fixtures" / "power_monthly.json").read_text())
+    from earthtrends.data import era5, power
+    fixtures = Path(__file__).parent / "fixtures"
+    monkeypatch.setenv(era5.REPLAY, str(fixtures / "era5_replay"))
+    fx = json.loads((fixtures / "power_monthly.json").read_text())
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: fx)
-    args = {"variable": "air_temp", "lat": 39.36, "lon": -74.42}
+    args = {"variable": "air_temp", "lat": 40.35, "lon": -74.66}
     full = tools.detect_trend(**args)
+    assert full["source"]["id"] == "era5" and full["main_note"] is None
+    assert [c["label"] for c in full["comparisons"]] == ["ERA5", "NASA POWER", "Weather station"]
+    leaks = (f"It could warm another {full['fit']['change']:.2f} °C by mid-century.",  # fit.change
+             f"July is about {full['baseline']['months'][6]:.1f} °C.")  # baseline.months
     calls = [ok(full, args)]
     view = loop.for_model(calls)[0]["result"]
     assert loop.model_results(calls) == [view]  # one view for the model and for the check (the scorer's too)
     assert set(view) <= set(loop.MODEL_FIELDS) and not {"fit", "explain", "record", "latest"} & set(view)
     assert view["baseline"] == {"text": full["baseline"]["text"]} and view["world"] == {"text": full["world"]["text"]}
     assert set(view["source"]) == {"id", "name", "url"} and view["headline_rate"] == full["headline_rate"]
-    assert all(not loop.invented_numbers(t, [full]) for t in LEAKS)  # the whole result would let them through
+    assert all(set(row) == {"label", "where", "years", "verdict", "note", "rate"} for row in view["comparisons"])
+    assert all(not loop.invented_numbers(t, [full]) for t in leaks)  # the whole result would let them through
     res = loop.model_results(calls)
-    for text in LEAKS:
+    for text in leaks:
         assert loop.invented_numbers(loop.without_periods(text), res), text
     h = full["headline_rate"]
     good = (f"It has clearly been getting warmer here: {h['text']} (95% range {h['range_text']}), January 1981 to "
-            f"December 2025. {full['world']['text']}")
+            f"December 2025. {full['world']['text']} {' '.join(full['plain'])}")
     assert loop.invented_numbers(loop.without_periods(good), res) == []
-

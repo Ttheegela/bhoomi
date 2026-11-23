@@ -106,6 +106,10 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
     by_2050.disagree true means models disagree on wetter or drier. Quote readouts.by_2050.text with its range_kind
     and scenario, readouts.more_than_today only where it is given, and models_note when it is set; every level is
     against the 1995–2014 average.
+    For air temperature, the hottest day of the month and rain it also compares the other records at this place
+    over the same years (comparisons, disagree, drift, thin_note, single_note, main_note). When disagree.any is true,
+    say the records disagree, give what each one shows (disagree.say) and the first reason (disagree.reasons), and
+    never say which record is right. Pass on thin_note, single_note, main_note and source.limit when they are set.
     verdict is one of "rising", "falling" or "no_clear_change" (p >= 0.05 or the CI crosses 0).
     When you report it, give the slope with its CI, name the source, and keep the caveats.
     """

@@ -39,6 +39,7 @@ def projection_view(p):
            "baseline": (p.get("baseline") or {}).get("text"), "text": b.get("text"), "range_kind": b.get("range_kind"),
            "more_than_today": (ro.get("more_than_today") or {}).get("text"),
            "disagree": DISAGREE if b.get("disagree") else None, "models_note": p.get("models_note"),
+           "location_note": (p.get("location") or {}).get("note"), "check": (p.get("check") or {}).get("text"),
            "baseline_record": (p.get("baseline_record") or {}).get("name")}
     return {k: v for k, v in out.items() if v is not None}
 
@@ -54,7 +55,8 @@ def projection_line(r: dict, label: str) -> str:
     more = f", {v['more_than_today']}" if v.get("more_than_today") else ""
     line = (f"{label}, experts' projection for {v['when']}{under}{src}: {v['text']}{vs}{more}. "
             f"The range is the {v['range_kind']}.")
-    return " ".join([line] + [_end(v[k]) for k in ("disagree", "models_note") if _s(v.get(k))])
+    return " ".join([line] + [_end(v[k]) for k in ("disagree", "models_note", "location_note", "check")
+                              if _s(v.get(k))])
 
 
 def _key(c: dict):
@@ -87,8 +89,10 @@ def picked(calls: list[dict]) -> list[tuple[tuple, dict]]:
     return out
 
 
-def block(calls: list[dict]) -> str:
-    """The guidance text for this turn's results; "" when none has a fact."""
+def block(calls: list[dict], simple: bool = False) -> str:
+    """The guidance text for this turn's results; "" when none has a fact. `simple` (a request for simple words,
+    design 16 §4): without the facts (they carry the 95% range and the world ratio) and without the projection line
+    (the plain lines, first in the answer, already carry it)."""
     rs = picked(calls)
     if not rs:
         return ""
@@ -103,10 +107,12 @@ def block(calls: list[dict]) -> str:
         what = names.get(r.get("variable"), str(r.get("variable") or ""))
         place = _s((r.get("place") or {}).get("name"))
         label = f"{place}, {what[:1].lower()}{what[1:]}" if places and place else what
-        future[k] = future.get(k) or projection_line(r, label)  # once per place and measurement, first source first
+        if not simple:  # once per place and measurement, first source first
+            future[k] = future.get(k) or projection_line(r, label)
         if per[k] > 1:
             label += f" ({_s((r.get('source') or {}).get('name')).split(',')[0]})"
-        parts.append(f"{label}: {_end(_s(g['fact']))}")
+        if not simple:
+            parts.append(f"{label}: {_end(_s(g['fact']))}")
         for x in g.get("look_next") or []:
             if isinstance(x, dict) and _s(x.get("label")):
                 url = _s(x.get("url"))
@@ -122,16 +128,50 @@ def block(calls: list[dict]) -> str:
     return " ".join(parts + tail + ([_end(disclaimer)] if disclaimer else []))
 
 
+RECORDS_DISAGREE = "Our records here disagree about the past."  # design 16 §4: the past clause when verdicts differ
+MAX_LEAD = 3  # places and measurements that get a line, with two or more
+
+
+def lead(calls: list[dict]) -> str:
+    """The lines an answer that looked something up starts with (design 16 §4), written by code and outside the word
+    count. Per place and measurement in picked() order: line 1 is the past clause (the shared meaning.headline, or
+    RECORDS_DISAGREE when the picked verdicts differ or the records there disagree, so it never depends on which
+    record is main), then plain[0]; then plain's other lines; then what each record shows with the first reason when
+    the records disagree, and thin_note or single_note. Two or more places or measurements: line 1 of each (and its
+    records lines), at most MAX_LEAD, each after "{Place}, {measurement}: ". "" when no result has plain lines."""
+    groups: dict = {}
+    for k, r in picked(calls):
+        groups.setdefault(k, []).append(r)
+    groups = {k: rs for k, rs in groups.items() if [x for x in rs[0].get("plain") or [] if _s(x)]}
+    names = {v["id"]: v["name"].split(" (")[0] for v in tools.list_variables()}
+    out = []
+    for rs in list(groups.values())[:MAX_LEAD]:
+        r = rs[0]
+        apart = len(rs) > 1 or any((x.get("disagree") or {}).get("any") for x in rs)
+        past = RECORDS_DISAGREE if apart else _s((r.get("meaning") or {}).get("headline"))
+        plain = [_s(x) for x in r["plain"] if _s(x)]
+        what = names.get(r.get("variable"), _s(r.get("variable")))
+        place = _s((r.get("place") or {}).get("name"))
+        head = (f"{place}, {what[:1].lower()}{what[1:]}: " if place else f"{what}: ") if len(groups) > 1 else ""
+        d = r.get("disagree") or {}
+        why = next((_s(x.get("text")) for x in d.get("reasons") or [] if isinstance(x, dict) and _s(x.get("text"))), "")
+        said = [" ".join(filter(None, (_s(d.get("say")), why)))] if d.get("any") else []
+        out += [head + " ".join(filter(None, (past and _end(past), plain[0]))),
+                *(plain[1:] if len(groups) == 1 else []),
+                *filter(None, said + [_s(r.get("thin_note")), _s(r.get("single_note"))])]
+    return "\n".join(out)
+
+
 def strip(text: str) -> str:
     """The text without any marker: what the word limit counts."""
     return _MARK.sub("", text)
 
 
-def fill(text: str, calls: list[dict]) -> str:
+def fill(text: str, calls: list[dict], simple: bool = False) -> str:
     """The first marker becomes the guidance (a space before it unless it starts a line); other markers go. No marker:
     the guidance goes in front of the official-resources marker if there is one, else at the end as its own
     paragraph. No guidance: markers removed, text otherwise unchanged."""
-    add = block(calls)
+    add = block(calls, simple)
     if not _MARK.search(text):
         if not add:
             return text

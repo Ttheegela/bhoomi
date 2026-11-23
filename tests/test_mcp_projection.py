@@ -274,5 +274,10 @@ def test_tool_list_has_get_projection_with_the_design_description(mcp_client):
     assert set(by_name["get_projection"]["inputSchema"]["properties"]) == {"variable", "lat", "lon", "scenario", "year",
                                                                           "source"}
     assert set(by_name["get_projection"]["inputSchema"]["required"]) == {"variable", "lat", "lon"}
+    detect = " ".join(by_name["detect_trend"]["description"].split())
     assert ("It also carries plain: two or three short lines for the public. Start with meaning.headline, then plain, "
-            "word for word.") in " ".join(by_name["detect_trend"]["description"].split())
+            "word for word.") in detect
+    # contract "Ask and MCP": the records block and what to say when the records disagree
+    assert ("When disagree.any is true, say the records disagree, give what each one shows (disagree.say) and the "
+            "first reason (disagree.reasons), and never say which record is right.") in detect
+    assert "Pass on thin_note, single_note, main_note and source.limit when they are set." in detect
