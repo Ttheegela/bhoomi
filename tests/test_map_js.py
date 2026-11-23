@@ -9,6 +9,9 @@ import subprocess
 
 import pytest
 
+from earthtrends.stats import trend
+from earthtrends.stats.meaning import UNITS
+
 ROOT = pathlib.Path(__file__).parent.parent
 SRC = (ROOT / "web" / "map.js").read_text(encoding="utf-8")
 PURE = SRC.split("/* PURE START")[1].split("*/", 1)[1].split("/* PURE END */")[0]
@@ -44,7 +47,10 @@ GAUGES = {"source": [{"name": "NOAA CO-OPS tide gauges", "url": "https://tidesan
                "verdict": None, "start": "2010-01", "end": "2026-10", "years": 16}],
           "skipped": [
               {"id": "12", "network": "psmsl", "name": "New York (The Battery)", "lat": 40.7, "lon": -74.0133,
-               "why": "the answer at this spot uses another gauge: The Battery (NOAA CO-OPS tide gauges)"},
+               "why": "the answer at this spot uses another gauge: The Battery (NOAA CO-OPS tide gauges)",
+               "psmsl_mode": {"slope": 3.04, "lo": 2.86, "hi": 3.21, "verdict": "rising", "start": "1856-01", "end": "2025-12", "years": 170}},
+              {"id": "13", "network": "psmsl", "name": "Sandy Hook", "lat": 40.4667, "lon": -74.0, "why":
+               "the answer at this spot uses another gauge: Sandy Hook (NOAA CO-OPS tide gauges)"},
               {"id": "99", "network": "psmsl", "name": "Short One", "lat": 1.0, "lon": 1.0, "why": "it has only 13 years of valid data"}]}
 
 CHECK = r"""
@@ -88,29 +94,42 @@ eq(graceBlocks(Object.assign({}, G, { lat: '%%%' })), null);
 var d = gaugeDots(F, '');
 eq(d.map(function (g) { return g.name; }), ['The Battery', 'Mumbai / Bombay', 'Okha', 'Juneau']);
 assert.ok(!d.some(function (g) { return g.name === 'New York (The Battery)' || g.name === 'Short One' || g.name === 'No Rate'; }));
-eq(gaugeDots(F, 'psmsl').map(function (g) { return g.network; }), ['psmsl', 'psmsl', 'psmsl']);
+// "Global gauges (PSMSL)": the PSMSL gauges plus the "another gauge" PSMSL entries with their psmsl_mode values
+var dp = gaugeDots(F, 'psmsl');
+eq(dp.map(function (g) { return g.name; }), ['Mumbai / Bombay', 'Okha', 'Juneau', 'New York (The Battery)']);
+eq([dp[3].slope, dp[3].lo, dp[3].hi, dp[3].verdict, dp[3].years, dp[3].network], [3.04, 2.86, 3.21, 'rising', 170, 'psmsl']);
+eq(gaugeTip(dp[3], false), ['New York (The Battery)', 'Rising: +3.0 mm a year, 95% range +2.9 to +3.2.', '1856–2025 · 170 years of records · PSMSL', 'Click for the full answer.']);
+// the in-view line around New York in each mode (in PSMSL mode it said "No gauges ..." before)
+var ny = [-75, 40, -73, 41.5];
+eq(gaugeView(d, ny, false), 'In view: 1 gauge. 1 rising, 0 falling, 0 no clear change. Fastest rise: The Battery, +2.9 mm a year.');
+eq(gaugeView(dp, ny, false), 'In view: 1 gauge. 1 rising, 0 falling, 0 no clear change. Fastest rise: New York (The Battery), +3.0 mm a year.');
 eq(gaugeDots({ gauges: 'x' }, ''), []);
 
 // 4. the hover words: rising, falling, no clear change, a clamped range, inches
 eq(gaugeTip(d[0], false), ['The Battery', 'Rising: +2.9 mm a year, 95% range +2.7 to +3.1.', '1856–2026 · 171 years of records · NOAA CO-OPS', 'Click for the full answer.']);
-eq(gaugeTip(d[3], false)[1], 'Falling: ' + M + '13.6 mm a year, 95% range ' + M + '14.1 to ' + M + '13.1.');
-eq(gaugeTip(d[2], false)[1], 'No clear change: ' + M + '0.4 mm a year, 95% range ' + M + '1.2 to +0.5, which includes no change.');
+eq(gaugeTip(d[3], false)[1], 'Falling: ' + M + '14 mm a year, 95% range ' + M + '14 to ' + M + '13.');
+eq(gaugeTip(d[2], false)[1], 'No clear change: ' + M + '0.40 mm a year, 95% range ' + M + '1.2 to +0.5, which includes no change.');
 eq(gaugeTip(d[1], false)[2], '1878–2025 · 26 years of records (short record) · PSMSL');
 eq(gaugeTip(d[0], true)[1], 'Rising: +0.11 in a year, 95% range +0.11 to +0.12.');
 eq(blockTip(bs[0], G, false), ['Near 29.0° N, 77.4° E', 'Falling: ' + M + '4.3 cm of water a year, 95% range ' + M + '4.8 to ' + M + '3.8.',
   'April 2002 to June 2026 · averaged over about 400 km · GRACE', 'Click for the full answer.']);
-eq(blockTip(bs[1], G, false)[1], 'No clear change: +0.1 cm of water a year, 95% range ' + M + '0.1 to +0.3, which includes no change.');
+eq(blockTip(bs[1], G, false)[1], 'No clear change: +0.060 cm of water a year, 95% range ' + M + '0.15 to +0.26, which includes no change.');
 eq(blockTip(bs[1], G, false)[0], 'Near 40.0° N, 75.3° W');
-eq(blockTip(bs[2], G, false)[1], 'No clear change: +12.3 cm of water a year, 95% range very wide, which includes no change.');
-eq(num(0, false, 'mm'), '0.0');
-eq(num(-0.04, false, 'mm'), '0.0');
+eq(blockTip(bs[2], G, false)[1], 'No clear change: +12 cm of water a year, 95% range very wide, which includes no change.');
+// 2 significant figures, half away from zero, as the card's headline_rate text
+eq([0.94, 3.04, -13.62, 0, 99.6, -0.004].map(function (x) { return num(x, false, 'mm'); }), ['+0.94', '+3.0', M + '14', '0', '+100', M + '0.0040']);
+eq(rng(-0.004, 11, false, 'mm'), M + '0.004 to +11.000');  // no non-zero end reads 0
+eq(rng(0.941, 0.944, false, 'mm'), '+0.941 to +0.944');    // the ends differ
+// the card's own words for the same numbers (the stats lane's _headline_rate, passed in): the hover equals the card
+JSON.parse(process.env.CARD).forEach(function (c) {
+  eq([num(c.v, false, 'mm') + ' mm a year', rng(c.lo, c.hi, false, 'mm') + ' mm a year'], [c.text, c.range_text], JSON.stringify(c));
+});
 
 // the in-view lines
 var world = [-540, -85, 540, 85];
 eq(gaugeView(d, world, false), 'In view: 4 gauges. 2 rising, 1 falling, 1 no clear change. Fastest rise: The Battery, +2.9 mm a year.');
 eq(gaugeView([d[3]], world, false), 'In view: 1 gauge. 0 rising, 1 falling, 0 no clear change.');
 eq(gaugeView(d, [0, -10, 10, 10], false), 'No gauges with 20 or more years of records in view. Zoom out or move the map.');
-eq(gaugeView(d, [-80, 30, -70, 45], false), 'In view: 1 gauge. 1 rising, 0 falling, 0 no clear change. Fastest rise: The Battery, +2.9 mm a year.');
 eq(inBox([170, -10, 190, 10], 0, -175), true);  // a box across the antimeridian
 eq(blockView(bs, world), 'In view, by area: 34% losing water, 0% gaining, 66% no clear change.');
 eq(blockView(bs, [0, -10, 10, 10]), 'No blocks with a value in view. Zoom out or move the map.');
@@ -168,15 +187,28 @@ console.log('ok');
 """
 
 
+def card_texts():
+    """The answer card's rate and range words (headline_rate, built by the stats lane) for rates given to 2 decimals."""
+    out = []
+    for v, lo, hi in ((0.94, 0.9, 0.98), (3.04, 2.86, 3.21), (-13.62, -14.1, -13.1), (-0.4, -1.2, 0.5), (12.34, 11.95, 12.05),
+                      (0.06, -0.15, 0.26), (2.0, 1.995, 2.004)):
+        h = trend._headline_rate("sea_level", UNITS["sea_level"], tuple(round(x * 10, 6) for x in (v, lo, hi)), None)
+        out.append({"v": v, "lo": lo, "hi": hi, "text": h["text"], "range_text": h["range_text"]})
+    return out
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_map_pure_logic():
-    env = {"GRACE": json.dumps(GRACE), "GAUGES": json.dumps(GAUGES), "PATH": ""}
+    env = {"GRACE": json.dumps(GRACE), "GAUGES": json.dumps(GAUGES), "CARD": json.dumps(card_texts()), "PATH": ""}
     r = subprocess.run([shutil.which("node"), "-"], input=PURE + CHECK, capture_output=True, text=True, env=env)
     assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr or r.stdout
 
 
-def test_map_reads_the_static_files_not_the_gauges_route():
-    """The dots come from web/data/gauge-trends.json (it replaces /api/gauges for the map); no CSS filter greys the map."""
+def test_map_reads_the_static_files_and_no_css_filter_greys_it():
+    """The dots come from web/data/gauge-trends.json (it replaces /api/gauges for the map). The base map is greyed in its
+    style, so no CSS filter may grey the canvas (it would grey the data too); the old legend is gone."""
     assert "/data/gauge-trends.json" in SRC and "/data/grace-trends.json" in SRC
     assert "/api/gauges" not in SRC
-    assert "cv.style.filter = 'none'" in SRC
+    css = (ROOT / "web" / "map.css").read_text(encoding="utf-8")
+    assert "grayscale" not in css and "maplibregl-canvas { filter" not in css
+    assert "map-legend" not in css + SRC and "map-detailed" not in css + SRC

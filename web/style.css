@@ -144,11 +144,6 @@ span.srclink { color: var(--ink-2); }
 .mk-ring { fill: none; stroke: var(--dv-nc); stroke-width: 2; }
 .mk-dot { fill: var(--ink-2); }
 .mk-pale { fill: var(--dv-ncfill); }
-/* the hover label wraps over up to four lines (map.css's rule is the old one-line name label) */
-.maplibregl-popup.map-tip .maplibregl-popup-content { max-width: 34ch; padding: 8px 10px; white-space: normal; overflow: visible; text-overflow: clip; font-size: 14px; line-height: 1.4; }
-.map-tip b, .map-tip span { display: block; }
-.map-tip b { font-weight: 600; }
-.map-tip .g { color: var(--ink-2); }
 
 /* the answer card (10-foundation.md section 3) */
 .rec { container-type: inline-size; }

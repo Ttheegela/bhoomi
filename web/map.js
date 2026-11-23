@@ -43,16 +43,31 @@
     var up = WATER.filter(function (s) { return s.to >= 0 && s.to < Infinity; }).map(function (s) { return s.to; });
     return 'Colours: blue for less water, darker for faster: ' + ranges(dn, n) + ' ' + u + '; orange for more water, darker for faster: ' + ranges(up, n) + ' ' + u + '. A pale grey block means no clear change.';
   }
-  // a rate as the answer card prints it: a sign, the true minus, 1 decimal; in inches 2 decimals under 1 (3 if that reads 0)
-  function num(x, imp, u) {
-    var v = imp ? x * INCH[u] : x, d = imp && Math.abs(v) < 1 ? 2 : 1;
-    if (imp && v !== 0 && Number(v.toFixed(d)) === 0) d = 3;
-    var s = Math.abs(v).toFixed(d);
-    return (Number(s) === 0 ? '' : v > 0 ? '+' : MINUS) + s;
+  // Rates as the answer card prints them (the stats lane's headline_rate text): the rate to 2 significant figures, half away
+  // from zero; both range ends to the same decimals, enough that they differ and no non-zero end reads 0. In inches as the card
+  // converts them: 2 decimals under 1, else 1 (3 if that reads 0).
+  function adj(x) { return +Math.abs(x).toExponential().split('e')[1]; } // the power of ten of the first digit
+  function units(x, e) { return Math.floor(Number((Math.abs(x) * Math.pow(10, -e)).toPrecision(12)) + 0.5); } // |x| in steps of 10^e
+  function atText(x, e) {
+    var r = units(x, e);
+    return r ? (x < 0 ? MINUS : '+') + (e < 0 ? (r / Math.pow(10, -e)).toFixed(-e) : String(r * Math.pow(10, e))) : '0';
+  }
+  function inch(x) {
+    var d = Math.abs(x) < 1 ? 2 : 1;
+    if (x !== 0 && Number(x.toFixed(d)) === 0) d = 3;
+    var s = Math.abs(x).toFixed(d);
+    return (Number(s) === 0 ? '' : x > 0 ? '+' : MINUS) + s;
+  }
+  function num(x, imp, u) { return imp ? inch(x * INCH[u]) : x ? atText(x, adj(x) - 1) : '0'; }
+  function rng(lo, hi, imp, u) {
+    if (imp) return num(lo, imp, u) + ' to ' + num(hi, imp, u);
+    var m = Math.max(Math.abs(lo), Math.abs(hi)), e = m ? adj(m) - 1 : 0;
+    var s = function (x) { return (x < 0 ? -1 : 1) * units(x, e); };
+    while (e > -6 && ((lo !== hi && s(lo) === s(hi)) || (lo && !units(lo, e)) || (hi && !units(hi, e)))) e--;
+    return atText(lo, e) + ' to ' + atText(hi, e);
   }
   function rateLine(v, x, lo, hi, wide, imp, u, per) {
-    var n = function (y) { return num(y, imp, u); };
-    return VERDICT[v] + ': ' + n(x) + ' ' + (imp ? 'in' : u) + ' ' + per + ', 95% range ' + (wide ? 'very wide' : n(lo) + ' to ' + n(hi)) +
+    return VERDICT[v] + ': ' + num(x, imp, u) + ' ' + (imp ? 'in' : u) + ' ' + per + ', 95% range ' + (wide ? 'very wide' : rng(lo, hi, imp, u)) +
       (lo <= 0 && hi >= 0 ? ', which includes no change' : '') + '.';
   }
   function month(t) { var p = String(t).split('-'); return MONTHS[+p[1] - 1] + ' ' + p[0]; }
@@ -72,11 +87,17 @@
     n = n.trim();
     return /\p{Ll}/u.test(n) ? n : n.toLowerCase().replace(/(^|[\s\-\/(])(\p{L})/gu, function (m, a, b) { return a + b.toUpperCase(); });
   }
-  // the dots: only gauges with a rate (20 years or more). A skipped entry has none, so it is never drawn: "another gauge" ones are
-  // the spot of a drawn CO-OPS dot, the rest no click can open. "psmsl": the PSMSL gauges only (Measured by: Global gauges).
+  // The dots: only gauges with a rate (20 years or more). "psmsl" (Measured by: Global gauges): the PSMSL gauges only, plus each
+  // skipped "another gauge" PSMSL entry drawn with its psmsl_mode values, the answer a click opens with source=psmsl. With the NOAA
+  // gauges those entries stay hidden (their spot is a drawn CO-OPS dot); other skipped entries no click can open, so never drawn.
   function gaugeDots(f, only) {
-    var out = [];
-    (f && Array.isArray(f.gauges) ? f.gauges : []).forEach(function (g) {
+    var out = [], list = f && Array.isArray(f.gauges) ? f.gauges : [];
+    if (only === 'psmsl' && f && Array.isArray(f.skipped)) {
+      list = list.concat(f.skipped.filter(function (s) {
+        return s && s.network === 'psmsl' && typeof s.why === 'string' && s.why.indexOf(ANOTHER) === 0 && s.psmsl_mode && typeof s.psmsl_mode === 'object';
+      }).map(function (s) { return Object.assign({}, s, s.psmsl_mode); }));
+    }
+    list.forEach(function (g) {
       if (!g || typeof g.name !== 'string' || !g.name.trim() || !fin(g.lat) || !fin(g.lon) || Math.abs(g.lat) > 90 || Math.abs(g.lon) > 180) return;
       if (!fin(g.slope) || !fin(g.lo) || !fin(g.hi) || !(g.years >= 20) || !VERDICT[g.verdict] || !/^\d{4}-\d\d$/.test(g.start) || !/^\d{4}-\d\d$/.test(g.end)) return;
       if ((g.network !== 'coops' && g.network !== 'psmsl') || (only && g.network !== only) || out.length >= 5000) return;
@@ -355,7 +376,6 @@
   function applyPrefs() {
     if (!map || inSettings()) return;
     var p = prefs();
-    frame.classList.toggle('map-detailed', p.base === 'detailed');
     if (p.base !== baseKey) {
       baseKey = p.base;
       styleReady = false;
@@ -383,7 +403,6 @@
       if (!loaded && !failed) wait.textContent = 'Loading the map… Still loading. The map is optional.';
     }, 8000);
     baseKey = prefs().base;
-    frame.classList.toggle('map-detailed', baseKey === 'detailed');
     import('./vendor/maplibre-gl/maplibre-gl.mjs').then(function (m) {
       lib = m;
       try {
@@ -406,7 +425,6 @@
       var cv = map.getCanvas();
       cv.tabIndex = -1;
       cv.setAttribute('aria-hidden', 'true');
-      cv.style.filter = 'none'; // the greys are set in the style (greyBase); map.css's old grayscale filter would grey the data too
       // the style carries the base-map credit itself; the compact control also shows the gauge credits
       map.addControl(new lib.AttributionControl({ compact: true }), 'bottom-right');
       collapseAttrib();
