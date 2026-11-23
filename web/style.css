@@ -138,6 +138,7 @@ span.srclink { color: var(--ink-2); }
 .mk-ring { fill: none; stroke: var(--dv-nc); stroke-width: 2; }
 .mk-dot { fill: var(--ink-2); }
 .mk-pale { fill: var(--dv-ncfill); }
+.mk-pin { fill: var(--ink); }
 
 /* the answer card (10-foundation.md section 3, 14-facts.md section 1) */
 .rec { container-type: inline-size; }

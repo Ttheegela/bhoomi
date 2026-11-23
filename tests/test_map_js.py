@@ -3,6 +3,7 @@ which gauges are drawn, the hover words, the view moves (web/design/13-maps.md s
 import base64
 import json
 import pathlib
+import re
 import shutil
 import struct
 import subprocess
@@ -87,9 +88,9 @@ eq(Array.from(ints(G.sig, 4)), [2, 0, 255, 0]);
 eq(ints('AQD//wCA', 4), null); // 6 bytes for 4 values: no width fits
 var bs = graceBlocks(G);
 eq(bs.length, 3);
-eq(bs[0], { lat: 29, lon: 77.39, area: 12406, slope: -4.31, lo: -4.76, hi: -3.81, wide: false, v: 'falling' });
-eq([bs[1].lat, bs[1].lon, bs[1].v, bs[1].wide], [40, -75.27, 'no_clear_change', false]);
-eq([bs[2].lon, bs[2].slope, bs[2].wide], [142, 12.34, true]);
+eq(bs[0], { lat: 29, lon: 77.39, area: 12406, slope: -4.31, lo: -4.76, hi: -3.81, v: 'falling' });
+eq([bs[1].lat, bs[1].lon, bs[1].v, wide(bs[1].lo, bs[1].hi)], [40, -75.27, 'no_clear_change', false]);
+eq([bs[2].lon, bs[2].slope, wide(bs[2].lo, bs[2].hi)], [142, 12.34, true]);
 eq(graceBlocks(Object.assign({}, G, { n: 5 })), null); // lengths that disagree: the file does not read
 eq(graceBlocks(Object.assign({}, G, { lat: '%%%' })), null);
 
@@ -128,12 +129,24 @@ eq(rng(0.941, 0.944, false, 'mm'), '+0.941 to +0.944');    // the ends differ
 function sp(r) { return { text: r.text.replace(/\u00a0/g, " "), range: r.range.replace(/\u00a0/g, " ") }; }
 JSON.parse(process.env.CARD).forEach(function (c) {
   eq([num(c.v, false, 'mm') + ' mm a year', rng(c.lo, c.hi, false, 'mm') + ' mm a year'], [c.h.text, c.h.range_text], JSON.stringify(c));
-  var r = sp(EX.rate({ headline_rate: c.h }, true));
+  var r = sp(TDX.rate({ headline_rate: c.h, slope_per_decade: c.pd[0], ci_low: c.pd[1], ci_high: c.pd[2] }, true));
   eq([num(c.v, true, 'mm') + ' in a year', rng(c.lo, c.hi, true, 'mm') + ' in a year'], [r.text, r.range], JSON.stringify(c));
 });
-// inches from headline_rate's 3 significant figures, as the card: 3.4285 mm is 3.43 on the card, so +0.14, not +0.13
-eq(inch(3.4285 / 25.4), '+0.13'); // the map's old way
-eq(num(3.4285, true, 'mm'), '+0.14');
+// inches: the unrounded rate converted, then rounded once (QA B2): 3.4285 mm is +0.13 in; its 3 significant figures (3.43)
+// converted would read +0.14
+eq(num(3.4285, true, 'mm'), '+0.13');
+eq(TDX.sig2Text(3.43 / 25.4), '+0.14');
+// Juneau (QA B2: the card converted headline_rate's rounded -14.1, the hover the unrounded -14.071): both convert ci_low now
+var ju = TDX.rate({ headline_rate: { value: -13.6, low: -14.1, high: -13.2, unit: 'mm', per: 'a year', text: M + '14 mm a year', range_text: M + '14 to ' + M + '13 mm a year' },
+  slope_per_decade: -136.2959, ci_low: -140.7101, ci_high: -131.8067 }, true);
+eq(sp(ju).range, rng(-14.07101, -13.18067, true, 'mm') + ' in a year');
+eq([sp(ju).text, sp(ju).range], [M + '0.54 in a year', M + '0.55 to ' + M + '0.52 in a year']);
+// a range with an earthquake step (Ofunato II, 2011) says "very wide", by the water blocks' rule
+var of = { name: 'Ofunato II', network: 'psmsl', slope: 8.92411, lo: -1699.3872, hi: 3266.6668, verdict: 'no_clear_change', start: '1965-01', end: '2016-12', years: 52 };
+eq(gaugeTip(of, false)[1], 'No clear change: +8.9 mm a year, 95% range very wide, which includes no change.');
+eq(gaugeTip(of, true)[1], 'No clear change: +0.35 in a year, 95% range very wide, which includes no change.');
+eq(gaugeTip(Object.assign({}, of, { lo: -29.63275, hi: 58.62216 }), false)[1], // Kamaisi II's range: wide, but read
+  'No clear change: +8.9 mm a year, 95% range ' + M + '30 to +59, which includes no change.');
 // "which includes no change" only for no clear change: a clear verdict's range end can round to 0
 var edge = { lat: 0, lon: 0, area: 1, slope: -0.25, lo: -0.49, hi: 0, wide: false, v: 'falling' };
 eq(blockTip(edge, G, false)[1], 'Falling: ' + M + '0.25 cm of water a year, 95% range ' + M + '0.49 to 0.');
@@ -144,9 +157,9 @@ var W = JSON.parse(process.env.WATER), wb = graceBlocks(W.file);
 eq(wb.length, W.cards.length);
 W.cards.forEach(function (c, i) {
   var b = wb[i], nc = c.verdict === 'no_clear_change' && c.h.low <= 0 && c.h.high >= 0 ? ', which includes no change' : '';
-  eq([b.v, b.wide], [c.verdict, false]);
+  eq([b.v, wide(b.lo, b.hi)], [c.verdict, false]);
   eq(blockTip(b, W.file, false)[1], VERDICT[c.verdict] + ': ' + c.h.text + ', 95% range ' + c.h.range_text.replace(' cm of water a year', '') + nc + '.');
-  var r = sp(EX.rate({ headline_rate: c.h }, true));
+  var r = sp(TDX.rate({ headline_rate: c.h, slope_per_decade: c.pd[0], ci_low: c.pd[1], ci_high: c.pd[2] }, true));
   eq(blockTip(b, W.file, true)[1], VERDICT[c.verdict] + ': ' + r.text + ', 95% range ' + r.range.replace(' in of water a year', '') + nc + '.');
 });
 eq(W.cards.map(function (c) { return c.h.text; }), [M + '4.3 cm of water a year', '+0.057 cm of water a year', M + '0.026 cm of water a year']);
@@ -209,11 +222,36 @@ eq(greyAll(['interpolate', ['linear'], ['zoom'], 5.8, 'hsla(0,0%,85%,0.53)', 6, 
   ['interpolate', ['linear'], ['zoom'], 5.8, 'rgba(232,232,232,0.53)', 6, 'rgba(255,255,255,1)']);
 eq(greyAll({ stops: [[5, '#fea'], [9, 'hsl(26,87%,62%)']] }, 'fill', false).stops.map(function (s) { return s[1].slice(0, 5); }), ['rgba(', 'rgba(']);
 eq(roleOf('text-halo-color') + roleOf('text-color') + roleOf('fill-outline-color'), 'halotextfill');
+// QA B5: greyed, the detailed map's road shields (coloured sprite icons) and its relief are hidden; with the colours back,
+// a shield returns only with labels on
+var lib = { layers: [{ id: 'water', type: 'fill', paint: { 'fill-color': '#abc' } }, { id: 'relief', type: 'raster' },
+  { id: 'highway-shield-non-us', type: 'symbol', layout: { 'icon-image': 'road_2' } }, { id: 'road_shield_us', type: 'symbol' },
+  { id: 'label_city', type: 'symbol', paint: { 'text-color': '#333' } }] };
+var rs = recordStyle(lib), vis = {}, paint = {};
+var sm = { getLayer: function () { return true; }, setLayoutProperty: function (id, k, v) { vis[id] = v; }, setPaintProperty: function (id, k, v) { paint[id] = v; } };
+eq(rs.hide.map(function (x) { return x.id; }), ['relief', 'highway-shield-non-us', 'road_shield_us']);
+greyStyle(sm, rs, true, false, true);
+eq(vis, { relief: 'none', 'highway-shield-non-us': 'none', road_shield_us: 'none' });
+eq([paint.water, paint.label_city], [greyOf('#abc', 'fill', false), greyOf('#333', 'text', false)]);
+greyStyle(sm, rs, false, false, true);
+eq(vis, { relief: 'visible', 'highway-shield-non-us': 'visible', road_shield_us: 'visible' });
+eq([paint.water, paint.label_city], ['#abc', '#333']);
+greyStyle(sm, rs, false, false, false);
+eq([vis.relief, vis.road_shield_us], ['visible', 'none']);
+// QA B1: over a pin the hover reads at the pin's tip (its place), not the pointer; elsewhere at the pointer
+var pinEl = {}, tipLL = { lng: -90.07, lat: 29.95 };
+var over = { point: { x: 5, y: 9 }, lngLat: { lng: -90.1, lat: 30.0 }, originalEvent: { target: { closest: function (s) { return s === '.map-mk' ? pinEl : null; } } } };
+var tipOfStub = function (el) { return el === pinEl ? tipLL : null; }, proj = function (ll) { return { x: ll.lng + 100, y: ll.lat }; };
+eq(hoverAt(over, tipOfStub, proj), { point: { x: -90.07 + 100, y: 29.95 }, lngLat: tipLL });
+var off = { point: { x: 5, y: 9 }, lngLat: { lng: -90.1, lat: 30.0 }, originalEvent: { target: { closest: function () { return null; } } } };
+assert.strictEqual(hoverAt(off, tipOfStub, proj), off);
 console.log('ok');
 """
 
 
 EXPLAIN = (ROOT / "web" / "explain.js").read_text(encoding="utf-8").split("/* PURE START */")[1].split("/* PURE END */")[0]
+# the card's formatter as the page has it (window.TDX): map.js rounds with the card's own sig2Text and spanText
+CARD_JS = "var TDX = (function () {" + EXPLAIN + "; return { rate: rate, sig2Text: sig2Text, spanText: spanText }; })();\n"
 
 
 def card_texts():
@@ -223,7 +261,7 @@ def card_texts():
                       (0.06, -0.15, 0.26), (2.0, 1.995, 2.004), (3.9, 3.4285, 4.5), (-0.0933, -0.21, 0.02), (7.1, 0.005, 14.0),
                       (-0.8, -1.3, -0.005)):  # the last two: an end that reads 0.000 in inches
         h = trend._headline_rate("sea_level", UNITS["sea_level"], tuple(round(x * 10, 6) for x in (v, lo, hi)), None)
-        out.append({"v": v, "lo": lo, "hi": hi, "h": h})
+        out.append({"v": v, "lo": lo, "hi": hi, "pd": [round(x * 10, 6) for x in (v, lo, hi)], "h": h})
     return out
 
 
@@ -239,16 +277,97 @@ def water_file():
          "lat": i16([la for la, _ in spots]), "lon": i16([lo for _, lo in spots]), "area": i16([12406, 12392, 12000, 100]),
          "slope": i32(dig("slope_per_decade")), "lo": i32(dig("ci_low")), "hi": i32(dig("ci_high")),
          "sig": u8([sig[r["verdict"]] for r in rs] + [255]), "start": "2002-04", "end": "2026-06", "footprint_km": 444}
-    return {"file": f, "cards": [{"verdict": r["verdict"], "h": r["headline_rate"]} for r in rs]}
+    return {"file": f, "cards": [{"verdict": r["verdict"], "h": r["headline_rate"],
+                                  "pd": [r[k] for k in ("slope_per_decade", "ci_low", "ci_high")]} for r in rs]}
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_map_pure_logic():
     env = {"GRACE": json.dumps(GRACE), "GAUGES": json.dumps(GAUGES), "CARD": json.dumps(card_texts()),
            "WATER": json.dumps(water_file()), "PATH": ""}
-    card = "var EX = (function () {" + EXPLAIN + "; return { rate: rate }; })();\n"
-    r = subprocess.run([shutil.which("node"), "-"], input=card + PURE + CHECK, capture_output=True, text=True, env=env)
+    r = subprocess.run([shutil.which("node"), "-"], input=CARD_JS + PURE + CHECK, capture_output=True, text=True, env=env)
     assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr or r.stdout
+
+
+SWEEP = r"""
+var E = JSON.parse(process.env.E), bad = { mm: 0, in: 0 }, wides = [];
+E.forEach(function (c) {
+  var t = { headline_rate: c.h, slope_per_decade: c.pd[0], ci_low: c.pd[1], ci_high: c.pd[2] };
+  [false, true].forEach(function (im) {
+    var r = TDX.rate(t, im), u = im ? ' in a year' : ' mm a year', cut = function (s) { return s.replace(/ /g, ' ').slice(0, -u.length); };
+    if (cut(r.text) !== num(c.v, im, 'mm') || cut(r.range) !== rng(c.lo, c.hi, im, 'mm')) bad[im ? 'in' : 'mm']++;
+  });
+  if (wide(c.lo, c.hi)) wides.push(c.name);
+});
+var f = JSON.parse(require('fs').readFileSync(process.env.W, 'utf8')), bs = graceBlocks(f);
+console.log(JSON.stringify({ n: E.length, bad: bad, wides: wides.sort(), blocks: bs && bs.length,
+  wideBlocks: bs && bs.filter(function (b) { return wide(b.lo, b.hi); }).length }));
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_every_gauge_hover_equals_its_card_and_the_real_files_read():
+    """QA B2: over every dot in web/data/gauge-trends.json (both "Measured by" lists), the hover's rate and 95% range equal
+    the card's in mm (the server's headline_rate text) and in inches (the card's conversion of slope_per_decade, ci_low and
+    ci_high). "Very wide" only for the three earthquake-step gauges. The real grace-trends.json reads (its enc is per field)."""
+    f = json.loads((ROOT / "web" / "data" / "gauge-trends.json").read_text(encoding="utf-8"))
+    ents = [g for g in f["gauges"] if g.get("slope") is not None]
+    ents += [dict(s, **s["psmsl_mode"]) for s in f["skipped"] if s.get("psmsl_mode")]
+    cases = []
+    for g in ents:
+        pd = [round(g[k] * 10, 4) for k in ("slope", "lo", "hi")]  # the API's 4-decimal values a decade
+        cases.append({"name": g["name"], "v": g["slope"], "lo": g["lo"], "hi": g["hi"], "pd": pd,
+                      "h": trend._headline_rate("sea_level", UNITS["sea_level"], tuple(pd), None)})
+    env = {"E": json.dumps(cases), "W": str(ROOT / "web" / "data" / "grace-trends.json"), "PATH": ""}
+    r = subprocess.run([shutil.which("node"), "-"], input=CARD_JS + PURE + SWEEP, capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["n"] == len(ents) > 600 and out["bad"] == {"mm": 0, "in": 0}, out["bad"]
+    assert out["wides"] == ["Ayukawa", "Ofunato II", "Soma"]
+    assert out["blocks"] > 11000 and 0 < out["wideBlocks"] < 20  # the Japan 2011 and Chile 2010 blocks
+
+
+def test_pins_are_ink_teardrops_with_a_key_line():
+    """QA B1 (13-maps.md §2a): each pin holds the teardrop path, its tip on the place (anchor bottom), filled with --ink (not
+    the no-change grey); both keys end item 3 with it and "Your places"; the old --mk-mod grey is gone from web/."""
+    assert "var PIN_D = 'M7 22 L0.81 10.27 A7 7 0 1 1 13.19 10.27 Z';" in SRC
+    assert "'<svg viewBox=\"0 0 14 22\" aria-hidden=\"true\"><path d=\"' + PIN_D + '\"/></svg>'" in SRC
+    assert "el.innerHTML = PIN_SVG;" in SRC and "new lib.Marker({ element: el, anchor: 'bottom' })" in SRC
+    css = (ROOT / "web" / "map.css").read_text(encoding="utf-8")
+    path = re.search(r"\.map-mk path \{([^}]*)\}", css)[1]
+    assert "fill: var(--ink)" in path and "stroke: var(--surface)" in path and "--dv-nc" not in path
+    assert re.search(r"\.mk-pin \{ fill: var\(--ink\); \}", (ROOT / "web" / "style.css").read_text(encoding="utf-8"))
+    sea, water = SRC.split("if (kind === 'gauges') {")[1].split("} else {")[0], SRC.split("var f = files.water.data")[1]
+    assert "['pin', 'Your places']" in sea and "['pin', 'Your places']" in water.split("updateView();")[0]
+    for f in (ROOT / "web").rglob("*"):
+        if f.is_file() and f.suffix in (".js", ".css", ".html") and "vendor" not in f.parts:
+            assert "--mk-mod" not in f.read_text(encoding="utf-8"), f
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_map_key_and_card_height_lines():
+    """QA B3: the water key says a block's rate is for its centre. QA B4: while a place loads the card keeps its last height
+    (holdHeight, before the card is cleared) and lets it go once the answer is drawn."""
+    water_key = SRC.split("var f = files.water.data")[1].split("updateView();")[0]
+    assert "A block's rate is for its centre; a town's own answer can differ a little." in water_key
+    for f in ("map.js", "app.js", "explain.js"):  # the whole file parses, not only its pure block
+        r = subprocess.run(["node", "--check", str(ROOT / "web" / f)], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    fn = re.search(r"^function holdHeight\(.*$", app, re.M)[0]
+    body = app.split("function drawRec(box) {")[1].split("\n}\n")[0]
+    assert body.index("holdHeight(box,") < body.index("clear(box)")
+    js = fn + r"""
+var box = { style: { minHeight: '' }, offsetHeight: 1016 }, seen = [];
+holdHeight(box, true); seen.push(box.style.minHeight);   // loading: the answer card's height is kept
+box.offsetHeight = 185;
+holdHeight(box, true); seen.push(box.style.minHeight);   // another pin landed while loading: still the old height
+holdHeight(box, false); seen.push(box.style.minHeight);  // the answer drawn: released
+console.log(JSON.stringify(seen));
+"""
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == ["1016px", "1016px", ""]
 
 
 def test_map_reads_the_static_files_and_no_css_filter_greys_it():

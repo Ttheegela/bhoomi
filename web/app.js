@@ -390,9 +390,13 @@ function renderRec() {
   drawRec(box);
   if (had && !box.contains(document.activeElement)) { const h = box.querySelector('h2'); if (h) h.focus({ preventScroll: true }); }
 }
+// While a place loads, the card keeps its last height and lets it go once the answer or the error is drawn: at 375 px the
+// card sits above the map, and its shrinking moved the page 831 px when a tapped gauge dot added a place (QA B4).
+function holdHeight(box, loading) { box.style.minHeight = loading ? box.style.minHeight || `${box.offsetHeight}px` : ''; }
 function drawRec(box) {
-  clear(box);
   const pin = selectedPin(curWin), w = winOf(curWin);
+  holdHeight(box, !!w && !!pin && pin.status === 'loading');
+  clear(box);
   box.setAttribute('aria-busy', String(!!pin && pin.status === 'loading'));
   if (!w) return;
   if (!pin) {
