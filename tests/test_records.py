@@ -22,7 +22,7 @@ NORMALS = [5, 6, 9, 12, 16, 20, 23, 22, 18, 13, 9, 6]
 RAIN = [0.8, 0.3, 0.2, 0.4, 1.3, 1.6, 2.9, 3.9, 4.2, 8.7, 11.8, 4.8]
 WEATHER = np.random.default_rng(99).normal(0, 0.8, 70 * 12)  # one place's weather, 1970 on: every record shares it
 STATION = {"name": "TEST STATION", "lat": 0.05, "lon": 0.0, "id": "XX000000001"}  # 5.6 km north of (0, 0)
-KEYS = ("comparisons", "comparisons_window", "disagree", "drift")
+KEYS = ("comparisons", "comparisons_window", "disagree", "drift", "single_note")
 NEAR = {"id": "IN020040900", "name": "Madras Minambakkam, IN", "lat": 12.99, "lon": 80.18}
 
 
@@ -199,7 +199,7 @@ def test_compare_false_and_measurements_without_records(monkeypatch):
                                            "compare": "false"}).json()[k] is None for k in KEYS)
     assert c.get("/api/trend", params={"variable": "air_temp", "lat": 0, "lon": 0, "source": "era5"}
                  ).json()["comparisons"][0]["main"] is True
-    # sea level: unchanged, the four fields null, nothing else read
+    # sea level: unchanged, the five fields null, nothing else read
     sea = {**record("power", 30), "variable": "sea_level", "units": "mm", "source": {"id": "coops", "name": "x"}}
     monkeypatch.setattr(data, "get_series", lambda *a, **k: calls.append(k.get("source")) or sea)
     calls.clear()
@@ -362,6 +362,36 @@ def test_a_disagreement_always_has_a_reason():
                 fits = [fit("era5", a, p=0.5), fit("power", b, p=0.5)] + ([fit("ghcn", c, p=0.5)] if c else [])
                 d = records._disagree("air_temp", fits, None)
                 assert d["any"] == (len({a, b, c} - {None}) > 1) and bool(d["reasons"]) == d["any"], (a, b, c)
+
+
+# ---- one record (single_note) ----
+
+MODEL = "Only one record could be compared here, so this answer rests on a single weather model."
+ONE_STATION = "Only one record could be compared here, so this answer rests on a single weather station."
+THIN = dict(seed=3, keep=lambda y, m: y < 2005)  # covers only 1981-2004: shown, not counted
+
+
+@pytest.mark.parametrize("rows, note", [
+    # like Delhi's hottest day when ERA5 can't be read: NASA POWER's lone verdict, the station thin
+    ([("power", record("power", -0.3)), ("era5", httpx.ConnectError("x")), ("ghcn", record("ghcn", 0.3, **THIN))],
+     MODEL),
+    ([("power", record("power", 0.3)), ("era5", records.Pending()), ("ghcn", ghcn._no_station("air_temp", None))],
+     MODEL),
+    # the station made main, both models down
+    ([("ghcn", record("ghcn", 0.3, seed=3)), ("era5", httpx.ConnectError("x")), ("power", httpx.ConnectError("x"))],
+     ONE_STATION),
+    # two counted rows or more: no note
+    ([("era5", record("era5", 0.3)), ("power", record("power", 0.3, seed=2)), ("ghcn", record("ghcn", 0.3, **THIN))],
+     None),
+    ([("era5", record("era5", 0.3)), ("power", record("power", 0.3, seed=2)), ("ghcn", record("ghcn", 0.3, seed=3))],
+     None),
+    ([("power", record("power", 0.3)), ("era5", httpx.ConnectError("x")), ("ghcn", record("ghcn", 0.3, seed=3))],
+     None),
+])
+def test_single_note_when_fewer_than_two_records_are_counted(rows, note):
+    r = run("air_temp", *rows)
+    assert r["single_note"] == note
+    assert (sum(c["counted"] for c in r["comparisons"]) < 2) == (note is not None)
 
 
 # ---- drift ----

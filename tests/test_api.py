@@ -16,7 +16,7 @@ SERIES_KEYS = {"variable", "units", "freq", "place", "times", "values", "source"
 TREND_KEYS = {"variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
               "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "baseline", "record",
               "range_kind", "headline_rate", "fit", "latest", "now", "world", "projection", "explain", "caveats", "meaning", "guidance",
-              "main_note", "comparisons", "comparisons_window", "disagree", "drift"}  # PR4a: null for sea level
+              "main_note", "comparisons", "comparisons_window", "disagree", "drift", "single_note"}  # PR4a: null for sea level
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 client = TestClient(app)
 
@@ -60,6 +60,19 @@ def test_series_and_trend_shapes(offline, variable, src):
     assert (r.json()["record"]["trimmed_from"] or "")[:4] == ("1911" if src == "coops" else "")
     # offline, air temperature's other records can't be read: a partial answer is never cached (PR4a "Caching")
     assert r.headers["cache-control"] == ("no-store" if variable == "air_temp" else CACHE)
+
+
+def test_single_note_on_the_trend_route(offline):
+    """PR4a "One record": offline only NASA POWER can be read (ERA5 and the station read "error"), so the answer rests
+    on one weather model; compare=false leaves the note null, and nothing else changes."""
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "source": "power"}
+    full = client.get("/api/trend", params=q).json()
+    bare = client.get("/api/trend", params={**q, "compare": "false"}).json()
+    assert full["single_note"] == "Only one record could be compared here, so this answer rests on a single weather model."
+    assert [c["counted"] for c in full["comparisons"]] == [True, False, False] and bare["single_note"] is None
+    pr4a = {"comparisons", "comparisons_window", "disagree", "drift", "single_note"}
+    assert {k: v for k, v in full.items() if k not in pr4a} == {k: v for k, v in bare.items() if k not in pr4a}
+    assert list(full)[-2:] == ["meaning", "guidance"]
 
 
 def test_start_end_passed_through(offline):
