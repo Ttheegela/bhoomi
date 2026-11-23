@@ -290,12 +290,21 @@ function syncTimer() {
   else if (!any && loadTimer) { clearInterval(loadTimer); loadTimer = 0; }
 }
 
+// At 375 px the sidebar and the card sit above the map. After a tap or key press on the map, a redraw (a place loading, its
+// answer, another pin) would move the map, so the page scrolls by the same amount, at once, and the map stays where it was
+// (QA B4). Side by side on a desktop the map's top does not move, so nothing scrolls there.
+let fromMap = false;
+['pointerdown', 'keydown'].forEach((t) => document.addEventListener(t, (e) => { fromMap = !!(e.target.closest && e.target.closest('#map-slot')); }, true));
+function keepTop(box, draw, scrollBy) {
+  const t0 = box.getBoundingClientRect().top;
+  draw();
+  const d = box.getBoundingClientRect().top - t0;
+  if (d) scrollBy(d);
+}
 function changed() {
-  renderSrcNote();
-  renderSidebar();
-  renderRec();
-  renderDetail();
-  renderFoot();
+  const draw = () => { renderSrcNote(); renderSidebar(); renderRec(); renderDetail(); renderFoot(); };
+  if (fromMap) keepTop($('map-slot'), draw, (d) => window.scrollBy({ top: d, behavior: 'instant' }));
+  else draw();
   syncTimer();
   const pins = pinList(curWin);
   const sel = pins.find((p) => p.selected);
@@ -390,9 +399,13 @@ function renderRec() {
   drawRec(box);
   if (had && !box.contains(document.activeElement)) { const h = box.querySelector('h2'); if (h) h.focus({ preventScroll: true }); }
 }
+// While a place loads, the card keeps its last height and lets it go once the answer or the error is drawn: at 375 px the
+// card sits above the map, and its shrinking moved the page 831 px when a tapped gauge dot added a place (QA B4).
+function holdHeight(box, loading) { box.style.minHeight = loading ? box.style.minHeight || `${box.offsetHeight}px` : ''; }
 function drawRec(box) {
-  clear(box);
   const pin = selectedPin(curWin), w = winOf(curWin);
+  holdHeight(box, !!w && !!pin && pin.status === 'loading');
+  clear(box);
   box.setAttribute('aria-busy', String(!!pin && pin.status === 'loading'));
   if (!w) return;
   if (!pin) {
