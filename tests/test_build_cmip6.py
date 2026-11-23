@@ -1,4 +1,6 @@
-"""scripts/build_cmip6.py on synthetic arrays and a fake server; no network, no Atlas files."""
+"""scripts/build_cmip6.py on synthetic arrays, a fake server and small real CSIC responses; no network, no Atlas files,
+no h5py."""
+import copy
 import hashlib
 import importlib.util
 import io
@@ -6,6 +8,7 @@ import json
 import ssl
 import struct
 import urllib.error
+import zipfile
 import zlib
 from pathlib import Path
 
@@ -49,6 +52,10 @@ def test_decode_undoes_shuffle_then_deflate():
     shuffled = np.frombuffer(a.tobytes(), np.uint8).reshape(-1, 4).T.tobytes()
     assert np.array_equal(b.decode(zlib.compress(shuffled), [2, 1], a.shape, a.dtype), a)
     assert np.array_equal(b.decode(zlib.compress(a.tobytes()), [1], a.shape, a.dtype), a)
+    # the Atlas files' pipeline: shuffle, deflate, then a 4-byte Fletcher-32 trailer
+    assert np.array_equal(b.decode(zlib.compress(shuffled) + b"\x01\x02\x03\x04", [2, 1, 3], a.shape, a.dtype), a)
+    with pytest.raises(zlib.error):  # a damaged chunk still fails: zlib checks its Adler-32
+        b.decode(zlib.compress(shuffled)[:-5] + b"\x00\x01\x02\x03\x04", [2, 1, 3], a.shape, a.dtype)
     with pytest.raises(ValueError, match="filters"):
         b.decode(a.tobytes(), [32015], a.shape, a.dtype)
     with pytest.raises(ValueError, match="size"):
@@ -152,13 +159,22 @@ def test_combine_builds_every_array_and_its_self_checks_pass(monkeypatch):
     assert [ok for _, ok in checks].count(False) == 1 and not checks[0][1]
 
 
+def stamp(rs: list[dict]) -> dict:
+    """What check writes to check.ok when every file passed."""
+    return {"checked": "2026-11-23T03:00:00+00:00", "passed": True, "files": {r["name"]: {
+        "sha256": "a" * 64, "md5": r["md5"] if r["var"] == "pr" else "b" * 32,
+        "retrieved": "2026-11-22" if r["var"] == "t" else "2026-11-23", "cds_request": b.cds_request(r),
+        "values": {"nj": {"compared": 10, "mismatches": 0}, "delhi": {"compared": 10, "mismatches": 0}},
+        "metadata_diff": ["NC_GLOBAL.tracking_id: CSIC 'a' -> CDS 'b'"]} for r in rs}}
+
+
 def test_pack_writes_int16_arrays_and_a_manifest(monkeypatch, tmp_path):
     rs, means = synthetic_run(monkeypatch)
     stats, checks = b.combine(means, rs)
     stats["t_change"][0, 0, 0, 0, 0] = np.nan
     stats["checks"] = np.array([t for t, _ in checks])
     stats["land"] = np.array([[0.0, 0.25, 0.5], [0.75, 1.0, 1.0]])
-    npz, js = b.pack(stats, "2026-11-23", rs, tmp_path)
+    npz, js = b.pack(stats, stamp(rs), rs, tmp_path)
     with np.load(npz) as z:
         assert set(z.files) == {"lat", "lon", "scenarios", "windows", "percentiles", "land"} | set(b.SCALES)
         assert all(z[k].dtype == np.int16 for k in b.SCALES)
@@ -167,16 +183,186 @@ def test_pack_writes_int16_arrays_and_a_manifest(monkeypatch, tmp_path):
         np.testing.assert_allclose(z["t_change"][3, 2, 1] * 0.01, stats["t_change"][3, 2, 1], atol=0.005)
         assert z["scenarios"].tolist() == list(b.SSPS) and z["windows"].tolist() == [[2021, 2040], [2041, 2060], [2081, 2100]]
     m = json.loads(js.read_text())
-    assert (m["doi"], m["licence"], m["baseline_years"], m["accessed"]) == ("10.20350/digitalCSIC/15492", "CC-BY-4.0",
-                                                                          [1995, 2014], "2026-11-23")
+    src = m["source"]  # where the files came from: the Copernicus copy; the dataset they are: the Atlas
+    assert (src["name"], src["doi"], src["url"], src["retrieved"], src["licence"]) == (
+        "Gridded monthly climate projection dataset underpinning the IPCC AR6 Interactive Atlas", "10.24381/cds.5292a2b0",
+        "https://cds.climate.copernicus.eu/datasets/projections-climate-atlas", "2026-11-23", "CC-BY-4.0")
+    assert (m["doi"], m["licence"], m["baseline_years"]) == ("10.20350/digitalCSIC/15492", "CC-BY-4.0", [1995, 2014])
+    assert "10.24381/cds.5292a2b0" in m["citations"][0] and "2026-11-23" in m["citations"][0]
+    v = m["verification"]
+    assert (v["values_compared"], v["values_differing"], v["files_byte_identical_to_csic"]) == (300, 0, 5)
     assert m["range_name"] == "range across climate models (10th–90th percentile)" and m["percentiles"] == [10, 50, 90]
     assert len(m["sources"]) == 15 and len(m["models"]["pr"]["ssp370"]) == 12 and len(m["self_checks"]) == len(checks)
+    assert m["sources"][1]["cds_request"]["experiment"] == "ssp1_2_6" and m["sources"][1]["sha256"] == "a" * 64
+    assert m["sources"][1]["attributes_differing_from_csic"] == ["NC_GLOBAL.tracking_id"]
     assert (m["land_mask"]["url"], m["land_mask"]["licence"], m["land_mask"]["md5"]) == (b.MASK["url"], "CC-BY-4.0",
                                                                                          b.MASK["md5"])
     assert npz.stat().st_size < 50_000
     stats["pr_change"][0, 0, 0, 0, 0] = 4000.0  # +4000% does not fit int16 at 0.1%
     with pytest.raises(ValueError, match="int16"):
-        b.pack(stats, "2026-11-23", rs, tmp_path)
+        b.pack(stats, stamp(rs), rs, tmp_path)
+
+
+# ---- the CDS copy against the CSIC originals ----
+
+FIX = Path(__file__).parent / "fixtures"
+
+
+def pr_row(exp: str, n_members: int | None = None) -> dict:
+    r = next(r for r in b.rows() if (r["var"], r["exp"]) == ("pr", exp))
+    return {**r, "members": r["members"][:n_members], "check_means": r["check_means"][:n_members]}
+
+
+def test_extract_unzips_the_nc_hashes_it_and_keeps_the_provenance(tmp_path):
+    content = np.random.default_rng(4).bytes(100_000)  # an HDF5-free stand-in for the .nc
+    row = {**pr_row("ssp245"), "bytes": len(content)}
+    prov = {"agent": {"roocs:rook_v1.4.1": {"prov:type": {"$": "prov:SoftwareAgent", "type": "xsd:QName"},
+                                            "dcterms:source": "https://github.com/roocs/rook/releases/tag/v1.4.1"},
+                      "roocs:C3S_CDS": {"prov:type": {"$": "prov:Organization"},
+                                        "dcterms:source": "https://cds.climate.copernicus.eu"}},
+            "wasDerivedFrom": {"_:id5": {"prov:usedEntity": "roocs:c3s-ipcc-atlas.pr.CMIP6.ssp245.mon"}},
+            "activity": {"o": {"prov:startTime": "2026-11-23T01:17:18"}, "s": {"prov:label": "subset_pr_1"}}}
+    (tmp_path / "raw").mkdir()
+    (tmp_path / "files").mkdir()
+    with zipfile.ZipFile(tmp_path / "raw" / "pr_ssp2_4_5.zip", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(row["name"], content)
+        z.writestr("provenance.json", json.dumps(prov))
+        z.writestr("provenance.png", b"\x89PNG")
+    rec, new = b.extract_one((tmp_path, row))
+    assert "not downloaded yet" in rec["problem"] and not new  # download_cds.sh has not written pr_ssp2_4_5.ok
+    (tmp_path / "raw" / "pr_ssp2_4_5.ok").touch()
+    rec, new = b.extract_one((tmp_path, row))
+    assert new and (tmp_path / "files" / row["name"]).read_bytes() == content
+    assert (rec["sha256"], rec["md5"], rec["csic_md5"]) == (hashlib.sha256(content).hexdigest(),
+                                                            hashlib.md5(content).hexdigest(), row["md5"])
+    assert rec["cds_request"] == {"origin": "cmip6", "experiment": "ssp2_4_5", "domain": "global", "period": "2015-2100",
+                                  "variable": "monthly_mean_of_daily_accumulated_precipitation"}
+    assert rec["provenance"] == {"software": ["https://github.com/roocs/rook/releases/tag/v1.4.1"],
+                                 "derived_from": ["roocs:c3s-ipcc-atlas.pr.CMIP6.ssp245.mon"],
+                                 "processed": ["2026-11-23T01:17:18"]}
+    assert json.loads((tmp_path / "extract" / f"{row['name']}.json").read_text()) == rec
+    assert b.extract_one((tmp_path, row)) == (rec, False)  # done already: not extracted again
+    other = tmp_path / "other"
+    (other / "files").mkdir(parents=True)
+    other.joinpath("raw").symlink_to(tmp_path / "raw")
+    rec, new = b.extract_one((other, {**row, "bytes": len(content) + 1}))  # not the CSIC size: refused, nothing left
+    assert "expected" in rec["problem"] and not new and not any((other / "files").iterdir())
+
+
+def test_parse_dump_reads_a_real_csic_point_dump():
+    text = (FIX / "csic_pr_historical_nj_3members.ascii").read_text()  # OPeNDAP ASCII, THREDDS mirror, 3 members
+    row = pr_row("historical", 3)
+    a, t0 = b.parse_dump(text, row)
+    assert a.shape == (3, 240) and a.dtype == np.float32 and t0 == 1740 and a[0, 0] == np.float32("2.7177734")
+    # the TSV's 1995-2014 means at 40.5N 74.5W: the dump is that cell and those months
+    np.testing.assert_allclose(a.astype(np.float64).mean(1), row["check_means"], atol=1e-5)
+    with pytest.raises(ValueError, match="point dump"):
+        b.parse_dump(text, pr_row("historical", 2))
+    with pytest.raises(ValueError, match="point dump"):
+        b.parse_dump(text, {**row, "exp": "ssp245"})
+    with pytest.raises(ValueError, match="every member"):
+        b.parse_dump(text.replace("[1][5][0], ", "[1][5][0]; ", 1), row)
+
+
+def test_mismatches_compares_float32_bit_patterns_and_nan_matches_nan():
+    a = np.array([1.0, np.nan, 2.0**113, 0.0], np.float32)
+    other_nan = a.copy()
+    other_nan.view(np.uint32)[1] = 0x7FC00001
+    assert b.mismatches(a, a.copy()) == 0 and b.mismatches(a, other_nan) == 0
+    up = a.copy()
+    up[0] = np.nextafter(np.float32(1), np.float32(2))
+    assert b.mismatches(a, up) == 1
+    neg = a.copy()
+    neg[3] = -0.0
+    assert b.mismatches(a, neg) == 1  # equal as numbers, not as bits
+    with pytest.raises(ValueError):
+        b.mismatches(a, a.astype(np.float64))
+
+
+def test_parse_das_and_the_attribute_diff():
+    csic = b.parse_das((FIX / "csic_pr_ssp245.das").read_text())  # the THREDDS mirror's DAS for pr ssp245
+    assert csic["pr"]["units"] == "mm" and csic["pr"]["_ChunkSizes"] == [4, 148, 26, 52]
+    assert csic["pr"]["missing_value"] == b.plain(np.float32(2.0**113)) == [2.0**113]
+    assert csic["pr"]["_FillValue"] == b.plain(np.float32(-1.7014118e38)) and csic["crs"]["semi_major_axis"] == [6378137]
+    uuid = "7dff649e-bb71-4995-bcc4-3c8134cb01a7"
+    assert csic["NC_GLOBAL"]["tracking_id"] == uuid == b.plain(np.bytes_(uuid.encode()))
+    assert csic["member_id"]["comment"].startswith("Values uniquely identify each member")
+    cds = copy.deepcopy(csic)
+    cds["NC_GLOBAL"]["tracking_id"] = "0" * 36
+    cds["NC_GLOBAL"]["history"] = "subset"
+    del cds["crs"]
+    assert b.attr_diff(csic, cds) == ["NC_GLOBAL.history: CSIC (none) -> CDS 'subset'",
+                                      f"NC_GLOBAL.tracking_id: CSIC '7dff649e-bb71-4995-bcc4-3c8134cb01a7' -> CDS '{'0' * 36}'",
+                                      "crs: only in CSIC"]
+    assert b.attr_diff(csic, csic) == []
+
+
+def identical(row: dict, dumps: dict, csic: dict):
+    """A stand-in for read_cds: what h5py gives for a file whose values and attributes equal CSIC's."""
+    def read(path, r, cells):
+        assert cells == {c: (*b.CELLS[c], b.span(b.BASE, r["start"])[0], 240) for c in b.CELLS}
+        return {"dims": ["member", "time", "lat", "lon"], "shape": [len(r["members"]), r["months"], 180, 360],
+                "dtype": "float32", "units": "mm", "members": list(r["members"]), "lat": b.LAT.copy(), "lon": b.LON.copy(),
+                "time": b.time_axis(r["start"], r["months"]), "points": {c: dumps[c].copy() for c in cells},
+                "attrs": copy.deepcopy(csic), "storage": {"chunks": [3, 220, 20, 40]}}
+    return read
+
+
+def test_compare_passes_identical_values_and_fails_on_one_changed_float():
+    row = pr_row("historical", 3)
+    a, _ = b.parse_dump((FIX / "csic_pr_historical_nj_3members.ascii").read_text(), row)
+    csic = b.parse_das((FIX / "csic_pr_ssp245.das").read_text())
+    got = identical(row, {"nj": a, "delhi": a}, csic)(None, row, {c: (*b.CELLS[c], 1740, 240) for c in b.CELLS})
+    res, problems = b.compare(got, row, {"nj": a}, csic)
+    assert problems == [] and res["values"] == {"nj": {"compared": 720, "mismatches": 0}} and res["metadata_diff"] == []
+    got["points"]["nj"][2, 100] = np.nextafter(got["points"]["nj"][2, 100], np.float32(np.inf))  # one float, one ulp
+    _, problems = b.compare(got, row, {"nj": a}, csic)
+    assert problems == ["nj: 1 of 720 values differ from CSIC's"]
+    got = identical(row, {"nj": a, "delhi": a}, csic)(None, row, {c: (*b.CELLS[c], 1740, 240) for c in b.CELLS})
+    got["members"], got["units"], got["time"] = got["members"][::-1], "kg m-2 s-1", got["time"] + 0.5
+    assert [p.split()[0] for p in b.compare(got, row, {"nj": a}, None)[1]] == ["units", "members", "time"]
+
+
+def test_check_refuses_one_changed_float_and_reduce_and_pack_need_the_stamp(monkeypatch, tmp_path):
+    content = b"stand-in for the extracted .nc"
+    row = {**pr_row("historical", 3), "bytes": len(content)}
+    dump = (FIX / "csic_pr_historical_nj_3members.ascii").read_text()
+    a, _ = b.parse_dump(dump, row)
+    for c in b.CELLS:
+        (tmp_path / "points" / c).mkdir(parents=True)
+        (tmp_path / "points" / c / "pr.historical.txt").write_text(dump)
+    for d in ("files", "extract", "csic"):
+        (tmp_path / d).mkdir()
+    (tmp_path / "files" / row["name"]).write_bytes(content)
+    (tmp_path / "csic" / f"{row['name']}.das").write_text((FIX / "csic_pr_ssp245.das").read_text())  # no network
+    (tmp_path / "extract" / f"{row['name']}.json").write_text(json.dumps(
+        {"name": row["name"], "bytes": len(content), "sha256": hashlib.sha256(content).hexdigest(), "retrieved": "2026-11-23"}))
+    csic = b.parse_das((FIX / "csic_pr_ssp245.das").read_text())
+    monkeypatch.setattr(b, "read_check", lambda p, r: True)  # the build's own reader needs a real HDF5 file
+
+    monkeypatch.setattr(b, "read_cds", identical(row, {"nj": a, "delhi": a}, csic))
+    ok = b.check_one((tmp_path, row))
+    assert ok["ok"] and ok["values"] == {c: {"compared": 720, "mismatches": 0} for c in b.CELLS} and ok["metadata_diff"] == []
+    with pytest.raises(SystemExit, match="check.ok"):
+        b.reduce(tmp_path, [row], 1)  # check has not written its stamp yet
+    assert b.record_check(tmp_path, [ok]) and b.checked(tmp_path, [row])["files"][row["name"]]["sha256"] == ok["sha256"]
+    with pytest.raises(SystemExit, match="does not cover"):
+        b.checked(tmp_path, [row, pr_row("ssp245")])
+
+    changed = a.copy()
+    changed.view(np.uint32)[0, 7] ^= 1  # the last bit of one float
+    monkeypatch.setattr(b, "read_cds", identical(row, {"nj": a, "delhi": changed}, csic))
+    bad = b.check_one((tmp_path, row))
+    assert not bad["ok"] and bad["problems"] == ["delhi: 1 of 720 values differ from CSIC's"]
+    (tmp_path / "check.ok").unlink()
+    assert not b.record_check(tmp_path, [ok, bad]) and not (tmp_path / "check.ok").exists()
+    assert json.loads((tmp_path / "check_report.json").read_text())["passed"] is False
+    with pytest.raises(SystemExit, match="check.ok"):
+        b.main(["pack", str(tmp_path)])
+
+    (tmp_path / "files" / row["name"]).write_bytes(content + b"!")  # changed after extract
+    assert b.check_one((tmp_path, row))["problems"] == ["size differs from the extract record",
+                                                        "sha256 differs from the extract record"]
 
 
 def link_message(name: str, addr: int, flags: int) -> bytes:

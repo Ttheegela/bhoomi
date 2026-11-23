@@ -4,18 +4,30 @@
 Data: IPCC-WGI AR6 Interactive Atlas Dataset, Version 2 final, Instituto de Física de Cantabria (IFCA, CSIC-UC), 2022,
   CC-BY 4.0, https://digital.csic.es/handle/10261/280324 ; CMIP6 item https://digital.csic.es/handle/10261/332744
   (doi:10.20350/digitalCSIC/15492). Monthly t, txx and pr for the historical run and SSP1-2.6, 2-4.5, 3-7.0 and 5-8.5:
-  15 netCDF4 files, 50.2 GB, one member per model. scripts/cmip6_files.tsv lists each file's URL, bytes and md5 (from the
-  repository's record), its members in file order, and each member's mean at 40.5N 74.5W over 1995-2014 (historical) or
-  2041-2060 (SSPs) from the THREDDS mirror's OPeNDAP point series; the build fails unless it reproduces them.
+  15 netCDF4 files, 50.2 GB, one member per model. scripts/cmip6_files.tsv lists each file's CSIC URL, bytes and md5
+  (from the repository's record), its members in file order, and each member's mean at 40.5N 74.5W over 1995-2014
+  (historical) or 2041-2060 (SSPs) from the THREDDS mirror's OPeNDAP point series; the build fails unless it reproduces
+  them.
+Retrieved from the Copernicus CDS copy: "Gridded monthly climate projection dataset underpinning the IPCC AR6
+  Interactive Atlas" (projections-climate-atlas, doi:10.24381/cds.5292a2b0, CC-BY 4.0), because digital.csic.es cuts
+  every transfer at about 1.08 GB. download_cds.sh (on the HPC node) leaves WORK/raw/<var>_<experiment>.zip and a .ok
+  marker; each zip holds the .nc under the CSIC name and size, provenance.json and provenance.png. Most .nc md5s equal
+  CSIC's but not all (the ssp245 files differ), so `check` records the md5 match and proves the values equal the CSIC
+  originals bit for bit against OPeNDAP point dumps from the THREDDS mirror (WORK/points/<cell>/<var>.<exp>.txt: every member and month, historical 1995-2014 or the whole SSP run,
+  at 40.5N 74.5W (nj) and 28.5N 77.5E (delhi)), and lists every attribute that differs from the mirror's DAS (cached in
+  WORK/csic).
 Land: the Atlas's own 1-degree land-sea mask (IPCC-WG1/Atlas, reference-grids/land_sea_mask_1degree.nc4, CC-BY 4.0,
   20960 bytes), stored per cell so a coastal place takes its change from land (earthtrends/data/cmip6.py).
 
-Subcommands (WORK is a scratch folder: WORK/files, WORK/reduce, WORK/out):
-  netcheck WORK                one HEAD request to digital.csic.es: can this node reach it?
-  download WORK [--jobs 4]     the 15 files and the mask, up to --jobs at once (1-5), resumable, md5-checked, read-checked
-  check WORK [--workers N]     sizes, md5s, the mask's grid, and that the reader reproduces every file's check means
-  reduce WORK [--workers N]    each model's 20-year means (one task per file and chunk-row of members), then the changes
-  pack WORK                    int16 npz + JSON manifest in WORK/out, and prints their paths and sizes
+Subcommands (WORK is a scratch folder: WORK/raw, WORK/files, WORK/reduce, WORK/out):
+  extract WORK [--workers N]   each downloaded zip's .nc into WORK/files; size, sha256, md5, provenance in WORK/extract
+  check WORK [--workers N]     structure, bit-exact values against the CSIC dumps, attribute differences, the mask's md5
+                               and grid, and the build's own reader; WORK/check_report.json, and WORK/check.ok only when
+                               all 16 files pass
+  reduce WORK [--workers N]    (needs check.ok) each model's 20-year means (one task per file and chunk-row of members),
+                               then the changes
+  pack WORK                    (needs check.ok) int16 npz + JSON manifest in WORK/out, and prints their paths and sizes
+  netcheck WORK, download WORK [--jobs 4]   the CSIC route (digital.csic.es), which cannot deliver whole files today
 --workers defaults to SLURM_CPUS_PER_TASK, else the CPU count.
 
 Method (docs/REWORK-SPEC.md PR3; D2, D6, D7): each model's mean of its monthly values over 1995-2014 and over 2021-2040,
@@ -25,7 +37,8 @@ of models; for pr also the number of models that get wetter and, the Atlas's own
 
 Reading: scripts/build_ar6.py's small HDF5 reader (numpy + stdlib), imported from this folder, plus dense link storage
 and a chunk loop for 4-D data. Copy build_cmip6.py, cmip6_files.tsv, build_ar6.py and build_grace.py into one folder.
-Needs numpy, and httpx only because build_ar6 imports it (certifi, which comes with httpx, is used for TLS).
+Needs numpy, and httpx only because build_ar6 imports it (certifi, which comes with httpx, is used for TLS). `check`
+also reads with h5py, as an independent reader: install it in the HPC env only, never in the app.
 """
 import argparse
 import csv
@@ -44,6 +57,7 @@ import time
 import urllib.error
 import urllib.request
 import warnings
+import zipfile
 import zlib
 from datetime import date, datetime, timezone
 from functools import cache
@@ -89,6 +103,20 @@ LAND_MASK = {
     "citation": "Iturbide, M., Fernández, J., Gutiérrez, J.M. et al. Implementation of FAIR principles in the IPCC: the "
                 "WGI AR6 Atlas repository. Scientific Data 9, 629 (2022). https://doi.org/10.1038/s41597-022-01739-y",
 }
+CDS = {
+    "name": "Gridded monthly climate projection dataset underpinning the IPCC AR6 Interactive Atlas",
+    "publisher": "Copernicus Climate Change Service (C3S) Climate Data Store",
+    "dataset_id": "projections-climate-atlas", "doi": "10.24381/cds.5292a2b0",
+    "url": "https://cds.climate.copernicus.eu/datasets/projections-climate-atlas",
+    "licence": "CC-BY-4.0", "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+}
+CDS_VARIABLES = {"t": "monthly_mean_of_daily_mean_temperature", "txx": "monthly_maximum_of_daily_maximum_temperature",
+                 "pr": "monthly_mean_of_daily_accumulated_precipitation"}
+THREDDS = "https://data.meteo.unican.es/thredds/dodsC/IPCC/AR6/IA-monthly/raw/CMIP6"  # the CSIC mirror, OPeNDAP
+CELLS = {"nj": (CHECK_YI, CHECK_XI), "delhi": (118, 257)}  # the point dumps' cells, 40.5N 74.5W and 28.5N 77.5E
+UNITS = {"t": "degC", "txx": "degC", "pr": "mm"}  # the CSIC files' units attribute (pr: mm a day)
+HDF5_ONLY = {"CLASS", "NAME", "DIMENSION_LIST", "REFERENCE_LIST", "_Netcdf4Dimid", "_Netcdf4Coordinates",
+             "_NCProperties"}  # netCDF4 bookkeeping in HDF5 that a DAS never shows
 
 VARIABLES = {
     "t": {"app_variable": "air_temp", "units": "degC", "change": "difference of 20-year means",
@@ -248,9 +276,13 @@ def read_mask(path: Path) -> np.ndarray:
 
 
 def decode(raw: bytes, filters: list[int], shape: tuple, dt: np.dtype) -> np.ndarray:
-    """One stored chunk -> its array: inflate (filter 1), then undo the shuffle (filter 2), as build_ar6 does."""
-    if filters not in ([], [1], [2, 1]):
+    """One stored chunk -> its array: drop the Fletcher-32 trailer (filter 3, last on write), inflate (filter 1), then
+    undo the shuffle (filter 2). The Atlas files use [2, 1, 3]; zlib's own Adler-32 checks every inflated chunk, so the
+    Fletcher-32 is not recomputed."""
+    if filters not in ([], [1], [2, 1], [1, 3], [2, 1, 3]):
         raise ValueError(f"unsupported filters {filters}")
+    if 3 in filters:
+        raw = raw[:-4]
     if 1 in filters:
         raw = zlib.decompress(raw)
     if len(raw) != int(np.prod(shape)) * dt.itemsize:
@@ -389,9 +421,14 @@ def to_int16(x: np.ndarray, scale: float) -> np.ndarray:
     return np.where(ok, v, FILL).astype(np.int16)
 
 
-def pack(stats: dict, accessed: str, rs: list[dict], out: Path) -> list[Path]:
-    """stats (from reduce) -> out/cmip6_atlas.npz (int16, value = stored x scale) and out/cmip6_atlas.json."""
+def pack(stats: dict, checked: dict, rs: list[dict], out: Path) -> list[Path]:
+    """stats (from reduce) and the check stamp -> out/cmip6_atlas.npz (int16, value = stored x scale) and
+    out/cmip6_atlas.json."""
     out.mkdir(parents=True, exist_ok=True)
+    files = [checked["files"][r["name"]] for r in rs]
+    retrieved = max(f["retrieved"] for f in files)
+    compared = sum(v["compared"] for f in files for v in f["values"].values())
+    differ = sum(v["mismatches"] for f in files for v in f["values"].values())
     arrays = {"lat": LAT.astype(np.float32), "lon": LON.astype(np.float32), "scenarios": np.array(SSPS),
               "windows": np.array(WINDOWS, np.int16), "percentiles": np.array(PCT, np.int16)}
     arrays |= {k: to_int16(stats[k], s) for k, s in SCALES.items()}
@@ -399,13 +436,23 @@ def pack(stats: dict, accessed: str, rs: list[dict], out: Path) -> list[Path]:
     npz = out / "cmip6_atlas.npz"
     write_npz(npz, **arrays)
     manifest = {
+        "source": {**CDS, "retrieved": retrieved,
+                   "note": "Where the files were retrieved: the Copernicus copy of the Atlas files below (same names and "
+                           "sizes). Their values equal the CSIC originals bit for bit at every member and month checked "
+                           "(verification); the attributes that differ are listed per file (sources)."},
         "dataset": "IPCC-WGI AR6 Interactive Atlas Dataset, CMIP6, monthly t, txx and pr on the Atlas 1-degree grid",
         "publisher": "Instituto de Física de Cantabria (IFCA, CSIC-UC)",
         "version": "Version 2 final (product_version v2.0-final)",
         "doi": "10.20350/digitalCSIC/15492",
         "record_url": "https://digital.csic.es/handle/10261/332744",
         "collection_url": "https://digital.csic.es/handle/10261/280324",
-        "licence": "CC-BY-4.0", "licence_url": "https://creativecommons.org/licenses/by/4.0/", "accessed": accessed,
+        "licence": "CC-BY-4.0", "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+        "verification": {
+            "against": "OPeNDAP point series of the CSIC files on their THREDDS mirror (" + THREDDS + "), every member "
+                       "and month (historical 1995-2014, SSPs 2015-2100) at 40.5N 74.5W and 28.5N 77.5E, compared as "
+                       "float32 bit patterns",
+            "checked": checked["checked"], "values_compared": compared, "values_differing": differ,
+            "files_byte_identical_to_csic": sum(f["md5"] == r["md5"] for r, f in zip(rs, files))},
         "baseline": "1995-2014 mean", "baseline_years": list(BASE), "windows": [list(w) for w in WINDOWS],
         "percentiles": list(PCT), "range_name": "range across climate models (10th–90th percentile)",
         "scenarios": {s: f"SSP{s[3]}-{s[4]}.{s[5]}" for s in SSPS},
@@ -416,12 +463,122 @@ def pack(stats: dict, accessed: str, rs: list[dict], out: Path) -> list[Path]:
         "models": {v: {s: stats[f"models_{v}_{s}"].tolist() for s in SSPS} for v in VARS},
         "method": METHOD, "notes": NOTES,
         "self_checks": [str(c) for c in stats["checks"]],
-        "sources": [{k: r[k] for k in ("name", "url", "bytes", "md5")} for r in rs],
-        "citations": CITATIONS, "acknowledgement": ACKNOWLEDGEMENT,
+        "sources": [{"name": r["name"], "bytes": r["bytes"], "sha256": f["sha256"], "cds_request": f["cds_request"],
+                     "retrieved": f["retrieved"], "md5": f["md5"], "csic_url": r["url"], "csic_md5": r["md5"],
+                     "attributes_differing_from_csic": [d.split(":")[0] for d in f["metadata_diff"] or []]}
+                    for r, f in zip(rs, files)],
+        "citations": [f"Copernicus Climate Change Service, Climate Data Store: {CDS['name']}. "
+                      f"https://doi.org/{CDS['doi']} (retrieved {retrieved})"] + CITATIONS,
+        "acknowledgement": ACKNOWLEDGEMENT,
     }
     js = out / "cmip6_atlas.json"
     js.write_text(json.dumps(manifest, indent=1, ensure_ascii=False) + "\n")
     return [npz, js]
+
+
+# ---- the CDS copy against the CSIC originals: pure ----
+
+def cds_request(row: dict) -> dict:
+    """The CDS request that returns this file; download_cds.sh saves it as WORK/raw/<var>_<experiment>.zip."""
+    e = row["exp"] if row["exp"] == "historical" else f"ssp{row['exp'][3]}_{row['exp'][4]}_{row['exp'][5]}"
+    return {"origin": "cmip6", "experiment": e, "domain": "global",
+            "period": "1850-2014" if e == "historical" else "2015-2100", "variable": CDS_VARIABLES[row["var"]]}
+
+
+def provenance(p: dict) -> dict:
+    """A CDS zip's provenance.json (W3C PROV) -> the software that made the file, what from, and when."""
+    return {"software": [a["dcterms:source"] for a in p.get("agent", {}).values()
+                         if a.get("prov:type", {}).get("$") == "prov:SoftwareAgent"],
+            "derived_from": [d["prov:usedEntity"] for d in p.get("wasDerivedFrom", {}).values()],
+            "processed": sorted(a["prov:startTime"] for a in p.get("activity", {}).values() if "prov:startTime" in a)[:1]}
+
+
+def parse_dump(text: str, row: dict) -> tuple[np.ndarray, int]:
+    """An OPeNDAP ASCII point dump of this file (every member at one cell) -> (values [member, month] as float32, the
+    first month's index in the file). A historical dump must hold 1995-2014, an SSP dump the whole run."""
+    t0, t1 = span(BASE, row["start"]) if row["exp"] == "historical" else (0, row["months"])
+    nm, nt = len(row["members"]), t1 - t0
+    head = re.search(rf"Float32 {row['var']}\[member = (\d+)\]\[time = (\d+)\]\[lat = 1\]\[lon = 1\];\n\}} "
+                     rf"\S+/{row['exp']}/{re.escape(row['name'])};", text)
+    if not head or tuple(map(int, head.groups())) != (nm, nt):
+        raise ValueError(f"not a point dump of {row['name']} with {nm} members x {nt} months")
+    cells = re.findall(r"^\[(\d+)\]\[(\d+)\]\[0\], (\S+)$", text, re.M)
+    if [(int(m), int(t)) for m, t, _ in cells] != [(m, t) for m in range(nm) for t in range(nt)]:
+        raise ValueError("the dump does not hold every member x month in order")
+    return np.array([float(v) for _, _, v in cells]).astype(np.float32).reshape(nm, nt), t0
+
+
+def mismatches(got, want) -> int:
+    """How many values differ as float32 bit patterns; a NaN matches a NaN whatever its payload."""
+    got, want = np.asarray(got), np.asarray(want)
+    if got.shape != want.shape or got.dtype != np.float32 or want.dtype != np.float32:
+        raise ValueError(f"{got.dtype} {got.shape} against {want.dtype} {want.shape}")
+    return int((~((got.view(np.uint32) == want.view(np.uint32)) | (np.isnan(got) & np.isnan(want)))).sum())
+
+
+def parse_das(text: str) -> dict[str, dict]:
+    """An OPeNDAP DAS -> {variable or NC_GLOBAL: {attribute: str (or list of str), or list of floats}}."""
+    toks = re.findall(r'"(?:[^"\\]|\\.)*"|[{};,]|[^\s{};,"]+', text)
+    out, stack, i = {}, [], 0
+    while i < len(toks):
+        if toks[i] == "}":
+            stack.pop()
+            i += 1
+        elif toks[i + 1] == "{":
+            stack.append(toks[i])
+            i += 2
+        else:  # type name value[, value ...];
+            j = toks.index(";", i)
+            typ, name, vals = toks[i], toks[i + 1], [t for t in toks[i + 2:j] if t != ","]
+            if typ == "String":
+                s = [re.sub(r"\\(.)", r"\1", v[1:-1]) for v in vals]
+                value = s[0] if len(s) == 1 else s
+            else:
+                value = [float(np.float32(v)) if typ == "Float32" else float(v) for v in vals]
+            out.setdefault(stack[-1], {})[name] = value
+            i = j + 1
+    return out
+
+
+def plain(v):
+    """An HDF5 attribute value -> what parse_das gives for it: str (or list of str), or a list of floats."""
+    a = np.atleast_1d(v)
+    if a.dtype.kind in "SUO":
+        s = [x.decode() if isinstance(x, bytes) else str(x) for x in a.ravel()]
+        return s[0] if len(s) == 1 else s
+    return [float(x) for x in a.ravel()]
+
+
+def attr_diff(csic: dict, cds: dict) -> list[str]:
+    """Every attribute (and variable) that differs between the CSIC file and the CDS one, as 'var.attr: ...'."""
+    show = lambda x: "(none)" if x is None else (repr(x) if len(repr(x)) <= 100 else repr(x)[:97] + "...")  # noqa: E731
+    out = []
+    for v in sorted(set(csic) | set(cds)):
+        if v not in cds or v not in csic:
+            out.append(f"{v}: only in {'CSIC' if v in csic else 'CDS'}")
+            continue
+        out += [f"{v}.{k}: CSIC {show(csic[v].get(k))} -> CDS {show(cds[v].get(k))}"
+                for k in sorted(set(csic[v]) | set(cds[v])) if csic[v].get(k) != cds[v].get(k)]
+    return out
+
+
+def compare(got: dict, row: dict, dumps: dict, csic: dict | None) -> tuple[dict, list[str]]:
+    """read_cds's output against cmip6_files.tsv, the CSIC point dumps {cell: values [member, month]} and the CSIC
+    attributes (parse_das; None when the DAS could not be fetched) -> (results, problems). Any problem fails check;
+    attribute differences are listed, not failed (units are a problem)."""
+    want = {"dims": ["member", "time", "lat", "lon"], "shape": [len(row["members"]), row["months"], len(LAT), len(LON)],
+            "dtype": "float32", "units": UNITS[row["var"]], "members": row["members"]}
+    problems = [f"{k} {got[k]}, expected {w}" for k, w in want.items() if got[k] != w]
+    problems += [f"{k} differs from the Atlas axis" for k, ref in
+                 (("lat", LAT), ("lon", LON), ("time", time_axis(row["start"], row["months"])))
+                 if not np.array_equal(got[k], ref)]
+    values = {c: {"compared": int(a.size), "mismatches": mismatches(got["points"][c], a)} for c, a in dumps.items()}
+    problems += [f"{c}: {v['mismatches']} of {v['compared']} values differ from CSIC's" for c, v in values.items()
+                 if v["mismatches"]]
+    if not dumps:
+        problems.append("no CSIC point dumps to compare")
+    return {"values": values, "metadata_diff": None if csic is None else attr_diff(csic, got["attrs"]),
+            "storage": got["storage"]}, problems
 
 
 # ---- network and disk (the HPC node only) ----
@@ -441,9 +598,9 @@ def request(url: str, method: str = "GET", headers: dict | None = None, timeout:
     return urllib.request.urlopen(req, timeout=timeout, context=tls())
 
 
-def file_md5(p: Path) -> str:
+def file_hash(p: Path, algo: str = "md5") -> str:
     with open(p, "rb") as f:
-        return hashlib.file_digest(f, "md5").hexdigest()
+        return hashlib.file_digest(f, algo).hexdigest()
 
 
 def fetch(row: dict, dest: Path, open_url=request) -> None:
@@ -467,7 +624,7 @@ def fetch(row: dict, dest: Path, open_url=request) -> None:
                         print(f"  {dest.name}: {f.tell() / 1e9:.1f} of {row['bytes'] / 1e9:.1f} GB", flush=True)
     if (size := part.stat().st_size) != row["bytes"]:
         raise ConnectionError(f"the transfer stopped at {size} of {row['bytes']} bytes")
-    if (md5 := file_md5(part)) != row["md5"]:
+    if (md5 := file_hash(part)) != row["md5"]:
         part.unlink()
         raise ValueError(f"md5 {md5}, expected {row['md5']}; deleted, run download again")
     os.replace(part, dest)
@@ -539,9 +696,7 @@ def netcheck(rs: list[dict]) -> int:
 def download(work: Path, rs: list[dict], jobs: int) -> int:
     files = work / "files"
     files.mkdir(parents=True, exist_ok=True)
-    if not (acc := work / "accessed.txt").exists():
-        acc.write_text(datetime.now(timezone.utc).date().isoformat() + "\n")
-    todo = sorted((r for r in rs if not (files / r["name"]).exists()), key=lambda r: -r["bytes"])  # largest first
+    todo =sorted((r for r in rs if not (files / r["name"]).exists()), key=lambda r: -r["bytes"])  # largest first
     print(f"{len(todo)} of {len(rs)} files to fetch, {sum(r['bytes'] for r in todo) / 1e9:.1f} GB, up to {jobs} at once",
           flush=True)
     q, gate, failed = queue.SimpleQueue(), threading.Condition(), []
@@ -601,19 +756,164 @@ def download(work: Path, rs: list[dict], jobs: int) -> int:
     return 0 if have == len(rs) else 1
 
 
-def check_one(args) -> bool:
-    work, r = args
-    p = work / "files" / r["name"]
+def extract_one(task) -> tuple[dict, bool]:
+    """One downloaded CDS zip -> its .nc in WORK/files (through .part; zipfile checks the CRC-32) and
+    WORK/extract/<name>.json: size, sha256, md5, the zip, its UTC download date, the request and the provenance.
+    -> (that record, or {"name", "problem"}; whether a file was written)."""
+    work, r = task
+    z = work / "raw" / f"{r['var']}_{cds_request(r)['experiment']}.zip"
+    dest, rec = work / "files" / r["name"], work / "extract" / f"{r['name']}.json"
+    if rec.exists() and dest.exists():
+        return json.loads(rec.read_text()), False
+    if not z.with_suffix(".ok").exists():
+        return {"name": r["name"], "problem": f"not downloaded yet (no {z.with_suffix('.ok').name})"}, False
+    part, sha, md5 = dest.with_name(dest.name + ".part"), hashlib.sha256(), hashlib.md5()
+    try:
+        with zipfile.ZipFile(z) as zf:
+            if not {r["name"], "provenance.json"} <= set(zf.namelist()):
+                return {"name": r["name"], "problem": f"{z.name} holds {zf.namelist()}"}, False
+            prov = provenance(json.loads(zf.read("provenance.json")))
+            with zf.open(r["name"]) as src, open(part, "wb") as f:
+                while block := src.read(1 << 24):
+                    sha.update(block)
+                    md5.update(block)
+                    f.write(block)
+    except Exception as e:  # a bad zip or CRC: report it, the other files still extract
+        return {"name": r["name"], "problem": f"cannot extract it: {e!r}"}, False
+    if (size := part.stat().st_size) != r["bytes"]:
+        part.unlink()
+        return {"name": r["name"], "problem": f"{size} bytes, expected {r['bytes']}"}, False
+    os.replace(part, dest)
+    out = {"name": r["name"], "bytes": size, "sha256": sha.hexdigest(), "md5": md5.hexdigest(), "csic_md5": r["md5"],
+           "zip": z.name, "zip_bytes": z.stat().st_size, "cds_request": cds_request(r), "provenance": prov,
+           "retrieved": datetime.fromtimestamp(z.with_suffix(".ok").stat().st_mtime, timezone.utc).date().isoformat()}
+    rec.parent.mkdir(parents=True, exist_ok=True)
+    rec.write_text(json.dumps(out, indent=1) + "\n")
+    return out, True
+
+
+def extract(work: Path, rs: list[dict], workers: int) -> int:
+    (work / "files").mkdir(parents=True, exist_ok=True)
+    with Pool(max(1, min(workers, len(rs)))) as pool:
+        done = list(pool.imap_unordered(extract_one, [(work, r) for r in rs]))
+    if any(new for _, new in done):
+        (work / "check.ok").unlink(missing_ok=True)  # new files need a new check
+    for x, new in sorted(done, key=lambda d: d[0]["name"]):
+        tag = ("skip" if x["problem"].startswith("not downloaded") else "FAIL") if "problem" in x else "new " if new else "had "
+        print(f"  {tag} {x['name']}: " + (x.get("problem") or f"{x['bytes']} bytes, sha256 {x['sha256']}, md5 "
+                                          f"{x['md5']} (CSIC md5 {x['csic_md5']})"))
+    have = sum("problem" not in x for x, _ in done)
+    print(f"{have} of {len(rs)} files extracted")
+    return 0 if have == len(rs) else 1
+
+
+def read_cds(path: Path, row: dict, cells: dict) -> dict:
+    """With h5py, a reader independent of the build's own: the file's structure, axes and attributes (as parse_das gives
+    them, plus _ChunkSizes as THREDDS shows it) and, for each cell {name: (lat index, lon index, first month, months)},
+    the values [member, month]."""
+    import h5py  # the HPC env only; never an app dependency
+    with h5py.File(path, "r") as f:
+        v = f[row["var"]]
+        attrs = {"NC_GLOBAL": {k: plain(a) for k, a in f.attrs.items() if k not in HDF5_ONLY}}
+        for k, d in f.items():
+            if isinstance(d, h5py.Dataset) and "not a netCDF variable" not in plain(d.attrs.get("NAME", "")):
+                attrs[k] = {a: plain(x) for a, x in d.attrs.items() if a not in HDF5_ONLY} | (
+                    {"_ChunkSizes": [float(c) for c in d.chunks]} if d.chunks else {})
+        return {"dims": [d[0].name.rsplit("/", 1)[-1] if len(d) else "" for d in v.dims],
+                "shape": list(v.shape), "dtype": str(v.dtype), "units": plain(v.attrs.get("units", "")),
+                "members": list(f["member_id"].asstr()[:]), "lat": f["lat"][:], "lon": f["lon"][:],
+                "time": f["time"][:], "points": {c: v[:, t0:t0 + n, yi, xi] for c, (yi, xi, t0, n) in cells.items()},
+                "attrs": attrs, "storage": {"chunks": list(v.chunks or ()), "compression": v.compression,
+                                            "shuffle": v.shuffle, "written_by": plain(f.attrs.get("_NCProperties", ""))}}
+
+
+def csic_attrs(work: Path, row: dict) -> dict | None:
+    """The CSIC file's attributes from the THREDDS mirror's DAS, cached in WORK/csic; None if it cannot be had."""
+    p = work / "csic" / f"{row['name']}.das"
     if not p.exists():
-        problem = "missing"
-    elif p.stat().st_size != r["bytes"]:
-        problem = f"{p.stat().st_size} bytes, expected {r['bytes']}"
-    elif (m := file_md5(p)) != r["md5"]:
-        problem = f"md5 {m}, expected {r['md5']}"
-    else:
-        return read_check(p, r)
-    print(f"  FAIL {r['name']}: {problem}", flush=True)
-    return False
+        try:
+            with request(f"{THREDDS}/{row['exp']}/{row['name']}.das", timeout=60) as resp:
+                text = resp.read().decode()
+        except Exception as e:
+            print(f"  no CSIC DAS for {row['name']}: {e!r}", flush=True)
+            return None
+        if "NC_GLOBAL" not in text:
+            return None
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
+    return parse_das(p.read_text())
+
+
+def check_one(args) -> dict:
+    """One file -> {"name", "ok", "problems", ...}. The mask: md5 and grid. An Atlas file: the size and sha256 extract
+    recorded; h5py (read_cds) against the TSV, the CSIC point dumps and DAS (compare); then the build's own reader, which
+    reduce uses (read_check)."""
+    work, r = args
+    p, out, problems = work / "files" / r["name"], {"name": r["name"]}, []
+    rec = work / "extract" / f"{r['name']}.json"
+    try:
+        if r["name"] == MASK["name"]:
+            problems = [] if p.exists() and file_hash(p) == MASK["md5"] else [f"missing, or md5 not {MASK['md5']}"]
+        elif not (p.exists() and rec.exists()):
+            problems = ["not extracted"]
+        else:
+            out |= json.loads(rec.read_text())
+            problems = [f"{k} differs from the extract record" for k, same in
+                        (("size", p.stat().st_size == r["bytes"] == out["bytes"]),
+                         ("sha256", file_hash(p, "sha256") == out["sha256"])) if not same]
+            if not problems:
+                dumps = {c: parse_dump((work / "points" / c / f"{r['var']}.{r['exp']}.txt").read_text(), r)
+                         for c in CELLS}
+                got = read_cds(p, r, {c: (*CELLS[c], t0, a.shape[1]) for c, (a, t0) in dumps.items()})
+                res, problems = compare(got, r, {c: a for c, (a, _) in dumps.items()}, csic_attrs(work, r))
+                out |= res
+    except Exception as e:  # report and carry on: the other files are still checked
+        problems = [f"cannot check it: {e!r}"]
+    if not problems and not read_check(p, r):
+        problems = ["the build's own reader fails on it (above)"]
+    vals = [f"{c} {v['compared']} values, {v['mismatches']} differ" for c, v in out.get("values", {}).items()]
+    if "md5" in out:
+        vals.insert(0, f"md5 {'equals' if out['md5'] == out['csic_md5'] else 'differs from'} CSIC's")
+    vals = "; ".join(vals)
+    lines = problems + [f"differs from CSIC: {d}" for d in out.get("metadata_diff") or []]
+    if "values" in out and out.get("metadata_diff") is None:
+        lines.append("attributes not compared: no CSIC DAS")
+    print(f"  {'FAIL' if problems else 'ok  '} {r['name']}" + (f": {vals}" if vals else "")
+          + "".join(f"\n       {x}" for x in lines), flush=True)
+    return out | {"ok": not problems, "problems": problems}
+
+
+def record_check(work: Path, results: list[dict]) -> bool:
+    """WORK/check_report.json always; WORK/check.ok, the stamp reduce and pack need, only when every file passed."""
+    report = {"checked": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+              "passed": all(x["ok"] for x in results),
+              "files": {x["name"]: x for x in sorted(results, key=lambda x: x["name"])}}
+    text = json.dumps(report, indent=1) + "\n"
+    (work / "check_report.json").write_text(text)
+    if report["passed"]:
+        (work / "check.ok").write_text(text)
+    return report["passed"]
+
+
+def check(work: Path, rows: list[dict], workers: int) -> int:
+    (work / "check.ok").unlink(missing_ok=True)  # a failing run never leaves an old pass behind
+    with Pool(max(1, min(workers, len(rows)))) as pool:
+        results = list(pool.imap_unordered(check_one, [(work, r) for r in rows]))
+    ok = record_check(work, results)
+    print(f"{sum(x['ok'] for x in results)} of {len(rows)} files pass; "
+          + ("wrote check.ok" if ok else f"no check.ok (details in {work / 'check_report.json'})"))
+    return 0 if ok else 1
+
+
+def checked(work: Path, rs: list[dict]) -> dict:
+    """The stamp check writes when every file passed; reduce and pack refuse to run without it."""
+    p = work / "check.ok"
+    if not p.exists():
+        raise SystemExit(f"no {p}: run extract, then check until every file passes")
+    s = json.loads(p.read_text())
+    if missing := sorted({r["name"] for r in rs} - set(s["files"])):
+        raise SystemExit(f"{p} does not cover {missing}: run check again")
+    return s
 
 
 def reduce_task(task) -> str:
@@ -633,6 +933,7 @@ def reduce_task(task) -> str:
 
 
 def reduce(work: Path, rs: list[dict], workers: int) -> int:
+    checked(work, rs)
     red, tasks = work / "reduce", []
     red.mkdir(parents=True, exist_ok=True)
     land = read_mask(work / "files" / MASK["name"])  # first, so a missing or wrong mask fails before the long part
@@ -664,7 +965,7 @@ def reduce(work: Path, rs: list[dict], workers: int) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Build CMIP6 changes from the IPCC AR6 Atlas (see the module docstring).")
-    ap.add_argument("step", choices=["netcheck", "download", "check", "reduce", "pack"])
+    ap.add_argument("step", choices=["netcheck", "download", "extract", "check", "reduce", "pack"])
     ap.add_argument("work", type=Path, help="scratch folder, e.g. /scratch/$USER/bhoomi-cmip6")
     ap.add_argument("--jobs", type=int, default=4, choices=range(1, 6), help="downloads at once (1-5)")
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK") or os.cpu_count()))
@@ -674,16 +975,16 @@ def main(argv=None) -> int:
         return netcheck(rs)
     if a.step == "download":
         return download(work, rs + [MASK], a.jobs)
+    if a.step == "extract":
+        return extract(work, rs, a.workers)
     if a.step == "check":
-        with Pool(a.workers) as pool:
-            ok = list(pool.imap_unordered(check_one, [(work, r) for r in rs + [MASK]]))
-        print(f"{sum(ok)} of {len(rs) + 1} files pass")
-        return 0 if all(ok) else 1
+        return check(work, rs + [MASK], a.workers)
     if a.step == "reduce":
         return reduce(work, rs, a.workers)
+    stamp = checked(work, rs)
     with np.load(work / "reduce" / "stats.npz") as z:
         stats = {k: z[k] for k in z.files}
-    for p in pack(stats, (work / "accessed.txt").read_text().strip(), rs, work / "out"):
+    for p in pack(stats, stamp, rs, work / "out"):
         print(f"{p}  {p.stat().st_size / 1e6:.2f} MB")
     return 0
 
