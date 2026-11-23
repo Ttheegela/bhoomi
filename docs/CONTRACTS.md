@@ -322,6 +322,13 @@ Every answer leads with short lines a general audience can follow: (1) what is e
 - **Ask:** the plain lines come first, written by code and outside the word count, after a past clause (`meaning.headline`, or "Our records here disagree about the past." when the picked results' verdicts differ). A request for simple words gives the plain lines, one sentence naming the sources, then `[GUIDANCE]` without `fact`. Voice forwards every question with "Explain in simple words."
 - **MCP `get_projection`:** design 16 §5, with `high_end` (never "plan for") and `model_range` for CMIP6 (`likely_range` only for AR6 sea level). `detect_trend`'s description adds: "It also carries plain: two or three short lines for the public. Start with meaning.headline, then plain, word for word."
 
+### Sources pages (PR6, owner 2026-11-23: "ok sources") — data lane states licences; UI lane builds the pages
+
+- Two static pages, `/sources/` (one card per dataset) and `/sources/world/` (the world figures we compare against). Design: `web/design/17-sources-pages.md`. No top-bar link; reached from the footer data line, the Sources step, the world-comparison step and Ask. No fixed world rate on the page.
+- **Licences and credits in code:** every data module's `SOURCE` (NASA POWER, NOAA GHCN-Daily, NOAA CO-OPS, PSMSL, GRACE, and the ERA5, CMIP6 and AR6 sources that already carry one) states `licence` (the provider's own terms, short form, e.g. "CC BY 4.0", "Public domain (US Government work)", or the provider's wording when there is no standard licence) and `credit` (the credit line the provider asks for, verbatim where it gives one). Each comes from the provider's own terms page, cited in a code comment with its URL. The pages print them; a drift test checks the pages against the code.
+- **Bhoomi's own charts and text:** CC BY 4.0, credited "Bhoomi (bhoomi.earth), built with AI assistance", plus the dataset credits. The code stays Apache-2.0.
+- **Links checked:** a "Links checked on {date}" line, set at each release link check; `scripts/check_links.py` covers every outbound link on both pages.
+
 ### World reference series — data lane, stats lane reads
 
 `earthtrends.data.world.reference(name)` returns a TimeSeries (with the full source block) from a snapshot file kept in the repo and refreshed by `scripts/update_world.py`; nothing is fetched per request.
