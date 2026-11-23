@@ -37,9 +37,10 @@ OUT = Path(__file__).resolve().parent.parent / "web" / "data"
 HOSTS = ("api.tidesandcurrents.noaa.gov", "psmsl.org")
 GAP_S = 0.75
 THIN = "it has too few recent readings for a trend"  # coops.series and psmsl.series word it so
-FILL = -32768
-CLAMP = 32767  # a GRACE range end stored at +-CLAMP is at or beyond +-327.67 cm a year
-SCALE = 0.01  # GRACE int16 step: 0.01 cm of water a year (0.1 mm)
+FILL = -2**31  # GRACE slope, lo, hi: no data
+SCALE = 0.00001  # GRACE int32 step: 0.00001 cm of water a year = the API's 0.0001 cm a decade, every digit it gives
+ENC = {"lat": "i16le-b64", "lon": "i16le-b64", "area": "i16le-b64", "slope": "i32le-b64", "lo": "i32le-b64",
+       "hi": "i32le-b64", "sig": "u8-b64"}
 SIG = {"no_clear_change": 0, "rising": 1, "falling": 2}
 NO_DATA = 255
 MAX_BYTES = 1_000_000
@@ -180,6 +181,14 @@ def unb64(s: str, dtype: str) -> np.ndarray:
     return np.frombuffer(base64.b64decode(s), dtype)
 
 
+def steps(per_decade: float) -> int:
+    """The API's rate per decade (4 decimals) -> whole steps of SCALE a year (0.0001 a decade), with no digit lost."""
+    d = Decimal(repr(per_decade)) * 10000
+    if d != d.to_integral_value():
+        raise SystemExit(f"{per_decade} has more than the 4 decimals the map keeps")
+    return int(d)
+
+
 def build_grace() -> dict:
     d = grace.load()
     # the centre rounded to 0.01 degrees, as get_series rounds a request: the spot whose answer the map shows
@@ -193,13 +202,7 @@ def build_grace() -> dict:
         except ValueError:  # glacier box or too little land: the point answer gives no trend here
             slope.append(FILL), lo.append(FILL), hi.append(FILL), sig.append(NO_DATA)
             continue
-        # cm a decade, 4 decimals -> steps of SCALE cm a year: x 10 exactly
-        s, a, z = (int((Decimal(repr(r[k])) * 10).quantize(Decimal(1), ROUND_HALF_UP))
-                   for k in ("slope_per_decade", "ci_low", "ci_high"))
-        slope.append(s)  # never clamped: past int16, b64() fails the build
-        # ponytail: a range end past +-327.67 cm a year (earthquake steps, Japan and Chile) is stored at +-CLAMP;
-        # int32 lo/hi if the map must print those ends exactly
-        lo.append(max(a, -CLAMP)), hi.append(min(z, CLAMP))
+        slope.append(steps(r["slope_per_decade"])), lo.append(steps(r["ci_low"])), hi.append(steps(r["ci_high"]))
         sig.append(SIG[r["verdict"]])
         periods.add((r["period"]["start"], r["period"]["end"]))
     if len(periods) != 1 or periods != {(d["months"][0], d["months"][-1])}:
@@ -211,10 +214,10 @@ def build_grace() -> dict:
     st = {k: round(v, 3) if isinstance(v, float) and not k.startswith("frac_") else v for k, v in st.items()}
     src, km = r["source"], round(2 * grace.HALF_BOX_DEG * 111)  # the point answer's box: 4 degrees, about 444 km
     return {
-        "v": 1, "kind": "grace_trends", "units": "cm of water a year", "enc": "i16le-b64", "scale": SCALE,
-        "fill": FILL, "clamp": CLAMP, "n": len(lat), "lat_lon_scale": 0.01, "area_units": "km2",
+        "v": 2, "kind": "grace_trends", "units": "cm of water a year", "enc": ENC, "scale": SCALE,
+        "fill": FILL, "n": len(lat), "lat_lon_scale": 0.01, "area_units": "km2",
         "lat": b64(lat, "<i2"), "lon": b64(lon, "<i2"), "area": b64(area, "<i2"),
-        "slope": b64(slope, "<i2"), "lo": b64(lo, "<i2"), "hi": b64(hi, "<i2"), "sig": b64(sig, "u1"),
+        "slope": b64(slope, "<i4"), "lo": b64(lo, "<i4"), "hi": b64(hi, "<i4"), "sig": b64(sig, "u1"),
         "sig_codes": {"0": "no_clear_change", "1": "rising", "2": "falling", "255": "no data"},
         "period": "the whole record", "start": start, "end": end,
         "reference": {"text": "the provider's 2004.0–2010.0 mean (January 2004 to December 2009)",
@@ -228,9 +231,11 @@ def build_grace() -> dict:
                    "calendar month's 2004–2009 average, then the Mann-Kendall test and Sen's slope over the whole "
                    "record, with the 95% range widened for months that are alike. The mascons themselves are "
                    "1-degree equal-area cells, about 110 km; each value stands for the whole box, not a town. "
-                   "slope, lo and hi (the 95% range): int16 little-endian in steps of `scale`, `fill` for no "
-                   "data; a range end at +-`clamp` is at or beyond +-327.67. lat and lon: int16 in steps of 0.01 "
-                   "degrees; area: int16 km2. Stats are weighted by mascon area over "
+                   "slope, lo and hi (the 95% range): int32 little-endian in steps of `scale` cm of water a year "
+                   "(the point answer's slope_per_decade, ci_low and ci_high to the API's 4 decimals a decade, no "
+                   "digit lost; round them as the card rounds headline_rate), `fill` for no data. lat and lon: "
+                   "int16 in steps of 0.01 degrees; area: int16 km2; sig: uint8 (`sig_codes`); `enc` names each "
+                   "array's type. Stats are weighted by mascon area over "
                    "mascons with a value; percentiles are the lowest rate with at least that share of the area at "
                    "or below it."),
         "stats": {"weights": "mascon area", **st},
