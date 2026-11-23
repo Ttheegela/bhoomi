@@ -261,6 +261,25 @@ Tarun's decision: "Remove both, state facts". Bhoomi is not a house-buying or in
   - Prompts never state a risk level or advice.
   - The voice prompt's "Say the risk level, the recommendation and the closing disclaimer" becomes "Say the fact, where to look next, and the closing disclaimer". It is listed in the PR body; the coordinator applies it.
 
+### Plain-language layer (PR6, owner 2026-11-23: "ok plain words") — stats lane writes it; UI, Ask, voice and MCP print it verbatim
+
+Every answer leads with short lines a general audience can follow: (1) what is expected, (2) how sure the experts are, in everyday words, (3) what it means day to day. Exact templates, slots and worked strings: `web/design/16-plain-language.md` §1 (it wins where this section is shorter). The words are written only in `earthtrends/stats/plain.py`; nobody else builds or edits them.
+
+| Field | Type | Rule |
+|---|---|---|
+| `projection.scenarios[k].plain` | list of 1–3 str | That row's lines (sea level at 2050; CMIP6 at 2041–2060), from its `p50`, `p17`/`p83` (sea) or `p10`/`p90` (CMIP6), `confidence`, `rate.p50` (sea), `disagree` (rain), `name`, and `projection.caveat`. A middle value that rounds to 0 drops line 3; a null value at that year gives one line ("By 2050, the experts give no value here on {path}." / "Around 2050, the climate models have no value here on {path}."). |
+| `plain` (TrendResult) | list of 2–3 str, always present | With a projection: the default scenario's `plain`. Without (`projection.available` false, or no projection): `[projection.why or the no-projection sentence, the how-sure sentence for meaning.confidence, meaning.comparison]`, an empty comparison dropped. |
+| `projection.check.text` (sea level) | str or null | "Measured levels here are already above the experts' range for recent years." ("below"); null unless `check.inside` is false. |
+
+- **Record-free:** with a projection the lines use only projection fields: no `now`, baseline value, verdict or `check`. They read the same whichever record is main and whichever source the visitor picks.
+- **Range names:** AR6 sea level, medium confidence: "about a 2 in 3 chance … on that path". CMIP6 10th–90th percentile: "8 in 10 climate models put it …", then "That shows how much the models agree, not how likely it is." Never "chance", "likely" or "odds" for CMIP6.
+- **Spoken form:** "1995 to 2014", "2041 to 2060" (no dashes); no brackets or signs (the direction word carries the sign); numbers with the server's own rounding (`sig2`, range ends to the same decimals).
+- **Facts, not advice:** no "you should", no buy, build, move, avoid or insure, no risk word.
+- **Invented numbers:** every number in `plain` is in a `projection` field or the fixed reference "100 mm"; Ask adds `plain` to `MODEL_FIELDS`.
+- **Page:** an "In plain words" box replaces card R3 when the projection is available and the selected scenario has `plain`; otherwise no box and R3 stays (`projection.why`). "About … more than today" leaves the card; it stays in the chart readout and MCP `today_level.vs_typical`.
+- **Ask:** the plain lines come first, written by code and outside the word count, after a past clause (`meaning.headline`, or "Our records here disagree about the past." when the picked results' verdicts differ). A request for simple words gives the plain lines, one sentence naming the sources, then `[GUIDANCE]` without `fact`. Voice forwards every question with "Explain in simple words."
+- **MCP `get_projection`:** design 16 §5, with `high_end` (never "plan for") and `model_range` for CMIP6 (`likely_range` only for AR6 sea level). `detect_trend`'s description adds: "It also carries plain: two or three short lines for the public. Start with meaning.headline, then plain, word for word."
+
 ### World reference series — data lane, stats lane reads
 
 `earthtrends.data.world.reference(name)` returns a TimeSeries (with the full source block) from a snapshot file kept in the repo and refreshed by `scripts/update_world.py`; nothing is fetched per request.
