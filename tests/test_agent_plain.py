@@ -217,7 +217,8 @@ def test_simple_words_follow_up(fake, monkeypatch):
                  history=HISTORY)
     g = BATTERY["guidance"]
     assert lead_of(a) == [f"{BATTERY['meaning']['headline']} {BATTERY['plain'][0]}", *BATTERY["plain"][1:]]
-    assert SIMPLE_TEXT in a and "Where to look next" in a and a.rstrip().endswith(g["disclaimer"])
+    assert SIMPLE_TEXT in a and "Where to look next" in a
+    assert a.rstrip().endswith(f"{g['disclaimer']}\n{guidance.SOURCES_LINE}")
     assert g["fact"] not in a and "95% range" not in a and "times as fast" not in a
     assert "experts' projection for 2050" not in a and "(likely" not in a  # the plain lines carry the projection
     assert loop.invented_numbers(a, loop.model_results(out["tool_calls"])) == []

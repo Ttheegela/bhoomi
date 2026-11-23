@@ -307,7 +307,8 @@ def compose(text: str, calls: list[dict], agree: bool = True) -> str:
             ins += " " if right and not right[0].isspace() else ""
         left += ins
     out = left + right
-    # Every source with a result names its link: any still missing goes at the end.
+    # Every source with a result names its link: any still missing goes at the end, or in front of the first
+    # [GUIDANCE] or [OFFICIAL RESOURCES] marker, so what code puts there (ending with the sources pages line) stays last.
     srcs = {}
     for c in ok_calls(calls):
         src = c["result"].get("source") or {}
@@ -315,8 +316,11 @@ def compose(text: str, calls: list[dict], agree: bool = True) -> str:
     missing = [f"Source: {s['name'].split(',')[0].strip()}, {s['url']}." for s in srcs.values()
                if _host(s.get("url")) not in out.lower() and s.get("name")]  # no URL: "" is always "in"
     if missing:
-        body = out.rstrip()
-        out = body + (" " if body else "") + " ".join(missing) + out[len(body):]
+        mark = min(filter(None, (guidance._MARK.search(out), resources._MARK.search(out))), key=re.Match.start,
+                   default=None)
+        body = out[:mark.start()].rstrip() if mark else out.rstrip()
+        rest = " " + out[mark.start():].lstrip() if mark else out[len(body):]
+        out = body + (" " if body else "") + " ".join(missing) + rest
     out = DEG_C.sub("\u00b0C", out)  # the tool spells the unit "degC"; the reader sees "°C", as on the page
     return NEG_ZERO.sub(r"\1", out)  # "-0.00" is a zero: no sign
 

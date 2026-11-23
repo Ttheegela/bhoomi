@@ -259,23 +259,22 @@ def tool_contents(body):
     return {m["tool_call_id"]: json.loads(m["content"]) for m in body["messages"] if m["role"] == "tool"}
 
 
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_model_sees_meaning_of_full_results_only(openrouter):
     sent, replies = openrouter
     replies += [
-        reply(tool_msg("power", "era5")),  # agree: era5 goes to the model without its numbers
-        reply(tool_msg("ghcn")),  # disagrees: era5 comes back in full ("earlier_results_in_full")
+        reply(tool_msg("power", "era5")),  # agree: ERA5 leads the hottest day (PR4a); power goes without its numbers
+        reply(tool_msg("ghcn")),  # disagrees: power comes back in full ("earlier_results_in_full")
         reply({"role": "assistant", "content": " ".join(["word"] * 300)}),  # too long: retried with results inline
         reply({"role": "assistant", "content": "The sources disagree."}),
     ]
     r = TestClient(app).post("/api/ask", json={"question": "Is Delhi's hottest day getting hotter?"})
     assert r.status_code == 200 and not replies
     normal = tool_contents(sent[1])
-    assert normal["power"]["meaning"] == MEANING  # the default source: in full, with its meaning
-    assert "meaning" not in normal["era5"] and "slope_per_decade" not in normal["era5"]  # hidden: neither
+    assert normal["era5"]["meaning"] == MEANING  # the default source (ERA5): in full, with its meaning
+    assert "meaning" not in normal["power"] and "slope_per_decade" not in normal["power"]  # hidden: neither
     restore = tool_contents(sent[2])["ghcn"]
     assert restore["meaning"] == MEANING
-    assert [x["meaning"] for x in restore["earlier_results_in_full"]["results"]] == [MEANING]  # era5, restored
+    assert [x["meaning"] for x in restore["earlier_results_in_full"]["results"]] == [MEANING]  # power, restored
     question = [m["content"] for m in sent[3]["messages"] if m["role"] == "user"][-1]
     inline = json.loads(question[question.index("[{"):])  # the retry: every result inline, none hidden now
     assert [c["result"]["meaning"] for c in inline] == [MEANING] * 3

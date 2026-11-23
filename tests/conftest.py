@@ -34,16 +34,6 @@ def empty_cache():
     coops._record.cache_clear()
 
 
-@pytest.fixture
-def power_first_for_heat(monkeypatch):
-    """The catalog order a test was written for: NASA POWER first (the default and the reference record) for air
-    temperature and the hottest day. PR4a makes ERA5 first there (earthtrends/data/catalog.py). The agent and eval
-    tests are re-baselined to that order (PR6); tests/test_meaning.py::test_model_sees_meaning_of_full_results_only
-    still uses this, and the fixture goes once that test is moved too."""
-    monkeypatch.setattr(data, "CATALOG", [dict(v, sources=["power", "era5", "ghcn"]) if v["id"] in ("air_temp", "air_temp_max")
-                                          else v for v in data.CATALOG])
-
-
 # The MCP session manager's lifespan can only start once per app instance, so the whole
 # test session shares this one started client. Routes that don't need MCP can use TestClient(app).
 @pytest.fixture(scope="session")

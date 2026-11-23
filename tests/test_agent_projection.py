@@ -43,7 +43,6 @@ def test_model_view_has_the_compact_sea_level_projection():
         "text": "+36 cm (likely +27 to +46 cm)", "range_kind": AR6, "more_than_today": "about 29 cm more than today",
         # design 16 §4: check.text (and location.note, null here) reach Ask; this synthetic record is below the range
         "check": "Measured levels here are already below the experts' range for recent years."}
-    assert guidance.projection_line(BATTERY, "Sea level").endswith(view["projection"]["check"])
     assert loop.model_results([ok(BATTERY)]) == [view]  # the number check pools what the model read
 
 
@@ -62,39 +61,40 @@ def test_model_view_has_the_compact_cmip6_projection():
     assert loop.model_view(DELHI)["world"] == {"text": None, "why_none": DELHI["world"]["why_none"]}
 
 
-# ---- the projection line and the disclaimer, put in by code ----
+# ---- the projection reaches Ask in the plain lines; the guidance doesn't repeat it (design 16 §4.3) ----
 
-def test_projection_lines_carry_the_exact_range_names():
+def test_the_guidance_no_longer_repeats_the_projection():
     sea = guidance.block([ok(BATTERY)])
-    assert (f"Sea level, experts' projection for 2050 under intermediate emissions (SSP2-4.5), from IPCC AR6 sea "
-            f"level projections (Garner et al. 2021): +36 cm (likely +27 to +46 cm) against the 1995–2014 average, "
-            f"about 29 cm more than today. The range is the {AR6}.") in sea
-    # order: fact, where to look next, the projection, the future link, the disclaimer
-    at = [sea.index(s) for s in (BATTERY["guidance"]["fact"], "Where to look next", "experts' projection",
-                                 BATTERY["guidance"]["future_link"]["url"], DISCLAIMER_PROJECTION)]
-    assert at == sorted(at) and sea.endswith(DISCLAIMER_PROJECTION)
+    for said in ("experts' projection", "+36 cm", "likely", "2 in 3", "more than today"):
+        assert said not in sea, said
+    # order: fact, where to look next, the future link, the disclaimer, the sources pages line
+    at = [sea.index(s) for s in (BATTERY["guidance"]["fact"], "Where to look next",
+                                 BATTERY["guidance"]["future_link"]["url"], DISCLAIMER_PROJECTION, guidance.SOURCES_LINE)]
+    assert at == sorted(at) and sea.endswith(f"{DISCLAIMER_PROJECTION}\n{guidance.SOURCES_LINE}")
+    # the range words come in the plain lines that lead the answer: AR6's chance, the climate models' agreement
+    assert "about a 2 in 3 chance" in guidance.lead([ok(BATTERY)])
     for r in (PRINCETON, CHENNAI, DELHI):
-        line = guidance.projection_line(r, "x")
-        assert f"The range is the {SPREAD}." in line and "likely" not in line and "chance" not in line
-    assert guidance.projection_line(PRINCETON, "x").endswith(PRINCETON["projection"]["models_note"])
-    assert "Models disagree on wetter or drier." in guidance.projection_line(CHENNAI, "x")
-    assert "more than today" not in guidance.projection_line(DELHI, "x")
-    assert guidance.projection_line(PUNJAB, "x") == ""
+        lead, block = guidance.lead([ok(r)]), guidance.block([ok(r)])
+        assert "8 in 10" in lead and "chance" not in lead and "experts' projection" not in block
+        assert SPREAD not in block and "more than today" not in lead + block
 
 
 def test_mixed_answer_shows_the_projection_disclaimer():
     """Water storage first (no projection, the plain disclaimer), then air temperature with one: the IPCC wording
     is not hidden behind the first result's."""
     out = guidance.block([ok(PUNJAB), ok(PRINCETON)])
-    assert out.endswith(DISCLAIMER_PROJECTION) and DISCLAIMER not in out and out.count("not professional advice") == 1
-    assert "Princeton, air temperature, experts' projection for 2041–2060" in out
-    assert guidance.block([ok(PUNJAB)]).endswith(DISCLAIMER)  # no projection anywhere: the plain one
+    assert out.endswith(f"{DISCLAIMER_PROJECTION}\n{guidance.SOURCES_LINE}") and DISCLAIMER not in out
+    assert out.count("not professional advice") == 1 and "experts' projection" not in out
+    assert f"Princeton, air temperature: {PRINCETON['meaning']['headline']} {PRINCETON['plain'][0]}" in (
+        guidance.lead([ok(PUNJAB), ok(PRINCETON)]))
+    assert guidance.block([ok(PUNJAB)]).endswith(f"{DISCLAIMER}\n{guidance.SOURCES_LINE}")  # no projection anywhere
 
 
 def test_one_projection_per_place_and_measurement_when_sources_disagree():
     era5 = {**PRINCETON, "verdict": "no_clear_change", "source": {**PRINCETON["source"], "id": "era5", "name": "ERA5"}}
-    out = guidance.block([ok(PRINCETON), ok(era5)])
-    assert out.count("experts' projection") == 1 and "(ERA5)" in out
+    lead = guidance.lead([ok(PRINCETON), ok(era5)])
+    assert lead.count(PRINCETON["plain"][0]) == 1 and lead.startswith(guidance.RECORDS_DISAGREE)
+    assert "(ERA5)" in guidance.block([ok(PRINCETON), ok(era5)])
 
 
 # ---- the checks accept the tool's projection numbers and years, and nothing made up ----
@@ -118,24 +118,28 @@ def test_projection_years_and_the_baseline_are_no_wrong_period():
 
 
 def test_scorer_passes_an_answer_with_the_code_written_projection():
-    answer = guidance.fill("Yes. It has clearly been getting warmer in Princeton. Source: NASA POWER (MERRA-2), "
-                           "https://power.larc.nasa.gov/. [GUIDANCE]", [ok(PRINCETON)])
+    answer = guidance.lead([ok(PRINCETON)]) + "\n\n" + guidance.fill(
+        "About 0.4 °C warmer every 10 years. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. [GUIDANCE]",
+        [ok(PRINCETON)])
     case = {"id": "p", "question": "q", "expect_tool": "detect_trend",
-            "must_say": [SPREAD, "IPCC projections"], "must_not_say": ["likely range", "in 3 chance", "risk"]}
+            "must_say": ["8 in 10 climate models", "IPCC projections", "bhoomi.earth/sources"],
+            "must_not_say": ["likely range", "in 3 chance", "risk"]}
     out = run.check(case, {"answer": answer, "tool_calls": [ok(PRINCETON)]})
     assert out["numbers"] and out["wording"] and out["links"] and out["must_say"], (out, answer)
 
 
-CODE_WORDS = ("experts' projection", "range", "IPCC projections", "Models disagree", "raw results")
+CODE_WORDS = ("experts project", "climate models put", "2 in 3 chance", "8 in 10", "IPCC projections",
+              "Models disagree")  # the models' raw-results note is the model's caveat now (prompt rule E)
 
 
 @pytest.mark.parametrize("cid,r", [("manhattan-family-house", BATTERY), ("manhattan-build-house", BATTERY),
                                    ("princeton-hotter-when-older", PRINCETON), ("delhi-hotter-when-older", DELHI),
                                    ("delhi-hottest-day-later", DELHI), ("chennai-rain-or-this-year", CHENNAI)])
 def test_eval_cases_ask_for_the_words_code_writes(cid, r):
-    """The cases' projection words are the guidance block's own, so a run can only miss them if the block is lost."""
+    """The cases' projection words are the code's own (the plain lines and the guidance), so a run can only miss them
+    if the code's text is lost."""
     case = {c["id"]: c for c in run.load_cases()}[cid]
-    a = guidance.block([ok(r)]).lower()
+    a = (guidance.lead([ok(r)]) + " " + guidance.block([ok(r)])).lower()
     said = [w for w in case["must_say"] if any(k.lower() in w.lower() for k in CODE_WORDS)]
     assert said and all(w.lower() in a for w in said), said
     assert not [w for w in case["must_not_say"] if w.lower() in a]
@@ -173,9 +177,10 @@ def test_loop_sends_the_projection_and_ends_with_it_then_the_disclaimer(monkeypa
     sent = Fake.results[0][0]["content"]["projection"]
     assert sent["text"] == "+36 cm (likely +27 to +46 cm)" and "scenarios" not in sent
     a = r["answer"]
-    # the plain lines first (code), then the model's text, then the guidance with the projection and the disclaimer
+    # the plain lines first (code), then the model's text, then the guidance: no projection repeated, the IPCC
+    # disclaimer, and the sources pages line last
     assert a.startswith(guidance.lead(r["tool_calls"]) + "\n\n" + body) and BATTERY["plain"][0] in a
-    assert a.index(AR6) < a.index(DISCLAIMER_PROJECTION)
+    assert AR6 not in a and a.endswith(f"{DISCLAIMER_PROJECTION}\n{guidance.SOURCES_LINE}")
 
 
 # ---- MCP passes the whole projection on ----

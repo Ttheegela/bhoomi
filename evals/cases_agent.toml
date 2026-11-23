@@ -7,12 +7,14 @@
 #                    single-verdict wording check is skipped (as for several places); default false.
 # Loaded after cases.toml by `uv run python -m evals.run`; ids must be unique across both files.
 #
-# Expert projections (PR6): code puts each result's experts' projection into [GUIDANCE], after the fact and where to
-# look next, then the disclaimer, which names IPCC projections whenever any result has one. The range name is exact:
-# sea level (IPCC AR6, medium confidence) "likely range (about 2 in 3 chance)"; air temperature, hottest day and rain
-# (CMIP6, IPCC AR6 Interactive Atlas) "range across climate models (10th–90th percentile)", never "likely" or a
-# chance; rain adds "Models disagree on wetter or drier." where under 8 in 10 models agree (Chennai's cell does).
-# "unlikely" is in the how-sure sentence, so the CMIP6 cases ban "likely range" and "in 3 chance", not "likely".
+# Expert projections (PR6): code leads the answer with the plain lines (web/design/16-plain-language.md §1), which
+# carry the projection; [GUIDANCE] no longer repeats it, and its disclaimer names IPCC projections whenever any result
+# has one. The range words are exact: sea level (IPCC AR6, medium confidence) "By 2050, experts project ..." and
+# "about a 2 in 3 chance"; air temperature, hottest day and rain (CMIP6, IPCC AR6 Interactive Atlas) "Around 2050,
+# climate models put ..." and "8 in 10 climate models", never a chance; rain says "The models disagree on wetter or
+# drier: 8 in 10 of them ..." where under 8 in 10 models agree (Chennai's cell does). "unlikely" is in the how-sure
+# sentence, so the CMIP6 cases ban "likely range" and "in 3 chance", not "likely". The models' raw-results note is a
+# caveat the model passes on (prompt rule E).
 
 # A follow-up that names only a new place: the agent must keep the earlier measurement (sea level) and run a new
 # check near Jakarta. The earlier answer is shaped like a rework answer (fact, where to look next, the experts'
@@ -81,8 +83,8 @@ question = "I want to build a house in Lower Manhattan. What are the risks?"
 expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [40.70, -74.01]      # The Battery
-must_say = ["coast.noaa.gov/slr", "msc.fema.gov", "cannot tell", "experts' projection for 2050",
-            "likely range (about 2 in 3 chance)", "IPCC projections"]
+must_say = ["coast.noaa.gov/slr", "msc.fema.gov", "cannot tell", "By 2050, experts project",
+            "about a 2 in 3 chance", "IPCC projections"]
 must_not_say = ["p-value", "0.05 line", "decade is ten years", "slope", "you should", "I recommend", "[OFFICIAL",
                 "range across climate models", "High risk", "Moderate risk", "Low risk"]
 
@@ -110,7 +112,7 @@ expect_tool = "detect_trend"
 expect_variable = "precip"
 expect_place = [13.08, 80.27]
 max_km = 40
-must_say = ["range across climate models (10th–90th percentile)", "Models disagree on wetter or drier",
+must_say = ["8 in 10 of them put it", "Models disagree on wetter or drier",
             "IPCC projections"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "likely range", "in 3 chance"]
 
@@ -146,7 +148,7 @@ expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [18.92, 72.83]
 max_km = 40
-must_say = ["likely range (about 2 in 3 chance)"]  # AR6 has the Mumbai gauge; no world comparison there (QA B3)
+must_say = ["about a 2 in 3 chance"]  # AR6 has the Mumbai gauge; no world comparison there (QA B3)
 must_not_say = ["[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk"]
 history = [
   { role = "user", content = "Which coastal cities in Asia are risky for property because of sea-level rise?" },
@@ -163,7 +165,7 @@ question = "I want to build a house in Lower Manhattan for my family's future. I
 expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [40.70, -74.01]
-must_say = ["coast.noaa.gov/slr", "msc.fema.gov", "experts' projection for 2050", "likely range (about 2 in 3 chance)",
+must_say = ["coast.noaa.gov/slr", "msc.fema.gov", "By 2050, experts project", "about a 2 in 3 chance",
             "IPCC projections"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "range across climate models",
                 "95% range of the projection", "High risk", "Moderate risk", "Low risk"]
@@ -177,7 +179,7 @@ question = "Has it been getting hotter in Delhi? Will summers be worse when I'm 
 expect_tool = "detect_trend"
 expect_place = [28.61, 77.21]
 max_km = 50
-must_say = ["not only summer", "experts' projection for 2041–2060", "range across climate models (10th–90th percentile)",
+must_say = ["not only summer", "Around 2050, climate models put", "8 in 10 climate models",
             "climate models' raw results", "IPCC projections"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "likely range", "in 3 chance"]
 
@@ -187,7 +189,7 @@ question = "Has it been getting hotter in Princeton, New Jersey? Will summers be
 expect_tool = "detect_trend"
 expect_place = [40.35, -74.66]
 max_km = 50
-must_say = ["not only summer", "experts' projection for 2041–2060", "range across climate models (10th–90th percentile)",
+must_say = ["not only summer", "Around 2050, climate models put", "8 in 10 climate models",
             "climate models' raw results", "IPCC projections"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "likely range", "in 3 chance"]
 
@@ -200,7 +202,7 @@ expect_tool = "detect_trend"
 expect_variable = "air_temp_max"
 expect_place = [28.58, 77.21]
 max_km = 50
-must_say = ["Hottest day of the month, experts' projection for 2041–2060", "range across climate models (10th–90th percentile)"]
+must_say = ["Around 2050, climate models put each month's hottest day", "8 in 10 climate models"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "likely range", "in 3 chance",
                 "more than today"]
 
@@ -214,7 +216,7 @@ expect_variable = "sea_level"
 expect_place = [29.26, -89.96]      # NOAA CO-OPS Grand Isle, LA
 max_km = 40
 must_say = ["times as fast as the world average", "Where to look next", "msc.fema.gov", "not professional advice",
-            "likely range (about 2 in 3 chance)", "IPCC projections"]
+            "about a 2 in 3 chance", "IPCC projections"]
 must_not_say = ["p-value", "0.05 line", "[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk",
                 "advise against", "Our recommendation"]
 
@@ -228,7 +230,7 @@ expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [58.30, -134.41]
 max_km = 40
-must_say = ["Falling here, while the world average rose", "likely range (about 2 in 3 chance)"]
+must_say = ["Falling here, while the world average rose", "about a 2 in 3 chance"]
 must_not_say = ["p-value", "0.05 line", "[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk",
                 "Our recommendation"]
 
@@ -239,7 +241,7 @@ id = "louisiana-vs-new-jersey"
 question = "If I can buy a house in Louisiana or a house in New Jersey, how does it compare for my family's safety for future generations? If I want to build a farmhouse or a sea-facing house, what risks am I facing, and what should I keep in mind?"
 expect_tool = "detect_trend"
 min_places = 2
-must_say = ["Where to look next", "not professional advice", "experts' projection", "IPCC projections"]
+must_say = ["Where to look next", "not professional advice", "IPCC projections"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk",
                 "advise against", "Our recommendation", "riskier"]
 
