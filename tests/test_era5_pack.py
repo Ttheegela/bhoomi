@@ -177,6 +177,7 @@ def test_no_land_near_uses_open_meteo(packs, monkeypatch, open_meteo, caplog):
     s = data.get_series("air_temp", 0.0, -30.0, source="era5")
     assert open_meteo == [("temperature_2m_mean", 0.0, -30.0)] and s["source"]["name"] == era5.SOURCE["name"]
     assert s["times"] == ["1990-01"] and not caplog.records  # not a failure: nothing logged
+    assert s["source"]["pack"] == "no_land" and not era5.is_fallback(s["source"])  # no pack value exists here
 
 
 def test_source_block_and_notes(packs, monkeypatch):
@@ -213,6 +214,7 @@ def test_a_failed_tile_falls_back_with_a_warning_and_is_not_cached(packs, monkey
     monkeypatch.setattr(httpx, "get", serve(packs / "a", {"n20e070.npz": break_it(tile.read_bytes())}))
     s = data.get_series("air_temp", 28.61, 77.21, source="era5")
     assert s["source"]["name"] == era5.SOURCE["name"] and len(open_meteo) == 1  # Open-Meteo's own source block
+    assert "pack" not in s["source"] and era5.is_fallback(s["source"])  # a failed read: kept briefly, never cached
     warned = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warned) == 1 and "n20e070.npz" in warned[0] and URL in warned[0] and "Open-Meteo" in warned[0]
     monkeypatch.setattr(httpx, "get", serve(packs / "a"))  # the store is back: the failure was not kept
@@ -222,9 +224,9 @@ def test_a_failed_tile_falls_back_with_a_warning_and_is_not_cached(packs, monkey
 
 def test_a_missing_manifest_or_an_outage_falls_back(packs, monkeypatch, caplog):
     monkeypatch.setenv(era5.PACK, URL)  # conftest: httpx.get raises ConnectError
-    assert era5.pack_series("air_temp", 28.61, 77.21) is None and "manifest.json" in caplog.records[-1].getMessage()
+    assert era5.pack_series("air_temp", 28.61, 77.21) is False and "manifest.json" in caplog.records[-1].getMessage()
     monkeypatch.setattr(httpx, "get", serve(packs / "a", {"manifest.json": 404}))
-    assert era5.pack_series("air_temp", 28.61, 77.21) is None and len(caplog.records) == 2
+    assert era5.pack_series("air_temp", 28.61, 77.21) is False and len(caplog.records) == 2
 
 
 def test_an_unlisted_tile_is_no_land_and_never_requested(packs, monkeypatch, caplog):
@@ -388,9 +390,10 @@ def test_a_record_that_could_not_be_read_names_the_pack_when_one_is_set(monkeypa
     assert era5.default_source() is era5.SOURCE  # replay reads Open-Meteo's recordings, so it keeps their name
 
 
-def test_open_meteo_while_the_pack_is_configured_is_kept_briefly(monkeypatch, open_meteo):
-    """Contract "Caching": with a pack configured, a series from Open-Meteo's fallback is kept FALLBACK_TTL_S, so a pack
-    outage never pins a place there; a pack series and, with no pack, an Open-Meteo series keep TTL_S."""
+def test_only_a_failed_reads_fallback_is_kept_briefly(monkeypatch, open_meteo, tmp_path):
+    """Contract "Caching": with a pack configured, Open-Meteo's series after a failed pack read is kept FALLBACK_TTL_S,
+    so an outage never pins a place there. A point with no land cell near, a pack series, and Open-Meteo with no pack
+    keep TTL_S."""
     clock, reads = [5000.0], []
     monkeypatch.setattr(data.time, "monotonic", lambda: clock[0])
     pack_series = era5.pack_series
@@ -402,35 +405,44 @@ def test_open_meteo_while_the_pack_is_configured_is_kept_briefly(monkeypatch, op
         data.get_series("air_temp", lat, lon, source="era5")
         return len(open_meteo) + len(reads) > n
 
-    data.get_series("air_temp", 0.0, -30.0, source="era5")  # no pack: Open-Meteo, kept as today
-    assert not fetched_again(data.FALLBACK_TTL_S + 1, 0.0, -30.0) and fetched_again(data.TTL_S, 0.0, -30.0)
+    data.get_series("air_temp", 10.0, -40.0, source="era5")  # no pack: Open-Meteo, kept as today
+    assert not fetched_again(data.TTL_S - 1, 10.0, -40.0)
     monkeypatch.setenv(era5.PACK, str(MINI))
-    data._cache.clear()
-    data.get_series("air_temp", 0.0, -30.0, source="era5")  # no land near in the pack: the fallback
-    assert not fetched_again(data.FALLBACK_TTL_S - 1, 0.0, -30.0) and fetched_again(2, 0.0, -30.0)
+    data.get_series("air_temp", 0.0, -30.0, source="era5")  # no land cell near in the pack: Open-Meteo, kept as usual
+    assert not fetched_again(data.TTL_S - 1, 0.0, -30.0)
     s = data.get_series("air_temp", 40.35, -74.66, source="era5")  # Princeton, from the pack
     assert s["source"]["url"] == era5.PACK_PAGE and not fetched_again(data.TTL_S - 1, 40.35, -74.66)
+    monkeypatch.setenv(era5.PACK, str(tmp_path))  # a pack with no manifest.json: every read fails
+    data.get_series("air_temp", 28.61, 77.21, source="era5")
+    assert not fetched_again(data.FALLBACK_TTL_S - 1, 28.61, 77.21) and fetched_again(2, 28.61, 77.21)
 
 
-def test_answers_with_open_meteo_while_the_pack_is_configured_are_never_cached(monkeypatch):
+def test_only_answers_after_a_failed_pack_read_are_never_cached(monkeypatch, open_meteo, tmp_path):
     from fastapi.testclient import TestClient
 
     from earthtrends.agent import tools
     from earthtrends.app import CACHE, app
-    om, pack = {"id": "era5", "url": era5.SOURCE["url"]}, {"id": "era5", "url": era5.PACK_PAGE}
+    plain = data.get_series("air_temp", 10.0, -40.0, source="era5")["source"]  # Open-Meteo, no pack
+    monkeypatch.setenv(era5.PACK, str(tmp_path))  # no manifest.json: a failed read
+    failed = data.get_series("air_temp", 28.61, 77.21, source="era5")["source"]
+    monkeypatch.setenv(era5.PACK, str(MINI))
+    no_land = data.get_series("air_temp", 0.0, -30.0, source="era5")["source"]
+    pack = data.get_series("air_temp", 40.35, -74.66, source="era5")["source"]
     power = {"id": "power", "url": "https://power.larc.nasa.gov/"}
     answer = {}
     monkeypatch.setattr(tools, "detect_trend", lambda *a, **k: answer)
     monkeypatch.setattr(tools, "get_series", lambda *a, **k: {"source": answer["source"]})
     c, q = TestClient(app), {"variable": "air_temp", "lat": 0, "lon": 0}
 
-    def headers(main, *rows):
+    def headers(main, *rows):  # (/api/trend, /api/series) for an answer whose main record and rows have these sources
         answer.clear()
         answer.update(source=main, main_note=None, comparisons=[{"status": "ok", "source": r} for r in (main, *rows)])
         return c.get("/api/trend", params=q).headers["cache-control"], c.get("/api/series", params=q).headers["cache-control"]
 
-    assert headers(om, power) == (CACHE, CACHE)  # no pack: Open-Meteo is cached as today
-    monkeypatch.setenv(era5.PACK, str(MINI))
-    assert headers(om, power) == ("no-store", "no-store")  # the main record came from the fallback
-    assert headers(power, om) == ("no-store", CACHE)  # an ERA5 row did
-    assert headers(pack, power) == (CACHE, CACHE)  # the pack: the normal cache
+    assert headers(no_land, power) == headers(power, no_land) == (CACHE, CACHE)  # no pack value exists there
+    assert headers(pack, power) == (CACHE, CACHE)
+    monkeypatch.setenv(era5.PACK, str(tmp_path))
+    assert headers(failed, power) == ("no-store", "no-store")  # the main record came from a failed read
+    assert headers(power, failed) == ("no-store", CACHE)  # an ERA5 row did
+    monkeypatch.delenv(era5.PACK)
+    assert headers(plain, power) == (CACHE, CACHE)  # no pack: Open-Meteo is cached as today

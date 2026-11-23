@@ -4,7 +4,9 @@ Order (get_series): the replay folder (BHOOMI_ERA5_REPLAY, tests and QA only), t
 (BHOOMI_ERA5_PACK, else PACK_URL: a base URL such as https://…/era5/v2025-12, or a local folder), then Open-Meteo,
 no key.
 Open-Meteo runs only when no base is set, a pack read fails (a warning names the file), or the pack has no land cell
-for the place. A pack series names its own source, so a visitor always sees which one they got.
+for the place. A pack series names its own source, so a visitor always sees which one they got. With a pack
+configured, Open-Meteo's source carries "pack": "no_land" when the pack has no land cell for the place (it keeps the
+normal cache); without it, Open-Meteo's series follows a failed read and is kept only briefly (is_fallback).
 
 Pack format v1, the contract between scripts/build_era5_pack.py (writes) and pack_series (reads):
 - Data: CDS dataset multi-origin-c3s-atlas, origin era5 (doi:10.24381/cds.h35hb680), monthly, 1981-01 to 2025-12, on
@@ -204,10 +206,14 @@ def default_source() -> dict:
     return PACK_SOURCE if pack_base() else SOURCE
 
 
+NO_LAND = {"pack": "no_land"}  # added to Open-Meteo's source where the pack has no land cell near: no pack value exists
+
+
 def is_fallback(source: dict) -> bool:
-    """True for an ERA5 record from Open-Meteo while a pack is configured: a pack outage or a place with no land cell
-    near. Such a record is cached only briefly and its answer is sent no-store (contract "Caching")."""
-    return bool(pack_base()) and source.get("url") == SOURCE["url"]
+    """True for an ERA5 record from Open-Meteo after a failed pack read while a pack is configured: it is cached only
+    briefly and its answer is sent no-store (contract "Caching"). A point with no land cell near (NO_LAND in its source)
+    always uses Open-Meteo, so it keeps the normal cache."""
+    return bool(pack_base()) and source.get("url") == SOURCE["url"] and source.get("pack") != NO_LAND["pack"]
 
 
 def _wrap(qlon: int) -> int:
@@ -276,10 +282,11 @@ def _deg(v: float, pos: str, neg: str) -> str:
     return f"{abs(v):.2f}° {pos if v >= 0 else neg}"
 
 
-def pack_series(variable: str, lat: float, lon: float) -> tuple[list[str], list[float | None], dict, list[str]] | None:
+def pack_series(variable: str, lat: float,
+                lon: float) -> tuple[list[str], list[float | None], dict, list[str]] | None | bool:
     """(times, values, source, notes) for a place from the pack: monthly, values in °C or mm a day, None for a missing
-    month, no preliminary months. None when replay is on, no base is set, the place's 3 × 3 block has no land cell, or
-    a read fails (logged as a warning naming the file): the caller then uses Open-Meteo."""
+    month, no preliminary months. Else the caller uses Open-Meteo: None when replay is on, no base is set or the place's
+    3 × 3 block has no land cell (no pack value exists); False when a read fails (logged as a warning naming the file)."""
     if not (base := pack_base()):
         return None
     name = "manifest.json"
@@ -302,7 +309,7 @@ def pack_series(variable: str, lat: float, lon: float) -> tuple[list[str], list[
                   for v in t["data"][k, PACK_VARS.index(PACK_VAR[variable])].tolist()]
     except Exception as e:  # an HTTP error, a listed tile missing, a bad or truncated npz, a vars or start mismatch
         log.warning("ERA5 pack: reading %s from %s failed (%r); using Open-Meteo.", name, base, e)
-        return None
+        return False
     k0 = int(PACK_START[:4]) * 12 + int(PACK_START[5:7]) - 1
     times = [f"{(k0 + i) // 12:04d}-{(k0 + i) % 12 + 1:02d}" for i in range(len(values))]
     cell = (f"the {'' if (ql, qn) == own_cell(lat, lon) else 'nearest land '}grid cell centred at {_deg(ql / 4, 'N', 'S')}, "

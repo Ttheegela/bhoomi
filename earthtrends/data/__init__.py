@@ -55,12 +55,14 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
     elif source == "era5" and (pack := era5.pack_series(variable, lat, lon)):  # our pack: monthly already, no flags
         times, values, src, notes = pack
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
-    elif source == "era5":  # Open-Meteo: no pack base, a failed pack read (logged), or no land cell near
-        # with a pack configured this series is kept only FALLBACK_TTL_S, so a pack outage never pins the point here
+    elif source == "era5":  # Open-Meteo: no pack base or no land cell near (pack is None), or a failed read (False)
+        # with a pack configured, a failed read's series is kept only FALLBACK_TTL_S, so an outage never pins the point
         param = era5.PARAMS[variable]
         times, values = monthly.daily_to_monthly(*era5.parse(era5.fetch(param, lat, lon), param), era5.HOW[variable])
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
         src, flags = era5.source(variable, lat, lon, today), era5.flags(times, today)
+        if pack is None and era5.pack_base():  # the pack has no land cell near: cached as usual (era5.is_fallback)
+            src |= era5.NO_LAND
         notes = ["Grid cell about 25 km wide, not a single station.",
                  f"Monthly values are built from daily ones; a month with fewer than {monthly.MIN_DAYS} valid days is left empty."]
         notes += [era5.NOTES[variable]] if variable in era5.NOTES else []
