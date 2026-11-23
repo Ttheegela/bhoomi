@@ -1,8 +1,8 @@
 /* Module 01: the map. Classes prefixed map-. The library's own sheet comes first. Dark theme hangs off :root[data-theme="dark"]. */
 @import url("vendor/maplibre-gl/maplibre-gl.css");
-/* ink and grey only: the risk is in the chip and the marker's name, never in a hue */
-:root { --mk-mod: #767676; --mk-low: #BDBDBD; }
-:root[data-theme="dark"] { --mk-mod: #C8C8C8; --mk-low: #9A9A9A; }
+/* ink and grey only: every pinned-place marker looks the same (facts, not advice: web/design/14-facts.md section 6) */
+:root { --mk-mod: #767676; }
+:root[data-theme="dark"] { --mk-mod: #C8C8C8; }
 #map-slot:not([hidden]) { display: flex; flex-direction: column; }
 .map-frame { position: relative; flex: 1 1 auto; min-height: 440px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); }
 .map-canvas { position: absolute; inset: 0; }
@@ -11,12 +11,9 @@
 .map-failed .map-wait { background: var(--surface); pointer-events: auto; }
 .map-failed .maplibregl-ctrl-top-right { display: none; }
 .map-retry { min-height: 48px; }
-/* markers: one button per pinned place; fill by risk (the risk is also in the accessible name and the tag) */
-.map-mk { position: absolute; top: 0; left: 0; box-sizing: border-box; width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--ink); background: var(--mk-low); cursor: pointer; }
+/* markers: one button per pinned place, all alike; its name is the accessible name and the tag */
+.map-mk { position: absolute; top: 0; left: 0; box-sizing: border-box; width: 14px; height: 14px; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--ink); background: var(--mk-mod); cursor: pointer; }
 .map-mk::before { content: ""; position: absolute; inset: -17px; }
-.map-mk.high { background: var(--ink); }
-.map-mk.moderate { background: var(--mk-mod); }
-.map-mk.low { background: var(--mk-low); }
 .map-mk.sel { width: 20px; height: 20px; box-shadow: 0 0 0 2px var(--ink); z-index: 2; }
 .map-mk:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
 /* dark: a 2 px ring in the surface colour outside the ink ring, so a pin stays visible on the lightest map colours ("less water") */
@@ -31,7 +28,7 @@
 .map-canvas .maplibregl-cooperative-gesture-screen { background: color-mix(in srgb, var(--ink) 82%, transparent); color: var(--bg); font: 16px/1.4 Inter, system-ui, sans-serif; }
 :root[data-theme="dark"] .map-canvas .maplibregl-ctrl-icon { filter: invert(1); }
 @media (forced-colors: active) {
-  .map-mk, .map-mk.high, .map-mk.moderate, .map-mk.low { border: 2px solid Canvas; background: CanvasText; }
+  .map-mk { border: 2px solid Canvas; background: CanvasText; }
 }
 /* the hover label over a gauge dot or a water block (web/design/13-maps.md sections 2 and 4); the key under the map is in style.css */
 .map-tip .maplibregl-popup-tip { display: none; }

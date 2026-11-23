@@ -562,15 +562,17 @@ def without_periods(text: str) -> str:
 
 def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
     """(range, certain) for each wrong period range in `text`. A range passes if it is the window the user asked for
-    (a call's start and end, by year) or written in a result's own caveat ("its 2004 to 2009 average": the tool's
-    words). CERTAIN, code may rewrite it: it fits no result's period at all. DOUBTFUL, retry only, never rewritten:
-    the only range of its sentence fits some result's period but none of its candidates', or is said for several
-    sources at once ("both cover ...") whose candidates have different periods. In a sentence with two or more
-    ranges, each range is fine when it fits any result's period."""
+    (a call's start and end, by year) or written in a result's own caveat or guidance fact ("its 2004 to 2009
+    average", "(1993 to April 2025; ...)": the tool's words). CERTAIN, code may rewrite it: it fits no result's period
+    at all. DOUBTFUL, retry only, never rewritten: the only range of its sentence fits some result's period but none
+    of its candidates', or is said for several sources at once ("both cover ...") whose candidates have different
+    periods. In a sentence with two or more ranges, each range is fine when it fits any result's period."""
     ok = [c for c in ok_calls(calls) if _period(c["result"])]
     if not ok:
         return []
-    caveats = [c.lower() for x in ok for c in x["result"].get("caveats") or [] if isinstance(c, str)]
+    caveats = [c.lower() for x in ok
+               for c in [*(x["result"].get("caveats") or []), (x["result"].get("guidance") or {}).get("fact")]
+               if isinstance(c, str)]
     asked = [(str(a["start"])[:4], str(a["end"])[:4]) for a in (c.get("arguments") or {} for c in calls)
              if isinstance(a, dict) and a.get("start") and a.get("end")]
     ranges = period_ranges(text)

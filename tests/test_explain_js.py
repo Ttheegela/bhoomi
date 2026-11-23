@@ -39,8 +39,11 @@ function clean(d, c) {
     assert.ok(!/1995 or earlier|2014 or later/.test(x), 'old baseline rule: ' + x);
     // step 5 says what we did, not that the record "holds less independent information"
     assert.ok(!/independent information|we widened the range/.test(x), 'old widened sentence: ' + x);
+    // facts, not advice (design 14): no risk level, recommendation or buy, build or invest advice anywhere
+    assert.ok(!ADVICE.test(x), 'advice: ' + x);
   });
 }
+var ADVICE = /risk|recommend|advis|\bbuy|invest|high:|moderate:|low:|our rule/i;
 function num(s) { return Number(String(s).replace(/−/g, '-').replace(/[^\d.+-]/g, '')); }
 function decimals(s) { var m = String(s).match(/\.(\d+)/); return m ? m[1].length : 0; }
 // step 4: "Over the record: {rate} × {span} = {change} (...)": the change is fit.change as printed, and the printed
@@ -76,15 +79,17 @@ var PN = copy(P); PN.trend.now = null;
 assert.strictEqual(card(PN.trend, false).r1, null);
 assert.ok(steps(PN.trend, PN.series, pc)[3].work.every(function (x) { return !/Now/.test(x); }));
 clean(PN, pc);
-// two-level risk label: the chip is the label as given; step 6 gives the ratio's 95% range and why there are two levels
-assert.strictEqual(P.trend.guidance.risk_label, 'Low to moderate risk');
-assert.strictEqual(pk.chip, 'Low to moderate risk');
+// facts, not advice (design 14): the card prints guidance.fact as given; step 6 gives the ratio, its 95% range and how
+// to read it, never a level or a threshold
+assert.strictEqual(pk.fact, P.trend.guidance.fact);
+assert.ok(!('chip' in pk));
 assert.ok(pS[5].work[0].indexOf(' = ' + fixed(pw.ratio, 1) + '× · ' + fixed(pw.ratio_low, 1) + ' to ' + fixed(pw.ratio_high, 1) + ' times (95% range) · ') > 0, pS[5].work[0]);
-assert.ok(/ Here: low to moderate risk, because the 95% range spans more than one level\.$/.test(pS[5].work[1]), pS[5].work[1]);
+assert.strictEqual(pS[5].work[1], '1× is the same pace as the world; 2× is twice as fast.');
 var PR = copy(P); PR.trend.world.text += ' Here: ' + fixed(pw.ratio_low, 1) + ' to ' + fixed(pw.ratio_high, 1) + ' times.'; // the API's sentence already says it
 assert.ok(!/times \(95% range\)/.test(steps(PR.trend, PR.series, pc)[5].work[0]));
-var P1 = copy(P); P1.trend.guidance.risk_label = 'Moderate risk'; // one level: no "because"
-assert.ok(/ Here: moderate risk\.$/.test(steps(P1.trend, P1.series, pc)[5].work[1]));
+// the card: the fact, where to look next (no url: plain text) and the disclaimer
+assert.deepStrictEqual(pk.next, [{ text: 'Your national weather service', href: '' }]);
+assert.strictEqual(pk.disc, 'This shows past measurements only. It is not a prediction and not professional advice.');
 // item 6: every caveat is in "Things to keep in mind", the POWER model-data one too
 assert.ok(P.trend.caveats.some(function (x) { return /weather model, MERRA-2/.test(x); }));
 P.trend.caveats.forEach(function (x) { assert.ok(pS[7].words[0].list.indexOf(x) >= 0, x); });
@@ -96,7 +101,11 @@ assert.strictEqual(pS[3].short, P.trend.headline_rate.text + ', 95% range ' + P.
 sumAddsUp(P, pc, NB + '°C');
 assert.strictEqual(pT.ytitle, '°C compared with the 1995–2014 average');
 assert.strictEqual(pT.sub, 'Seasons removed: each month is compared with its own 1995–2014 average.');
-assert.strictEqual(pk.world, 'Since 1981: here ' + fmtNum(pw.local_rate, true) + NB + '°C per decade, world ' + fmtNum(pw.world_rate, true) + NB + '°C per decade (' + fixed(pw.ratio, 1) + '×)');
+// the card's world line: the two rates (the fact gives the ratio and the years), then the world figure's source
+assert.deepStrictEqual(pk.world, { text: 'Over those years: here ' + fmtNum(pw.local_rate, true) + NB + '°C per decade, world ' + fmtNum(pw.world_rate, true) + NB + '°C per decade.',
+  src: 'NOAA global land record', href: pw.source.record_url });
+var PH = copy(P); PH.trend.world.source.record_url = 'http://example.org/'; // not https: the name, no link
+assert.strictEqual(card(PH.trend, false).world.href, '');
 assert.ok(pS[5].work[0].slice(-(pw.method.length + 1)) === pw.method + '.' || pS[5].work[0].slice(-pw.method.length) === pw.method, pS[5].work[0]);
 assert.strictEqual(pS.length, 9);
 assert.strictEqual(pS[0].link.href, P.trend.source.record_url);
@@ -104,6 +113,11 @@ assert.strictEqual(pS[6].link, null); // no future link here
 // step 6 prints world.ratio as given, never one worked out from the rates
 var P9 = copy(P); P9.trend.world.ratio = 9.9;
 assert.ok(/ = 9\.9× · /.test(steps(P9.trend, P9.series, pc)[5].work[0]));
+// with the server's own digits, as the fact and the compare table print them: 0.75 stays 0.75, 1.0 stays 1.0
+var P75 = copy(P); P75.trend.world.ratio = 0.75; P75.trend.world.ratio_low = 0.5; P75.trend.world.ratio_high = 1.0;
+var p75 = steps(P75.trend, P75.series, pc)[5];
+assert.ok(p75.work[0].indexOf(' = 0.75× · 0.5 to 1.0 times (95% range) · ') > 0 && / \(0\.75×\)$/.test(p75.short), p75.work[0] + ' | ' + p75.short);
+assert.ok(worldParts(P75.trend, false).ratio === '0.75×' && worldParts(P75.trend, false).range === '0.5 to 1.0');
 // step 5: "below" follows p < 0.05; the range words follow the range
 assert.ok(/so below 0\.05 · .*all above zero → /.test(pS[4].work[0]), pS[4].work[0]);
 var P5 = copy(P); P5.trend.explain.real.p_value = 0.2;
@@ -172,6 +186,7 @@ assert.ok(body.every(function (l) { return !/^[=+\-@]/.test(l); }));
 
 // in °F: levels add 32, changes and rates do not; the API's world sentence is marked as metric
 var pfc = ctx(P, 'Princeton, NJ', true), fk = card(P.trend, true);
+assert.strictEqual(fk.fact, P.trend.guidance.fact); // a ratio has no unit: the fact as given
 assert.strictEqual(fk.r1.value, fmtNum(P.trend.now.value * 1.8, true) + NB + '°F'); // "Now" in °F: a change, so no +32
 assert.ok(/°F per decade$/.test(fk.r2.value + ' ' + fk.r2.per));
 var pfS = steps(P.trend, P.series, pfc);
@@ -197,8 +212,16 @@ assert.ok(bS[3].work[0].indexOf(' = ' + bmm + ', which is ' + bcm + ' (95% range
 assert.ok(/^Over the record: \+3\.0\d* mm a year × 105\.667 years = /.test(bS[3].work[0]), bS[3].work[0]);
 assert.strictEqual(bk.r1.value, B.trend.now.text);
 assert.ok(!/which is/.test(steps(B.trend, B.series, ctx(B, 'New York, NY', true))[3].work[0])); // in inches one unit does
-// the why already starts "Since 1993, …": the world line under it doesn't say it again; step 6 still does
-assert.ok(/^Since 1993, /.test(B.trend.guidance.why) && /^Here \+/.test(bk.world), bk.world);
+// the card: the fact, the world line with its source, where to look next (FEMA's https url is a link) and the disclaimer
+assert.strictEqual(bk.fact, B.trend.guidance.fact);
+assert.deepStrictEqual(bk.world, { text: 'Over those years: here +2.7' + NB + 'mm a year, world +3.3' + NB + 'mm a year.', src: 'NASA satellite record', href: B.trend.world.source.record_url });
+assert.deepStrictEqual(bk.next, [{ text: 'Official flood maps (FEMA Flood Map Service Center)' + NB + '↗', href: 'https://msc.fema.gov/portal/home' }, { text: 'Your local planning office', href: '' }]);
+assert.strictEqual(bk.disc, 'This shows past measurements and IPCC projections, which depend on how much the world emits. It is not a prediction and not professional advice.');
+var BL = copy(B); BL.trend.guidance.look_next = [{ label: 'X', url: 'http://msc.fema.gov/' }, { label: '', url: null }, null];
+assert.deepStrictEqual(card(BL.trend, false).next, [{ text: 'X', href: '' }]); // not https: plain text; no label: left out
+BL.trend.guidance.look_next = []; delete BL.trend.guidance.disclaimer;
+assert.ok(card(BL.trend, false).next.length === 0 && card(BL.trend, false).disc === '');
+// step 6 still starts "Since 1993"
 assert.ok(/^Since 1993: here /.test(bS[5].short), bS[5].short);
 // widened, then the sea-level line
 assert.ok(B.trend.explain.real.widened);
@@ -245,7 +268,28 @@ BF.trend.world.ratio = BF.trend.world.ratio_low = BF.trend.world.ratio_high = nu
 var bfS = steps(BF.trend, BF.series, bc)[5];
 assert.deepStrictEqual(bfS.words, [BF.trend.world.text, BF.trend.world.why_none, SEA6]);
 assert.ok(!/×/.test(bfS.short) && !/ ÷ /.test(bfS.work[0]), bfS.short + ' | ' + bfS.work[0]);
+assert.ok(bfS.work.every(function (x) { return !/1× is/.test(x); })); // no ratio: no line on how to read it
+assert.strictEqual(card(BF.trend, false).world.text, 'Since 1993: here +2.7' + NB + 'mm a year, world +3.3' + NB + 'mm a year.'); // the rates, no ratio
 clean(BF, bc);
+// Juneau: falling while the world rose (a ratio below 0). The fact gives the world's rate, so the world line doesn't
+// repeat it; step 6 says what below 0 means; in inches the fact (mm) says it is in metric
+var JU = copy(B); JU.trend.verdict = 'falling'; JU.trend.world.local_rate = -15; JU.trend.world.ratio = -4.5; JU.trend.world.ratio_low = -5.2; JU.trend.world.ratio_high = -3.8;
+JU.trend.guidance.fact = 'Falling here, while the world average rose 3.3 mm a year over the same years (1993 to April 2025).';
+assert.deepStrictEqual(card(JU.trend, false).world, { text: 'Over those years: here −15.0' + NB + 'mm a year.', src: 'NASA satellite record', href: B.trend.world.source.record_url });
+assert.strictEqual(steps(JU.trend, JU.series, bc)[5].work[1], '1× is the same pace as the world. Below 0, the change here went the other way.');
+assert.strictEqual(card(JU.trend, true).fact, 'Falling here, while the world average rose 3.3 mm a year over the same years (1993 to April 2025) (in metric).');
+assert.strictEqual(card(JU.trend, false).fact, JU.trend.guidance.fact);
+clean(JU, bc);
+// review: "Over those years" only when the fact is the world comparison, i.e. the ratio's sign agrees with the verdict
+// (guidance.py). Otherwise the fact gives the full record's rate and years, so the line says "Since 1993" and both rates.
+var SINCE = { src: 'NASA satellite record', href: B.trend.world.source.record_url };
+var FR = copy(B); FR.trend.verdict = 'falling'; FR.trend.world.ratio = 0.5; // falling over the record, rising since 1993
+assert.deepStrictEqual(card(FR.trend, false).world, Object.assign({ text: 'Since 1993: here +2.7' + NB + 'mm a year, world +3.3' + NB + 'mm a year.' }, SINCE));
+var RN = copy(B); RN.trend.world.ratio = -0.3; RN.trend.world.local_rate = -0.5; // rising over the record, falling since 1993
+assert.deepStrictEqual(card(RN.trend, false).world, Object.assign({ text: 'Since 1993: here −0.50' + NB + 'mm a year, world +3.3' + NB + 'mm a year.' }, SINCE));
+var R0 = copy(B); R0.trend.world.ratio = 0; R0.trend.world.local_rate = 0; // a zero ratio says nothing: the fact is the rate
+assert.deepStrictEqual(card(R0.trend, false).world, Object.assign({ text: 'Since 1993: here 0.00' + NB + 'mm a year, world +3.3' + NB + 'mm a year.' }, SINCE));
+[FR, RN, R0].forEach(function (d) { clean(d, bc); });
 // step 6, air temperature: the world figure is station-based; a model source says the two are measured differently
 var AIR6 = 'The world figure is built from weather stations on land.', MOD6 = ' The number here comes from a weather model, so the two are measured in different ways.';
 assert.strictEqual(P.trend.source.id, 'power');
@@ -262,10 +306,8 @@ assert.ok(/\. Baseline estimated from the fitted trend\.$/.test(card(K.trend, fa
 var kw = steps(K.trend, K.series, kc)[2].work[0];
 assert.ok(kw.indexOf('The record spans ' + Math.round(K.trend.record.years) + ' years, at least 5 of the 20 years are counted, and it has data both before 1995 and after 2014, so we fit the trend and the seasons together') > 0, kw);
 sumAddsUp(K, kc, NB + 'mm');
-assert.strictEqual(K.trend.guidance.risk_label, 'Risk between low and high (wide range)');
-assert.strictEqual(card(K.trend, false).chip, 'Risk between low and high (wide range)');
-var kS6 = steps(K.trend, K.series, kc)[5].work[1];
-assert.ok(/ Here the 95% range spans every level, so the risk could be anywhere from low to high\.$/.test(kS6) && !/wide range/.test(kS6), kS6);
+assert.strictEqual(steps(K.trend, K.series, kc)[5].work[1], '1× is the same pace as the world; 2× is twice as fast.');
+assert.deepStrictEqual(card(K.trend, false).next, [{ text: 'Your local planning office', href: '' }]); // a PSMSL gauge: no FEMA link
 clean(K, kc);
 
 // Chennai, rain: shares of the usual rain; monthly totals in mm; the annual total as given; rates a day
@@ -310,10 +352,16 @@ assert.strictEqual(cl[10], 'time,value_mm/day,anomaly_%,flag');
 assert.strictEqual(cS[1].short, 'Wettest in ' + MONTHS_LONG[cb.high_month - 1] + ' (' + fmtNum(cb.high, false) + NB + 'mm), driest in ' + MONTHS_LONG[cb.low_month - 1] + ' (' + fmtNum(cb.low, false) + NB + 'mm)');
 assert.ok(/^Here the wettest month, /.test(cS[1].words[0]));
 assert.ok(/ ÷ .*the usual rate = /.test(cS[1].work[0]) && /mm a day/.test(cS[1].work[0]) && !/a year/.test(cS[1].work[0]), cS[1].work[0]);
-// step 6 without a world figure: why there is none, then the rain rule (world.text), so "+0.4 to +10.7%" can be read
-assert.ok(!C.trend.world.available && /^Our rule: /.test(C.trend.world.text) && C.trend.world.why_none);
-assert.deepStrictEqual(cS[5].words, [C.trend.world.why_none, C.trend.world.text]);
+// step 6 without a world figure: why there is none, never world.text (an older answer's level rule is not printed)
+assert.ok(!C.trend.world.available && C.trend.world.text === null && C.trend.world.why_none);
+assert.deepStrictEqual(cS[5].words, [C.trend.world.why_none]);
 assert.strictEqual(cS[5].short, C.trend.world.why_none);
+var CR = copy(C); CR.trend.world.text = 'Our rule: a change of 10% or more is high.';
+assert.deepStrictEqual(steps(CR.trend, CR.series, cc)[5].words, [C.trend.world.why_none]);
+// the card: the fact as given (no rain note after it), no world line; in inches a % fact is unchanged
+assert.strictEqual(ck.fact, C.trend.guidance.fact);
+assert.ok(ck.world === null && card(C.trend, true).fact === C.trend.guidance.fact && !/mm/.test(ck.fact));
+assert.deepStrictEqual(ck.next, [{ text: 'Your national weather service', href: '' }]);
 assert.strictEqual(cS[2].short, 'Every level is compared with the 1995–2014 average here, about ' + commas(Math.round(C.trend.baseline.annual_total_mm)) + NB + 'mm a year');
 assert.ok(/ of the 1995–2014 average per decade × 4\.50 decades = /.test(cS[3].work[0]), cS[3].work[0]);
 sumAddsUp(C, cc, '%');
@@ -331,10 +379,13 @@ assert.strictEqual(chartModel(C2.trend, C2.series, false).fit, null);
 var c2T = chartText(C2.trend, C2.series, cc);
 assert.ok(!c2T.drawn && c2T.endLabel === '' && !/stands at|trend line/.test(c2T.summary));
 
-// Delhi, hottest day: no chip, no world figure
+// Delhi, hottest day: no world figure; the fact, where to look next and the disclaimer like any other card
 var H = load('delhi_hottest_day'), hdc = ctx(H, 'Delhi'), hk = card(H.trend, false), hS = steps(H.trend, H.series, hdc);
-assert.strictEqual(hk.chip, '');
-assert.strictEqual(hk.world, '');
+assert.strictEqual(hk.world, null);
+assert.strictEqual(hk.fact, H.trend.guidance.fact);
+assert.deepStrictEqual(hk.next, [{ text: 'Your national weather service', href: '' }]);
+assert.strictEqual(hk.disc, 'This shows past measurements only. It is not a prediction and not professional advice.');
+assert.strictEqual(card(H.trend, true).fact, H.trend.guidance.fact.replace(/\.$/, ' (in metric).')); // °C in a °F page
 assert.strictEqual(hS[5].short, 'There is no matching world figure for the hottest day of the month.');
 assert.strictEqual(hS[5].work, undefined);
 assert.deepStrictEqual(hS[5].words, [H.trend.world.why_none]); // no rule (world.text null): why_none alone
@@ -379,18 +430,17 @@ var G = load('grace_water_storage'), gc = ctx(G, 'Punjab, India'), gT = chartTex
 assert.strictEqual(gT.ytitle, 'cm of water compared with ' + gb.text);
 assert.strictEqual(gS[2].short, 'Every level is compared with ' + gb.text);
 assert.strictEqual(gS[6].short, G.trend.projection.why);
-assert.ok(/^Our rule: /.test(G.trend.world.text) && G.trend.world.why_none);
-assert.deepStrictEqual(gS[5].words, [G.trend.world.why_none, G.trend.world.text]); // water storage's own rule
+assert.deepStrictEqual(gS[5].words, [G.trend.world.why_none]); // why there is no world figure, no level rule
+assert.strictEqual(card(G.trend, false).world, null);
 assert.strictEqual(card(G.trend, false).r1.label, 'Now, compared with ' + gb.text);
 assert.ok(!/− −/.test(gS[1].work[0]) && / − \(−[\d.]+ cm\) \(the usual /.test(gS[1].work[0]), gS[1].work[0]);
 sumAddsUp(G, gc, NB + 'cm');
 clean(G, gc);
 
-// no clear change: the headline says so, so the chip doesn't say it again (item 8); the range includes zero
+// no clear change: a card like any other, the fact as given; the range includes zero
 var S = load('seattle_air_temp_no_change'), sc = ctx(S, 'Seattle'), sk = card(S.trend, false), sS = steps(S.trend, S.series, sc);
-assert.ok(S.trend.guidance.risk_label === 'No clear change' && sk.word === 'No clear change');
-assert.strictEqual(sk.chip, '');
-assert.strictEqual(card(B.trend, false).chip, B.trend.guidance.risk_label); // any other label is the chip, as given
+assert.ok(sk.word === 'No clear change' && sk.fact === S.trend.guidance.fact && /^No clear change \(/.test(sk.fact));
+assert.ok(sk.next.length === 1 && /^This shows past measurements only\./.test(sk.disc));
 assert.strictEqual(sk.conf, '45 years of records');
 assert.ok(/, which includes no change$/.test(sk.r2.line));
 assert.ok(/^That does not mean nothing changed/.test(sS[4].words[2]));
@@ -400,17 +450,19 @@ assert.ok(/Verdict: no clear change\.$/.test(chartText(S.trend, S.series, sc).su
 var S9 = copy(S); S9.trend.world.ratio = -0.4;
 [S, S9].forEach(function (d) {
   var k9 = card(d.trend, false), s9 = steps(d.trend, d.series, sc);
-  assert.ok(/^Since 1981: here −0\.01 °C per decade, world \+0\.35 °C per decade$/.test(k9.world), k9.world);
-  assert.ok(!/×|÷/.test(s9[5].work[0]) && !/×/.test(s9[5].short), s9[5].work[0]);
+  assert.ok(/^Since 1981: here −0\.01 °C per decade, world \+0\.35 °C per decade\.$/.test(k9.world.text) && k9.world.src === 'NOAA global land record', k9.world.text);
+  assert.ok(!/×|÷/.test(s9[5].work[0]) && !/×/.test(s9[5].short) && s9[5].work.length === 1, s9[5].work[0]);
 });
 clean(S, sc);
 
-// QA B3: a clear rise with no world figure: the label and the why as given, no world line, a recommendation
+// QA B3: a clear rise with no world figure (Mumbai): the fact as given, then why there is no world figure, no link
 var MB = load('mumbai_sea_level_no_world'), mc = ctx(MB, 'Mumbai'), mk = card(MB.trend, false), mg = MB.trend.guidance;
-assert.ok(mg.risk === null && mg.risk_label === 'No world comparison' && typeof mg.recommendation === 'string' && mg.recommendation);
-assert.strictEqual(mk.chip, 'No world comparison');
-assert.strictEqual(mk.why, mg.why);
-assert.strictEqual(mk.world, '');
+assert.ok(!('risk' in mg) && !('risk_label' in mg) && !('recommendation' in mg) && !('why' in mg));
+assert.strictEqual(mk.fact, mg.fact);
+assert.deepStrictEqual(mk.world, { text: MB.trend.world.why_none, src: '', href: '' });
+assert.deepStrictEqual(mk.next, [{ text: 'Your local planning office', href: '' }]);
+assert.strictEqual(mk.disc, mg.disclaimer);
+assert.strictEqual(card(MB.trend, true).fact, mg.fact.replace(/\.$/, ' (in metric).')); // mm in an inches page
 assert.strictEqual(steps(MB.trend, MB.series, mc)[5].short, MB.trend.world.why_none);
 clean(MB, mc);
 
@@ -423,7 +475,7 @@ clean(L, lc);
 // an answer cached from before the rework: the verdict only
 var O = { verdict: 'rising', slope_per_decade: 30.5, ci_low: 28, ci_high: 33, units: 'mm', meaning: { headline: 'The sea here has clearly been rising.', confidence: 'Very clear' } };
 var ok_ = card(O, false);
-assert.ok(ok_.old && ok_.word === 'Rising' && ok_.why === O.meaning.headline);
+assert.ok(ok_.old && ok_.word === 'Rising' && ok_.fact === O.meaning.headline);
 assert.strictEqual(rate(O, false), null);
 
 // the compare CSV: one header block, then every plotted place's months
@@ -786,14 +838,26 @@ def test_how_clears_the_sticky_top_bar():
 
 
 def test_compare_table_fits_wide_screens():
-    """QA B8: a long place name pushed the Risk column out of sight at 1440. Place names and risk chips wrap in the
-    compare table; the box still scrolls sideways, which only a narrow screen needs."""
+    """QA B8: a long place name pushed the last column out of sight at 1440. Place names wrap in the compare table; the
+    box still scrolls sideways from 600 px up. Design 14 §8: under 600 px each place is a block with its column names
+    (data-label), so nothing scrolls sideways; the table keeps explicit roles for Safari."""
     css = (ROOT / "web" / "compare.css").read_text(encoding="utf-8")
     rules = re.findall(r"([^{}]+)\{([^}]*)\}", css)
     place = [sel for sel, body in rules if "nowrap" in body and re.search(r"td:first-child|td:nth-child\(1\)", sel)]
     assert not place, place
-    assert re.search(r"\.cmp-tbl \.risk \{[^}]*white-space: normal;", css)
     assert re.search(r"\.cmp-scroll \{ overflow-x: auto; \}", css)
+    narrow = re.search(r"@media \(max-width: 599px\) \{ /\* one block per place.*?\n\}", css, re.S)
+    assert narrow, "no block layout under 600 px"
+    for rule in (".cmp-scroll { overflow-x: visible; }", ".cmp-tbl, .cmp-tbl tbody, .cmp-tbl tr, .cmp-tbl td { display: block; }",
+                 ".cmp-tbl td[data-label]::before { content: attr(data-label);"):
+        assert rule in narrow[0], rule
+    assert css.index(".cmp-tbl td.n {") < narrow.start()  # the block rules come last, so they win at equal specificity
+    assert ".cmp-tbl" not in (ROOT / "web" / "style.css").read_text(encoding="utf-8")  # the table's rules live in compare.css
+    assert re.search(r"\.cmp-tbl th \{ font-size: 14px;[^}]*font-weight: 400;", css) and "uppercase" not in css  # sentence case
+    cmp = (ROOT / "web" / "compare.js").read_text(encoding="utf-8")
+    for r in ("'table'", "'rowgroup'", "'row'", "'columnheader'", "'cell'"):
+        assert r in cmp, r
+    assert "c.setAttribute('data-label', cols[k])" in cmp
 
 
 def test_narrow_readout_value_column_is_capped():
@@ -805,12 +869,39 @@ def test_narrow_readout_value_column_is_capped():
     assert cols and cols[1] == "minmax(0, 1fr) fit-content(45%)", cols and cols[1]
 
 
-def test_long_risk_chip_moves_under_the_heading():
-    """Item 7: "Risk between low and high (wide range)" is shown as given. On a phone it moves under the place name instead of
-    pushing past the card and squeezing the source line to one word a line."""
+def test_no_risk_level_or_advice_in_the_page_code():
+    """Facts, not advice (owner, 2026-11-22; design 14 §0): no risk chip, advice box or threshold is left in the page's
+    code or words, outside comments: no "risk", "recommend", "advise", "buy" or "invest" in any string the page can
+    print, and no .risk or .advice rule in style.css."""
+    banned = re.compile(r"risk|recommend|advis|\bbuy|invest", re.I)
+    for name in ("app.js", "compare.js", "chat.js", "map.js", "explain.js", "index.html"):
+        text = (ROOT / "web" / name).read_text(encoding="utf-8")
+        code = re.sub(r"/\*.*?\*/|<!--.*?-->", "", text, flags=re.S)
+        code = re.sub(r"(^|\s)//[^\n]*", r"\1", code)  # line comments; "https://" keeps its ':' so it stays
+        m = banned.search(code)
+        assert not m, (name, code[max(0, m.start() - 60):m.end() + 20])
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
-    assert re.search(r"\.rec \.where \{[^}]*flex-wrap: wrap;", css)
-    assert re.search(r"\.rec \.where \.risk \{[^}]*white-space: normal;", css)
+    assert not re.search(r"\.(risk|advice)\b", css)
+    assert not re.search(r"\.(risk|rk)\b", (ROOT / "web" / "compare.css").read_text(encoding="utf-8"))
+    # every pinned-place marker looks the same (§6): the --mk-mod fill, no risk classes, no --mk-low
+    mcss = (ROOT / "web" / "map.css").read_text(encoding="utf-8")
+    assert "--mk-low" not in mcss and not re.search(r"\.map-mk\.(high|moderate|low)\b", mcss)
+    assert re.search(r"\n\.map-mk \{[^}]*background: var\(--mk-mod\);", mcss)
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert "Our recommendation" not in app
+    # design 14 §6: the small words, exactly
+    assert "Pin up to 6 places to compare. Click one to see what its records show." in (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    assert "'Pin a place to see what its records show'" in app
+    assert "question: 'Is the sea rising where you live? Some tide gauges have measured it for more than a century.'" in app
+    assert ("\"Without a usable tide gauge nearby, our records can't tell you about this coast.\"), "
+            "nextLine([{ text: 'Your local planning office', href: '' }])") in app
+    assert "return el('div', { class: 'next' }, el('span', { class: 'nl' }, 'Where to look next:'), ' ', ul);" in app
+    # the card: the fact, then the world line, the readouts, where to look next, the button, then the disclaimer, always
+    rec = re.search(r"\nfunction drawRec\(box\) \{(.*?)\n\}", app, re.S)[1]
+    at = rec.index
+    assert at("if (C.fact) box.append(el('p', { class: 'say' }, C.fact));") < at("if (C.world)") < at("class: C.r3f ? 'reads sub' : 'reads'") \
+        < at("if (C.next.length) box.append(nextLine(C.next));") < at("box.append(el('div', { class: 'acts' }, how));") \
+        < at("if (C.disc) box.append(el('p', { class: 'disc' }, C.disc));")
 
 
 def test_scenario_colours_never_colour_text():
@@ -932,14 +1023,19 @@ def test_after_2100_note_wraps_at_the_visible_width():
     assert note and all(x in note[1] for x in ("box-sizing: border-box", "width: 100cqw", "position: sticky", "left: 0"))
 
 
-def test_sea_level_fixtures_carry_the_current_advice():
-    """The fixtures' sea-level advice is the server's current wording ("advise against" for High), never an older text."""
-    from earthtrends.stats.guidance import RECOMMEND
+def test_fixtures_carry_the_current_guidance():
+    """The fixtures' guidance is the server's current wording (facts, not advice: owner, 2026-11-22), never an older
+    text: the stats lane's own code on the fixture's series gives the same object."""
+    from earthtrends.stats import compute_trend
+    from earthtrends.stats.baseline import baseline
 
-    for f in sorted((ROOT / "tests" / "fixtures" / "rework").glob("*sea_level*.json")):
-        g = json.loads(f.read_text(encoding="utf-8"))["trend"]["guidance"]
-        assert g["recommendation"] in RECOMMEND["sea_level"].values(), f.name
-    assert "advise against" in RECOMMEND["sea_level"]["high"]
+    for f in sorted((ROOT / "tests" / "fixtures" / "rework").glob("*.json")):
+        if f.stem == "variables":
+            continue
+        d = json.loads(f.read_text(encoding="utf-8"))
+        s = {k: v for k, v in d["series"].items() if k != "anomaly"}
+        assert d["trend"]["guidance"] == compute_trend(s, base=baseline(s))["guidance"], f.name
+        assert {"fact", "look_next"} <= set(d["trend"]["guidance"]) and "thresholds" not in d["trend"]["world"]
 
 
 def _contrast(a, b):

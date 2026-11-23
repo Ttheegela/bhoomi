@@ -49,8 +49,8 @@ Data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and 
 ]
 
 # A decision question at a US coast: the data as usual, what past data cannot tell (meaning.limit: "cannot tell"),
-# no advice of the model's own (only the tool's guidance, put in by code), and the official links the code puts at
-# the [OFFICIAL RESOURCES] marker for a CO-OPS result.
+# no advice of the model's own (only the tool's guidance, put in by code), and the official links for a CO-OPS result:
+# NOAA's viewer from the [OFFICIAL RESOURCES] marker, FEMA's flood maps from the guidance's "Where to look next".
 [[case]]
 id = "manhattan-build-house"
 question = "I want to build a house in Lower Manhattan. What are the risks?"
@@ -71,8 +71,9 @@ must_say = ["not a ranking"]
 must_not_say = ["p-value", "0.05 line", "you should", "I recommend", "[OFFICIAL"]
 
 # ---- guidance, plain words and multi-place answers (agent/context-chat) ----
-# The risk level, recommendation, outlook and disclaimer come from the tool's "guidance" (stats lane) and are put
-# in by code; these cases check what the agent controls, plus the guidance words where a case names them.
+# The fact, where to look next and the disclaimer come from the tool's "guidance" (stats lane) and are put in by
+# code; these cases check what the agent controls, plus the guidance words where a case names them. Facts, not
+# advice (owner, 2026-11-22): no answer gives a risk level or a recommendation.
 
 # Student: one place, rain. "Just this year?" is answered by the long record, not one year.
 [[case]]
@@ -126,7 +127,8 @@ history = [
   { role = "assistant", content = "No tide gauge near Jakarta has a usable sea-level record, so I cannot say whether the sea there is rising." },
 ]
 
-# Builder: a decision at a US coast; the official US links come from the [OFFICIAL RESOURCES] marker.
+# Builder: a decision at a US coast; NOAA's viewer comes from the [OFFICIAL RESOURCES] marker, FEMA's flood maps from
+# the guidance's "Where to look next".
 [[case]]
 id = "manhattan-family-house"
 question = "I want to build a house in Lower Manhattan for my family's future. Is sea level rising there, and what should I check?"
@@ -156,7 +158,8 @@ max_km = 50
 must_say = ["not only summer"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL"]
 
-# An investment on a coast where the sea is rising fast: the tool's guidance must say High risk and advise against.
+# An investment on a coast where the sea is rising fast: the tool's fact compares it with the world average, and
+# the US gauge's look_next names FEMA's flood maps. No risk level, no advice for or against.
 [[case]]
 id = "grand-isle-invest"
 question = "Should I invest in a house in Grand Isle, Louisiana?"
@@ -164,30 +167,33 @@ expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [29.26, -89.96]      # NOAA CO-OPS Grand Isle, LA
 max_km = 40
-must_say = ["High risk", "advise against"]
-must_not_say = ["p-value", "0.05 line", "[GUIDANCE", "[OFFICIAL"]
+must_say = ["times as fast as the world average", "Where to look next", "msc.fema.gov", "not professional advice"]
+must_not_say = ["p-value", "0.05 line", "[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk",
+                "advise against", "Our recommendation"]
 
 # A calm one: at Juneau the land rises faster than the sea, so sea level there is clearly falling (the golden case
-# juneau-sea-level-falling). The tool's guidance should come back Low risk.
+# juneau-sea-level-falling). The tool's fact says it is falling here while the world average rose.
 [[case]]
-id = "juneau-calm-low-risk"
+id = "juneau-calm-sea-falling"
 question = "Is sea-level rise a risk for a house by the water in Juneau, Alaska?"
 expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [58.30, -134.41]
 max_km = 40
-must_say = ["Low risk"]
-must_not_say = ["p-value", "0.05 line", "[GUIDANCE", "[OFFICIAL"]
+must_say = ["Falling here, while the world average rose"]
+must_not_say = ["p-value", "0.05 line", "[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk",
+                "Our recommendation"]
 
-# The owner's comparison: two states, several measurements, each place's risk level, the tool's recommendations
-# and the disclaimer. No expect_variable: sea level, air temperature and rain are all expected.
+# The owner's comparison: two states, several measurements, each place's fact, where to look next and the
+# disclaimer. No expect_variable: sea level, air temperature and rain are all expected.
 [[case]]
 id = "louisiana-vs-new-jersey"
 question = "If I can buy a house in Louisiana or a house in New Jersey, how does it compare for my family's safety for future generations? If I want to build a farmhouse or a sea-facing house, what risks am I facing, and what should I keep in mind?"
 expect_tool = "detect_trend"
 min_places = 2
-must_say = ["risk"]
-must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL"]
+must_say = ["Where to look next", "not professional advice"]
+must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk",
+                "advise against", "Our recommendation"]
 
 # The voice agent's question that came back as the give-up text although its lookups had results (the model kept
 # asking for tools until the call cap). It must answer from what was found and name sea level and temperature.

@@ -12,7 +12,8 @@ import pytest
 
 from earthtrends.stats import compute_trend, trend
 from earthtrends.stats.baseline import anomaly, baseline
-from earthtrends.stats.guidance import SCARCE, guidance_for, q, sig2
+from earthtrends.stats.guidance import guidance_for, q, sig2
+from earthtrends.stats.trend import SCARCE
 
 FIX = Path(__file__).parent / "fixtures" / "rework"
 UNITS = {"air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "sea_level": "mm"}
@@ -136,7 +137,7 @@ def test_an_unclear_trend_gets_the_two_rates_and_no_ratio(land):
     assert r["verdict"] == "no_clear_change" and w["available"]
     assert w["local_rate"] is not None and w["world_rate"] is not None
     assert (w["ratio"], w["ratio_low"], w["ratio_high"], g["ratio"]) == (None, None, None, None)
-    assert g["risk_label"] == "No clear change"
+    assert g["fact"] == f"No clear change (1981 to 2025; 95% range {r['headline_rate']['range_text']})."
 
 
 # ---- F4: rainfall's trend on calendar-year totals ----
@@ -184,46 +185,54 @@ def test_a_year_needs_11_months_and_the_trend_20_such_years():
         compute_trend(ts(x, variable="precip"))
 
 
-def test_too_little_rain_for_a_percentage_rule():
+def test_under_100_mm_a_year_says_a_small_change_is_a_large_percentage():
     x = 0.1 + 0.004 * np.arange(480) / 12 + np.random.default_rng(6).normal(0, 0.01, 480)  # about 70 mm a year
     r = compute_trend(ts(x, variable="precip"))
     assert r["baseline"]["annual_total_mm"] < 100 and r["verdict"] == "rising"
+    assert SCARCE == "Rain here averages under 100 mm a year, so a small change in millimetres is a large percentage."
     assert (r["world"]["text"], r["world"]["why_none"]) == (None, SCARCE)
-    g = r["guidance"]
-    assert (g["risk"], g["risk_label"], g["why"], g["recommendation"]) == (None, None, SCARCE, None)
+    assert r["guidance"]["fact"] == rain_fact(r, 2020)
     assert r["headline_rate"]["unit"] == "%"  # the rate itself is still shown
 
 
-@pytest.mark.parametrize("mm,label", [(99.9, None), (100.1, "High risk")])
-def test_the_rain_rule_starts_at_100_mm_a_year(mm, label):
+def rain_fact(r, last):
+    """The rain fact from the result's own headline_rate: its number without the sign, its range without the per."""
+    h = r["headline_rate"]
+    return (f"Rising about {h['text'].split()[0][1:]} of the usual yearly rain every 10 years (1981 to {last}; 95% "
+            f"range {h['range_text'].removesuffix(h['per']).strip()}).")
+
+
+@pytest.mark.parametrize("mm,scarce", [(99.9, True), (100.1, False)])
+def test_the_rain_rule_starts_at_100_mm_a_year(mm, scarce):
     t = 1981 + (np.arange(540) + 0.5) / 12  # +10% a decade on a 1995-2014 normal of mm a year
     r = compute_trend(ts(mm / 365.25 * (1 + 0.01 * (t - 2005)), variable="precip"))
     assert r["baseline"]["annual_total_mm"] == mm and r["verdict"] == "rising"
-    assert (r["world"]["why_none"] == SCARCE, r["guidance"]["risk_label"]) == (label is None, label)
+    assert (r["world"]["why_none"] == SCARCE) is scarce
+    # the same sentence either side of the line: the rate, as the headline shows it
+    assert r["headline_rate"]["text"].startswith("+10") and r["guidance"]["fact"] == rain_fact(r, 2025)
 
 
 def test_too_little_rain_with_no_clear_change_still_says_so():
     r = compute_trend(ts(0.1 + np.random.default_rng(0).normal(0, 0.01, 480), variable="precip"))
-    g = r["guidance"]
     assert r["verdict"] == "no_clear_change" and r["world"]["why_none"] == SCARCE
-    assert (g["risk"], g["risk_label"]) == (None, "No clear change") and g["recommendation"]
+    assert r["guidance"]["fact"] == f"No clear change (1981 to 2020; 95% range {r['headline_rate']['range_text']})."
 
 
 def test_a_rain_normal_of_zero_is_not_enough_data():
     # contrived (rain can't go below zero): a clear rise whose 1995-2014 months average exactly 0, so there is no %
     r = compute_trend(ts(0.25 * (1981 + np.arange(540) // 12 - 2004.5), variable="precip"))
     assert (r["baseline"]["value"], r["verdict"], r["headline_rate"]) == (0.0, "rising", None)
-    assert r["world"]["why_none"] == SCARCE and r["guidance"]["risk_label"] == "Not enough data"
+    assert r["world"]["why_none"] == SCARCE and r["guidance"]["fact"] == "Not enough data (1981 to 2025)."
 
 
-# ---- L6: the sea-level why names the years its world ratio is from ----
+# ---- L6: the sea-level fact names the years its world ratio is from ----
 
-def test_sea_level_why_names_the_years_of_its_world_comparison():
+def test_sea_level_fact_names_the_years_of_its_world_comparison():
     r = compute_trend(fixture("battery_sea_level"))  # record from 1920, the world comparison from 1993
     assert r["world"]["window"]["start"][:4] > r["period"]["start"][:4]
-    assert r["guidance"]["why"].startswith(f"Since {r['world']['window']['start'][:4]}, the sea here has risen ")
+    assert " as fast as the world average (1993 to " in r["guidance"]["fact"]
     lewes = compute_trend(fixture("lewes_sea_level_short"))  # record and comparison both start in 1999
-    assert lewes["guidance"]["why"].endswith(" the world average over the same years.")
+    assert " as fast as the world average (1999 to " in lewes["guidance"]["fact"]
 
 
 # ---- F5, F7: caveats by kind of record ----
@@ -239,7 +248,7 @@ def test_caveats_by_kind_of_record(var, sid, want):
     assert [c for c in r["caveats"] if c in (trend.POWER_T_CAVEAT, trend.GHCN_CAVEAT)] == want
 
 
-# ---- headline_rate: a rain range end never reads on the other side of a threshold from how guidance judged it ----
+# ---- headline_rate: a rain range end on or across 5% or 10% shows the share to 2 significant figures (RAIN_ROUND_AT) ----
 
 RAIN = "% of the 1995–2014 average per decade"
 
@@ -250,11 +259,11 @@ def rain_range(lo, hi):
 
 
 @pytest.mark.parametrize("lo,hi,want", [
-    (4.51, 17, "+4.5 to +17"),  # Mumbai: judged 4.5, low; "+5" would read moderate
+    (4.51, 17, "+4.5 to +17"),  # Mumbai: the share is 4.5; "+5" would round it up across 5
     (-17, -4.51, "−17 to −4.5"),  # the same, drier
-    (9.6, 23, "+9.6 to +23"),  # judged 9.6, moderate; "+10" would read high
+    (9.6, 23, "+9.6 to +23"),  # the share is 9.6; "+10" would round it up to 10
 ])
-def test_a_rain_end_near_a_threshold_reads_as_it_was_judged(lo, hi, want):
+def test_a_rain_end_near_5_or_10_shows_its_share(lo, hi, want):
     assert rain_range(lo, hi) == f"{want}{RAIN}"
 
 
@@ -270,12 +279,15 @@ def test_a_rain_end_away_from_a_threshold_keeps_its_usual_rounding():
 
 
 @pytest.mark.parametrize("slope,verdict,want", [(0.049496, "rising", "+5.0%"), (-0.049496, "falling", "−5.0%")])
-def test_the_rain_headline_shows_the_share_guidance_judged(slope, verdict, want):
-    """Unrounded, 4.9496% reads +4.9; guidance judges the 4-decimal 0.0495 (+5.0%, on the moderate threshold). The
-    headline shows the judged number, so it and guidance.rate never disagree."""
+def test_the_rain_headline_shows_the_share_guidance_rate_shows(slope, verdict, want):
+    """Unrounded, 4.9496% reads +4.9; guidance.rate works out the 4-decimal 0.0495 (+5.0%). The headline shows that
+    number, so it and guidance.rate never disagree."""
     lo, hi = sorted((slope * 0.6, slope * 1.4))
     h = trend._headline_rate("precip", "mm/day", (slope, lo, hi), 1.0)
     r = {"variable": "precip", "units": "mm/day", "verdict": verdict, "period": {"start": "1981-01", "end": "2025-12"},
          **{k: round(v, 4) for k, v in (("slope_per_decade", slope), ("ci_low", lo), ("ci_high", hi))}}
-    g = guidance_for(r, 1.0)
-    assert h["text"] == f"{want} {trend.RAIN_PER}" and g["rate"]["text"] == want and "about 5.0%" in g["why"]
+    g = guidance_for({**r, "headline_rate": h}, 1.0)
+    assert h["text"] == f"{want} {trend.RAIN_PER}" and g["rate"]["text"] == want
+    rng = h["range_text"].removesuffix(trend.RAIN_PER).strip()
+    assert g["fact"] == (f"{verdict.capitalize()} about {want[1:]} of the usual yearly rain every 10 years (1981 to "
+                         f"2025; 95% range {rng}).")

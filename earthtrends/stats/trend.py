@@ -10,8 +10,7 @@ import numpy as np
 
 from earthtrends.data.world import reference as _reference  # the world snapshots (D5); tests replace it
 from earthtrends.stats.baseline import MONTH_DAYS, YEAR_MONTHS, baseline, columns, fit, normals_at, num
-from earthtrends.stats.guidance import (DISPLAY, OWN_RULE, RAIN_MIN_MM, RAIN_THRESHOLDS, SCARCE, THRESHOLDS,
-                                        guidance_for, q, sig2, signed)
+from earthtrends.stats.guidance import DISPLAY, guidance_for, q, sig2, signed
 from earthtrends.stats.meaning import UNITS, meaning_for
 from earthtrends.stats.projection import sea_level as _sea_level_projection
 
@@ -61,12 +60,19 @@ NO_MATCH = {"air_temp_max": "There is no matching world figure for the hottest d
             "water_storage": "Water storage is judged on this region's own change, not against a world figure."}
 NO_MATCH_OTHER = "There is no matching world figure for this measurement."
 RAIN_YEAR_MONTHS = 11  # a calendar year's rainfall total counts with at least this many valid months
+RAIN_MIN_MM = 100  # a 1995-2014 annual normal under this many mm a year: world.why_none is SCARCE (domain review F4)
+SCARCE = "Rain here averages under 100 mm a year, so a small change in millimetres is a large percentage."
+# headline_rate.range_text: a rain end that would read on or across 5% or 10% shows the share to 2 significant figures
+# ("+4.5 to +17%", not "+5 to +17%"). Kept from the old rain levels so the published ranges don't shift.
+# ponytail: a rounding rule with no level behind it now; plain rounding if the owner prefers.
+RAIN_ROUND_AT = (5, 10)
 WIDENED = 1.2  # explain.real.widened: _widen's factor on Var(S) (a variance factor) is at least this, ~10% wider
 NOW_MONTHS, NOW_NEED = 12, 10  # `now`: the latest 12 months, at least 10 of them with a value
 # Caveats by kind of record (domain review F5, F7), so the page, the CSV and the agent carry them.
 GHCN_CAVEAT = "Station records are not adjusted for changes in instruments, observing times or station moves."
 POWER_T_CAVEAT = ("NASA POWER comes from a weather model, MERRA-2, which does not use land thermometer readings; a "
                   "nearby weather station can differ.")
+RAIN_CAVEAT = "It covers total rain, not heavy downpours or floods."  # every rainfall record
 
 
 def compute_trend(series: dict, base: dict | None = None) -> dict:
@@ -109,6 +115,8 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
         caveats.append(GHCN_CAVEAT)
     if sid == "power" and var in ("air_temp", "air_temp_max"):
         caveats.append(POWER_T_CAVEAT)
+    if var == "precip":
+        caveats.append(RAIN_CAVEAT)
 
     base = baseline(s) if base is None else base
     xa = _anomalies(cols, base, monthly)
@@ -143,7 +151,7 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
     have = np.flatnonzero(~np.isnan(x))  # the last valid value, preliminary included
     last = times[have[np.argmax(t[have])]]
     world = _world(var, monthly, used, t[ok], xa[ok], sid, verdict)
-    # too little rain for a % rule (domain review F4), a normal of zero included; guidance reads world.why_none
+    # under 100 mm a year (domain review F4), a normal of zero included: why_none says a small change is a large %
     if var == "precip" and base["value"] is not None and base["value"] * 365.25 < RAIN_MIN_MM:
         world.update(text=None, why_none=SCARCE)
     data = {"n_months": len(ok), "n_missing": int(idx[ok][-1] - idx[ok][0]) + 1 - len(ok), "start": used[0],
@@ -169,8 +177,10 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
         "baseline": base,
         "record": record,
         "range_kind": RANGE_KIND,
-        # from the unrounded slope and range (and span), so no number is rounded twice
-        "headline_rate": _headline_rate(var, units, tuple(v / f * 10 for v in (slope, lo, hi)), base["value"]),
+        # from the 4-decimal slope_per_decade, ci_low and ci_high, so the rate text, its range, guidance and the fact
+        # all round the same numbers (an unrounded -1.0499996 cm a year read "-1.0" beside a slope of -10.5)
+        "headline_rate": _headline_rate(var, units, (slope_d, lo_d, hi_d), base["value"]),
+        # the unrounded slope and range times the unrounded span, rounded once
         "fit": {"start": used[0], "end": used[-1], "years": yrs,
                 **{k: round(v * span, 4) + 0.0 for k, v in (("change", slope), ("change_low", lo),
                                                             ("change_high", hi))},
@@ -365,9 +375,9 @@ def _signed0(d: Decimal) -> str:
 
 def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict | None:
     """The trend rate in the unit people read, with its 95% range (contract `headline_rate`): value, low and high to
-    3 significant figures; text to 2 (rainfall: the share as guidance judges it); both ends of range_text to the same decimals, enough that they differ, except
-    that a rainfall end shown on or across one of guidance's RAIN_THRESHOLDS is shown as guidance judges it (2
-    significant figures: 4.51 reads +4.5, not +5). None for rainfall without a 1995-2014 average above zero."""
+    3 significant figures; text to 2 (rainfall: the share as guidance.rate shows it); both ends of range_text to the
+    same decimals, enough that they differ, except that a rainfall end on or across one of RAIN_ROUND_AT is the share
+    to 2 significant figures (4.51 reads +4.5, not +5). None for rainfall without a 1995-2014 average above zero."""
     rain = var == "precip" and units == UNITS["precip"]
     if rain:
         if not base_value or base_value <= 0:
@@ -383,22 +393,22 @@ def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict 
     while exp > -6 and (lo != hi and _at(lo, exp) == _at(hi, exp) or any(v and not _at(v, exp) for v in (lo, hi))):
         exp -= 1
     ends, mid = [_at(lo, exp), _at(hi, exp)], sig2(v) + 0
-    if rain:  # text is the share guidance judges (and shows as rate), off the 4-decimal slope, not the raw one:
-        # 0.049496 on 1.0 mm/day is +5.0%, not +4.9%. Each range end too when it would read on or across a threshold
-        mid = _rain_judged(per_decade[0], base_value).copy_sign(v) + 0
+    if rain:  # text is the share guidance.rate shows, off the 4-decimal slope, not the raw one: 0.049496 on 1.0
+        # mm/day is +5.0%, not +4.9%. Each range end too when it would read on or across one of RAIN_ROUND_AT
+        mid = _rain_share(per_decade[0], base_value).copy_sign(v) + 0
         for i, (shown, raw) in enumerate(zip(ends, per_decade[1:])):
-            judged = _rain_judged(raw, base_value)
-            if any(abs(shown) == c or (abs(shown) >= c) != (judged >= c) for c in RAIN_THRESHOLDS):
-                ends[i] = judged.copy_sign(shown)
+            share = _rain_share(raw, base_value)
+            if any(abs(shown) == c or (abs(shown) >= c) != (share >= c) for c in RAIN_ROUND_AT):
+                ends[i] = share.copy_sign(shown)
     gap = "" if unit == "%" else " "
     return {"value": float(_sig(v, 3)), "low": float(_sig(lo, 3)), "high": float(_sig(hi, 3)), "unit": unit,
             "per": per, "text": f"{_signed0(mid)}{gap}{unit} {per}",
             "range_text": f"{_signed0(ends[0])} to {_signed0(ends[1])}{gap}{unit} {per}"}
 
 
-def _rain_judged(per_decade, base_value) -> Decimal:
-    """The share (%, no sign) guidance._risk judges a rain end on: sig2 of the result's 4-decimal slope over the
-    1995-2014 average, worked out the same way, so a shown end and its level never disagree."""
+def _rain_share(per_decade, base_value) -> Decimal:
+    """A rain rate as a share (%, no sign) of the 1995-2014 average, worked out as guidance.rate does: sig2 of the
+    result's 4-decimal slope over that average, so headline_rate.text and guidance.rate.text never disagree."""
     return sig2(abs(Decimal(repr(round(float(per_decade), 4) + 0.0))) / Decimal(repr(float(base_value))) * 100)
 
 
@@ -411,8 +421,8 @@ def _world(var: str, monthly: bool, used: list, t, xa, source_id=None, verdict: 
     range (the local rate's 95% range ends over the same months, domain review F2) only for a rising or falling
     verdict: an unclear trend gets the two rates and no ratio."""
     out = {"available": False, "measure": None, "local_rate": None, "world_rate": None, "unit": None, "window": None,
-           "method": None, "ratio": None, "ratio_low": None, "ratio_high": None, "thresholds": None, "source": None,
-           "text": OWN_RULE.get(var), "why_none": NO_MATCH.get(var, NO_MATCH_OTHER)}
+           "method": None, "ratio": None, "ratio_low": None, "ratio_high": None, "source": None,
+           "text": None, "why_none": NO_MATCH.get(var, NO_MATCH_OTHER)}
     cfg = WORLD.get(var)
     if cfg is None or not monthly:
         return out
@@ -444,7 +454,6 @@ def _world(var: str, monthly: bool, used: list, t, xa, source_id=None, verdict: 
             "method": "; ".join(m for m in (WORLD_METHOD, SEA_KIND if var == "sea_level" else KIND.get((var, source_id)))
                                 if m),
             "ratio": ratios[0], "ratio_low": ratios[1], "ratio_high": ratios[2],
-            "thresholds": dict(THRESHOLDS),
             "source": {k: src.get(k) for k in ("name", "dataset_id", "record_url", "retrieved", "method")},  # GIA note
             "text": cfg["text"].format(verb=cfg["verb"] if glob > 0 else "changed by", w=_plain(glob),
                                        l=_plain(local), start=start[:4], end=end[:4]),
