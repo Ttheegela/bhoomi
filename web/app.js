@@ -6,15 +6,17 @@ const PLACE_SOURCE = { name: 'Open-Meteo Geocoding API (GeoNames)', url: 'https:
 
 const SOURCES = {
   power: { name: 'NASA POWER (MERRA-2)', url: 'https://power.larc.nasa.gov/' },
-  era5: { name: 'ERA5 reanalysis via Open-Meteo archive', url: 'https://open-meteo.com/',
-    // the footer carries the attribution Open-Meteo asks for: its credit line, the dataset, and the licence
-    credit: 'Weather data by Open-Meteo.com', dataset: 'ERA5 reanalysis', licence: { name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' } },
+  // our pack of the Copernicus Atlas dataset; an ERA5 answer names its own source (Open-Meteo's archive is the fallback)
+  era5: { name: 'ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)', url: 'https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas' },
   ghcn: { name: 'NOAA NCEI GHCN-Daily', url: 'https://www.ncei.noaa.gov/' },
   coops: { name: 'NOAA CO-OPS tide gauges', url: 'https://tidesandcurrents.noaa.gov/' },
   psmsl: { name: 'Permanent Service for Mean Sea Level (PSMSL)', url: 'https://psmsl.org/' },
   // Used only when /api/variables lists it (the footer and the pickers follow the catalog).
   grace: { name: 'NASA GSFC GRACE and GRACE-FO mascons', url: 'https://earth.gsfc.nasa.gov/geo/data/grace-mascons' },
 };
+// the attribution Open-Meteo asks for, in the footer only when an ERA5 record on screen came from its archive: its credit
+// line, the dataset, and the licence
+const OPEN_METEO = { url: 'https://open-meteo.com/', credit: 'Weather data by Open-Meteo.com', dataset: 'ERA5 reanalysis', licence: { name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' } };
 // One plain-words line under "Measured by" (sea level, water storage); "Main record" takes its help from TDX.recHelp.
 const SOURCE_HELP = {
   coops: 'Readings from the nearest NOAA tide gauge (US coasts).',
@@ -667,14 +669,16 @@ function renderFoot() {
   clear(p);
   const w = winOf(curWin);
   if (!w) return;
-  const v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]);
-  const src = SOURCES[sid], pin = selectedPin(curWin), t = pin && pin.status === 'ok' ? pin.trend : null;
+  const v = varById(curWin), pin = selectedPin(curWin), t = pin && pin.status === 'ok' ? pin.trend : null;
+  // the answer's own record (it may have fallen back from the default), else the visitor's choice, else the catalog's first
+  const main = t && SOURCES[(t.source || {}).id] ? t.source : { id: sourceFor(curWin) || (v && v.sources && v.sources[0]) };
+  const src = footSrc(main), named = [src];
   p.append('Data: ');
   if (src) srcLink(p, src, true); else p.append('public records');
   // the other records on the card (design 12 §3), each by its own source
   (t && Array.isArray(t.comparisons) ? t.comparisons : []).forEach((x) => {
-    const s = x && !x.main && x.available === true && SOURCES[(x.source || {}).id];
-    if (s) { p.append(' · '); srcLink(p, s, true); }
+    const s = x && !x.main && x.available === true && footSrc(x.source);
+    if (s) { p.append(' · '); srcLink(p, s, true); named.push(s); }
   });
   // with an expert projection on the page, the foot names it too
   const pj = t ? window.TDX.projOf(t) : null, ps = pj && pj.source;
@@ -684,15 +688,19 @@ function renderFoot() {
   p.append(`. Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed against ${curWin === 'water_storage' ? "the provider's own reference period" : 'the 1995–2014 average'}).`);
   const cop = t ? window.TDX.attribution(t) : ''; // ERA5 and the CMIP6 files are Copernicus products: once, as the server words it
   if (cop) p.append(` ${cop}`);
-  // the Open-Meteo attribution travels with its data: on every tab that sets ERA5 beside the main record too (design 12 §15)
+  // the Open-Meteo attribution travels with its data: only while an ERA5 record named above came from its archive
   const ul = $('footer-sources');
   let li = Array.prototype.find.call(ul.children, (x) => x.dataset.credit === 'era5');
-  if ((sid === 'era5' || (v && Array.isArray(v.sources) && v.sources.includes('era5'))) && SOURCES.era5) {
+  if (named.some(fromOpenMeteo)) {
     if (!li) { li = el('li', {}); li.dataset.credit = 'era5'; ul.append(li); }
     clear(li);
-    li.append(el('a', { href: SOURCES.era5.url, class: 'srclink' }, SOURCES.era5.credit), `, ${SOURCES.era5.dataset}, `, el('a', { href: SOURCES.era5.licence.url, class: 'srclink' }, SOURCES.era5.licence.name));
+    li.append(el('a', { href: OPEN_METEO.url, class: 'srclink' }, OPEN_METEO.credit), `, ${OPEN_METEO.dataset}, `, el('a', { href: OPEN_METEO.licence.url, class: 'srclink' }, OPEN_METEO.licence.name));
   } else if (li) li.remove();
 }
+// ERA5 comes from our pack or, when the pack can't be read, from Open-Meteo's archive (docs/CONTRACTS.md "ERA5 pack"): an
+// ERA5 record is named by its own source block, every other one by the page's table
+function footSrc(s) { return s && s.id === 'era5' && isHttps(s) ? s : s && SOURCES[s.id]; }
+function fromOpenMeteo(s) { return isHttps(s) && /^https:\/\/([\w-]+\.)*open-meteo\.com\//.test(s.url); }
 function placeCredit() {
   const ul = $('footer-sources');
   const li = el('li', {});

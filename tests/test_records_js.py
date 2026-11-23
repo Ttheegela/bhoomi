@@ -755,3 +755,103 @@ def test_single_note_with_the_main_record_fallback():
     r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env, timeout=60)
     assert r.returncode == 0, r.stderr + r.stdout
 
+
+
+# ERA5 comes from our Copernicus pack, or from Open-Meteo's archive when the pack can't be read (docs/CONTRACTS.md "ERA5
+# pack"). The answers are the Princeton fixture (NASA POWER main, its ERA5 row from Open-Meteo) with `source` replaced.
+ERA5_CREDIT = r"""
+var P = load('princeton_air_temp');
+var OM = copy(P.trend.comparisons[1].source); // Open-Meteo's ERA5 block, as the fixture has it
+var PACK = { id: 'era5', name: 'ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)', url: 'https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas',
+  dataset_id: 'doi:10.24381/cds.h35hb680', version: 'pack-2026-11', record_url: 'https://doi.org/10.24381/cds.h35hb680', retrieved: '2026-11-23',
+  method: "The Atlas dataset's monthly mean of ERA5 2 m air temperature for the grid cell, about 25 km across.", cadence: 'monthly', deseasoned_upstream: false, limit: null,
+  attribution: 'Contains modified Copernicus Climate Change Service information 2026.' };
+// ERA5 main from `src`: its row first, NASA POWER beside it
+function era5Main(src) {
+  var d = copy(P), c = d.trend.comparisons, e = c[1];
+  c[1] = c[0]; c[0] = e; c[0].main = true; c[1].main = false; c[0].source = copy(src);
+  d.trend.source = copy(src); d.series.source = copy(src); d.trend.projection.baseline_record = { id: 'era5', name: src.name };
+  return d;
+}
+function powerWith(src) { var d = copy(P); d.trend.comparisons[1].source = copy(src); return d; } // NASA POWER main, its ERA5 row from `src`
+var CASES = { pack: era5Main(PACK), om: era5Main(OM), power: copy(P), powerPack: powerWith(PACK) };
+"""
+
+ERA5_CREDIT_PURE = ERA5_CREDIT + r"""
+var pc = { label: 'Princeton, NJ', name: 'Air temperature', slug: 'air-temperature', imperial: false, cmp: 'ok' };
+function sources(d) { var S = steps(d.trend, d.series, pc), s = S[S.length - 1]; assert.strictEqual(s.title, 'Sources');
+  return { short: s.short, list: s.words[0].list.map(function (x) { return x.text + (x.link ? x.link.href : ''); }) }; }
+function head(d) { return csvPlace(d.trend, d.series, pc).text.split('\n').filter(function (l) { return l.charAt(0) === '#'; }); }
+function om(x) { return /open-meteo/i.test(JSON.stringify(x)); }
+function once(a, s) { return a.filter(function (x) { return x === s; }).length === 1; }
+var REC = 'Other record: NASA POWER (MERRA-2), NASA POWER monthly point data, parameter T2M (MERRA-2). Retrieved 22 November 2026. ' + P.trend.source.record_url;
+// the pack: named by its own block, no Open-Meteo anywhere, the Copernicus line once
+var s = sources(CASES.pack), h = head(CASES.pack);
+assert.strictEqual(s.list[0], 'Records: ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset), doi:10.24381/cds.h35hb680, version pack-2026-11. Retrieved 23 November 2026. ' + PACK.record_url);
+assert.ok(s.list[1] === REC && once(s.list, COP) && s.short.indexOf(PACK.name + '; NASA POWER (MERRA-2)') === 0, JSON.stringify(s));
+assert.deepStrictEqual(h.slice(1, 4), ['# Source: ' + PACK.name, '# Dataset: doi:10.24381/cds.h35hb680; version: pack-2026-11', '# Record: ' + PACK.record_url]);
+assert.ok(once(h, '# ' + COP) && !om(s) && !om(h), JSON.stringify(h));
+// the fallback: Open-Meteo's own block, as today, with the Copernicus line
+s = sources(CASES.om); h = head(CASES.om);
+assert.strictEqual(s.list[0], 'Records: ERA5 reanalysis via Open-Meteo archive, doi:10.24381/cds.adbb2d47. Retrieved 22 November 2026. ' + OM.record_url);
+assert.ok(s.list[1] === REC && once(s.list, COP) && s.short.indexOf(OM.name + '; NASA POWER (MERRA-2)') === 0, JSON.stringify(s));
+assert.deepStrictEqual(h.slice(1, 4), ['# Source: ' + OM.name, '# Dataset: doi:10.24381/cds.adbb2d47; version: not named by the provider', '# Record: ' + OM.record_url]);
+assert.ok(once(h, '# ' + COP));
+// NASA POWER: unchanged, its ERA5 row named by that row's own block
+s = sources(CASES.power); h = head(CASES.power);
+assert.ok(/^Records: NASA POWER \(MERRA-2\), /.test(s.list[0]) && s.list[1].indexOf('Other record: ' + OM.name + ', doi:10.24381/cds.adbb2d47.') === 0 && once(s.list, COP), JSON.stringify(s));
+assert.ok(h[1] === '# Source: NASA POWER (MERRA-2)' && h.some(function (l) { return l.indexOf('# Other record: ' + OM.name + ';') === 0; }) && once(h, '# ' + COP), JSON.stringify(h));
+s = sources(CASES.powerPack); h = head(CASES.powerPack);
+assert.ok(s.list[1].indexOf('Other record: ' + PACK.name + ', doi:10.24381/cds.h35hb680.') === 0 && once(s.list, COP) && !om(s), JSON.stringify(s));
+assert.ok(h.some(function (l) { return l.indexOf('# Other record: ' + PACK.name + ';') === 0; }) && once(h, '# ' + COP) && !om(h), JSON.stringify(h));
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_era5_credit_in_sources_step_and_csv():
+    """The Sources step and the CSV name each record by its own source block: a pack answer never mentions Open-Meteo, a
+    fallback answer names it as today, and both carry the Copernicus line once."""
+    env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
+    r = subprocess.run(["node", "-"], input=PURE + DATA + ERA5_CREDIT_PURE, capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+
+
+ERA5_CREDIT_FOOT = ERA5_CREDIT + r"""
+window.TDX.show = function () {}; window.TDX.others = function () {}; window.TDX.redraw = function () {};
+function settle() { return new Promise(function (r) { (function w() { setTimeout(function () { if (!flight && !queue.length) r(); else w(); }, 10); })(); }); }
+function txt(n) { return typeof n === 'string' ? n : n.kids.map(txt).join(''); }
+function hrefs(n) { return n.all().filter(function (k) { return k.tagName === 'A'; }).map(function (k) { return k.attrs.href; }); }
+function credit() { return ids['footer-sources'].children.filter(function (li) { return li.dataset.credit === 'era5'; }); }
+var COP = PACK.attribution, A = '\u00a0↗';
+// d's answer on screen, then the footer as drawn
+function foot(d) { results[resKey(curWin, selectedPin(curWin))].trend = d.trend; renderFoot(); var p = ids['foot-data'], c = credit();
+  assert.ok(c.length <= 1 && txt(p).split(COP).length === 2, txt(p)); // the Copernicus line once, at most one Open-Meteo credit
+  return { line: txt(p), href: hrefs(p)[0], credit: c.length ? [txt(c[0]), hrefs(c[0])] : null }; }
+var OMC = ['Weather data by Open-Meteo.com, ERA5 reanalysis, CC BY 4.0', ['https://open-meteo.com/', 'https://creativecommons.org/licenses/by/4.0/']];
+(async function () {
+  docOn.DOMContentLoaded[0]();
+  await settle();
+  var f = foot(CASES.om); // the fallback: Open-Meteo named and credited, as today
+  assert.ok(f.line.indexOf('Data: ' + OM.name + A + ' · NASA POWER (MERRA-2)' + A + ' · NOAA NCEI GHCN-Daily' + A + '. ') === 0 && f.href === 'https://open-meteo.com/', f.line);
+  assert.deepStrictEqual(f.credit, OMC);
+  f = foot(CASES.pack); // the pack: its own name and page, no Open-Meteo credit
+  assert.ok(f.line.indexOf('Data: ' + PACK.name + A + ' · NASA POWER (MERRA-2)' + A + ' · NOAA NCEI GHCN-Daily' + A + '. ') === 0 && f.href === PACK.url, f.line);
+  assert.ok(f.credit === null && !/open-meteo/i.test(f.line), f.line);
+  f = foot(CASES.power); // NASA POWER with an ERA5 row from Open-Meteo: unchanged
+  assert.ok(f.line.indexOf('Data: NASA POWER (MERRA-2)' + A + ' · ' + OM.name + A + ' · NOAA NCEI GHCN-Daily' + A + '. ') === 0 && f.href === 'https://power.larc.nasa.gov/', f.line);
+  assert.deepStrictEqual(f.credit, OMC);
+  f = foot(CASES.powerPack); // its ERA5 row from the pack: the row's own name, no Open-Meteo credit
+  assert.ok(f.line.indexOf('Data: NASA POWER (MERRA-2)' + A + ' · ' + PACK.name + A + ' · ') === 0 && f.credit === null, f.line);
+  process.exit(0);
+})().catch(function (e) { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_era5_credit_in_the_footer():
+    """The footer names each record by its own source block and credits Open-Meteo only while an ERA5 record on screen came
+    from its archive; the Copernicus line stays for both."""
+    js = APP_DOM + SRC + "\n" + APP + ERA5_CREDIT_FOOT
+    env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env, timeout=60)
+    assert r.returncode == 0, r.stderr + r.stdout
