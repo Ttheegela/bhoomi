@@ -125,8 +125,11 @@
         value: c(t.slope_per_decade), low: c(t.ci_low), high: c(t.ci_high), unit: cu, per: 'per decade' };
     }
     var u = normU(h.unit), per = str(h.per), k = imp && RATE_K[u];
-    if (k && isNum(t.slope_per_decade) && isNum(t.ci_low) && isNum(t.ci_high)) {
-      var d = perDecade(per), v = t.slope_per_decade / d * k[0], lo = t.ci_low / d * k[0], hi = t.ci_high / d * k[0];
+    if (k) { // without the 4-decimal fields, headline_rate's own value, low and high; never the metric text in °F or inches
+      var d = perDecade(per), x = isNum(t.slope_per_decade) && isNum(t.ci_low) && isNum(t.ci_high)
+        ? [t.slope_per_decade / d, t.ci_low / d, t.ci_high / d] : [h.value, h.low, h.high];
+      if (!x.every(isNum)) return null;
+      var v = x[0] * k[0], lo = x[1] * k[0], hi = x[2] * k[0];
       return { text: withUnit(sig2Text(v), k[1]) + ' ' + per, range: withUnit(spanText(lo, hi), k[1]) + ' ' + per,
         value: v, low: lo, high: hi, unit: k[1], per: per };
     }
@@ -497,7 +500,9 @@
       if (isSea) s6.words.push('Satellites measure the height of the sea surface itself. The tide gauge measures the sea against the land, so if the land here is sinking, that adds to the local number.');
       if (t.variable === 'air_temp') s6.words.push('The world figure is built from weather stations on land.'
         + (src.id === 'power' || src.id === 'era5' ? ' The number here comes from a weather model, so the two are measured in different ways.' : ''));
-      s6.work = [(wp.ratio ? fmtNum(wm.a, false) + ' ÷ ' + fmtNum(wm.b, false) + ' = ' + wp.ratio + ' · ' + (rr ? rr + ' times (' + rk + ') · ' : '') : '')
+      // the two rates with the world line's digits (sig2Text), without a "+"
+      var u2 = function (x) { return sig2Text(x).replace(/^\+/, ''); };
+      s6.work = [(wp.ratio ? u2(wm.a) + ' ÷ ' + u2(wm.b) + ' = ' + wp.ratio + ' · ' + (rr ? rr + ' times (' + rk + ') · ' : '') : '')
         + M(w.window.start) + ' to ' + M(w.window.end) + ' · ' + stop(str(w.method))];
       // how to read the ratio, never a level (design 14 §7)
       if (wp.ratio) s6.work.push('1× is the same pace as the world' + (w.ratio < 0 ? '. Below 0, the change here went the other way.' : '; 2× is twice as fast.'));

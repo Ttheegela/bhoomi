@@ -50,12 +50,9 @@
   // headline_rate rule) on the files' unrounded rates a year; in inches converted first, then rounded once, as the card does
   function num(x, imp, u) { return TDX.sig2Text(imp ? x * INCH[u] : x); }
   function rng(lo, hi, imp, u) { var k = imp ? INCH[u] : 1; return TDX.spanText(lo * k, hi * k); }
-  // a 95% range with an end at ±327.67 or beyond (a year, in the layer's own unit: the old int16 water file's clamp) says "very
-  // wide": only records with an earthquake step reach it (Japan 2011, Chile 2010), gauges and water blocks alike
-  function wide(lo, hi) { return lo <= -327.67 || hi >= 327.67; }
   // "which includes no change" only for no clear change, as the card (a clear verdict's end can round to 0)
   function rateLine(v, x, lo, hi, imp, u, per) {
-    return VERDICT[v] + ': ' + num(x, imp, u) + ' ' + (imp ? 'in' : u) + ' ' + per + ', 95% range ' + (wide(lo, hi) ? 'very wide' : rng(lo, hi, imp, u)) +
+    return VERDICT[v] + ': ' + num(x, imp, u) + ' ' + (imp ? 'in' : u) + ' ' + per + ', 95% range ' + rng(lo, hi, imp, u) +
       (v === 'no_clear_change' && lo <= 0 && hi >= 0 ? ', which includes no change' : '') + '.';
   }
   function month(t) { var p = String(t).split('-'); return MONTHS[+p[1] - 1] + ' ' + p[0]; }
@@ -107,12 +104,15 @@
   // a stored integer to its value with the file's scale: a divide when the scale is 1/an integer (0.01, 0.00001), so 431
   // reads -4.31, not -4.3100000000000005
   function scaler(s) { var q = Math.round(1 / s); return Math.abs(q * s - 1) < 1e-9 ? function (x) { return x / q; } : function (x) { return x * s; }; }
-  // grace-trends.json to blocks with a value; null if the file does not read (each field's width comes from its length)
+  // grace-trends.json (v 2) to blocks with a value; null if the file does not read: each field's enc must name the width its
+  // bytes decode to here, so another format (f32, say) reads as nothing, never as garbage
+  var GRACE_FIELDS = [['lat', 'i16le-b64', Int16Array], ['lon', 'i16le-b64', Int16Array], ['area', 'i16le-b64', Int16Array],
+    ['slope', 'i32le-b64', Int32Array], ['lo', 'i32le-b64', Int32Array], ['hi', 'i32le-b64', Int32Array], ['sig', 'u8-b64', Uint8Array]];
   function graceBlocks(f) {
-    if (!f || !(f.n > 0) || !fin(f.scale) || !fin(f.lat_lon_scale) || !/^\d{4}-\d\d$/.test(f.start) || !/^\d{4}-\d\d$/.test(f.end)) return null;
+    if (!f || f.v !== 2 || !f.enc || !(f.n > 0) || !fin(f.scale) || !fin(f.lat_lon_scale) || !/^\d{4}-\d\d$/.test(f.start) || !/^\d{4}-\d\d$/.test(f.end)) return null;
     var a;
-    try { a = ['lat', 'lon', 'area', 'slope', 'lo', 'hi', 'sig'].map(function (k) { return ints(f[k], f.n); }); } catch (e) { return null; }
-    if (a.some(function (x) { return !x; }) || !(a[6] instanceof Uint8Array)) return null;
+    try { a = GRACE_FIELDS.map(function (g) { var x = f.enc[g[0]] === g[1] && ints(f[g[0]], f.n); return x instanceof g[2] ? x : null; }); } catch (e) { return null; }
+    if (a.some(function (x) { return !x; })) return null;
     var sv = scaler(f.scale), sl = scaler(f.lat_lon_scale), out = [];
     for (var i = 0; i < f.n; i++) {
       var v = SIG[a[6][i]];
