@@ -54,7 +54,7 @@ def limit(param: str, lat: float) -> str | None:
     if param != "PRECTOTCORR":
         return None
     if abs(lat) > 62.5:
-        return RAIN_LIMIT + " This far north it gets no gauge correction."
+        return RAIN_LIMIT + f" This far {'north' if lat > 0 else 'south'} it gets no gauge correction."
     return RAIN_LIMIT + (" At this latitude the correction is only partial." if abs(lat) >= 42.5 else "")
 
 

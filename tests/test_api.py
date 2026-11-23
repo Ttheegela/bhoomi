@@ -58,7 +58,8 @@ def test_series_and_trend_shapes(offline, variable, src):
     assert r.json()["baseline"] == s["anomaly"]["baseline"]  # one baseline for the chart and the card
     # the gauge's two sparse years from 1911 are left out of the fit; the grid cell is dense from the start
     assert (r.json()["record"]["trimmed_from"] or "")[:4] == ("1911" if src == "coops" else "")
-    assert r.headers["cache-control"] == CACHE
+    # offline, air temperature's other records can't be read: a partial answer is never cached (PR4a "Caching")
+    assert r.headers["cache-control"] == ("no-store" if variable == "air_temp" else CACHE)
 
 
 def test_start_end_passed_through(offline):

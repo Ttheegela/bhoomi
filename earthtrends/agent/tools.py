@@ -1,6 +1,10 @@
 """The features behind both doors: MCP tools (mcp_server.py) and /api/ routes (app.py)."""
+import json
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, wait as wait_for
+
+import httpx
 
 from earthtrends import data
 from earthtrends.stats import compute_trend, records
@@ -11,6 +15,10 @@ from earthtrends.stats.baseline import anomaly, baseline
 # "pending", and its read finishes in the background, which warms the cache. The page's /api/trend waits for all.
 BUDGET_S = 8.0
 MAIN_NOTE = "{} couldn't be read just now; showing {}."  # contract "Main record fallback"
+# The only reasons the main record falls back: an outage or a refusal upstream (Open-Meteo's daily limit is a 429). Bad
+# input stays a 400 and a code bug surfaces; neither reads "ERA5 couldn't be read just now".
+UPSTREAM = (httpx.HTTPError, json.JSONDecodeError)
+log = logging.getLogger(__name__)
 
 
 def list_variables() -> list[dict]:
@@ -50,8 +58,8 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
     (contract "Records for this place (PR4a)"): they are read in parallel threads while the main one is, from the
     same caches, for at most BUDGET_S from the call (Ask and MCP), or for as long as they take with `wait` (the
     page). `compare=False` leaves those fields null (the page draws the card first).
-    Main record fallback: with no source named, a default record that can't be read (an outage or a refusal, not bad
-    input and not "no data here") gives way to the next one in catalog order, and `main_note` says so."""
+    Main record fallback: with no source named, a default record that upstream doesn't serve (UPSTREAM: an outage
+    or a refusal) gives way to the next one in catalog order, and `main_note` says so."""
     deadline = time.monotonic() + BUDGET_S
     entry = next((v for v in data.list_variables() if v["id"] == variable), None)
     order = entry["sources"] if entry and variable in records.VARIABLES else []
@@ -64,10 +72,11 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
         note = None
         try:
             s, full, base = _windowed(variable, lat, lon, start, end, source)
-        except Exception as e:
-            if source is not None or len(order) < 2 or records.failed(e)[0] != "error":
+        except UPSTREAM as e:
+            if source is not None or len(order) < 2:
                 raise
             gone, main = main, order[1]
+            log.warning("detect_trend: main record %s could not be read (%s); showing %s", gone, type(e).__name__, main)
             s, full, base = got.pop(main).result() if main in got else _windowed(variable, lat, lon, start, end, main)
             note = MAIN_NOTE.format(records.LABEL[gone], records.LABEL[main])
             if compare:
@@ -86,8 +95,8 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
                     for sid in order if sid != main]  # the main record first, then catalog order
             try:
                 extra = records.compare(variable, [(main, (s, full, base))] + rows, lat, lon)
-            except Exception:  # noqa: BLE001 - the records block must never sink the main answer
-                pass
+            except Exception as e:  # noqa: BLE001 - the records block must never sink the main answer; the log shows it
+                log.warning("detect_trend: records for %s %s failed (%s)", variable, main, type(e).__name__)
     finally:
         if pool:
             pool.shutdown(wait=False)  # a late or failed read finishes in the background and fills the cache

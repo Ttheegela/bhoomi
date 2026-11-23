@@ -88,3 +88,16 @@ def test_a_replay_folder_has_one_recording_date(tmp_path, monkeypatch):
     monkeypatch.setenv(era5.REPLAY, str(tmp_path))
     with pytest.raises(ValueError, match="must hold recordings from one date"):
         data.get_series("air_temp", 1, 2, source="era5")
+
+
+def test_the_recorder_refuses_a_reply_from_open_meteo():
+    import importlib.util
+
+    import httpx
+    spec = importlib.util.spec_from_file_location("rec", Path(__file__).parent.parent / "scripts" / "record_era5_replay.py")
+    rec = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rec)
+    reply = httpx.Response(200, request=httpx.Request("GET", "https://archive-api.open-meteo.com/v1/archive?x=1"))
+    with pytest.raises(SystemExit, match="Refusing archive-api.open-meteo.com"):
+        rec.refuse_open_meteo(reply.url)
+    rec.refuse_open_meteo(httpx.URL("https://bhoomi.earth/api/series"))  # the app passes

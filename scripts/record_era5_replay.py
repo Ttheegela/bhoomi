@@ -37,10 +37,18 @@ PLACES = [
 ]
 
 
+def refuse_open_meteo(url: httpx.URL | str) -> None:
+    """This script records through the app, never from Open-Meteo directly: checked on the app address and on every
+    reply's final URL, after redirects."""
+    if "open-meteo" in httpx.URL(url).host:
+        sys.exit(f"Refusing {httpx.URL(url).host}: record through the app, never from Open-Meteo directly.")
+
+
 def get(client: httpx.Client, api: str, params: dict) -> httpx.Response:
     """A 429 waits for its Retry-After; a 502 (production could not reach Open-Meteo, often its rate limit) waits longer each time."""
     for i in range(5):
         r = client.get(api, params=params)
+        refuse_open_meteo(r.url)
         if r.status_code not in (429, 502):
             r.raise_for_status()
             return r
@@ -51,8 +59,7 @@ def get(client: httpx.Client, api: str, params: dict) -> httpx.Response:
 
 
 def main(out: Path, app: str) -> None:
-    if "open-meteo" in httpx.URL(app).host:
-        sys.exit("Record through the app, never from Open-Meteo directly.")
+    refuse_open_meteo(app)
     out.mkdir(parents=True, exist_ok=True)
     retrieved = upstream.utc_today()
     with httpx.Client(timeout=120, follow_redirects=True) as client:

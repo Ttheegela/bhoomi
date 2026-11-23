@@ -45,10 +45,8 @@ SOURCE_NAME = "IPCC AR6 sea level projections (Garner et al. 2021)"
 
 # ---- CMIP6 (PR3) ----
 CMIP6_VARIABLES = tuple(atlas.VARIABLES)  # air_temp, air_temp_max, precip
-# Copernicus products (ERA5, the CMIP6 Atlas files from the Climate Data Store) carry this line (domain review)
-COPERNICUS = "Contains modified Copernicus Climate Change Service information 2026."
-CMIP6_SOURCE = {"name": "IPCC AR6 Interactive Atlas, CMIP6 projections", "version": "v2.0-final", "licence": "CC BY 4.0",
-                "attribution": COPERNICUS}
+# `attribution` (the Copernicus line) comes with the Atlas source from cmip6.at()
+CMIP6_SOURCE = {"name": "IPCC AR6 Interactive Atlas, CMIP6 projections", "version": "v2.0-final", "licence": "CC BY 4.0"}
 CMIP6_KEYS = ("kind", "source", "location", "baseline", "units", "change_kind", "windows", "default_scenario",
               "scenarios", "readouts", "caveat", "models_note", "baseline_record")
 CMIP6_DEFAULT = "ssp245"

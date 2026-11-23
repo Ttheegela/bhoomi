@@ -95,7 +95,8 @@ def run_tool(name: str, args: dict) -> tuple[dict | list | None, str | None]:
         if name == "detect_trend":
             if not all(k in args for k in ("variable", "lat", "lon")):
                 return None, "detect_trend needs variable, lat and lon."
-            return tools.detect_trend(**{k: args[k] for k in TREND_ARGS if k in args}), None
+            # compare=False until PR6 shows the records to the model (MODEL_FIELDS drops them); MCP still compares
+            return tools.detect_trend(**{k: args[k] for k in TREND_ARGS if k in args}, compare=False), None
         return None, f"Unknown tool {name!r}."
     except (json.JSONDecodeError, httpx.HTTPError):  # JSONDecodeError first: it is also a ValueError
         return None, SOURCE_DOWN
