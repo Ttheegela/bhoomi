@@ -159,6 +159,8 @@ def test_loop_inserts_guidance_outside_the_word_limit(fake, monkeypatch):
     r = loop.ask("Should I invest in a house in Grand Isle?", model="fake:m")
     assert r["answer"] == f"{body} {EXPECT} {resources.US_COAST} Source: NOAA CO-OPS tide gauges, {SRC['url']}."
     assert fake.script == []  # 100 words + code's text: no length retry
+    # FEMA's flood maps once, in "Where to look next"; the official-resources sentence doesn't repeat them
+    assert r["answer"].count("msc.fema.gov") == 1 and r["answer"].index("msc.fema.gov") < r["answer"].index(resources.US_COAST)
 
 
 def test_results_but_no_answer_is_never_the_give_up(fake, monkeypatch):

@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from earthtrends.agent import guidance as agent_guidance
-from earthtrends.agent import loop
+from earthtrends.agent import loop, resources
 from earthtrends.stats import compute_trend, guidance, trend
 from earthtrends.stats.baseline import baseline
 from earthtrends.stats.guidance import DISCLAIMER, DISCLAIMER_PROJECTION, SCARCE, guidance_for
@@ -443,3 +443,11 @@ def test_no_branch_gives_a_risk_level_or_advice(monkeypatch):
     assert all(r["guidance"]["fact"] in text for r in full) and "Where to look next: " in text
     assert text.endswith(DISCLAIMER_PROJECTION) or text.endswith(DISCLAIMER)
     assert not ADVICE.search(text), text
+    # the official-resources sentence the agent adds after it: every string in resources.py, and each row chosen
+    rows = {resources.sentence([r]) for r in full}
+    assert {resources.US_COAST, resources.SEA, resources.WORLD} <= rows
+    for s in [v for v in vars(resources).values() if isinstance(v, str)] + sorted(rows):
+        assert not ADVICE.search(s) and not LEVEL.search(s), s
+    coops = next(r for r in full if r["source"]["id"] == "coops")  # FEMA once: "Where to look next" wins
+    one = agent_guidance.block([{**calls[0], "result": coops}]) + " " + resources.sentence([coops])
+    assert one.count("msc.fema.gov") == 1 and "Where to look next: Official flood maps" in one
