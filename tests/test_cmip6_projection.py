@@ -96,6 +96,19 @@ def test_no_1995_2014_average_means_no_projection():
     assert list(t["projection"]) == KEYS and t["guidance"]["disclaimer"] == DISCLAIMER
 
 
+def test_rain_with_a_1995_2014_normal_of_zero_gets_no_percent_projection():
+    s = series("chennai_rain")
+    s["values"] = [0.0 if "1995" <= t[:4] <= "2014" else v for t, v in zip(s["times"], s["values"])]
+    t = compute_trend(s)
+    assert (t["baseline"]["projection_axis"], t["baseline"]["value"], t["headline_rate"]) == (True, 0.0, None)
+    assert t["projection"] == {**dict.fromkeys(KEYS), "available": False,
+                               "why": "This record has no 1995–2014 average to start the projection from, so we "
+                                      "don't show one."}
+    assert t["guidance"]["disclaimer"] == DISCLAIMER
+    base = {**t["baseline"], "value": None}  # missing, not zero: the same
+    assert projection.cmip6(s, base, None)["available"] is False
+
+
 def test_a_cell_the_models_have_no_value_for():
     t = compute_trend(series("chennai_rain", lat=22.5, lon=24.5))  # the eastern Sahara: too dry for a rain change
     assert atlas.at("precip", 22.5, 24.5) is None

@@ -229,9 +229,10 @@ def cmip6(series: dict, base: dict, now: dict | None) -> dict:
     """An air_temp, air_temp_max or precip TimeSeries, its whole-record baseline and the TrendResult's `now` -> the
     contract's `projection` object. Delta method (D4): the projected level is this place's observed 1995-2014 mean plus
     the Atlas's change, so on the 1995-2014 anomaly axis it is the change itself, as published."""
-    if not base.get("projection_axis"):
-        return _cmip6_none(NO_AXIS)
     var, place = series["variable"], series.get("place") or {}
+    # rain with a 1995-2014 normal of 0 has no % of normal (no headline_rate), so no % axis to put the change on
+    if not base.get("projection_axis") or var == "precip" and not (base.get("value") or 0) > 0:
+        return _cmip6_none(NO_AXIS)
     a = atlas.at(var, place["lat"], place["lon"]) if None not in (place.get("lat"), place.get("lon")) else None
     w = a["windows"].index(list(BY_2050)) if a else None
     if a is None or a["scenarios"][CMIP6_DEFAULT]["p50"][w] is None:
