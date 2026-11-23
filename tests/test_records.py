@@ -369,6 +369,7 @@ def test_a_disagreement_always_has_a_reason():
 MODEL = "Only one record could be compared here, so this answer rests on a single weather model."
 ONE_STATION = "Only one record could be compared here, so this answer rests on a single weather station."
 THIN = dict(seed=3, keep=lambda y, m: y < 2005)  # covers only 1981-2004: shown, not counted
+THIN_MAIN = "This record has few readings in recent years, so it isn't counted when we compare."
 
 
 @pytest.mark.parametrize("rows, note", [
@@ -380,9 +381,9 @@ THIN = dict(seed=3, keep=lambda y, m: y < 2005)  # covers only 1981-2004: shown,
     # the station made main, both models down
     ([("ghcn", record("ghcn", 0.3, seed=3)), ("era5", httpx.ConnectError("x")), ("power", httpx.ConnectError("x"))],
      ONE_STATION),
-    # QA: Delhi's hottest day with the station made main, thin; ERA5 down: the one counted row is NASA POWER's
-    ([("ghcn", record("ghcn", 0.3, **THIN)), ("era5", httpx.ConnectError("x")), ("power", record("power", 0.3, seed=2))],
-     MODEL),
+    # the station made main but too short for a trend (so no thin_note), ERA5 down: the one counted row is NASA POWER's
+    ([("ghcn", record("ghcn", 0.3, seed=3, y0=2010)), ("era5", httpx.ConnectError("x")),
+      ("power", record("power", 0.3, seed=2))], MODEL),
     # two counted rows or more: no note
     ([("era5", record("era5", 0.3)), ("power", record("power", 0.3, seed=2)), ("ghcn", record("ghcn", 0.3, **THIN))],
      None),
@@ -397,27 +398,24 @@ def test_single_note_when_fewer_than_two_records_are_counted(rows, note):
     assert (sum(c["counted"] for c in r["comparisons"]) < 2) == (note is not None)
 
 
-@pytest.mark.parametrize("station", [
-    # thin: few readings in 3 of the last 10 years
-    record("ghcn", 0.3, seed=3, keep=lambda y, m: (y != 2018) and (y != 2020 or m <= 5) and (y != 2022 or m <= 6)),
-    record("ghcn", 0.3, seed=3, y0=2010),  # too short for a trend
+@pytest.mark.parametrize("station, thin, single", [
+    # thin (few readings in 3 of the last 10 years): thin_note, and single_note stays null
+    (record("ghcn", 0.3, seed=3, keep=lambda y, m: (y != 2018) and (y != 2020 or m <= 5) and (y != 2022 or m <= 6)),
+     THIN_MAIN, None),
+    (record("ghcn", 0.3, seed=3, y0=2010), None, ONE_STATION),  # too short for a trend: the main row's word
 ])
-def test_single_note_with_nothing_counted_follows_the_main_row(station):
+def test_nothing_counted_a_thin_main_gets_thin_note_a_short_one_single_note(station, thin, single):
     r = run("air_temp", ("ghcn", station), ("era5", httpx.ConnectError("x")), ("power", httpx.ConnectError("x")))
-    assert not any(c["counted"] for c in r["comparisons"]) and r["single_note"] == ONE_STATION
-
-
-THIN_MAIN = ("This record has few readings in recent years, so it isn't counted when we compare; the other records are "
-             "compared below.")
+    assert not any(c["counted"] for c in r["comparisons"]) and (r["thin_note"], r["single_note"]) == (thin, single)
 
 
 @pytest.mark.parametrize("rows, thin, single", [
     # a thin station picked as main, both models counted: it says so, and two records are still compared
     ([("ghcn", record("ghcn", 0.3, **THIN)), ("era5", record("era5", 0.3)), ("power", record("power", 0.3, seed=2))],
      THIN_MAIN, None),
-    # ... and with ERA5 down, NASA POWER is the one counted record
+    # QA, Delhi's hottest day: ... and with ERA5 down, NASA POWER is the one counted record; single_note stays null
     ([("ghcn", record("ghcn", 0.3, **THIN)), ("era5", httpx.ConnectError("x")), ("power", record("power", 0.3, seed=2))],
-     THIN_MAIN, MODEL),
+     THIN_MAIN, None),
     # a main row that isn't thin, or has no trend: null
     ([("era5", record("era5", 0.3)), ("power", record("power", 0.3, seed=2)), ("ghcn", record("ghcn", 0.3, **THIN))],
      None, None),

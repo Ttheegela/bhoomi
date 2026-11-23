@@ -649,7 +649,7 @@ ONE_JS = r"""
 window.TDX.show = function () {}; window.TDX.others = function () {}; window.TDX.redraw = function () {};
 function settle() { return new Promise(function (r) { (function w() { setTimeout(function () { if (!flight && !queue.length) r(); else w(); }, 10); })(); }); }
 var MODEL = 'Only one record could be compared here, so this answer rests on a single weather model.';
-var THIN = "This record has few readings in recent years, so it isn't counted when we compare; the other records are compared below.";
+var THIN = "This record has few readings in recent years, so it isn't counted when we compare.";
 var AGREE = 'Both records agree: rising.';
 function ones() { return ids['rec'].querySelectorAll('.one'); }
 // the notes, in this order, right after .verdict, each with the server's text as given
@@ -689,10 +689,10 @@ async function again(next) {
   notesAre([MODEL]); // single only
   assert.strictEqual(await heard(), MODEL); // announced in place of "The other records have loaded."
   renderRec(); notesAre([MODEL]); // a re-render never stacks it
-  await again({ thin_note: THIN, single_note: MODEL, disagree: null }); // thin and single: thin first
-  notesAre([THIN, MODEL]);
-  assert.strictEqual(await heard(), THIN + ' ' + MODEL);
-  renderRec(); notesAre([THIN, MODEL]);
+  await again({ thin_note: THIN, single_note: null, disagree: null }); // thin: the server leaves single_note null
+  notesAre([THIN]);
+  assert.strictEqual(await heard(), THIN);
+  renderRec(); notesAre([THIN]);
   await again({ thin_note: THIN, single_note: null, disagree: { any: false, line: AGREE, say: '', reasons: [] } }); // thin only, two others agree
   notesAre([THIN]);
   assert.strictEqual(await heard(), THIN + ' ' + AGREE);
