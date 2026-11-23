@@ -452,8 +452,8 @@ function drawRec(box) {
     box.append(box2);
     if (note.next) box.append(el('div', { class: 'model' }, el('p', {}, note.next))); // a plain next step under the strong line
   }
-  // R3: the chosen scenario's 2050 projection (web/design/11-sea-level-future.md section 3); without one, why there is none
-  const r3 = C.r3f ? el('div', {}, el('p', { class: 'rl' }, C.r3f.label), el('p', { class: 'rv' }, C.r3f.value), el('p', { class: 'rs' }, C.r3f.line))
+  // R3: the chosen scenario's 2050 projection (design 11 §3; CMIP6 design 15 §2, rain's "of the usual yearly rain" small); without one, why there is none
+  const r3 = C.r3f ? el('div', {}, el('p', { class: 'rl' }, C.r3f.label), el('p', { class: 'rv' }, C.r3f.value, C.r3f.per ? ' ' : '', C.r3f.per ? el('small', {}, C.r3f.per) : ''), el('p', { class: 'rs' }, C.r3f.line))
     : el('div', {}, el('p', { class: 'rl' }, 'What experts project'), el('p', { class: 'rt' }, C.r3));
   const fl = !C.r3f && g.future_link; // with a projection the flood map moves under the chart and into step 7
   if (fl && typeof fl.url === 'string' && fl.url.startsWith('https://') && fl.label) r3.append(el('p', { class: 'rt' }, el('a', { href: fl.url, target: '_blank', rel: 'noopener' }, `${fl.label} ↗`)));
@@ -525,7 +525,7 @@ function renderFoot() {
   // with an expert projection on the page, the foot names it too
   const pin = selectedPin(curWin), pj = pin && pin.status === 'ok' ? window.TDX.projOf(pin.trend) : null, ps = pj && pj.source;
   if (ps && typeof ps.record_url === 'string' && ps.record_url.startsWith('https://')) {
-    p.append('. Future: ', el('a', { href: ps.record_url, class: 'srclink' }, 'IPCC AR6 sea level projections ↗'), ` (${ps.licence})`);
+    p.append('. Future: ', el('a', { href: ps.record_url, class: 'srclink' }, pj.windows ? 'IPCC AR6 Interactive Atlas, CMIP6 projections ↗' : 'IPCC AR6 sea level projections ↗'), ` (${ps.licence})`);
   }
   p.append(`. Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed against ${curWin === 'water_storage' ? "the provider's own reference period" : 'the 1995–2014 average'}).`);
   // the Open-Meteo attribution travels with its data
