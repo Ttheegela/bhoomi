@@ -191,12 +191,12 @@ def test_ghcn_station_rule():
     st, km, types = ghcn.ranked(28.567, 77.117, found, "air_temp_max")[0]  # Palam is on top of the point but its TMAX starts in 2009
     assert st["id"] == "IN022021900" and 5 < km < 15 and types == ("TMAX",)
     assert ghcn.ranked(28.58, 77.21, found, "air_temp")[0][2] == ("TAVG",)
-    with pytest.raises(ValueError, match=r"has 30 years of daily high temperature data since 1981\. The nearest is New Delhi Safdarjun, IN, \d+ km away"):
+    with pytest.raises(ValueError, match=r"has 30 years of daily high temperature data since 1981\. The nearest is New Delhi Safdarjun, \d+ km away"):
         ghcn.ranked(29.2, 77.2, found, "air_temp_max")[0]
     with pytest.raises(ValueError, match=r"^No weather station within 25 km has 30 years of rainfall data since 1981\.$"):
         ghcn.ranked(0, -30, [], "precip")[0]
     palam_only = [s for s in found if s["id"] == "IN022023000"]
-    with pytest.raises(ValueError, match=r"The nearest weather station, New Delhi Palam, IN \(0 km away\), does not have 30 years of .* and no other station within 25 km does either\."):
+    with pytest.raises(ValueError, match=r"The nearest weather station, New Delhi Palam \(0 km away\), does not have 30 years of .* and no other station within 25 km does either\."):
         ghcn.ranked(28.567, 77.117, palam_only, "air_temp_max")[0]
 
 
@@ -207,11 +207,11 @@ def test_no_station_error_keeps_the_nearest_station_for_the_records_row(offline2
     with pytest.raises(ghcn.NoStation) as short:
         ghcn.ranked(28.567, 77.117, [palam], "air_temp_max")
     assert short.value.status == "short" and short.value.station == {
-        "id": "IN022023000", "name": "New Delhi Palam, IN", "lat": palam["lat"], "lon": palam["lon"], "km": round(km, 1),
+        "id": "IN022023000", "name": "New Delhi Palam", "lat": palam["lat"], "lon": palam["lon"], "km": round(km, 1),
         "record_url": "https://www.ncei.noaa.gov/cdo-web/datasets/GHCND/stations/GHCND:IN022023000/detail"}
     with pytest.raises(ghcn.NoStation) as far:
         ghcn.ranked(29.2, 77.2, list(found.values()), "air_temp_max")
-    assert far.value.status == "none" and far.value.station["name"] == "New Delhi Safdarjun, IN" and far.value.station["km"] > 25
+    assert far.value.status == "none" and far.value.station["name"] == "New Delhi Safdarjun" and far.value.station["km"] > 25
     with pytest.raises(ghcn.NoStation) as nothing:
         ghcn.ranked(0, -30, [], "precip")
     assert (nothing.value.status, nothing.value.station) == ("none", None)
@@ -231,7 +231,7 @@ def test_ghcn_station_rule_thin_record():
 def test_ghcn_checks_the_rows(offline2, monkeypatch):
     # the search says 1944-2025, but the rows only cover 2022 on: not enough, and the error names the station
     monkeypatch.setattr(ghcn, "fetch", lambda sid, types: [{"DATE": f"2022-{m:02d}-{d:02d}", "TMAX": "30"} for m in range(1, 13) for d in range(1, 29)])
-    with pytest.raises(ValueError, match=r"The nearest weather station, New Delhi Safdarjun, IN \(1 km away\)"):
+    with pytest.raises(ValueError, match=r"The nearest weather station, New Delhi Safdarjun \(1 km away\)"):
         data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
 
 
@@ -385,7 +385,7 @@ def test_era5_series(offline2):
 def test_ghcn_series(offline2):
     s = data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="1991", source="ghcn")
     assert s["freq"] == "monthly" and s["source"]["id"] == "ghcn" and len(s["times"]) == len(s["values"]) == 24
-    assert s["place"] == {"name": "New Delhi Safdarjun, IN", "lat": 28.583, "lon": 77.2, "km": 1.0,  # km: 1 decimal
+    assert s["place"] == {"name": "New Delhi Safdarjun", "lat": 28.583, "lon": 77.2, "km": 1.0,  # km: 1 decimal
                           "id": "IN022021900"}
     assert "IN022021900" in s["notes"][0] and "km from the point" in s["notes"][0]
     assert any("fewer than 20 valid days" in n for n in s["notes"])
@@ -1112,7 +1112,7 @@ def test_readable_names():
 
 
 def test_station_names_are_readable_in_series_and_sentences(offline2, psmsl_offline):
-    assert data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="1991", source="ghcn")["place"]["name"] == "New Delhi Safdarjun, IN"
+    assert data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="1991", source="ghcn")["place"]["name"] == "New Delhi Safdarjun"
     s = data.get_series("sea_level", 18.95, 72.83, source="psmsl")
     assert s["place"]["name"] == "Mumbai / Bombay (Apollo Bandar)" and "Mumbai / Bombay (Apollo Bandar) (PSMSL id 43)" in s["notes"][0]
 
@@ -1461,3 +1461,12 @@ def test_one_upstream_call_for_the_same_record_asked_twice_at_once(monkeypatch):
         t.join(5)
     assert calls == ["T2M"] and len(out) == 2 and out[0] == out[1] and out[0] is not out[1]
     assert not data._flying
+
+
+def test_station_display_names():
+    """QA: NOAA's raw names read as "Ny City Central Park, Ny Us" and "Sydney Botanic Gardens, AS" (AS is Australia in
+    GHCN's FIPS codes, not American Samoa). Short words stay in capitals, a US station keeps its state, others drop the
+    code; a name NOAA cut short stays cut short."""
+    assert [ghcn.display_name(n) for n in ("NY CITY CENTRAL PARK, NY US", "HIGHTSTOWN 2 W, NJ US",
+                                           "NEW DELHI SAFDARJUN, IN", "SYDNEY BOTANIC GARDENS, AS")] == [
+        "NY City Central Park, NY", "Hightstown 2 W, NJ", "New Delhi Safdarjun", "Sydney Botanic Gardens"]

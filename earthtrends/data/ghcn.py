@@ -1,4 +1,5 @@
 """NOAA NCEI GHCN-Daily (nearest station) through the Access Data Service, no key."""
+import re
 import time
 from datetime import date, datetime
 from functools import lru_cache
@@ -8,7 +9,7 @@ from urllib.parse import quote
 import httpx
 
 from .coops import haversine_km
-from .upstream import LIMIT, NAME, fit, readable, source_block, text
+from .upstream import LIMIT, NAME, fit, source_block, text
 
 SEARCH = "https://www.ncei.noaa.gov/access/services/search/v1/data"
 DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
@@ -50,6 +51,19 @@ LOST_MINUS = {  # id: place
     "UKE00156888": "Woburn", "UKW00015014": "Molesworth", "UKW00015015": "Chelveston", "UKW00015018": "Bassingbourn",
     "UKW00015033": "Huntingdon", "UKW00015034": "Wyton", "UKW00015035": "Waddington", "UKW00015041": "Sturgate",
 }
+
+
+def display_name(name: str) -> str:
+    """NOAA's station name for people: "NY CITY CENTRAL PARK, NY US" -> "NY City Central Park, NY", "SYDNEY BOTANIC
+    GARDENS, AS" -> "Sydney Botanic Gardens". Words of two letters or fewer stay in capitals (a state, "W", "AP"). A US
+    station keeps its state; any other trailing code is dropped: GHCN's are FIPS codes, and AS is Australia, not
+    American Samoa. A name with a lowercase letter keeps its casing; one NOAA cut short ("SAFDARJUN") stays cut short."""
+    m = re.fullmatch(r"(.+?),\s*([A-Z]{2})(\s+US)?", name)
+    head, state = (m.group(1), m.group(2) if m.group(3) else None) if m else (name, None)
+    if not any(c.islower() for c in head):  # all capitals: title case, never longer ("İ" lowercases to two characters)
+        head = re.sub(r"[^\W\d_]+", lambda w: w[0] if len(w[0]) <= 2 or len(w[0].capitalize()) != len(w[0])
+                      else w[0].capitalize(), head)
+    return head + (f", {state}" if state else "")
 
 
 def record_url(station_id: str) -> str:
@@ -94,7 +108,7 @@ def parse_search(resp: dict) -> list[dict]:
                 continue
             if sid in LOST_MINUS and lon > 0:
                 lon = -lon
-            out.append({"id": sid, "name": readable(text(st["name"], NAME)) or sid, "lat": lat, "lon": lon, "types": types})
+            out.append({"id": sid, "name": display_name(text(st["name"], NAME)) or sid, "lat": lat, "lon": lon, "types": types})
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             continue
     return out
