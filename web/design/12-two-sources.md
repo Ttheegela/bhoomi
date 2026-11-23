@@ -33,7 +33,7 @@ Pictures: `rework-pr4-records-design/` in the side-session notes (static mock, "
 .where    h2#rec-h {pin.label}
           p.meta   {main src} ↗ · {latest.text}[ ({months} preliminary)]          §7
 .verdict  {▲|▼|≈} {word}   {conf}[ · <a href="#rec-oth">Other records disagree ↓</a>]
-[p.one     {thin_note} or {single_note}; never both]                              domain review 2026-11-23                                                          domain review 2026-11-23
+[p.one     {thin_note} or {single_note}; never both]                              domain review 2026-11-23
 p.say · p.world · .reads R1|R2|R3                                                   main record, unchanged
 .oth      Records for this place                                                    new
 .next · .acts · p.disc                                                              unchanged
