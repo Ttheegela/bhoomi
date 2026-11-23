@@ -1,19 +1,21 @@
 """The tool's guidance put in by code and the gave-up fix. Offline: no LLM, no network."""
+import json
+
 import pytest
 
 from evals import run
 from earthtrends.agent import guidance, loop, providers, resources, tools
 
-GUIDE = {"risk": "high", "risk_label": "High risk",
-         "why": "The sea here is rising about 2.4 times faster than the world average.", "ratio": 2.4,
+FACT = "Rising about 2.4 times as fast as the world average (1993 to April 2025; 95% range 2.1 to 2.7 times)."
+FEMA = {"label": "Official flood maps (FEMA Flood Map Service Center)", "url": "https://msc.fema.gov/portal/home"}
+PLANNING = {"label": "Your local planning office", "url": None}
+DISCLAIMER = "This shows past measurements only. It is not a prediction and not professional advice."
+GUIDE = {"fact": FACT, "ratio": 2.4,
          "reference": {"text": "World average", "source": {"name": "Ref", "url": "https://example.org/ref"}},
-         "rate": {"value": 8.3, "unit": "cm", "text": "+8.3 cm", "per": "every 10 years"},
-         "display": {"unit": "cm", "factor": 0.1},
-         "recommendation": "For a long-term home or investment near the shore here, we'd advise against it unless "
-                           "the site sits well above flood level.",
+         "rate": {"value": 8.3, "unit": "mm", "text": "+8.3 mm", "per": "a year", "note": None},
+         "display": {"unit": "cm", "factor": 0.1}, "look_next": [FEMA, PLANNING],
          "future_link": {"label": "Future flood map (NOAA)", "url": "https://coast.noaa.gov/slr/"},
-         "disclaimer": "This guidance isn't perfect. It is based only on past records, and the future is not "
-                       "certain. Not professional financial or legal advice."}
+         "disclaimer": DISCLAIMER}
 SRC = {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"}
 GI = {"variable": "sea_level", "units": "mm", "place": {"name": "Grand Isle", "lat": 29.26, "lon": -89.96},
       "period": {"start": "1947-01", "end": "2026-09"}, "verdict": "rising", "slope_per_decade": 83.0,
@@ -22,11 +24,9 @@ GI = {"variable": "sea_level", "units": "mm", "place": {"name": "Grand Isle", "l
                   "comparison": "About 8 cm higher every 10 years.", "limit": "It cannot tell the future."},
       "guidance": GUIDE}
 GI_ARGS = {"variable": "sea_level", "lat": 29.26, "lon": -89.96}
-EXPECT = ("Sea level: High risk. The sea here is rising about 2.4 times faster than the world average. For a "
-          "long-term home or investment near the shore here, we'd advise against it unless the site sits well above "
-          "flood level. This guidance isn't perfect. It is based "
-          "only on past records, and the future is not certain. Not professional financial or legal advice. "
-          "Future flood map (NOAA) (https://coast.noaa.gov/slr/).")
+EXPECT = (f"Sea level: {FACT} Where to look next: Official flood maps (FEMA Flood Map Service Center) "
+          "(https://msc.fema.gov/portal/home); Your local planning office. Future flood map (NOAA) "
+          f"(https://coast.noaa.gov/slr/). {DISCLAIMER}")
 
 
 def ok(result, args):
@@ -43,7 +43,7 @@ def clean(monkeypatch):
 
 def test_block_is_the_tools_strings_word_for_word():
     assert guidance.block([ok(GI, GI_ARGS)]) == EXPECT
-    for s in (GUIDE["why"], GUIDE["recommendation"], GUIDE["disclaimer"]):
+    for s in (GUIDE["fact"], GUIDE["disclaimer"], FEMA["label"], FEMA["url"], PLANNING["label"]):
         assert s in EXPECT
     # an old result that still carries a past-trend outlook adds nothing about the future (spec D1)
     old = {**GUIDE, "outlook_label": "If the past trend continues",
@@ -51,10 +51,14 @@ def test_block_is_the_tools_strings_word_for_word():
     assert guidance.block([ok({**GI, "guidance": old}, GI_ARGS)]) == EXPECT
 
 
-def test_hottest_day_adds_no_guidance():
-    flat = {**GUIDE, "risk": None, "risk_label": None, "why": None, "recommendation": None, "future_link": None}
+def test_hottest_day_adds_its_fact():
+    fact = "No clear change (1981 to 2025; 95% range −0.02 to +0.27 °C per decade)."
+    flat = {**GUIDE, "fact": fact, "ratio": None, "reference": None, "future_link": None,
+            "look_next": [{"label": "Your national weather service", "url": None}]}
     hot = {**GI, "variable": "air_temp_max", "units": "degC", "guidance": flat}
-    assert guidance.block([ok(hot, {**GI_ARGS, "variable": "air_temp_max"})]) == ""
+    assert guidance.block([ok(hot, {**GI_ARGS, "variable": "air_temp_max"})]) == (
+        f"Hottest day of the month: {fact} Where to look next: Your national weather service. {DISCLAIMER}")
+    assert guidance.block([ok({**hot, "guidance": {**flat, "fact": ""}}, GI_ARGS)]) == ""  # no fact: nothing
 
 
 @pytest.mark.parametrize("text,want", [
@@ -74,19 +78,21 @@ def test_result_without_guidance_is_unchanged():
     assert guidance.fill("Rising. [GUIDANCE]", [ok(plain, GI_ARGS)]) == "Rising."
 
 
-def test_two_places_are_named_and_the_disclaimer_comes_once():
-    ac = {**GI, "place": {"name": "Atlantic City", "lat": 39.36, "lon": -74.42},
-          "guidance": {**GUIDE, "risk_label": "Moderate risk"}}
+def test_two_places_are_named_and_the_disclaimer_and_look_next_come_once():
+    other = "Rising about 1.3 times as fast as the world average (1993 to April 2025; 95% range 1.1 to 1.5 times)."
+    ac = {**GI, "place": {"name": "Atlantic City", "lat": 39.36, "lon": -74.42}, "guidance": {**GUIDE, "fact": other}}
     out = guidance.block([ok(GI, GI_ARGS), ok(ac, {**GI_ARGS, "lat": 39.36, "lon": -74.42})])
-    assert out.startswith("Grand Isle, sea level: High risk.") and "Atlantic City, sea level: Moderate risk." in out
+    assert out.startswith(f"Grand Isle, sea level: {FACT} Atlantic City, sea level: {other} Where to look next: ")
     assert out.count(GUIDE["disclaimer"]) == 1 and out.count("coast.noaa.gov/slr") == 1
+    assert out.count(FEMA["url"]) == 1 and out.count(PLANNING["label"]) == 1 and out.endswith(DISCLAIMER)
 
 
-def test_sources_at_one_place_with_different_risk_are_both_shown():
+def test_sources_at_one_place_that_disagree_are_both_shown():
+    flat = "No clear change (1947 to 2026)."
     psmsl = {**GI, "source": {"id": "psmsl", "name": "PSMSL, RLR", "url": "https://psmsl.org/"},
-             "guidance": {**GUIDE, "risk_label": "Moderate risk"}}
+             "verdict": "no_clear_change", "guidance": {**GUIDE, "fact": flat, "look_next": [PLANNING]}}
     out = guidance.block([ok(psmsl, {**GI_ARGS, "source": "psmsl"}), ok(GI, {**GI_ARGS, "source": "coops"})])
-    assert out.index("(NOAA CO-OPS tide gauges): High risk") < out.index("(PSMSL): Moderate risk")
+    assert out.index(f"(NOAA CO-OPS tide gauges): {FACT}") < out.index(f"(PSMSL): {flat}")
     same = guidance.block([ok(GI, GI_ARGS), ok({**GI, "source": psmsl["source"]}, GI_ARGS)])
     assert same == EXPECT  # agreeing sources: one entry, the catalog default's
 
@@ -94,11 +100,24 @@ def test_sources_at_one_place_with_different_risk_are_both_shown():
 # ---- the scorer accepts guidance numbers ----
 
 def test_scorer_accepts_inserted_guidance_numbers_and_link():
-    case = {"id": "gi", "question": "q", "expect_tool": "detect_trend", "must_say": ["High risk", "advise against"]}
+    case = {"id": "gi", "question": "q", "expect_tool": "detect_trend",
+            "must_say": ["times as fast as the world average", "msc.fema.gov", "not professional advice"],
+            "must_not_say": ["High risk", "advise against", "recommend"]}
     answer = guidance.fill("Yes. Sea level at Grand Isle has clearly been rising. Source: NOAA CO-OPS tide gauges, "
                            "https://tidesandcurrents.noaa.gov/.", [ok(GI, GI_ARGS)])
     out = run.check(case, {"answer": answer, "tool_calls": [ok(GI, GI_ARGS)]})
-    assert out["numbers"] and out["links"] and out["must_say"], out
+    # the fact's world window (1993 to April 2025) is the tool's own words, not a wrong period
+    assert out["numbers"] and out["links"] and out["must_say"] and out["wording"], out
+
+
+def test_the_number_check_pools_the_facts_numbers():
+    """The fact's ratio range is in no other field the model reads (world is cut to its text), so the pool takes it
+    from the fact: an answer may quote it, and a range of its own still fails."""
+    res = loop.model_results([ok({**GI, "world": {"text": "x", "ratio_low": 2.1}}, GI_ARGS)])
+    assert "ratio_low" not in json.dumps(res)
+    said = "It rose about 2.4 times as fast as the world average (95% range 2.1 to 2.7 times)."
+    assert loop.invented_numbers(said, res) == []
+    assert loop.invented_numbers(said.replace("2.7", "3.9"), res) == ["3.9"]
 
 
 # ---- through the loop ----
@@ -417,8 +436,7 @@ def test_scorer_uses_the_loops_number_check():
 # ---- the model reads, and the number check pools, only the fields the prompt uses ----
 
 LEAKS = ("It could warm another 1.5 °C by mid-century.",  # fit.change
-         "July is about 24 °C.",  # baseline.months
-         "up to 0.75 °C")  # world.thresholds
+         "July is about 24 °C.")  # baseline.months
 
 
 def test_rework_fields_stay_out_of_the_model_view_and_the_number_check(monkeypatch):

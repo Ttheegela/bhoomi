@@ -92,6 +92,9 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
     slope_per_decade (in `units` per decade, e.g. degC per decade or mm per decade), ci_low, ci_high,
     p_value, autocorrelation_adjusted, verdict, source {id, name, url}, caveats, and meaning: four plain-language
     strings computed from the result (headline, confidence, comparison, limit) for readers who are not analysts.
+    It also carries guidance: fact (one sentence on what the records show), look_next (where to look next: labels,
+    with a url or null) and disclaimer. These are facts, not advice: pass them on as given, and give no risk level
+    or recommendation of your own.
     verdict is one of "rising", "falling" or "no_clear_change" (p >= 0.05 or the CI crosses 0).
     When you report it, give the slope with its CI, name the source, and keep the caveats.
     """

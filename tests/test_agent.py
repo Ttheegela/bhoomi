@@ -1428,6 +1428,11 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "This is the sea measured against the land, so the land rising or sinking is part of it.",
     "write as if for a ten-year-old",
     "write [GUIDANCE] on its own",
+    # facts, not advice (owner, 2026-11-22)
+    "each result's fact, where to look next, the future link and the disclaimer once",
+    "Bhoomi states facts, not advice: never give a risk level, a recommendation, or advice on whether to buy, build, "
+    "move, avoid or invest.",
+    "from these verdicts only; never a difference, a ratio or a risk level of your own",
     "at most six calls",
     "past data at single places",
     "A question is broad only when it asks which places or where across a large area and names no single place or "
@@ -1507,7 +1512,10 @@ def test_prompt_rules(phrase):
                                     "a decade is ten years", "every ten years", "explaining what a decade is more than once",
                                     "the p-value phrase second", "millimetres every ten years", "comparison of slopes",
                                     "verdict, numbers and p-value", 'A question about a region or "which places"',
-                                    'Broad questions (a region or "which places"', "you cannot advise", "judge investments", "past data cannot tell what will happen"])
+                                    'Broad questions (a region or "which places"', "you cannot advise", "judge investments", "past data cannot tell what will happen",
+                                    # facts, not advice: the prompt never asks for a risk level or a recommendation
+                                    "risk_label", "risk level, why, recommendation", "You may name a result's risk level",
+                                    "The recommendation is the tool's alone", "each result's risk level only"])
 def test_prompt_rules_removed(phrase):
     assert phrase not in prompts.SYSTEM
 

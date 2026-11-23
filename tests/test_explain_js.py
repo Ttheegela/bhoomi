@@ -932,14 +932,19 @@ def test_after_2100_note_wraps_at_the_visible_width():
     assert note and all(x in note[1] for x in ("box-sizing: border-box", "width: 100cqw", "position: sticky", "left: 0"))
 
 
-def test_sea_level_fixtures_carry_the_current_advice():
-    """The fixtures' sea-level advice is the server's current wording ("advise against" for High), never an older text."""
-    from earthtrends.stats.guidance import RECOMMEND
+def test_fixtures_carry_the_current_guidance():
+    """The fixtures' guidance is the server's current wording (facts, not advice: owner, 2026-11-22), never an older
+    text: the stats lane's own code on the fixture's series gives the same object."""
+    from earthtrends.stats import compute_trend
+    from earthtrends.stats.baseline import baseline
 
-    for f in sorted((ROOT / "tests" / "fixtures" / "rework").glob("*sea_level*.json")):
-        g = json.loads(f.read_text(encoding="utf-8"))["trend"]["guidance"]
-        assert g["recommendation"] in RECOMMEND["sea_level"].values(), f.name
-    assert "advise against" in RECOMMEND["sea_level"]["high"]
+    for f in sorted((ROOT / "tests" / "fixtures" / "rework").glob("*.json")):
+        if f.stem == "variables":
+            continue
+        d = json.loads(f.read_text(encoding="utf-8"))
+        s = {k: v for k, v in d["series"].items() if k != "anomaly"}
+        assert d["trend"]["guidance"] == compute_trend(s, base=baseline(s))["guidance"], f.name
+        assert {"fact", "look_next"} <= set(d["trend"]["guidance"]) and "thresholds" not in d["trend"]["world"]
 
 
 def _contrast(a, b):
