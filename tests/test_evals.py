@@ -596,6 +596,7 @@ def test_false_disagree_when_sources_agree_fails():
     assert run.check(case, fake_run(answer.replace("The sources disagree. ", ""), multi([POWER, era5, ghcn])))["wording"]
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_models_disagree_sentence_is_not_a_false_disagree():
     era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
     answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09). "
