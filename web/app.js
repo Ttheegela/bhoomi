@@ -441,18 +441,21 @@ function confLine(conf, B) {
   }
   return s;
 }
-// One row; explicit roles, because Safari drops table semantics under the narrow card's display: grid.
+// One row, and its note in a row under it; explicit roles, because Safari drops table semantics under the narrow card's
+// display: grid. A thin station (not counted when the records are compared) is muted.
 function othRow(r) {
   const th = el('th', { scope: 'row', role: 'rowheader' }, r.href ? el('a', { href: r.href, target: '_blank', rel: 'noopener' }, `${r.label} ↗`) : r.label);
   if (r.sub) th.append(el('span', { class: 'k' }, r.sub));
-  const tr = el('tr', r.main ? { role: 'row', class: 'is-main' } : { role: 'row' }, th);
-  if (r.why !== undefined) { tr.append(el('td', { role: 'cell', class: 'na', colspan: '3' }, r.why)); return tr; }
-  const yrs = el('td', { role: 'cell', class: 'y' }, el('span', { class: 'yr' }, r.years));
-  if (r.miss) yrs.append(el('span', { class: 'k' }, r.miss));
-  if (r.note) yrs.append(el('span', { class: 'k' }, r.note));
-  tr.append(el('td', { role: 'cell', class: 'v' }, el('span', { class: 'sh', 'aria-hidden': 'true' }, r.shape), r.word),
-    el('td', { role: 'cell', class: 'r' }, r.rate, el('span', { class: 'pd' }, ' per decade')), yrs);
-  return tr;
+  const cls = [r.main ? 'is-main' : '', r.thin ? 'thin' : '', r.note ? 'with-note' : ''].filter(Boolean).join(' ');
+  const tr = el('tr', cls ? { role: 'row', class: cls } : { role: 'row' }, th);
+  if (r.why !== undefined) tr.append(el('td', { role: 'cell', class: 'na', colspan: '3' }, r.why));
+  else {
+    const yrs = el('td', { role: 'cell', class: 'y' }, el('span', { class: 'yr' }, r.years));
+    if (r.miss) yrs.append(el('span', { class: 'k' }, r.miss));
+    tr.append(el('td', { role: 'cell', class: 'v' }, el('span', { class: 'sh', 'aria-hidden': 'true' }, r.shape), r.word),
+      el('td', { role: 'cell', class: 'r' }, r.rate, el('span', { class: 'pd' }, ' per decade')), yrs);
+  }
+  return r.note ? [tr, el('tr', { role: 'row', class: 'nt' }, el('td', { role: 'cell', colspan: '4' }, r.note))] : [tr];
 }
 function othRetry(text, pin) {
   const b = el('button', { type: 'button', class: 'btn' }, text);
@@ -463,7 +466,7 @@ function othBlock(B, pin) {
   const box = el('div', { class: 'oth' }, el('h3', { id: 'rec-oth', tabindex: '-1' }, 'Records for this place'));
   if (B.window) box.append(el('p', { class: 'win' }, B.window)); // "Same years for all: 1981 to 2025"
   const tb = el('tbody', { role: 'rowgroup' });
-  B.rows.forEach((r) => tb.append(othRow(r)));
+  B.rows.forEach((r) => tb.append(...othRow(r)));
   const hr = el('tr', { role: 'row' });
   ['Record', 'Trend', 'Rate per decade', 'Years'].forEach((c) => hr.append(el('th', { scope: 'col', role: 'columnheader' }, c)));
   box.append(el('table', { role: 'table' }, el('caption', { class: 'sr-only' }, B.caption),

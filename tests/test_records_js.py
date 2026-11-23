@@ -210,7 +210,7 @@ var NONE = 'No weather station within 25 km has 30 years of daily mean temperatu
 var tm = copy(PT); tm.comparisons[2] = row('ghcn', { status: 'none', available: false, why: NONE, where: null, verdict: null, headline_rate: null });
 tm.disagree = { any: false, line: 'Both records agree: rising.', say: 'ERA5 shows it getting warmer. NASA POWER shows it getting warmer.', reasons: [] };
 var mb = recBlock(tm, pc);
-assert.deepStrictEqual(mb.rows[2], { main: false, label: 'Weather station', href: '', sub: '', why: NONE }); // no link, no where line
+assert.deepStrictEqual(mb.rows[2], { main: false, label: 'Weather station', href: '', sub: '', note: '', why: NONE }); // no link, no where line
 assert.deepStrictEqual(mb.agree, ['Both records agree: rising.']);
 var m8 = steps(tm, P.series, pc)[7];
 assert.ok(m8.short === 'Both agree: rising' && /^We ran steps 1 to 6 on one more record for this place/.test(m8.words[0]), m8.short);
@@ -219,10 +219,24 @@ assert.strictEqual(m8.work[2], 'Weather station: ' + NONE);
 assert.ok(csvPlace(tm, P.series, pc).text.split('\n').indexOf('# Other record: Weather station: ' + NONE) > 0);
 var SHORT = 'This station has fewer than 30 years of daily rain data since 1981, and no other station within 25 km does either.';
 var ts = copy(tm); ts.comparisons[2] = station({ status: 'short', available: false, why: SHORT, where: 'Madras Minambakkam, 13 km away', verdict: null });
-assert.deepStrictEqual(recBlock(ts, pc).rows[2], { main: false, label: 'Weather station', href: SRC.ghcn.record_url, sub: 'Madras Minambakkam, 13 km away', why: SHORT });
+assert.deepStrictEqual(recBlock(ts, pc).rows[2], { main: false, label: 'Weather station', href: SRC.ghcn.record_url, sub: 'Madras Minambakkam, 13 km away', note: '', why: SHORT });
 var te = copy(PT); te.comparisons[1] = row('power', { status: 'error', available: false, why: "We couldn't read this record just now.", verdict: null });
 var eb = recBlock(te, pc);
 assert.ok(eb.retry === true && eb.rows[1].why === "We couldn't read this record just now.");
+// "pending" (Ask and MCP only) is shown like "error"
+var tg = copy(PT); tg.comparisons[1] = row('power', { status: 'pending', available: false, counted: false, why: 'Not loaded yet.', verdict: null });
+assert.ok(recBlock(tg, pc).retry === true && recBlock(tg, pc).rows[1].why === 'Not loaded yet.');
+// a thin station: kept with its own verdict, muted, its note under the row; the server compared the other two only
+var THIN = "Few readings after 2015 (3 to 8 months a year), so this row covers less and isn't counted when we compare.";
+var tt = copy(t0); tt.comparisons.forEach(function (x) { x.counted = true; });
+Object.assign(tt.comparisons[2], { counted: false, note: THIN });
+tt.disagree = { any: true, line: 'The records disagree here.', say: 'ERA5 shows no clear change. NASA POWER shows the hottest days getting less hot.', reasons: [{ id: 'two_models', text: 'x' }] };
+var tb2 = recBlock(tt, dc);
+assert.ok(tb2.rows[2].thin === true && tb2.rows[2].note === THIN && tb2.rows[2].word === 'Rising' && tb2.rows[0].thin === false && tb2.rows[0].note === '');
+var t8 = steps(tt, H.series, dc)[7];
+assert.strictEqual(t8.short, 'They disagree: ERA5 no clear change, NASA POWER falling'); // the counted rows only
+assert.ok(t8.work.indexOf('Weather station: ' + THIN) > 0);
+assert.ok(/; rising; Few readings after 2015 \(3 to 8 months a year\), so this row covers less and isn't counted when we compare\.; https:/.test(csvOther(tt.comparisons[2])));
 // fewer than two rows with a trend: disagree null, rows only
 var t1 = copy(tm); t1.comparisons[1] = te.comparisons[1]; t1.disagree = null;
 var b1 = recBlock(t1, pc);
@@ -235,7 +249,7 @@ assert.strictEqual(WAIT, 'Reading the other records for this place: NASA POWER a
 assert.strictEqual(recWait(['power', 'era5', 'ghcn'], 'power', 0), 'Reading the other records for this place: ERA5 and the nearest weather station within 25 km. A weather station takes 5 to 20 seconds the first time. 0 s so far.');
 assert.strictEqual(recWait(['era5', 'power', 'ghcn'], 'ghcn', 3), 'Reading the other records for this place: ERA5 and NASA POWER. 3 s so far.');
 var wb = recBlock(tp, Object.assign({}, pc, { cmp: 'loading', wait: WAIT }));
-assert.deepStrictEqual(wb.rows, [{ main: true, label: 'ERA5', href: SRC.era5.record_url, sub: 'Main record', shape: '▲', word: 'Rising', rate: card(tp, false).r2.value, years: '1981–2025', miss: '', note: '' }]);
+assert.deepStrictEqual(wb.rows, [{ main: true, label: 'ERA5', href: SRC.era5.record_url, sub: 'Main record', shape: '▲', word: 'Rising', rate: card(tp, false).r2.value, years: '1981–2025', miss: '', note: '', thin: false }]);
 assert.ok(wb.wait === WAIT && !wb.link && !wb.fail);
 var fb = recBlock(tp, Object.assign({}, pc, { cmp: 'error' }));
 assert.ok(fb.rows.length === 1 && fb.fail === "We couldn't read the other records just now." && !fb.wait);
@@ -390,7 +404,7 @@ def test_the_block_markup_and_focus():
     place when the records land, so focus never moves, and a removed retry button sends it to the heading."""
     for s in ("el('table', { role: 'table' }", "el('caption', { class: 'sr-only' }, B.caption)", "el('thead', { role: 'rowgroup' }, hr)",
               "el('tbody', { role: 'rowgroup' })", "el('th', { scope: 'col', role: 'columnheader' }, c)", "el('th', { scope: 'row', role: 'rowheader' }",
-              "{ role: 'row', class: 'is-main' }", "el('td', { role: 'cell', class: 'na', colspan: '3' }, r.why)",
+              "r.main ? 'is-main' : ''", "r.thin ? 'thin' : ''", "el('tr', { role: 'row', class: 'nt' }, el('td', { role: 'cell', colspan: '4' }, r.note))", "tb.append(...othRow(r))", "el('td', { role: 'cell', class: 'na', colspan: '3' }, r.why)",
               "el('h3', { id: 'rec-oth', tabindex: '-1' }, 'Records for this place')", "el('p', { class: 'st', role: 'status', id: 'rec-oth-st' }, B.wait)",
               "othRetry('Try again', pin)", "othRetry('Try the other records again', pin)", "'Other records disagree\u00a0↓'",
               "el('span', { class: 'pd' }, ' per decade')"):
@@ -434,5 +448,8 @@ def test_narrow_card_turns_rows_into_blocks():
     assert ".oth tr.is-main > * { font-weight: 650; border-bottom: 1.5px solid var(--ink); }" in CSS
     assert re.search(r"\.oth col\.c1 \{ width: 34%; \} \.oth col\.c2 \{ width: 30%; \} \.oth col\.c3 \{ width: 18%; \} \.oth col\.c4 \{ width: 18%; \}", CSS)
     assert ".oth .pd { display: none; }" in CSS
+    # a thin station is muted, and its note sits under the row (full width at every size)
+    assert ".oth tr.thin > td { color: var(--ink-2); }" in CSS and ".oth tr.nt td { font-size: 14px; color: var(--ink-2);" in CSS
+    assert ".oth tr.nt { display: block; padding: 0 0 10px; }" in oth[0] and ".oth tr.with-note { border-bottom: 0;" in oth[0]
     # the first 519 px block is still the readouts' (test_narrow_readout_value_column_is_capped reads the first one)
     assert ".reads > div, .reads > div + div {" in blocks[0]

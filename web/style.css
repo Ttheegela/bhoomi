@@ -203,6 +203,10 @@ span.srclink { color: var(--ink-2); }
 .oth .sh { margin-right: 6px; }
 .oth td.r, .oth .yr { white-space: nowrap; }
 .oth td.na { font-size: 14px; color: var(--ink-2); }
+/* a thin station: its own verdict in muted ink, and under the row why it isn't counted when the records are compared */
+.oth tr.thin > td { color: var(--ink-2); }
+.oth tr.with-note > * { border-bottom: 0; padding-bottom: 4px; }
+.oth tr.nt td { font-size: 14px; color: var(--ink-2); padding: 0 10px 10px 0; }
 .oth .pd { display: none; }
 .oth p { max-width: none; }
 .oth .agr { font-size: 15px; margin: 10px 0 0; }
@@ -227,6 +231,8 @@ span.srclink { color: var(--ink-2); }
   .oth td.r { grid-column: 1; grid-row: 3; }
   .oth td.y { grid-column: 2; grid-row: 3; text-align: right; font-size: 14px; color: var(--ink-2); }
   .oth td.na { grid-column: 1 / -1; grid-row: 3; }
+  .oth tr.with-note { border-bottom: 0; padding-bottom: 4px; }
+  .oth tr.nt { display: block; padding: 0 0 10px; }
   .oth .pd { display: inline; font-weight: 400; color: var(--ink-2); font-size: 14px; }
 }
 /* loading bar in the answer card: thin, full width, ink on the line colour */

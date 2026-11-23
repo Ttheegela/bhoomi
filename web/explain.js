@@ -246,12 +246,13 @@
   // a table row (§3): a row without a trend keeps its name and gives `why` in one cell; "none" has no link and no where line
   function recRow(x, imp) {
     var none = x.status === 'none', where = none ? '' : str(x.where);
-    var r = { main: !!x.main, label: str(x.label), href: none ? '' : https((x.source || {}).record_url), sub: x.main ? 'Main record' + (where ? ' · ' + where : '') : where };
+    var r = { main: !!x.main, label: str(x.label), href: none ? '' : https((x.source || {}).record_url), sub: x.main ? 'Main record' + (where ? ' · ' + where : '') : where,
+      note: str(x.note) }; // under the row: why a thin station isn't counted when the records are compared
     if (x.available !== true) { r.why = str(x.why); return r; }
     var q = rate(x, imp);
+    r.thin = x.counted === false; // its own verdict, shown muted; the server leaves it out of agree, disagree and drift
     r.shape = shapeOf(x.verdict); r.word = verdictWord(x); r.rate = q ? bare(q) : '—'; r.years = str(x.years);
     r.miss = isNum(x.n_missing) && x.n_missing > 0 ? commas(x.n_missing) + (x.n_missing === 1 ? ' month missing' : ' months missing') : '';
-    r.note = str(x.note); // a station over part of the shared years: "Covers only 1995–2025 of these years"
     return r;
   }
   // the main record alone while the others are read, or when they couldn't be: the card's own numbers
@@ -274,7 +275,7 @@
     var d = t.disagree, dr = t.drift;
     b.rows = rows.map(function (x) { return recRow(x, c.imperial); });
     b.window = str((t.comparisons_window || {}).label);
-    b.retry = rows.some(function (x) { return x.status === 'error'; });
+    b.retry = rows.some(function (x) { return x.status === 'error' || x.status === 'pending'; }); // "pending" (Ask, MCP) as "error"
     b.link = !!(d && d.any);
     if (d && d.any) b.dis = { line: str(d.line), lead: 'Why records can differ:', note: CANT,
       reasons: (Array.isArray(d.reasons) ? d.reasons : []).map(function (x) { return str(x && x.text); }).filter(Boolean) };
@@ -463,10 +464,11 @@
     if (!rows) { var w = ctx.cmp === 'error' ? str(ctx.err) || "We couldn't read the other records just now." : 'Reading the other records for this place…'; return { title: title, short: w, words: [w] }; }
     var imp = ctx.imperial, f = F(t, imp), d = t.disagree, dr = t.drift || null, mn = srcIn(t);
     var on = rows.filter(function (x) { return x.available === true; }), more = on.filter(function (x) { return !x.main; }).length;
+    var cnt = on.filter(function (x) { return x.counted !== false; }); // the rows the server compared
     var dw = dr && dr.source && str(dr.label) ? DRIFT_W[str(dr.direction).replace(/^getting /, '')] : '';
-    var short = d && d.any ? 'They disagree: ' + on.map(function (x) { return lc1(str(x.label)) + ' ' + verdictWord(x).toLowerCase(); }).join(', ')
+    var short = d && d.any ? 'They disagree: ' + cnt.map(function (x) { return lc1(str(x.label)) + ' ' + verdictWord(x).toLowerCase(); }).join(', ')
       : d ? str(d.line).replace(' records agree', ' agree').replace(/\.$/, '') + (dw ? '; ' + dr.label + ' has been drifting ' + dw : '')
-      : on.length === 1 ? 'Only ' + str(on[0].label) + ' has a trend here' : 'No record has a trend here';
+      : on.length === 1 ? 'Only ' + str(on[0].label) + ' has a trend here' : 'Too few records to compare here';
     var words = [(more ? 'We ran steps 1 to 6 on ' + (more === 1 ? 'one more record' : 'two more records') + ' for this place, each against its own 1995–2014 average. ' : '')
       + cap(mn) + ', the main record, leads the card and the chart; the others are here so you can see whether they agree.'];
     if (d) words.push(str(d.line) + (str(d.say) ? ' ' + d.say : ''));
@@ -483,7 +485,8 @@
       ['By chance, in 100'].concat(col(function (x) { return x.in_100 == null ? '' : String(x.in_100); })),
       ['Trend'].concat(col(lowV))] };
     var work = [].concat(str((t.comparisons_window || {}).label) ? [t.comparisons_window.label] : [], [{ table: table }],
-      rows.filter(function (x) { return x.available !== true && str(x.why); }).map(function (x) { return str(x.label) + ': ' + x.why; }));
+      rows.filter(function (x) { return x.available !== true && str(x.why); }).map(function (x) { return str(x.label) + ': ' + x.why; }),
+      rows.filter(function (x) { return x.available === true && str(x.note); }).map(function (x) { return str(x.label) + ': ' + x.note; }));
     // drift, pair by pair, in the Units setting with the server's digits
     var other = function (id) { var x = rows.filter(function (y) { return (y.source || {}).id === id; })[0]; return !x ? id : x.station || x.kind === 'station' ? 'the ' + lc1(str(x.label)) : str(x.label); };
     var pairs = dr && str(dr.label) && Array.isArray(dr.pairs) ? dr.pairs.filter(function (q) { return q && isNum(q.rate) && isNum(q.low) && isNum(q.high); }) : [];
@@ -1084,7 +1087,8 @@
     var q = x.source || {}, st = x.station || {}, h = x.headline_rate || {}, asc = function (v) { return str(v).replace(/−/g, '-'); };
     return 'Other record: ' + str(q.name) + (str(st.name) ? ', station ' + st.name + ' (' + str(st.id) + ')' + (isNum(x.km) ? ', ' + x.km + ' km away' : '') : '')
       + '; ' + str(x.years) + (x.n_missing > 0 ? ', ' + x.n_missing + ' months missing' : '')
-      + '; ' + asc(bare({ text: str(h.text), per: str(h.per) })) + ' ' + str(h.per) + ' (95% range ' + asc(h.range_text) + '); ' + verdictWord(x).toLowerCase() + '; ' + https(q.record_url);
+      + '; ' + asc(bare({ text: str(h.text), per: str(h.per) })) + ' ' + str(h.per) + ' (95% range ' + asc(h.range_text) + '); ' + verdictWord(x).toLowerCase()
+      + (str(x.note) ? '; ' + x.note : '') + '; ' + https(q.record_url);
   }
   function csvRecords(t, s) {
     var rows = rowsOf(t), d = t.disagree, dr = t.drift, pm = preMonths(s), out = [], cop = attrOf(recSources(t));
