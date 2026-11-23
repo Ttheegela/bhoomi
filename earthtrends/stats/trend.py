@@ -13,6 +13,7 @@ from earthtrends.stats.baseline import MONTH_DAYS, YEAR_MONTHS, baseline, column
 from earthtrends.stats.guidance import (DISPLAY, OWN_RULE, RAIN_MIN_MM, RAIN_THRESHOLDS, SCARCE, THRESHOLDS,
                                         guidance_for, q, sig2, signed)
 from earthtrends.stats.meaning import UNITS, meaning_for
+from earthtrends.stats.projection import sea_level as _sea_level_projection
 
 MIN_DAYS_PER_MONTH = 20
 # Spec D6, in years: (no trend below, "short record" below). GRACE has its own minimum of 10 years.
@@ -149,6 +150,7 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
             "end": used[-1], "where": _where(series)}
     if rain:  # the trend's own counts: calendar years with enough months
         data.update(n_years=n, n_missing_years=int(year[ok][-1] - year[ok][0]) + 1 - n)
+    now = _now(var, base, used, year[ok], month[ok], idx[ok], xl[ok], fit_units) if monthly else None
     result = {
         "variable": var,
         "units": units,
@@ -179,9 +181,10 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
         "latest": {"month": last,
                    "text": f"Data through {calendar.month_name[int(last[5:7])]} {last[:4]}" if monthly
                    else f"Data through {last[:4]}"},
-        "now": _now(var, base, used, year[ok], month[ok], idx[ok], xl[ok], fit_units) if monthly else None,
+        "now": now,
         "world": world,
-        "projection": {"available": False, "why": PROJECTION.get(var, PROJECTION_LATER)},
+        "projection": _sea_level_projection(s, base, now) if var == "sea_level"
+        else {"available": False, "why": PROJECTION.get(var, PROJECTION_LATER)},
         "explain": {
             "data": data,
             "seasons": _seasons(base, units, var == "precip"),

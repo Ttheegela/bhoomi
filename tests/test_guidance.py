@@ -6,7 +6,7 @@ import json
 import pytest
 
 from earthtrends.stats import compute_trend, guidance
-from earthtrends.stats.guidance import DISCLAIMER, RECOMMEND, SCARCE, SHORT, guidance_for
+from earthtrends.stats.guidance import DISCLAIMER, DISCLAIMER_PROJECTION, RECOMMEND, SCARCE, SHORT, guidance_for
 
 UNITS = {"sea_level": "mm", "air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "water_storage": "cm"}
 KEYS = ["risk", "risk_label", "why", "ratio", "reference", "rate", "display", "recommendation", "future_link",
@@ -223,6 +223,17 @@ def test_all_keys_always_present_and_finite(r):
     assert set(g["display"]) == {"unit", "factor"}
 
 
+
+def test_disclaimer_with_and_without_a_projection():
+    shown = {"available": True}
+    assert guidance_for({**res(place=BATTERY), "projection": shown})["disclaimer"] == DISCLAIMER_PROJECTION
+    no = {"available": False, "why": "There is no expert projection for this tide gauge."}
+    assert guidance_for({**res(place=BATTERY), "projection": no})["disclaimer"] == DISCLAIMER  # PR1 text
+    assert guidance_for(res("air_temp", slope=0.3, ratio=1.0, place=BATTERY))["disclaimer"] == DISCLAIMER
+    assert "based only on past records" not in DISCLAIMER_PROJECTION and "IPCC projections" in DISCLAIMER_PROJECTION
+    assert " will " not in DISCLAIMER_PROJECTION  # no future tense about the place
+
+
 def test_compute_trend_attaches_guidance_last():
     times = [f"{y}-{m:02d}" for y in range(1990, 2025) for m in range(1, 13)]
     values = [3.0 + 0.04 * i / 12 for i in range(len(times))]  # 0.04 mm/day a year on a 3 mm/day start
@@ -318,10 +329,30 @@ def test_too_little_rain_for_a_percentage_rule():
 
 
 def test_advice_describes_the_evidence_and_what_to_check():
-    words = json.dumps(RECOMMEND)
-    assert "advise against" not in words and "we'd" not in words
-    assert "flood maps" in RECOMMEND["sea_level"]["high"] and "storm floods" in RECOMMEND["sea_level"]["low"]
+    # the owner kept "advise against" for a high sea-level risk (2026-11-22); no other text advises against
+    others = [t for v, d in RECOMMEND.items() for k, t in d.items() if (v, k) != ("sea_level", "high")]
+    assert not any("advise against" in t or "we'd" in t for t in others)
     assert guidance.OWN_RULE["precip"].endswith("It covers total rain, not heavy downpours or floods.")
+
+
+SEA_HIGH = ("For a long-term home or investment near the shore here, we'd advise against it unless the site sits well "
+            "above flood level.")
+SEA_MODERATE = ("For a long-term home or investment near the shore here, check how high the site sits above flood "
+                "level before you commit.")
+SEA_LOW = ("Past records give no special reason to avoid the shore here. Check the site's flood level as you would on "
+           "any coast.")
+
+
+@pytest.mark.parametrize("ratio,ends,label,text", [
+    (1.7, (1.5, 2.0), "High risk", SEA_HIGH),  # the whole range at 1.5 or more
+    (1.5, (1.1, 2.0), "Moderate to high risk", SEA_MODERATE),  # the lower level's text
+    (0.6, (0.5, 0.7), "Low risk", SEA_LOW),  # the whole range under 0.75
+])
+def test_sea_level_advice_is_the_production_wording(ratio, ends, label, text):
+    r = res("sea_level", "rising", 49.0, ratio=ratio)
+    r["world"].update(ratio_low=ends[0], ratio_high=ends[1])
+    g = guidance_for(r)
+    assert (g["risk_label"], g["recommendation"]) == (label, text)
 
 
 def test_no_advice_states_a_future_from_the_past_trend():

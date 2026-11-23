@@ -11,14 +11,18 @@ The climate-scientist review of PR1 (2026-11-22) added:
 - `now`, the measured level of the last 12 months, and a trend line through the mean (F1);
 - a 95% range on the world ratio and on the rain share, with two-level labels when it crosses a threshold (F2);
 - rainfall tested on calendar-year totals, and no % rule where rain is scarce (F4);
-- advice that describes the evidence and says what to check, instead of advising against a purchase;
+- advice that describes the evidence and says what to check, instead of advising against a purchase (sea level kept its production wording, "advise against" included: the owner's decision, 2026-11-22);
 - caveats for station records and for NASA POWER temperatures (F5, F7);
 - a widening rule for months that are alike, picked by Monte Carlo (it replaces the all-lags Hamed–Rao).
 
 ## What guidance is not
 
-- **Not a forecast.** Guidance never gives a future value. No future number is made from a past trend. Future values will come only from published expert projections, in the result's `projection` object (added in later work).
-- **Not professional advice.** It is not financial, legal, engineering or insurance advice. Every guidance object ends with this disclaimer: "This guidance isn't perfect. It is based only on past records, and the future is not certain. Not professional financial or legal advice."
+- **Not a forecast.** Guidance never gives a future value. No future number is made from a past trend. Future values come only from published expert projections, in the result's `projection` object (sea level since PR2; see below).
+- **Not professional advice.** It is not financial, legal, engineering or insurance advice. Every guidance object ends with this disclaimer: "This guidance isn't perfect. It is based only on past records, and the future is not certain. Not professional financial or legal advice." When the result shows an expert projection (`projection.available` true), "based only on past records" is no longer true, so it reads instead: "This guidance isn't perfect. The past comes from measurements here; the future values are IPCC projections, which depend on how much the world emits and are not predictions. Not professional financial or legal advice."
+
+## Expert projections and the risk level
+
+A sea-level result carries `projection`: IPCC AR6 relative sea level at the tide gauge (or AR6's regional estimate for the area around it), exactly as published, against the 1995–2014 average. It is built in `earthtrends/stats/projection.py` and tested in `tests/test_projection.py`. It does not change the risk level, `why`, the recommendation or any other guidance field: those still come only from the measured trend and the like-for-like world comparison below. The page shows the projection beside the guidance, not inside it. Whether a later rule should weigh it is a separate decision.
 
 ## Before guidance: the record must support a trend
 
@@ -108,7 +112,7 @@ For rainfall the big number is the share of this place's 1995–2014 average rai
 - For sea level, the full-record rate stays in `slope_per_decade`, with its own years and no ratio.
 - Without the world reference series (the data lane's module is missing or fails), `world.available` is false and `why_none` reads "The world reference series is not available."
 - When `world.available` is false, every number in `world` is null and `why_none` is one plain sentence.
-- `world.source` is the reference's `name`, `dataset_id`, `record_url`, `retrieved` and `method`. For sea level the method keeps the data lane's note that the NASA-SSH figure is not corrected for glacial isostatic adjustment (about 0.3 mm a year).
+- `world.source` is the reference's `name`, `dataset_id`, `record_url`, `retrieved` and `method`. For sea level the method keeps the data lane's note that the world figure (NASA GSFC GMSL v5.2, ending April 2025) is corrected for glacial isostatic adjustment, which adds about 0.24 mm a year.
 - `guidance.ratio` is `world.ratio`. `guidance.reference` is `{"text": world.text, "source": {"name": world.source.name, "url": world.source.record_url}}`. Both are null when `world.available` is false.
 
 `world.text` as shown:
@@ -158,7 +162,7 @@ The checks run in this order:
 
 | Variable | High | Moderate | Low |
 |---|---|---|---|
-| sea_level | The sea here has been rising faster than the world average. Before you buy or build near the shore, check the site's height above flood level and the official flood maps. | The sea here has been rising at least about as fast as the world average. Before you buy or build near the shore, check the site's flood level as you would on any coast. | Past sea-level records here give no special reason to avoid the shore, but they say nothing about storm floods. Check the site's flood level as you would on any coast. |
+| sea_level | For a long-term home or investment near the shore here, we'd advise against it unless the site sits well above flood level. | For a long-term home or investment near the shore here, check how high the site sits above flood level before you commit. | Past records give no special reason to avoid the shore here. Check the site's flood level as you would on any coast. |
 | air_temp | It has been getting warmer here faster than the average for all land areas. Before you plan a home, a farm or outdoor work, check how hot the summers get and how you would keep cool, with shade and water. | It has been getting warmer here at least about as fast as the average for all land areas. Before you plan a home, a farm or outdoor work, check how hot the summers get and how you would keep cool. | Past records give no special reason to change plans here because of heat. |
 | precip, wetter | Rain here has been increasing strongly. Before you build or plant, check drainage and the flood history of the site. | Rain here has been increasing. Before you build or plant, check drainage and the flood history of the site. | No clear change: The rain record here shows no clear change, but that is not proof that rain is steady. Before you build or plant, check drainage and how secure your water supply would be in dry years, as you would anywhere. A clear change whose lower level is Low (all under 5 %, or reaching higher, like Chennai's and Mumbai's "Risk between low and high (wide range)"): the Moderate text. |
 | precip, drier | Rain here has been decreasing strongly. If you farm or run a business that needs water, check how secure your water supply would be in dry years. | Rain here has been decreasing. If you farm or depend on rainfall, check how secure your water supply would be in dry years. | No clear change: as above. A clear change whose lower level is Low: the Moderate text. |
@@ -168,7 +172,7 @@ No world comparison (rising, no world ratio; no level):
 - sea_level: "The sea here has been rising. Before you buy or build near the shore, check the site's height above flood level and the official flood maps."
 - air_temp: "It has been getting warmer here. Before you plan a home, a farm or outdoor work, check how hot the summers get and how you would keep cool."
 
-The advice describes what the records show and what to check. A ratio of past rates says nothing about a site's height, storm surge or flood defences, so no level advises against a purchase. The sea-level and air-temperature moderate texts say "at least about as fast" because a range from moderate to high gets the moderate text. No text states a future from a past trend (spec D1; climate recheck): rain advice says what was found and what to check now, never "plan for less water", because decades of rain at one place can be swings that turn back. The rain Low texts make no claim about the size of the change (QA B11: Mumbai, +11% a decade with a range from +5 to +17%, was told "perhaps only a small share"); the rate and `why` give the size.
+The advice describes what the records show and what to check. Sea level keeps the production wording, the owner's decision on 2026-11-22 ("Keep 'advise against'"): High advises against a long-term home or investment near the shore unless the site sits well above flood level, and it is the only text that advises against anything. The level comes from the like-for-like ratio and its 95% range, so a range from moderate to high (1.1 to 2.0, say) gets the Moderate text, and only a range wholly at 1.5 or more gets High. The air-temperature moderate text says "at least about as fast" because a range from moderate to high gets the moderate text. No text states a future from a past trend (spec D1; climate recheck): rain advice says what was found and what to check now, never "plan for less water", because decades of rain at one place can be swings that turn back. The rain Low texts make no claim about the size of the change (QA B11: Mumbai, +11% a decade with a range from +5 to +17%, was told "perhaps only a small share"); the rate and `why` give the size.
 
 ## Future map link (`future_link`)
 

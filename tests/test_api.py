@@ -82,6 +82,17 @@ def test_the_baseline_never_depends_on_the_window(offline, variable, src):
             assert t.json()["baseline"] == whole, w
 
 
+def test_sea_level_projection_reads_the_whole_record_whatever_the_window(offline):
+    q = {"variable": "sea_level", "lat": 39.36, "lon": -74.42}
+    whole = client.get("/api/trend", params=q).json()["projection"]
+    assert whole["available"] and whole["location"]["id"] == 180  # Atlantic City, CO-OPS 8534720 -> PSMSL 180
+    assert whole["readouts"]["now"]["end"] == f"{date.today().year - 1}-12" and whole["check"]["inside"] is not None
+    for w in ({"start": "1999"}, {"end": "2010"}):  # "now" and the check stay the record's, not the window's
+        assert client.get("/api/trend", params={**q, **w}).json()["projection"] == whole, w
+    air = client.get("/api/trend", params={**q, "variable": "air_temp"}).json()["projection"]
+    assert air == {"available": False, "why": "Expert projections for this measurement are not added yet."}
+
+
 def test_rainfall_levels_in_percent_seasons_in_mm_a_month(offline):
     t = client.get("/api/trend", params={"variable": "precip", "lat": 39.36, "lon": -74.42}).json()
     b, f, sea = t["baseline"], t["fit"], t["explain"]["seasons"]

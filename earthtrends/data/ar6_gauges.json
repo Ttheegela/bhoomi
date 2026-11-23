@@ -1,0 +1,473 @@
+{
+ "dataset": "IPCC AR6 Sea Level Projections: regional relative sea-level projections, confidence output (ar6-regional-confidence.zip), tide-gauge locations",
+ "doi": "10.5281/zenodo.6382554",
+ "concept_doi": "10.5281/zenodo.5914709",
+ "version": "20210809",
+ "record_url": "https://zenodo.org/records/6382554",
+ "licence": "CC-BY-4.0",
+ "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+ "terms_url": "https://github.com/Rutgers-ESSP/IPCC-AR6-Sea-Level-Projections/blob/main/LICENSE.md",
+ "accessed": "2026-11-22",
+ "baseline": "1995-2014 mean",
+ "baseline_years": [
+  1995,
+  2014
+ ],
+ "units": {
+  "levels": "mm",
+  "rates": "mm per year"
+ },
+ "scaling": {
+  "levels": 1,
+  "rates": 0.1,
+  "note": "stored int16 = value / scale, AR6's own storage; fill -32768"
+ },
+ "quantiles": [
+  0.05,
+  0.167,
+  0.5,
+  0.833,
+  0.95
+ ],
+ "source_quantile_indices": [
+  7,
+  19,
+  53,
+  87,
+  99
+ ],
+ "years": [
+  2020,
+  2030,
+  2040,
+  2050,
+  2060,
+  2070,
+  2080,
+  2090,
+  2100,
+  2110,
+  2120,
+  2130,
+  2140,
+  2150
+ ],
+ "scenarios": {
+  "ssp126": {
+   "ssp": "ssp126",
+   "label": "SSP1-2.6",
+   "confidence": "medium"
+  },
+  "ssp245": {
+   "ssp": "ssp245",
+   "label": "SSP2-4.5",
+   "confidence": "medium"
+  },
+  "ssp370": {
+   "ssp": "ssp370",
+   "label": "SSP3-7.0",
+   "confidence": "medium"
+  },
+  "ssp585": {
+   "ssp": "ssp585",
+   "label": "SSP5-8.5",
+   "confidence": "medium"
+  },
+  "ssp126_low": {
+   "ssp": "ssp126",
+   "label": "SSP1-2.6",
+   "confidence": "low"
+  },
+  "ssp245_low": {
+   "ssp": "ssp245",
+   "label": "SSP2-4.5",
+   "confidence": "low"
+  },
+  "ssp585_low": {
+   "ssp": "ssp585",
+   "label": "SSP5-8.5",
+   "confidence": "low"
+  }
+ },
+ "range_names": {
+  "medium": {
+   "0.167-0.833": "likely range (about 2 in 3 chance)",
+   "0.05-0.95": "5th to 95th percentile range"
+  },
+  "low": {
+   "0.167-0.833": "16.7th to 83.3rd percentile range",
+   "0.05-0.95": "5th to 95th percentile range"
+  }
+ },
+ "components": {
+  "total": "total",
+  "oceandynamics": "sterodynamic (ocean dynamics and thermal expansion)",
+  "GIS": "Greenland ice sheet",
+  "AIS": "Antarctic ice sheet",
+  "glaciers": "glaciers",
+  "landwaterstorage": "land water storage",
+  "verticallandmotion": "vertical land motion"
+ },
+ "arrays": {
+  "levels": "[location, component, scenario, quantile, year]",
+  "rates": "[location, scenario, quantile, year]"
+ },
+ "locations": {
+  "gauges": 1016,
+  "grid_cells": 56,
+  "note": "IDs below 1e9 are PSMSL gauge IDs; from 1e9 up, AR6 1-degree cells used by a regional-estimate row of coops_to_psmsl.csv",
+  "dropped_gauges": [
+   126,
+   137,
+   144,
+   173,
+   192,
+   201,
+   387,
+   951,
+   999,
+   1005,
+   1219,
+   1244,
+   1392,
+   1798
+  ],
+  "dropped_reason": "AR6 has missing values there"
+ },
+ "vertical_land_motion_from": {
+  "medium": "verticallandmotion_ssp245_medium_confidence_values.nc",
+  "low": "verticallandmotion_ssp585_low_confidence_values.nc"
+ },
+ "notes": [
+  "Rates are AR6's own rates of the total (its *_rates.nc files), centred on each decade; they are not differences of the levels, which AR6 draws from other p-boxes before 2100.",
+  "AR6 levels switch p-boxes after 2100, so 2100 to 2110 can jump (AR6 FAQ).",
+  "Quantiles of the parts do not add up to the quantiles of the total.",
+  "Low-confidence scenarios include ice-sheet processes AR6 can't give a likelihood for; their ranges are named by percentiles."
+ ],
+ "sources": {
+  "zip": {
+   "name": "ar6-regional-confidence.zip",
+   "bytes": 9243771601,
+   "md5": "fec362a2385079fac32fa736d4a39944",
+   "note": "md5 as Zenodo lists it; only the entries below were fetched, each checked by CRC-32"
+  },
+  "location_list.lst": {
+   "md5": "f536e05937342f1183cc04f48294270d"
+  },
+  "entries": [
+   {
+    "name": "medium_confidence/ssp126/total_ssp126_medium_confidence_values.nc",
+    "bytes": 72061982,
+    "crc32": "ed514be9",
+    "md5": "e9224a7effdfdefe1d3283b3434e8a57"
+   },
+   {
+    "name": "medium_confidence/ssp126/oceandynamics_ssp126_medium_confidence_values.nc",
+    "bytes": 143310564,
+    "crc32": "b4ba07f3",
+    "md5": "e319207b984ba4df6174c23af731e5ff"
+   },
+   {
+    "name": "medium_confidence/ssp126/GIS_ssp126_medium_confidence_values.nc",
+    "bytes": 21962790,
+    "crc32": "321e15c2",
+    "md5": "fee93e34b44a8c1b2a3a50479d495da3"
+   },
+   {
+    "name": "medium_confidence/ssp126/AIS_ssp126_medium_confidence_values.nc",
+    "bytes": 25141727,
+    "crc32": "71897509",
+    "md5": "abe7bfbe6dea20e15132554740bdc129"
+   },
+   {
+    "name": "medium_confidence/ssp126/glaciers_ssp126_medium_confidence_values.nc",
+    "bytes": 26331335,
+    "crc32": "1fd04417",
+    "md5": "f5e75a5e69b358d1637183b86de4551e"
+   },
+   {
+    "name": "medium_confidence/ssp126/landwaterstorage_ssp126_medium_confidence_values.nc",
+    "bytes": 34845676,
+    "crc32": "40068ef6",
+    "md5": "c6d4974faf47752c3a2d2f924d994a5e"
+   },
+   {
+    "name": "medium_confidence/ssp126/total_ssp126_medium_confidence_rates.nc",
+    "bytes": 38538730,
+    "crc32": "a7eb96a0",
+    "md5": "0783d343cf661e31b449cfbd2047fd9f"
+   },
+   {
+    "name": "medium_confidence/ssp245/total_ssp245_medium_confidence_values.nc",
+    "bytes": 72943754,
+    "crc32": "6ee89877",
+    "md5": "2dd7d85332d5137490882e78b498fdcd"
+   },
+   {
+    "name": "medium_confidence/ssp245/oceandynamics_ssp245_medium_confidence_values.nc",
+    "bytes": 143864161,
+    "crc32": "23309d6f",
+    "md5": "3f9e3cb540eb407cdad29260987965b8"
+   },
+   {
+    "name": "medium_confidence/ssp245/GIS_ssp245_medium_confidence_values.nc",
+    "bytes": 24434956,
+    "crc32": "6c209d82",
+    "md5": "f72b24af1b13eb1d30217929d791d35d"
+   },
+   {
+    "name": "medium_confidence/ssp245/AIS_ssp245_medium_confidence_values.nc",
+    "bytes": 25660455,
+    "crc32": "2efe9f07",
+    "md5": "727c8f493519092e1a5ae7a6b7d90bcf"
+   },
+   {
+    "name": "medium_confidence/ssp245/glaciers_ssp245_medium_confidence_values.nc",
+    "bytes": 29420178,
+    "crc32": "eea3de04",
+    "md5": "98dfb8dafc89ddb4ee1d8bd129b112bd"
+   },
+   {
+    "name": "medium_confidence/ssp245/landwaterstorage_ssp245_medium_confidence_values.nc",
+    "bytes": 38350295,
+    "crc32": "52293dee",
+    "md5": "baa4512a1cbcee2b77ff47e382a5ed92"
+   },
+   {
+    "name": "medium_confidence/ssp245/total_ssp245_medium_confidence_rates.nc",
+    "bytes": 38104917,
+    "crc32": "97b6c690",
+    "md5": "ed4d2605ad13470b2486a78339c46895"
+   },
+   {
+    "name": "medium_confidence/ssp370/total_ssp370_medium_confidence_values.nc",
+    "bytes": 74245470,
+    "crc32": "a3907f6f",
+    "md5": "0341d83abdda706b5a312e3af32f4966"
+   },
+   {
+    "name": "medium_confidence/ssp370/oceandynamics_ssp370_medium_confidence_values.nc",
+    "bytes": 153697532,
+    "crc32": "d9e1762f",
+    "md5": "34864cfa039a8dbe36fe6e3685efbf43"
+   },
+   {
+    "name": "medium_confidence/ssp370/GIS_ssp370_medium_confidence_values.nc",
+    "bytes": 26297768,
+    "crc32": "3afa01e3",
+    "md5": "49f9caeb0cc988feb1a3625181578e20"
+   },
+   {
+    "name": "medium_confidence/ssp370/AIS_ssp370_medium_confidence_values.nc",
+    "bytes": 26269288,
+    "crc32": "f7c9ef29",
+    "md5": "2c43100928c69a9fd22f7f83d69ff16d"
+   },
+   {
+    "name": "medium_confidence/ssp370/glaciers_ssp370_medium_confidence_values.nc",
+    "bytes": 31722518,
+    "crc32": "9c255d02",
+    "md5": "00c96fa9f7b531023fbbc16e9f6e0826"
+   },
+   {
+    "name": "medium_confidence/ssp370/landwaterstorage_ssp370_medium_confidence_values.nc",
+    "bytes": 45497121,
+    "crc32": "245dc14a",
+    "md5": "bb46ac5a6e1b934a1834717fbee41e7b"
+   },
+   {
+    "name": "medium_confidence/ssp370/total_ssp370_medium_confidence_rates.nc",
+    "bytes": 40762177,
+    "crc32": "0c670e05",
+    "md5": "67d0efdfd8cf5902443409e09fda7a34"
+   },
+   {
+    "name": "medium_confidence/ssp585/total_ssp585_medium_confidence_values.nc",
+    "bytes": 74968632,
+    "crc32": "7c423b60",
+    "md5": "1c3d8ad4fe9741bc92be6b7c76f573ac"
+   },
+   {
+    "name": "medium_confidence/ssp585/oceandynamics_ssp585_medium_confidence_values.nc",
+    "bytes": 153536544,
+    "crc32": "6b9a63fa",
+    "md5": "ebe193f590e26cb50578221c42b86213"
+   },
+   {
+    "name": "medium_confidence/ssp585/GIS_ssp585_medium_confidence_values.nc",
+    "bytes": 28079854,
+    "crc32": "db5ab0b8",
+    "md5": "81429697ef061eef019c61755a4bb0d0"
+   },
+   {
+    "name": "medium_confidence/ssp585/AIS_ssp585_medium_confidence_values.nc",
+    "bytes": 27166717,
+    "crc32": "0c993166",
+    "md5": "c01fc105ca7486495aa16538f33420fc"
+   },
+   {
+    "name": "medium_confidence/ssp585/glaciers_ssp585_medium_confidence_values.nc",
+    "bytes": 33143955,
+    "crc32": "aae17902",
+    "md5": "9378b7aca57c794c33232f70db15e00d"
+   },
+   {
+    "name": "medium_confidence/ssp585/landwaterstorage_ssp585_medium_confidence_values.nc",
+    "bytes": 35172916,
+    "crc32": "f2c800ad",
+    "md5": "da928b643d118f230a7eb8a60638e9ab"
+   },
+   {
+    "name": "medium_confidence/ssp585/total_ssp585_medium_confidence_rates.nc",
+    "bytes": 40854540,
+    "crc32": "5fb0be35",
+    "md5": "eefced01c6f02ed17b57c24697ce6081"
+   },
+   {
+    "name": "low_confidence/ssp126/total_ssp126_low_confidence_values.nc",
+    "bytes": 167616806,
+    "crc32": "b015dfa8",
+    "md5": "f75a9ccb441dbfd03619f97fde398896"
+   },
+   {
+    "name": "low_confidence/ssp126/oceandynamics_ssp126_low_confidence_values.nc",
+    "bytes": 143310564,
+    "crc32": "9fdccec9",
+    "md5": "fe91dbc82236cc7f40d2ed53ac368b70"
+   },
+   {
+    "name": "low_confidence/ssp126/GIS_ssp126_low_confidence_values.nc",
+    "bytes": 78525046,
+    "crc32": "0370e8b3",
+    "md5": "aa48ea6540a3d857707fb893558f9dd9"
+   },
+   {
+    "name": "low_confidence/ssp126/AIS_ssp126_low_confidence_values.nc",
+    "bytes": 82137617,
+    "crc32": "cef2f6de",
+    "md5": "318bc0ff62064432bdd183b975c488d2"
+   },
+   {
+    "name": "low_confidence/ssp126/glaciers_ssp126_low_confidence_values.nc",
+    "bytes": 61047346,
+    "crc32": "b75f05ec",
+    "md5": "d5c862e3d99da3a063feea62d61eab0e"
+   },
+   {
+    "name": "low_confidence/ssp126/landwaterstorage_ssp126_low_confidence_values.nc",
+    "bytes": 34845676,
+    "crc32": "63334435",
+    "md5": "23a8b60d5bd0cafa4e7b18dc39bcc09a"
+   },
+   {
+    "name": "low_confidence/ssp126/total_ssp126_low_confidence_rates.nc",
+    "bytes": 79935353,
+    "crc32": "40dda079",
+    "md5": "e77c8f91ec7ad0ed58983a42ff68436c"
+   },
+   {
+    "name": "low_confidence/ssp245/total_ssp245_low_confidence_values.nc",
+    "bytes": 168038316,
+    "crc32": "49ea0e6a",
+    "md5": "fd79304064217f4d3bf258eb5cd813a3"
+   },
+   {
+    "name": "low_confidence/ssp245/oceandynamics_ssp245_low_confidence_values.nc",
+    "bytes": 143864161,
+    "crc32": "87857981",
+    "md5": "0548b803e4aa8a800a916afd4f42a437"
+   },
+   {
+    "name": "low_confidence/ssp245/GIS_ssp245_low_confidence_values.nc",
+    "bytes": 81884331,
+    "crc32": "e548013c",
+    "md5": "703aca29442f4611c25400c61ae09f99"
+   },
+   {
+    "name": "low_confidence/ssp245/AIS_ssp245_low_confidence_values.nc",
+    "bytes": 82449963,
+    "crc32": "d10a905a",
+    "md5": "bb43ef2c291854b942f8c9892e990d92"
+   },
+   {
+    "name": "low_confidence/ssp245/glaciers_ssp245_low_confidence_values.nc",
+    "bytes": 67069341,
+    "crc32": "bd1c5d93",
+    "md5": "f42d2c55c62b7e55b3e1a69e10771396"
+   },
+   {
+    "name": "low_confidence/ssp245/landwaterstorage_ssp245_low_confidence_values.nc",
+    "bytes": 38350295,
+    "crc32": "bf648e43",
+    "md5": "5b3c33e9f8098a995d11335da356a6a0"
+   },
+   {
+    "name": "low_confidence/ssp245/total_ssp245_low_confidence_rates.nc",
+    "bytes": 79052633,
+    "crc32": "144de5b4",
+    "md5": "63f3160ee87021f467ede2695c45ea41"
+   },
+   {
+    "name": "low_confidence/ssp585/total_ssp585_low_confidence_values.nc",
+    "bytes": 174702935,
+    "crc32": "e5fd8adb",
+    "md5": "5141ed369b37d2ac90d141260843183a"
+   },
+   {
+    "name": "low_confidence/ssp585/oceandynamics_ssp585_low_confidence_values.nc",
+    "bytes": 153536544,
+    "crc32": "67551544",
+    "md5": "5161e835e88ed953b6e67fd4b3b050e4"
+   },
+   {
+    "name": "low_confidence/ssp585/GIS_ssp585_low_confidence_values.nc",
+    "bytes": 97505420,
+    "crc32": "e90a1552",
+    "md5": "3cad9de167da99b4f3843909ca726207"
+   },
+   {
+    "name": "low_confidence/ssp585/AIS_ssp585_low_confidence_values.nc",
+    "bytes": 112943584,
+    "crc32": "fac1e215",
+    "md5": "d8af2fbb3fd4710691f41f70a5e5d78e"
+   },
+   {
+    "name": "low_confidence/ssp585/glaciers_ssp585_low_confidence_values.nc",
+    "bytes": 70317447,
+    "crc32": "fd99bc51",
+    "md5": "de01876dd1eb384306b3499891e086a7"
+   },
+   {
+    "name": "low_confidence/ssp585/landwaterstorage_ssp585_low_confidence_values.nc",
+    "bytes": 35172916,
+    "crc32": "f21d008e",
+    "md5": "99c593654c9afdfeaad3b2e94259953e"
+   },
+   {
+    "name": "low_confidence/ssp585/total_ssp585_low_confidence_rates.nc",
+    "bytes": 97270957,
+    "crc32": "e8179216",
+    "md5": "b212cb960636f950ba183525c9c525ee"
+   },
+   {
+    "name": "medium_confidence/ssp245/verticallandmotion_ssp245_medium_confidence_values.nc",
+    "bytes": 151294727,
+    "crc32": "24c473f8",
+    "md5": "4b8456ff02b3eb678324b615c1d4b658"
+   },
+   {
+    "name": "low_confidence/ssp585/verticallandmotion_ssp585_low_confidence_values.nc",
+    "bytes": 151294727,
+    "crc32": "7860a49b",
+    "md5": "5edabf3f95d1699027154e77345d44f3"
+   }
+  ],
+  "gauge_names": "https://psmsl.org/data/obtaining/rlr.monthly.data/filelist.txt"
+ },
+ "citations": [
+  "Fox-Kemper, B., H.T. Hewitt, C. Xiao, G. Aðalgeirsdóttir, S.S. Drijfhout, T.L. Edwards, N.R. Golledge, M. Hemer, R.E. Kopp, G. Krinner, A. Mix, D. Notz, S. Nowicki, I.S. Nurhati, L. Ruiz, J.-B. Sallée, A.B.A. Slangen, and Y. Yu, 2021: Ocean, Cryosphere and Sea Level Change. In Climate Change 2021: The Physical Science Basis. Contribution of Working Group I to the Sixth Assessment Report of the Intergovernmental Panel on Climate Change [Masson-Delmotte, V., P. Zhai, A. Pirani, S.L. Connors, C. Péan, S. Berger, N. Caud, Y. Chen, L. Goldfarb, M.I. Gomis, M. Huang, K. Leitzell, E. Lonnoy, J.B.R. Matthews, T.K. Maycock, T. Waterfield, O. Yelekçi, R. Yu, and B. Zhou (eds.)]. Cambridge University Press, Cambridge, United Kingdom and New York, NY, USA, pp. 1211–1362, doi:10.1017/9781009157896.011.",
+  "Kopp, R. E., Garner, G. G., Hermans, T. H. J., Jha, S., Kumar, P., Reedy, A., Slangen, A. B. A., Turilli, M., Edwards, T. L., Gregory, J. M., Koubbe, G., Levermann, A., Merzky, A., Nowicki, S., Palmer, M. D., & Smith, C. (2023). The Framework for Assessing Changes To Sea-Level (FACTS) v1.0: A platform for characterizing parametric and structural uncertainty in future global, relative, and extreme sea-level change. Geoscientific Model Development, 16, 7461–7489. https://doi.org/10.5194/gmd-16-7461-2023",
+  "Garner, G. G., T. Hermans, R. E. Kopp, A. B. A. Slangen, T. L. Edwards, A. Levermann, S. Nowikci, M. D. Palmer, C. Smith, B. Fox-Kemper, H. T. Hewitt, C. Xiao, G. Aðalgeirsdóttir, S. S. Drijfhout, T. L. Edwards, N. R. Golledge, M. Hemer, G. Krinner, A. Mix, D. Notz, S. Nowicki, I. S. Nurhati, L. Ruiz, J-B. Sallée, Y. Yu, L. Hua, T. Palmer, B. Pearson, 2021. IPCC AR6 Sea Level Projections. Version 20210809. Dataset accessed 2026-11-22 at https://doi.org/10.5281/zenodo.5914709."
+ ],
+ "acknowledgement": "We thank the projection authors for developing and making the sea-level rise projections available, multiple funding agencies for supporting the development of the projections, and the NASA Sea Level Change Team for developing and hosting the IPCC AR6 Sea Level Projection Tool."
+}
