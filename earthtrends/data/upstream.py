@@ -16,9 +16,15 @@ def utc_today() -> str:
 def source_block(base: dict, dataset_id: str, version: str | None, record_url: str, retrieved: str, method: str,
                  limit: str | None = None) -> dict:
     """The full source block of docs/CONTRACTS.md (Rework v2) for a monthly series that still has its seasons.
-    `limit`: one plain caveat about where this record is weaker (PR4a `source.limit`), else None."""
+    `limit`: one plain caveat about where this record is weaker (PR4a `source.limit`), else None. `attribution` comes
+    from `base` (ERA5's COPERNICUS), else None."""
     return {**base, "dataset_id": dataset_id, "version": version, "record_url": record_url, "retrieved": retrieved,
-            "method": method, "cadence": "monthly", "deseasoned_upstream": False, "limit": limit}
+            "method": method, "cadence": "monthly", "deseasoned_upstream": False, "limit": limit,
+            "attribution": base.get("attribution")}
+
+
+# Copernicus licence wording for ERA5 and the CMIP6 Atlas (both Copernicus Climate Change Service products).
+COPERNICUS = "Contains modified Copernicus Climate Change Service information 2026."
 
 
 def text(value, limit: int) -> str:

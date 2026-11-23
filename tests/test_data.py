@@ -7,7 +7,8 @@ import httpx
 import pytest
 
 from earthtrends import data
-from earthtrends.data import coops, era5, ghcn, grace, monthly, power, psmsl, upstream
+from earthtrends.agent import tools
+from earthtrends.data import cmip6, coops, era5, ghcn, grace, monthly, power, psmsl, upstream
 
 FX = Path(__file__).parent / "fixtures"
 
@@ -1280,7 +1281,7 @@ def test_coops_deadline_is_a_provider_failure(monkeypatch):
 
 
 # ---- Rework v2: the full source block, record_url, flags, retrieved ----
-SOURCE_KEYS = {"id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "method", "cadence", "deseasoned_upstream", "limit"}
+SOURCE_KEYS = {"id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "method", "cadence", "deseasoned_upstream", "limit", "attribution"}
 
 
 def _captured_get(module, monkeypatch, reply):
@@ -1359,6 +1360,18 @@ def test_flags_match_values_for_every_source(offline, offline2, psmsl_offline):
         assert len(s["flags"]) == len(s["values"]) and set(s["flags"]) <= {None, "preliminary"}, source
         s = data.get_series(variable, lat, lon, start="2009", end="2010-06", source=source)
         assert len(s["flags"]) == len(s["values"]) == 18, source
+
+
+def test_copernicus_attribution_on_era5_and_the_cmip6_atlas_only(offline, offline2, psmsl_offline):
+    copernicus = "Contains modified Copernicus Climate Change Service information 2026."
+    for variable, lat, lon, source in (("air_temp", 39.36, -74.42, "power"), ("air_temp_max", 28.58, 77.21, "era5"),
+                                       ("air_temp_max", 28.58, 77.21, "ghcn"), ("sea_level", 39.36, -74.42, "coops"),
+                                       ("sea_level", 18.95, 72.83, "psmsl"), ("water_storage", 28.61, 77.21, "grace")):
+        got = data.get_series(variable, lat, lon, source=source)["source"]["attribution"]
+        assert got == (copernicus if source == "era5" else None), source
+    assert era5.SOURCE["attribution"] == cmip6.at("air_temp", 28.61, 77.21)["source"]["attribution"] == copernicus
+    t = tools.detect_trend("air_temp_max", 28.58, 77.21, source="era5")
+    assert t["source"]["attribution"] == t["projection"]["source"]["attribution"] == copernicus  # stats passes both on
 
 
 def test_era5_recent_months_are_preliminary(monkeypatch):

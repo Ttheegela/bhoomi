@@ -8,10 +8,11 @@ from pathlib import Path
 
 import httpx
 
-from .upstream import fit, source_block
+from .upstream import COPERNICUS, fit, source_block
 
 URL = "https://archive-api.open-meteo.com/v1/archive"
-SOURCE = {"id": "era5", "name": "ERA5 reanalysis via Open-Meteo archive", "url": "https://open-meteo.com/"}
+SOURCE = {"id": "era5", "name": "ERA5 reanalysis via Open-Meteo archive", "url": "https://open-meteo.com/",
+          "attribution": COPERNICUS}
 PARAMS = {"air_temp": "temperature_2m_mean", "air_temp_max": "temperature_2m_max", "precip": "precipitation_sum"}
 HOW = {"air_temp": "mean", "air_temp_max": "max", "precip": "mean"}  # daily -> monthly rule
 NOTES = {"air_temp_max": "Each monthly value is the hottest single day of that month, not the average of the daily highs."}
