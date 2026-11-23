@@ -1470,3 +1470,28 @@ def test_station_display_names():
     assert [ghcn.display_name(n) for n in ("NY CITY CENTRAL PARK, NY US", "HIGHTSTOWN 2 W, NJ US",
                                            "NEW DELHI SAFDARJUN, IN", "SYDNEY BOTANIC GARDENS, AS")] == [
         "NY City Central Park, NY", "Hightstown 2 W, NJ", "New Delhi Safdarjun", "Sydney Botanic Gardens"]
+
+
+@pytest.mark.parametrize("rows, status", [(True, "short"), (False, "none")])
+def test_no_usable_station_is_kept_like_a_series(offline2, monkeypatch, rows, status):
+    """QA: Chennai's Minambakkam (too few years) was downloaded again on every compare, about 35 s each. The lookup's
+    "short" or "none" answer is kept for the point like a series: asking again makes no NOAA request."""
+    asked = []
+    found = ghcn.parse_search(load("ghcn_search_delhi.json"))
+    monkeypatch.setattr(ghcn, "search", lambda la, lo, types: asked.append("search") or (found if rows else []))
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: asked.append(sid) or [
+        {"DATE": f"2022-{m:02d}-{d:02d}", "TMAX": "30"} for m in range(1, 13) for d in range(1, 29)])  # too few years
+    with pytest.raises(ghcn.NoStation) as first:
+        data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    n = len(asked)
+    assert first.value.status == status and n > 0 and (("IN022021900" in asked) is rows)
+    with pytest.raises(ghcn.NoStation) as again:
+        data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    assert len(asked) == n  # no new search, no new fetch
+    assert (str(again.value), again.value.status, again.value.station) == (
+        str(first.value), first.value.status, first.value.station) and again.value is not first.value
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: (_ for _ in ()).throw(httpx.ReadTimeout("slow")))
+    data._cache.clear()  # an outage is never kept: the next ask tries NOAA again
+    for _ in range(2):
+        with pytest.raises(httpx.ReadTimeout if rows else ghcn.NoStation):
+            data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
