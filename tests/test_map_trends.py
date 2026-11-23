@@ -126,6 +126,23 @@ PLACES = {"Delhi": (28.61, 77.21), "Princeton": (40.35, -74.66), "Chennai": (13.
 TYPES = {"i16le-b64": "<i2", "i32le-b64": "<i4", "u8-b64": "u1"}
 
 
+def test_map_decoding_reads_as_the_card():
+    """The map's own rule: each rate is int x scale in the file's units (cm of water a year), typed by enc. Rounded as
+    headline_rate rounds, the Delhi, Princeton and Chennai blocks read as their cards (as of the 2026-06 GRACE month)."""
+    d = json.loads((ROOT / "web" / "data" / "grace-trends.json").read_text())
+    assert d["units"] == "cm of water a year" and all(d["enc"][k] == "i32le-b64" for k in ("slope", "lo", "hi"))
+    a = {k: b.unb64(d[k], TYPES[t]) for k, t in d["enc"].items()}
+    la, lg = a["lat"] * d["lat_lon_scale"], a["lon"] * d["lat_lon_scale"]
+    for (name, (y, x)), want in zip(PLACES.items(), ("−4.3", "+0.057", "−0.026")):
+        k = int(np.argmin((la - y) ** 2 + ((lg - x) * np.cos(np.radians(y))) ** 2))
+        year = tuple(int(a[f][k]) * d["scale"] for f in ("slope", "lo", "hi"))  # float, as the map multiplies
+        page = _headline_rate("cm a year", "cm", year, None)  # no reader's unit: rounded as given
+        card = tools.detect_trend("water_storage", round(float(la[k]), 2), round(float(lg[k]), 2))["headline_rate"]
+        assert page["text"] == f"{want} cm per decade", name
+        assert (page["text"], page["range_text"]) == tuple(card[f].replace(" of water a year", " per decade")
+                                                           for f in ("text", "range_text")), name
+
+
 def test_committed_grace_file_reads_as_the_card():
     """Each block's rates, rounded as the card rounds headline_rate, give the card's own words: the Delhi, Princeton
     and Chennai blocks and 20 random ones. Fails when the stats code changes and grace-trends.json was not rebuilt."""
