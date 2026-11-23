@@ -91,7 +91,7 @@ def test_battery_projection_has_the_contract_shape_and_ar6_values_unshifted(batt
     assert p["source"] == {"name": "IPCC AR6 sea level projections (Garner et al. 2021)",
                            "dataset_id": "doi:10.5281/zenodo.6382554", "version": "20210809",
                            "record_url": "https://doi.org/10.5281/zenodo.6382554", "licence": "CC BY 4.0",
-                           "citation": m["citations"], "acknowledgement": m["acknowledgement"]}
+                           "citation": m["citations"], "acknowledgement": m["acknowledgement"], "attribution": None}
     assert type(p["source"]["citation"]) is list and len(p["source"]["citation"]) == 3  # one entry per paper
     assert all(isinstance(c, str) and c for c in p["source"]["citation"])
     d = ar6.load()

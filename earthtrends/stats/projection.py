@@ -45,7 +45,10 @@ SOURCE_NAME = "IPCC AR6 sea level projections (Garner et al. 2021)"
 
 # ---- CMIP6 (PR3) ----
 CMIP6_VARIABLES = tuple(atlas.VARIABLES)  # air_temp, air_temp_max, precip
-CMIP6_SOURCE = {"name": "IPCC AR6 Interactive Atlas, CMIP6 projections", "version": "v2.0-final", "licence": "CC BY 4.0"}
+# Copernicus products (ERA5, the CMIP6 Atlas files from the Climate Data Store) carry this line (domain review)
+COPERNICUS = "Contains modified Copernicus Climate Change Service information 2026."
+CMIP6_SOURCE = {"name": "IPCC AR6 Interactive Atlas, CMIP6 projections", "version": "v2.0-final", "licence": "CC BY 4.0",
+                "attribution": COPERNICUS}
 CMIP6_KEYS = ("kind", "source", "location", "baseline", "units", "change_kind", "windows", "default_scenario",
               "scenarios", "readouts", "caveat", "models_note", "baseline_record")
 CMIP6_DEFAULT = "ssp245"
@@ -98,7 +101,7 @@ def sea_level(series: dict, base: dict, now: dict | None) -> dict:
         "kind": "sea_level_ar6",
         "source": {"name": SOURCE_NAME, "dataset_id": f"doi:{m['doi']}", "version": m["version"],
                    "record_url": f"https://doi.org/{m['doi']}", "licence": "CC BY 4.0",
-                   "citation": list(m["citations"]), "acknowledgement": m["acknowledgement"]},
+                   "citation": list(m["citations"]), "acknowledgement": m["acknowledgement"], "attribution": None},
         "location": location,
         "baseline": {"text": TEXT, "years": list(YEARS)},
         "units": "mm",
