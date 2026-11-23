@@ -9,7 +9,7 @@ Pictures (design mock, "sample": the current page from the worktree, API answere
 2. **Record-free.** With a projection, the lines use only the projection (and its own caveat). No `now`, no `baseline.value`, no verdict, no `check`: they read the same whichever record is main (ERA5 for temperature and hottest day after PR4, POWER for rain, CO-OPS or PSMSL for sea level) and whichever source the visitor picks. The past belongs to the verdict, `fact` and Ask's own text.
 3. **Facts, not advice.** No "you should", no buy, build, move, avoid or insure, no risk word. "Would" only for what follows from the projected number itself (high tides ride on mean sea level).
 4. **Spoken form.** Years "1995 to 2014", "2041 to 2060", never a dash. No brackets, no signs: the direction word carries the sign ("36 cm higher", "3% less"). No-break space before "cm", "mm", "°C".
-5. **The right range name.** AR6 sea level, medium confidence: "about a 2 in 3 chance" (its likely range, 17th to 83rd percentile), always "on that path". CMIP6 10th to 90th percentile: "8 in 10 climate models put it …", followed by "That shows how much the models agree, not how likely it is." Never "chance", "likely" or "odds" for CMIP6; never the idiom "not a chance".
+5. **The right range name.** AR6 sea level, medium confidence: "about a 2 in 3 chance" (its likely range, 17th to 83rd percentile), always "on that path". CMIP6 10th to 90th percentile: "8 in 10 climate models put it …", followed by "That shows how much the models agree, not how likely it is." Never "chance" or "odds" for CMIP6, and "likely" only inside that fixed sentence; never the idiom "not a chance".
 6. **Numbers** use the server's own rounding: `sig2` for single values, `ends()` for a range (both ends to the same decimals, as `readouts.by_2050.text`), so the lines match R3's old values and the chart readout exactly.
 
 ## 1. The templates (`S` = a scenario row; sea level at 2050 (`i` = index of 2050 in `p.years`), CMIP6 at 2041–2060 (`w` = 1))
@@ -112,7 +112,7 @@ No new colours. `.plain` fill `--bg` #F6F6F3 (#0F1113) on `--surface`; the fill 
 ## 9. QA checks (1440 and 1920 light first, then dark and 375)
 - [ ] The box's lines equal `S.plain` verbatim for every scenario and the low-confidence rows; switching scenarios swaps them; R3 is gone only when the box shows.
 - [ ] Switch the main record (POWER, ERA5, station; CO-OPS, PSMSL): the box text does not change.
-- [ ] No "chance", "likely" or "odds" in a CMIP6 line; "about a 2 in 3 chance" only in sea level medium-confidence lines; no "not a chance"; no advice words (14 §14 list).
+- [ ] No "chance" or "odds" in a CMIP6 line, and "likely" only inside the fixed "not how likely it is"; "about a 2 in 3 chance" only in sea level medium-confidence lines; no "not a chance"; no advice words (14 §14 list).
 - [ ] Ask: the lines come first and outside the word count; simple-words answers have no figures from the model and no `fact`; the invented-numbers check passes on the persona questions.
 - [ ] MCP `get_projection` for The Battery, Princeton and water storage returns §5's shapes; every number in `plain` and every `text` is in a numeric field or the result's text.
 

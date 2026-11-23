@@ -314,7 +314,7 @@ Every answer leads with short lines a general audience can follow: (1) what is e
 | `projection.check.text` (sea level) | str or null | "Measured levels here are already above the experts' range for recent years." ("below"); null unless `check.inside` is false. |
 
 - **Record-free:** with a projection the lines use only projection fields: no `now`, baseline value, verdict or `check`. They read the same whichever record is main and whichever source the visitor picks.
-- **Range names:** AR6 sea level, medium confidence: "about a 2 in 3 chance … on that path". CMIP6 10th–90th percentile: "8 in 10 climate models put it …", then "That shows how much the models agree, not how likely it is." Never "chance", "likely" or "odds" for CMIP6.
+- **Range names:** AR6 sea level, medium confidence: "about a 2 in 3 chance … on that path". CMIP6 10th–90th percentile: "8 in 10 climate models put it …", then "That shows how much the models agree, not how likely it is." Never "chance" or "odds" for CMIP6, and "likely" only inside that fixed sentence.
 - **Spoken form:** "1995 to 2014", "2041 to 2060" (no dashes); no brackets or signs (the direction word carries the sign); numbers with the server's own rounding (`sig2`, range ends to the same decimals).
 - **Facts, not advice:** no "you should", no buy, build, move, avoid or insure, no risk word.
 - **Invented numbers:** every number in `plain` is in a `projection` field or the fixed reference "100 mm"; Ask adds `plain` to `MODEL_FIELDS`.
