@@ -37,6 +37,19 @@ METHOD = {  # by the data types used
     ("TMAX",): f"Each month is the highest of the station's daily maximum temperatures in NOAA's GHCN-Daily, {_QC}.",
     ("PRCP",): f"Each month is the mean of the station's daily precipitation totals in NOAA's GHCN-Daily, in mm a day, {_QC}.",
 }
+# NOAA's station list lost the minus sign of some longitudes between 1° W and 0° ("-0° 10' 44"" read as +0.1789): no
+# ECA&D (E) or WBAN (W) network station anywhere is listed between 1° W and 0°, while 82 are listed between 0° and 1° E
+# (ghcnd-stations.txt, 2026-11-22). The number can't tell which: Writtle (0.43° E) and Goudhurst (0.46° E) are listed
+# the same way and are right. These UK stations are really west of Greenwich (checked against NOAA's ISD station
+# history where it lists them, else the place's own position); parse_search() puts the sign back.
+# ponytail: UK only; Spain (35), France (8) and Algeria (3) E stations show the same pattern and are not checked yet.
+LOST_MINUS = {  # id: place
+    "UKE00100808": "Hull", "UKE00105894": "High Mowthorpe", "UKE00105900": "Rothamsted", "UKE00105915": "Hampstead",
+    "UKE00105919": "Bognor Regis", "UKE00105926": "Hayling Island", "UKE00105927": "Alice Holt Lodge",
+    "UKE00107650": "Heathrow", "UKE00156848": "Cranwell", "UKE00156864": "Monks Wood", "UKE00156884": "Wisley",
+    "UKE00156888": "Woburn", "UKW00015014": "Molesworth", "UKW00015015": "Chelveston", "UKW00015018": "Bassingbourn",
+    "UKW00015033": "Huntingdon", "UKW00015034": "Wyton", "UKW00015035": "Waddington", "UKW00015041": "Sturgate",
+}
 
 
 def record_url(station_id: str) -> str:
@@ -79,6 +92,8 @@ def parse_search(resp: dict) -> list[dict]:
             sid = text(st["id"], 40)
             if not sid:
                 continue
+            if sid in LOST_MINUS and lon > 0:
+                lon = -lon
             out.append({"id": sid, "name": readable(text(st["name"], NAME)) or sid, "lat": lat, "lon": lon, "types": types})
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             continue
@@ -103,7 +118,10 @@ def search(lat: float, lon: float, types: tuple[str, ...]) -> list[dict]:
     dlat = MAX_KM / 111 * 1.05
     # ponytail: the box does not wrap at +-180 degrees longitude; near there it is cut off. Query a second box on the other side to fix.
     dlon = min(180.0, dlat / max(cos(radians(lat)), 0.01))
-    box = (min(90, lat + dlat), max(-180, lon - dlon), max(-90, lat - dlat), min(180, lon + dlon))  # N,W,S,E
+    w, e = max(-180, lon - dlon), min(180, lon + dlon)
+    if w < 0 and e > -1:  # NOAA lists a LOST_MINUS station at +lon: reach the place it lists one that is really in the box
+        e = max(e, min(1.0, -w))
+    box = (min(90, lat + dlat), w, max(-90, lat - dlat), e)  # N,W,S,E
     r = _get(SEARCH, {"dataset": "daily-summaries", "bbox": ",".join(f"{x:.3f}" for x in box), "dataTypes": ",".join(types),
                       "startDate": FIRST_DAY, "endDate": last_day(), "limit": 1000})
     return parse_search(r.json())
