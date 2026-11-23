@@ -956,7 +956,28 @@ assert.deepStrictEqual(cp7.words, ['Future values come only from the climate mod
   "Scenarios are possible paths for the world's emissions, not predictions. We never stretch the past trend into the future."]);
 assert.deepStrictEqual(cp7.work.map(sp), ["This place's 1995–2014 average from NASA POWER: 11.9 °C (step 3). On the chart that is 0.", // now.text keeps the server's space
   "Models' change, 2041–2060, SSP2-4.5: +1.9 °C (range +1.2 to +2.3 °C).", 'So the 2041–2060 average sits at +1.9 °C on the chart, where 0 is that average.',
-  'Now: +0.24 °C (the 12 months to December 2025). +1.9 °C − +0.24 °C = about 1.7 °C more than today. Approximate: a 12-month average against a 20-year one.']);
+  'Now: +0.24 °C (the 12 months to December 2025). +1.9 °C − +0.2 °C = about 1.7 °C more than today. Approximate: a 12-month average against a 20-year one.']);
+// review: the working's subtraction adds up at the printed digits. Both numbers are printed at the result's decimals
+// (by_2050.p50 and now.value, as sea level does in whole mm); the card's R3 keeps its own rounding.
+function subtracts(d, sel, imp) {
+  var w = steps(d.trend, d.series, pc2(d, 'X', imp, sel))[6].work.filter(function (x) { return /^(Now|Latest): /.test(x); })[0];
+  var m = sp(w).match(/\. ([+−]?[\d.]+) °[CF] − \(?([+−]?[\d.]+) °[CF]\)? = about ([\d.]+) °[CF] (more|less) than /);
+  assert.ok(m, w);
+  var a = num(m[1]), b = num(m[2]), c = num(m[3]), dc = decimals(m[3]);
+  assert.strictEqual(Number((a - b).toFixed(dc)) * (m[4] === 'less' ? -1 : 1), c, w);
+  return sp(w);
+}
+assert.strictEqual(subtracts(CD, null, false), 'Now: +0.51 °C (the 12 months to December 2025). +1.26 °C − +0.51 °C = about 0.75 °C more than today. Approximate: a 12-month average against a 20-year one.');
+assert.ok(subtracts(CP, null, false).indexOf(' +1.9 °C − +0.2 °C = about 1.7 °C more than today.') > 0);
+assert.ok(subtracts(CP, null, true).indexOf(' +3.4 °F − +0.4 °F = about 3.0 °F more than today.') > 0); // °F: × 1.8 first, then rounded
+assert.ok(subtracts(load('seattle_air_temp_no_change'), null, false).indexOf(' +1.6 °C − (−0.5 °C) = about 2.1 °C more than today.') > 0); // a negative "Now" in brackets
+CMF.filter(function (n) { return n !== 'chennai_rain'; }).map(load).forEach(function (d) {
+  [[null, false], [null, true], [{ ssp: 'ssp126' }, false], [{ ssp: 'ssp585' }, true]].forEach(function (a) { subtracts(d, a[0], a[1]); }); });
+// rounding at the result's decimals can miss by one digit (1.25 → 1.3, 0.04 → 0.0, but 1.25 − 0.04 = 1.2): one decimal more
+var CM1 = copy(CP); CM1.trend.projection.scenarios[1].p50[1] = 1.25; CM1.trend.now.value = 0.04; CM1.trend.now.text = '+0.040 °C';
+CM1.trend.projection.readouts.more_than_today = { value: 1.2, text: 'about 1.2 °C more than today', approximate: true };
+assert.ok(subtracts(CM1, null, false).indexOf(' +1.25 °C − +0.04 °C = about 1.2 °C more than today.') > 0);
+assert.strictEqual(card(CD.trend, false, null, TODAY).r3f.line, 'SSP2-4.5, IPCC AR6 Atlas. Range across models +0.5 to +1.8' + NB + '°C. About 0.75' + NB + '°C more than today.'); // the card: unchanged
 assert.deepStrictEqual(cp7.link, { text: 'IPCC AR6 Atlas, CMIP6 projections ↗', href: 'https://digital.csic.es/handle/10261/332744' });
 assert.strictEqual(cc7.words[1], "We change this place's own 1995–2014 average by the share the models give (the delta method), so raw model values never sit next to the records.");
 assert.deepStrictEqual(cc7.work, ["This place's 1995–2014 average from NASA POWER: 3.7" + NB + 'mm a day, about 1,363' + NB + 'mm a year (step 3). On the chart that is 0.',

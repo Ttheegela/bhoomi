@@ -786,15 +786,16 @@
     var v = function (x) { return isNum(x) ? fmt(x * k) : 'no value'; };
     var rng = function (a, b) { return isNum(a) && isNum(b) ? withUnit(spanText(a * k, b * k), uu) : 'no value'; };
     var n = t.now, nw = nowOf(t, imp), mt = (p.readouts || {}).more_than_today, p50 = (S.p50 || [])[1];
-    var old = !!nw && /-/.test(str(n.end)) && (isNum(today) ? today : estMonth()) - mi(n.end) > 24, tw = old ? 'in ' + Y(n.end) : 'today', more = '';
+    var old = !!nw && /-/.test(str(n.end)) && (isNum(today) ? today : estMonth()) - mi(n.end) > 24, tw = old ? 'in ' + Y(n.end) : 'today', more = '', mn = '';
     if (!rain && nw && isNum(n.value) && isNum(p50)) { // the default scenario in metric prints the server's text as given
-      var d = (p50 - n.value) * k, a = sig2Text(Math.abs(d)).replace(/^\+/, '');
-      more = S === S0 && !imp && mt && str(mt.text) ? mt.text.replace(' °C', NB + '°C')
+      var d = (p50 - n.value) * k, a = sig2Text(Math.abs(d)).replace(/^\+/, ''), srv = S === S0 && !imp && mt && str(mt.text);
+      more = srv ? mt.text.replace(' °C', NB + '°C')
         : a === '0' ? 'about the same as ' + tw : 'about ' + withUnit(a, uu) + ' ' + (d > 0 ? 'more' : 'less') + ' than ' + tw;
+      mn = srv ? (/\d+(\.\d+)?/.exec(mt.text) || [a])[0] : a; // the number "more" prints (step 7 subtracts to it)
     }
     return { cm: true, p: p, S: S, S0: S0, ssp: S.id, med: p.scenarios, oth: p.scenarios.filter(function (x) { return x !== S; }),
       low: false, lc: '', noLow: false, rk: str(S.range_kind), name: str(S.name), Name: cap(str(S.name)), short: scenShort(S), code: str(S.code),
-      rain: rain, fmt: fmt, v: v, rng: rng, now: nw, old: old, nowWord: old ? 'Latest' : 'Now', more: more, N: (S.models || [])[1],
+      rain: rain, k: k, u: uu, fmt: fmt, v: v, rng: rng, now: nw, old: old, nowWord: old ? 'Latest' : 'Now', more: more, moreN: mn, N: (S.models || [])[1],
       loc: p.location || {}, axis: (t.baseline || {}).projection_axis !== false,
       dis: function (i) { return !!(S.disagree && S.disagree[i]); } };
   }
@@ -869,7 +870,12 @@
       'So the 2041–2060 average sits at ' + fx.v(p50) + ' on the chart, where 0 is that average.'];
     if (fx.rain) work.push('Models agreeing on wetter or drier: ' + p.windows.map(function (w, i) { return (isNum((S.agree || [])[i]) ? pct(S.agree[i]) : 'no value') + ' for ' + wtxt(w); }).join(', ')
       + '. Under 80%, we say they disagree.', "No “more than today” for rain: one year's rain swings more than this change.");
-    else if (fx.more) work.push(fx.nowWord + ': ' + fx.now.value + ' (' + fx.now.label + '). ' + fx.v(p50) + ' − ' + sub(fx.now.value) + ' = ' + fx.more + '. Approximate: a 12-month average against a 20-year one.');
+    else if (fx.more) { // the subtraction at the result's decimals (one more if rounding would miss it), so it adds up as printed
+      var dec = (fx.moreN.split('.')[1] || '').length, e = dec, A = p50 * fx.k, B = t.now.value * fx.k, c = Number(fx.moreN);
+      var at = function (x, q) { return Number(x.toFixed(q)); }, num = function (x) { var r = at(x, e); return withUnit((r > 0 ? '+' : '') + fixed(r, e), fx.u); };
+      while (e < dec + 3 && Math.abs(at(at(A, e) - at(B, e), dec)) !== c) e++;
+      work.push(fx.nowWord + ': ' + fx.now.value + ' (' + fx.now.label + '). ' + num(A) + ' − ' + sub(num(B)) + ' = ' + fx.more + '. Approximate: a 12-month average against a 20-year one.');
+    }
     var ll = latlon(loc);
     return { title: 'What comes next',
       short: fx.v(p50) + ' around 2050 under ' + fx.name + ' (' + fx.code + '), from ' + fx.N + ' climate models' + (fx.dis(1) ? '; models disagree on wetter or drier' : ''),
