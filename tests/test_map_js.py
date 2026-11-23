@@ -27,10 +27,18 @@ def u8(values) -> str:
     return base64.b64encode(bytes(values)).decode()
 
 
-# a tiny grace-trends.json: Delhi falling, Princeton no clear change, one fill, one with a clamped range end
-GRACE = {"v": 1, "enc": "i16le-b64", "scale": 0.01, "fill": -32768, "clamp": 32767, "n": 4, "lat_lon_scale": 0.01,
+def i32(values) -> str:
+    return base64.b64encode(struct.pack("<%di" % len(values), *values)).decode()
+
+
+# grace-trends.json v2: each field's encoding
+ENC = {"lat": "i16le-b64", "lon": "i16le-b64", "area": "i16le-b64", "slope": "i32le-b64", "lo": "i32le-b64",
+       "hi": "i32le-b64", "sig": "u8-b64"}
+# a tiny grace-trends.json: Delhi falling, Princeton no clear change, one fill, one with a very wide range
+GRACE = {"v": 2, "enc": ENC, "scale": 0.01, "fill": -2147483648, "n": 4, "lat_lon_scale": 0.01,
          "lat": i16([2900, 4000, 0, 3800]), "lon": i16([7739, -7527, 0, 14200]), "area": i16([12406, 12392, 100, 12000]),
-         "slope": i16([-431, 6, -32768, 1234]), "lo": i16([-476, -15, -32768, -32767]), "hi": i16([-381, 26, -32768, 32767]),
+         "slope": i32([-431, 6, -2147483648, 1234]), "lo": i32([-476, -15, -2147483648, -32767]),
+         "hi": i32([-381, 26, -2147483648, 32767]),
          "sig": u8([2, 0, 255, 0]), "start": "2002-04", "end": "2026-06", "footprint_km": 444,
          "reference": {"years": [2004, 2009]}}
 
@@ -81,7 +89,7 @@ eq([-3.1, -3, -0.1, 0, 1.9, 2, 7, 14.6].map(function (x) { return step(se, x); }
   ['C--dv-dn2', 'C--dv-dn1', 'C--dv-dn1', 'C--dv-up1', 'C--dv-up1', 'C--dv-up2', 'C--dv-up4', 'C--dv-up4']);
 eq(seaWords(false), 'Colours: blue for falling (darker: 3 mm a year or more), orange to wine for rising, darker for faster: 0 to 2, 2 to 4, 4 to 7, 7 or more mm a year. A grey ring means no clear change.');
 
-// 2. the base64 decode: little-endian int16 and bytes, lat and lon / 100, fill and "no data" dropped, a clamped end kept as wide
+// 2. the base64 decode: little-endian int16, int32 and bytes, lat and lon / 100, fill and "no data" dropped
 eq(Array.from(ints('AQD//wCA/38=', 4)), [1, -1, -32768, 32767]);
 eq(Array.from(ints(Buffer.from(new Int32Array([5707, -475, -2147483648, 2147483647]).buffer).toString('base64'), 4)), [5707, -475, -2147483648, 2147483647]);
 eq(Array.from(ints(G.sig, 4)), [2, 0, 255, 0]);
@@ -89,10 +97,16 @@ eq(ints('AQD//wCA', 4), null); // 6 bytes for 4 values: no width fits
 var bs = graceBlocks(G);
 eq(bs.length, 3);
 eq(bs[0], { lat: 29, lon: 77.39, area: 12406, slope: -4.31, lo: -4.76, hi: -3.81, v: 'falling' });
-eq([bs[1].lat, bs[1].lon, bs[1].v, wide(bs[1].lo, bs[1].hi)], [40, -75.27, 'no_clear_change', false]);
-eq([bs[2].lon, bs[2].slope, wide(bs[2].lo, bs[2].hi)], [142, 12.34, true]);
+eq([bs[1].lat, bs[1].lon, bs[1].v], [40, -75.27, 'no_clear_change']);
+eq([bs[2].lon, bs[2].slope, bs[2].lo, bs[2].hi], [142, 12.34, -327.67, 327.67]);
 eq(graceBlocks(Object.assign({}, G, { n: 5 })), null); // lengths that disagree: the file does not read
 eq(graceBlocks(Object.assign({}, G, { lat: '%%%' })), null);
+// another format reads as nothing, never as garbage: a field's enc we don't decode, an enc that disagrees with the bytes
+// (int16 bytes where enc says int32), the old single enc string, or another version
+eq(graceBlocks(Object.assign({}, G, { enc: Object.assign({}, G.enc, { slope: 'f32le-b64' }) })), null);
+eq(graceBlocks(Object.assign({}, G, { lo: G.lat })), null);
+eq(graceBlocks(Object.assign({}, G, { enc: 'i32le-b64' })), null);
+eq(graceBlocks(Object.assign({}, G, { v: 3 })), null);
 
 // 3. only gauges with a rate are drawn: "another gauge" entries are hidden and their partner drawn; other skipped ones never
 var d = gaugeDots(F, '');
@@ -119,7 +133,7 @@ eq(blockTip(bs[0], G, false), ['Near 29.0° N, 77.4° E', 'Falling: ' + M + '4.3
   'April 2002 to June 2026 · averaged over about 400 km · GRACE', 'Click for the full answer.']);
 eq(blockTip(bs[1], G, false)[1], 'No clear change: +0.060 cm of water a year, 95% range ' + M + '0.15 to +0.26, which includes no change.');
 eq(blockTip(bs[1], G, false)[0], 'Near 40.0° N, 75.3° W');
-eq(blockTip(bs[2], G, false)[1], 'No clear change: +12 cm of water a year, 95% range very wide, which includes no change.');
+eq(blockTip(bs[2], G, false)[1], 'No clear change: +12 cm of water a year, 95% range ' + M + '330 to +330, which includes no change.');
 // 2 significant figures, half away from zero, as the card's headline_rate text
 eq([0.94, 3.04, -13.62, 0, 99.6, -0.004].map(function (x) { return num(x, false, 'mm'); }), ['+0.94', '+3.0', M + '14', '0', '+100', M + '0.0040']);
 eq(rng(-0.004, 11, false, 'mm'), M + '0.004 to +11.000');  // no non-zero end reads 0
@@ -141,14 +155,12 @@ var ju = TDX.rate({ headline_rate: { value: -13.6, low: -14.1, high: -13.2, unit
   slope_per_decade: -136.2959, ci_low: -140.7101, ci_high: -131.8067 }, true);
 eq(sp(ju).range, rng(-14.07101, -13.18067, true, 'mm') + ' in a year');
 eq([sp(ju).text, sp(ju).range], [M + '0.54 in a year', M + '0.55 to ' + M + '0.52 in a year']);
-// a range with an earthquake step (Ofunato II, 2011) says "very wide", by the water blocks' rule
+// a range with an earthquake step (Ofunato II, 2011) prints its numbers, as the card does (review: no "very wide")
 var of = { name: 'Ofunato II', network: 'psmsl', slope: 8.92411, lo: -1699.3872, hi: 3266.6668, verdict: 'no_clear_change', start: '1965-01', end: '2016-12', years: 52 };
-eq(gaugeTip(of, false)[1], 'No clear change: +8.9 mm a year, 95% range very wide, which includes no change.');
-eq(gaugeTip(of, true)[1], 'No clear change: +0.35 in a year, 95% range very wide, which includes no change.');
-eq(gaugeTip(Object.assign({}, of, { lo: -29.63275, hi: 58.62216 }), false)[1], // Kamaisi II's range: wide, but read
-  'No clear change: +8.9 mm a year, 95% range ' + M + '30 to +59, which includes no change.');
+eq(gaugeTip(of, false)[1], 'No clear change: +8.9 mm a year, 95% range ' + M + '1700 to +3300, which includes no change.');
+eq(gaugeTip(of, true)[1], 'No clear change: +0.35 in a year, 95% range ' + M + '70 to +130, which includes no change.');
 // "which includes no change" only for no clear change: a clear verdict's range end can round to 0
-var edge = { lat: 0, lon: 0, area: 1, slope: -0.25, lo: -0.49, hi: 0, wide: false, v: 'falling' };
+var edge = { lat: 0, lon: 0, area: 1, slope: -0.25, lo: -0.49, hi: 0, v: 'falling' };
 eq(blockTip(edge, G, false)[1], 'Falling: ' + M + '0.25 cm of water a year, 95% range ' + M + '0.49 to 0.');
 eq(blockTip(Object.assign({}, edge, { v: 'no_clear_change' }), G, false)[1], 'No clear change: ' + M + '0.25 cm of water a year, 95% range ' + M + '0.49 to 0, which includes no change.');
 eq(gaugeTip(Object.assign({}, d[3], { hi: 0 }), false)[1], 'Falling: ' + M + '14 mm a year, 95% range ' + M + '14 to 0.');
@@ -157,7 +169,7 @@ var W = JSON.parse(process.env.WATER), wb = graceBlocks(W.file);
 eq(wb.length, W.cards.length);
 W.cards.forEach(function (c, i) {
   var b = wb[i], nc = c.verdict === 'no_clear_change' && c.h.low <= 0 && c.h.high >= 0 ? ', which includes no change' : '';
-  eq([b.v, wide(b.lo, b.hi)], [c.verdict, false]);
+  eq(b.v, c.verdict);
   eq(blockTip(b, W.file, false)[1], VERDICT[c.verdict] + ': ' + c.h.text + ', 95% range ' + c.h.range_text.replace(' cm of water a year', '') + nc + '.');
   var r = sp(TDX.rate({ headline_rate: c.h, slope_per_decade: c.pd[0], ci_low: c.pd[1], ci_high: c.pd[2] }, true));
   eq(blockTip(b, W.file, true)[1], VERDICT[c.verdict] + ': ' + r.text + ', 95% range ' + r.range.replace(' in of water a year', '') + nc + '.');
@@ -270,10 +282,9 @@ def water_file():
     the point answer's headline_rate at each block centre (local GRACE file, no network)."""
     spots = ((2900, 7739), (4000, -7527), (1300, 8051), (0, 0))  # Delhi, Princeton, Chennai, one with no data
     rs = [tools.detect_trend("water_storage", la / 100, lo / 100) for la, lo in spots[:3]]
-    i32 = lambda xs: base64.b64encode(struct.pack("<%di" % len(xs), *xs)).decode()
     dig = lambda k: [round(r[k] * 10**4) for r in rs] + [-2147483648]  # 4-decimal digits a decade
     sig = {"no_clear_change": 0, "rising": 1, "falling": 2}
-    f = {"v": 1, "enc": "i32le-b64", "scale": 0.00001, "fill": -2147483648, "n": 4, "lat_lon_scale": 0.01,
+    f = {"v": 2, "enc": ENC, "scale": 0.00001, "fill": -2147483648, "n": 4, "lat_lon_scale": 0.01,
          "lat": i16([la for la, _ in spots]), "lon": i16([lo for _, lo in spots]), "area": i16([12406, 12392, 12000, 100]),
          "slope": i32(dig("slope_per_decade")), "lo": i32(dig("ci_low")), "hi": i32(dig("ci_high")),
          "sig": u8([sig[r["verdict"]] for r in rs] + [255]), "start": "2002-04", "end": "2026-06", "footprint_km": 444}
@@ -290,18 +301,16 @@ def test_map_pure_logic():
 
 
 SWEEP = r"""
-var E = JSON.parse(process.env.E), bad = { mm: 0, in: 0 }, wides = [];
+var E = JSON.parse(process.env.E), bad = { mm: 0, in: 0 };
 E.forEach(function (c) {
   var t = { headline_rate: c.h, slope_per_decade: c.pd[0], ci_low: c.pd[1], ci_high: c.pd[2] };
   [false, true].forEach(function (im) {
     var r = TDX.rate(t, im), u = im ? ' in a year' : ' mm a year', cut = function (s) { return s.replace(/ /g, ' ').slice(0, -u.length); };
     if (cut(r.text) !== num(c.v, im, 'mm') || cut(r.range) !== rng(c.lo, c.hi, im, 'mm')) bad[im ? 'in' : 'mm']++;
   });
-  if (wide(c.lo, c.hi)) wides.push(c.name);
 });
 var f = JSON.parse(require('fs').readFileSync(process.env.W, 'utf8')), bs = graceBlocks(f);
-console.log(JSON.stringify({ n: E.length, bad: bad, wides: wides.sort(), blocks: bs && bs.length,
-  wideBlocks: bs && bs.filter(function (b) { return wide(b.lo, b.hi); }).length }));
+console.log(JSON.stringify({ n: E.length, bad: bad, blocks: bs && bs.length }));
 """
 
 
@@ -309,7 +318,7 @@ console.log(JSON.stringify({ n: E.length, bad: bad, wides: wides.sort(), blocks:
 def test_every_gauge_hover_equals_its_card_and_the_real_files_read():
     """QA B2: over every dot in web/data/gauge-trends.json (both "Measured by" lists), the hover's rate and 95% range equal
     the card's in mm (the server's headline_rate text) and in inches (the card's conversion of slope_per_decade, ci_low and
-    ci_high). "Very wide" only for the three earthquake-step gauges. The real grace-trends.json reads (its enc is per field)."""
+    ci_high), the earthquake-step gauges' wide ranges included. The real grace-trends.json reads (its enc is per field)."""
     f = json.loads((ROOT / "web" / "data" / "gauge-trends.json").read_text(encoding="utf-8"))
     ents = [g for g in f["gauges"] if g.get("slope") is not None]
     ents += [dict(s, **s["psmsl_mode"]) for s in f["skipped"] if s.get("psmsl_mode")]
@@ -323,8 +332,7 @@ def test_every_gauge_hover_equals_its_card_and_the_real_files_read():
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
     assert out["n"] == len(ents) > 600 and out["bad"] == {"mm": 0, "in": 0}, out["bad"]
-    assert out["wides"] == ["Ayukawa", "Ofunato II", "Soma"]
-    assert out["blocks"] > 11000 and 0 < out["wideBlocks"] < 20  # the Japan 2011 and Chile 2010 blocks
+    assert out["blocks"] > 11000
 
 
 def test_pins_are_ink_teardrops_with_a_key_line():
