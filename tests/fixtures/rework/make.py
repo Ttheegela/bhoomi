@@ -4,6 +4,11 @@ The monthly values are synthetic (a seeded random walk around a seasonal cycle),
 the stats lane's own code, as /api/series and /api/trend build it (earthtrends/agent/tools.py): the baseline, the
 anomalies and compute_trend, so the fixtures follow the contract as it changes. Nothing here calls a provider (the
 world reference series are snapshot files in the repo). Run: uv run python tests/fixtures/rework/make.py
+
+Records for this place (PR4a): a case's `others` are the other records of the same place, made from the same seeded
+weather with their own trend, noise and gaps (or the error their fetch would raise), and set beside the main record by
+the stats lane's records.compare, as detect_trend does. Cases without `others` carry the six fields null, as
+/api/trend?compare=false does.
 """
 import json
 import math
@@ -12,7 +17,8 @@ from pathlib import Path
 import numpy as np
 
 from earthtrends.data.catalog import CATALOG
-from earthtrends.stats import compute_trend
+from earthtrends.data.ghcn import NoStation, record_url
+from earthtrends.stats import compute_trend, records
 from earthtrends.stats.baseline import anomaly, baseline
 
 HERE = Path(__file__).parent
@@ -34,13 +40,37 @@ def coops(sid, name):
             "cadence": "monthly", "deseasoned_upstream": False}
 
 
+def era5(param, lat, lon, method):
+    return {"id": "era5", "name": "ERA5 reanalysis via Open-Meteo archive", "url": "https://open-meteo.com/",
+            "dataset_id": "doi:10.24381/cds.adbb2d47", "version": None,
+            "record_url": f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&daily={param}"
+                          "&models=era5&timezone=auto&start_date=1981-01-01&end_date=2025-12-31",
+            "retrieved": "2026-11-22", "method": method, "cadence": "monthly", "deseasoned_upstream": False,
+            "attribution": "Contains modified Copernicus Climate Change Service information 2026."}
+
+
+def ghcn(sid, method):
+    return {"id": "ghcn", "name": "NOAA NCEI GHCN-Daily", "url": "https://www.ncei.noaa.gov/",
+            "dataset_id": "doi:10.7289/V5D21VHZ", "version": "Version 3",
+            "record_url": f"https://www.ncei.noaa.gov/cdo-web/datasets/GHCND/stations/GHCND:{sid}/detail",
+            "retrieved": "2026-11-22", "method": method, "cadence": "monthly", "deseasoned_upstream": False}
+
+
+ERA5_NOTES = ["Grid cell about 25 km wide, not a single station."]
+QC = "leaving out readings that failed NOAA's quality checks"
 T2M = "Monthly mean of the daily 2 m air temperature for the MERRA-2 grid cell (about 50 km)."
 GRID = ["Grid cell about 50 km wide, not a single station."]
 CASES = [
     dict(file="princeton_air_temp", variable="air_temp", units="degC", seed=7,
          place={"name": "Princeton", "lat": 40.35, "lon": -74.66}, source=power("T2M", 40.35, -74.66, T2M),
          span=(1981, 1, 2025, 12), slope=0.031, sd=1.1, phi=0.3, notes=GRID,
-         normals=[-0.4, 0.8, 5.0, 11.1, 16.6, 21.7, 24.5, 23.6, 19.7, 13.3, 7.6, 2.1]),
+         normals=[-0.4, 0.8, 5.0, 11.1, 16.6, 21.7, 24.5, 23.6, 19.7, 13.3, 7.6, 2.1],
+         others=[dict(id="era5", seed=101, slope=0.029, jitter=0.25, offset=-0.4, notes=ERA5_NOTES,
+                      source=era5("temperature_2m_mean", 40.35, -74.66, "Open-Meteo's daily mean of ERA5 hourly 2 m air temperature for the grid cell (about 25 km), averaged by us into months.")),
+                 dict(id="ghcn", seed=102, slope=0.033, jitter=0.5, offset=-0.6, missing=0.02,
+                      place={"name": "Hightstown 2 W, Nj Us", "lat": 40.26639, "lon": -74.56417, "id": "USC00283951"},
+                      notes=["Weather station Hightstown 2 W, Nj Us (USC00283951), 12 km from the point you asked about."],
+                      source=ghcn("USC00283951", f"Each month is the mean of the station's daily (highest + lowest) / 2 temperatures in NOAA's GHCN-Daily, {QC}."))]),
     dict(file="battery_sea_level", variable="sea_level", units="mm", seed=5,
          place={"name": "The Battery", "lat": 40.7006, "lon": -74.0142}, source=coops("8518750", "The Battery"),
          span=(1920, 1, 2025, 10), slope=3.0, sd=55, phi=0.55, prelim=2, missing=0.004,
@@ -50,12 +80,23 @@ CASES = [
          place={"name": "Chennai", "lat": 13.08, "lon": 80.27}, notes=GRID,
          source=power("PRECTOTCORR", 13.08, 80.27, "Monthly mean of the daily corrected rainfall for the MERRA-2 grid cell (about 50 km), in mm a day."),
          span=(1981, 1, 2025, 12), slope=0.75, sd=0.45, phi=0.1,
-         normals=[0.8, 0.3, 0.2, 0.4, 1.3, 1.6, 2.9, 3.9, 4.2, 8.7, 11.8, 4.8]),
+         normals=[0.8, 0.3, 0.2, 0.4, 1.3, 1.6, 2.9, 3.9, 4.2, 8.7, 11.8, 4.8],
+         others=[dict(id="era5", seed=103, slope=0.9, jitter=0.1, offset=0.0, notes=ERA5_NOTES,
+                      source=era5("precipitation_sum", 13.08, 80.27, "Open-Meteo's daily total of ERA5 hourly precipitation for the grid cell (about 25 km), averaged by us into mm a day for each month.")),
+                 dict(id="ghcn", status="short", error="The nearest weather station, Madras Minambakkam, IN (13 km away), does not have 30 years of rainfall data since 1981, and no other station within 25 km does either.",
+                      station={"id": "IN020040900", "name": "Madras Minambakkam, IN", "lat": 12.994, "lon": 80.181,
+                               "km": 12.8, "record_url": record_url("IN020040900")})]),
     dict(file="delhi_hottest_day", variable="air_temp_max", units="degC", seed=11,
          place={"name": "Delhi", "lat": 28.58, "lon": 77.21}, notes=GRID,
          source=power("T2M_MAX", 28.58, 77.21, "The highest daily maximum 2 m air temperature of each month for the MERRA-2 grid cell (about 50 km)."),
          span=(1981, 1, 2025, 12), slope=0.024, sd=0.9, phi=0.2,
-         normals=[24.1, 28.2, 34.0, 40.1, 43.2, 42.6, 37.4, 35.2, 35.1, 34.2, 30.1, 25.3]),
+         normals=[24.1, 28.2, 34.0, 40.1, 43.2, 42.6, 37.4, 35.2, 35.1, 34.2, 30.1, 25.3],
+         others=[dict(id="era5", seed=104, slope=0.0, jitter=0.3, offset=0.6, notes=ERA5_NOTES,
+                      source=era5("temperature_2m_max", 28.58, 77.21, "Open-Meteo's daily maximum of ERA5 hourly 2 m air temperature for the grid cell (about 25 km); each month is its hottest day.")),
+                 dict(id="ghcn", seed=105, slope=0.045, jitter=0.6, offset=-0.3, missing=0.11,
+                      place={"name": "New Delhi Safdarjun, IN", "lat": 28.583, "lon": 77.2, "id": "IN022021900"},
+                      notes=["Weather station New Delhi Safdarjun, IN (IN022021900), 1 km from the point you asked about."],
+                      source=ghcn("IN022021900", f"Each month is the highest of the station's daily maximum temperatures in NOAA's GHCN-Daily, {QC}."))]),
     dict(file="lewes_sea_level_short", variable="sea_level", units="mm", seed=13,
          place={"name": "Lewes", "lat": 38.7828, "lon": -75.1192}, source=coops("8557380", "Lewes"),
          span=(1999, 1, 2025, 10), slope=5.4, sd=45, phi=0.5, prelim=2,
@@ -95,6 +136,18 @@ CASES = [
          span=(1948, 1, 2022, 12), slope=5.1, sd=60, phi=0.5, missing=0.005, gaps=[(1995, 1, 2001, 12), (2006, 1, 2008, 12)],
          notes=["Tide gauge DIAMOND HARBOUR (543), 40 km from the point you asked about."],
          normals=[6900, 6880, 6920, 6990, 7080, 7180, 7300, 7360, 7340, 7250, 7060, 6950]),
+    # PR4a: the records agree (no clear change) while NASA POWER drifts drier than the other two (design 12 §13)
+    dict(file="sydney_rain_drift", variable="precip", units="mm/day", seed=37, rain=True,
+         place={"name": "Sydney", "lat": -33.87, "lon": 151.21}, notes=GRID,
+         source=power("PRECTOTCORR", -33.87, 151.21, "Monthly mean of the daily corrected rainfall for the MERRA-2 grid cell (about 50 km), in mm a day."),
+         span=(1981, 1, 2025, 12), slope=-0.54, sd=0.6, phi=0.3,
+         normals=[3.3, 3.9, 4.2, 4.1, 3.3, 4.0, 3.1, 2.6, 2.3, 2.5, 2.8, 2.5],
+         others=[dict(id="era5", seed=106, slope=0.04, jitter=0.05, offset=0.0, notes=ERA5_NOTES,
+                      source=era5("precipitation_sum", -33.87, 151.21, "Open-Meteo's daily total of ERA5 hourly precipitation for the grid cell (about 25 km), averaged by us into mm a day for each month.")),
+                 dict(id="ghcn", seed=107, slope=0.29, jitter=0.1, offset=0.0, missing=0.03,
+                      place={"name": "Sydney Botanic Gardens, AS", "lat": -33.8662, "lon": 151.216, "id": "ASN00066006"},
+                      notes=["Weather station Sydney Botanic Gardens, AS (ASN00066006), 1 km from the point you asked about."],
+                      source=ghcn("ASN00066006", f"Each month is the mean of the station's daily precipitation totals in NOAA's GHCN-Daily, in mm a day, {QC}."))]),
     # QA B3: a long record that ends under 20 years after 1993, so there is no world figure (like Mumbai)
     dict(file="mumbai_sea_level_no_world", variable="sea_level", units="mm", seed=31,
          place={"name": "MUMBAI (BOMBAY)", "lat": 18.9167, "lon": 72.8333},
@@ -135,12 +188,44 @@ def series_for(c):
             "flags": [None] * (n - prelim) + ["preliminary"] * prelim}
 
 
+def other_for(c, o):
+    """Another record of the case's place: the same weather (the case's seed), its own trend, offset, noise and gaps;
+    or, with `error`, what the station lane raises (NoStation, with the nearest station)."""
+    if "error" in o:
+        return NoStation(o["error"], o["status"], o["station"])
+    s = series_for({**c, "slope": o["slope"], "missing": 0, "gaps": [], "prelim": 0})
+    rng = np.random.default_rng(o["seed"])
+    vals = []
+    for v in s["values"]:
+        e = o["jitter"] * rng.normal()
+        v = None if v is None else max(0.0, v * (1 + e)) if c.get("rain") else v + o["offset"] + e
+        vals.append(None if rng.random() < o.get("missing", 0) or v is None else round(v, 2))
+    s = {**s, "values": vals, "source": o["source"], "notes": o["notes"], "place": o.get("place", c["place"])}
+    return s, s, baseline(s)
+
+
+def trend_for(c, s, base):
+    """compute_trend, plus main_note and the six PR4a fields as detect_trend sets them, before meaning and guidance."""
+    r = compute_trend(s, base=base)
+    extra = dict.fromkeys(("comparisons", "comparisons_window", "disagree", "drift", "thin_note", "single_note"))
+    if c.get("others"):
+        extra = records.compare(c["variable"], [(s["source"]["id"], (s, s, base))] +
+                                [(o["id"], other_for(c, o)) for o in c["others"]], c["place"]["lat"], c["place"]["lon"])
+    tail = {k: r.pop(k) for k in ("meaning", "guidance")}
+    return {**r, "main_note": None, **extra, **tail}
+
+
 if __name__ == "__main__":
     for c in CASES:
         s = series_for(c)
         base = baseline(s)
-        d = {"series": {**s, "anomaly": anomaly(s, base)}, "trend": compute_trend(s, base=base)}
+        d = {"series": {**s, "anomaly": anomaly(s, base)}, "trend": trend_for(c, s, base)}
         (HERE / f"{c['file']}.json").write_text(json.dumps(d, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
         t = d["trend"]
         print(c["file"], t["verdict"], t["baseline"]["method"], t["headline_rate"]["text"] if t["headline_rate"] else None, t["guidance"]["fact"])
+        if t["comparisons"]:
+            print("   ", [(x["label"], x["status"], x["verdict"], x["headline_rate"] and x["headline_rate"]["text"])
+                          for x in t["comparisons"]],
+                  t["disagree"] and (t["disagree"]["line"], [x["id"] for x in t["disagree"]["reasons"]]),
+                  t["drift"] and (t["drift"]["text"], t["drift"]["pairs"]))
     (HERE / "variables.json").write_text(json.dumps(CATALOG, ensure_ascii=False) + "\n", encoding="utf-8")

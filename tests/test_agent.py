@@ -366,6 +366,7 @@ def three_calls():
     return [call(arguments={**DELHI, "source": s}, id=s) for s in ("power", "era5", "ghcn")]
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_three_sources_agree(fake, monkeypatch):
     by_source(monkeypatch, {"power": "rising", "era5": "rising", "ghcn": "rising"})
     fake.script = [step(tool_calls=three_calls()), step("All three agree: rising.", cost=0.002)]
@@ -398,6 +399,7 @@ def test_multi_source_over_180_retried_with_its_own_numbers(fake, monkeypatch):
     assert loop.RETRY_LONG.format(limit=180, target=150) in fake.started[1]
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_one_source_errors_two_answer(fake, monkeypatch):
     by_source(monkeypatch, {"power": "rising", "era5": "rising"}, fail={"ghcn"})
     fake.script = [step(tool_calls=three_calls()), step(words(150))]
@@ -633,6 +635,7 @@ def test_note_asks_for_the_link_without_a_sentence():
                                "on its caveats. Write [AGREEING SOURCES] where the agreeing sources belong.")
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_later_disagreeing_source_brings_back_earlier_numbers(fake, monkeypatch):
     period = {"start": "1981-01", "end": "2025-12"}
     era5 = {**TREND, "variable": "air_temp_max", "verdict": "rising", "slope_per_decade": 0.3187, "ci_low": 0.1234,
@@ -710,6 +713,7 @@ ERA5_SENT, GHCN_SENT = f"ERA5 reanalysis via Open-Meteo archive agrees{TREND_FIG
     ("Station data (NOAA NCEI GHCN-Daily agrees.)", DELHI_CALLS, "{E} {G} {m} {L}"),
     (f"As a check, {NY_SENT} It is 1 km away.", NY_CALLS, "{m} {N} {L}"),
 ])
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_copy_inside_a_model_sentence_stays(model, calls, want):
     links = DELHI_LINKS if calls is DELHI_CALLS else NY_SOURCES
     # the model's words are intact; the code's sentences are added next to them
@@ -1055,7 +1059,7 @@ def test_unnamed_wrong_range_takes_the_default_source(fake, monkeypatch):
     three_periods(monkeypatch)
     text = DISAGREE_TEXT.format(end="July 2025").replace("The sources disagree.", "The sources disagree, 1985 to 2020.")
     fake.script = [step(tool_calls=three_calls()), step(text), step(text)]
-    want = text.replace("1985 to 2020", "January 1981 to December 2025")  # POWER is first in the catalog
+    want = text.replace("1985 to 2020", "January 1940 to December 2025")  # ERA5 is first in the catalog (PR4a)
     assert loop.ask("q", model="fake:m")["answer"] == want
 
 
@@ -2088,12 +2092,12 @@ INLAND_DELHI = {"variable": "sea_level", "lat": 28.61, "lon": 77.21}
     (INLAND_DELHI, [coops_src, psmsl_src]),  # sea level, no source: the default and its automatic fallback
     ({**INLAND_DELHI, "source": None}, [coops_src, psmsl_src]),  # None is left out too
     ({**INLAND_DELHI, "source": ""}, [coops_src]),  # "" is not left out: the data layer uses the default only
-    (DELHI, [loop.power]),  # no source: the variable's default
+    (DELHI, [loop.era5]),  # no source: the variable's default (ERA5 for the hottest day since PR4a)
 ])
 def test_failed_call_carries_the_sources_it_tried(arguments, mods):
     view = loop.for_model([failed_call(arguments)])[0]
     assert view["sources"] == tried(*mods)
-    if loop.power not in mods:  # these names and addresses carry no digit (NASA POWER's "MERRA-2" does)
+    if not {loop.power, loop.era5} & set(mods):  # these names and addresses carry no digit ("MERRA-2" and "ERA5" do)
         assert not any(ch.isnumeric() for ch in json.dumps({k: view[k] for k in ("error", "sources")}))
 
 

@@ -15,11 +15,8 @@ const SOURCES = {
   // Used only when /api/variables lists it (the footer and the pickers follow the catalog).
   grace: { name: 'NASA GSFC GRACE and GRACE-FO mascons', url: 'https://earth.gsfc.nasa.gov/geo/data/grace-mascons' },
 };
-// One plain-words line under the source control (grid sizes as in the catalog's resolution text).
+// One plain-words line under "Measured by" (sea level, water storage); "Main record" takes its help from TDX.recHelp.
 const SOURCE_HELP = {
-  power: 'A NASA record of past weather on a grid about 50 km wide.',
-  era5: 'A European record of past weather on a grid about 25 km wide.',
-  ghcn: 'Readings from the nearest weather station.',
   coops: 'Readings from the nearest NOAA tide gauge (US coasts).',
   psmsl: 'Readings from the nearest tide gauge in a worldwide collection.',
   grace: 'Satellite measurements of water stored on land, averaged over an area about 400 km wide.',
@@ -189,18 +186,27 @@ function dropErrors(win, key) {
   if (!e) return;
   e.pins.forEach((p) => { const k = resKey(win, p); if (results[k] && results[k].status === 'error' && !(key && results[k].none) && (!key || pinKeyOf(p.lat, p.lon) === key)) delete results[k]; });
 }
+// The card's first call leaves the other records out (design 12 §2): they come in a second call once the card is drawn.
+const noCompare = (params) => (window.TDX.compared(params.variable) ? Object.assign({}, params, { compare: 'false' }) : params);
 function enqueue(win, p) {
   const k = resKey(win, p);
   if (results[k]) return;
-  results[k] = { status: 'loading', trend: null, series: null, error: null, t0: Date.now() };
-  queue.push({ win, p, k, params: Object.assign({ variable: win, lat: p.lat, lon: p.lon }, sourceFor(win) ? { source: sourceFor(win) } : {}) });
+  const params = Object.assign({ variable: win, lat: p.lat, lon: p.lon }, sourceFor(win) ? { source: sourceFor(win) } : {});
+  results[k] = { status: 'loading', trend: null, series: null, error: null, t0: Date.now(), params };
+  queue.push({ win, p, k, params });
   pump();
 }
 function pump() {
   while (flight < MAX_FLIGHT && queue.length) {
     const job = queue.shift();
+    if (job.others) { // the other records (compare), counted in MAX_FLIGHT like a pin
+      if (results[job.k] !== job.res) continue; // removed or asked again meanwhile
+      flight++;
+      api('/api/trend', job.res.params).then((r) => { flight--; othersLanded(job, r); pump(); });
+      continue;
+    }
     flight++;
-    Promise.all([api('/api/series', job.params), api('/api/trend', job.params)]).then(([sr, tr]) => {
+    Promise.all([api('/api/series', job.params), api('/api/trend', noCompare(job.params))]).then(([sr, tr]) => {
       const res = results[job.k];
       if (!res) { flight--; pump(); return; }
       // too many requests: try once more by itself after Retry-After seconds (5 if missing, 30 at most); "Checking…" meanwhile
@@ -212,17 +218,57 @@ function pump() {
         pump();
         return;
       }
-      const s = sr.ok ? sr.body : null;
-      const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
-      if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); res.none = sr.status === 400; } // none: a real "no record here", not asked again on every click
-      else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; res.none = true; }
-      else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; res.none = tr.status === 400; }
-      else { res.status = 'ok'; res.series = s; res.trend = tr.body; }
-      flight--;
-      landed(job.win, job.p, res);
-      pump();
+      // The record the card's answer used: when ERA5 can't be read the trend falls back to the next record (main_note) and
+      // the series doesn't, so the series is asked again for that record before anything fails; the records call follows it
+      const tid = tr.ok && tr.body && tr.body.source ? tr.body.source.id : null, sid = sr.ok && sr.body && sr.body.source ? sr.body.source.id : null;
+      if (tid) res.params = Object.assign({}, job.params, { source: tid }); // pinned on the stored answer
+      (tid && (tr.body.main_note || sid !== tid) ? api('/api/series', res.params) : Promise.resolve(sr)).then((sr2) => cardLanded(job, res, sr2, tr));
     });
   }
+}
+function cardLanded(job, res, sr, tr) {
+  if (results[job.k] !== res) { flight--; pump(); return; } // removed meanwhile
+  const s = sr.ok ? sr.body : null;
+  const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
+  if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); res.none = sr.status === 400; } // none: a real "no record here", not asked again on every click
+  else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; res.none = true; }
+  else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; res.none = tr.status === 400; }
+  else { res.status = 'ok'; res.series = s; res.trend = tr.body; }
+  flight--;
+  landed(job.win, job.p, res);
+  pump();
+}
+// The other records for this place (design 12 §2, §5): the same /api/trend with them, once the card is drawn (the main
+// record is cached by then), and only for the pin on screen: every call reads ERA5, and Open-Meteo's free allowance is
+// small. Only their fields go into the answer, in place, so the chart is never redrawn; kept there, so they are asked once.
+function compare(win, p, k) {
+  const res = results[k];
+  if (!res || res.status !== 'ok') return;
+  window.TDX.mergeOthers(res.trend, null); // asked again: back to "Reading the other records…"
+  Object.assign(res, { cmp: 'loading', cmpErr: null, c0: Date.now() });
+  queue.unshift({ others: true, win, p, k, res }); // the pin on screen goes before the other pins' cards
+  TD.announce('Loading the other records…');
+  pump();
+}
+// the selected pin's card is drawn and its other records were never asked for: ask now
+function askOthers() {
+  const e = store[curWin], p = e && e.pins.find((q) => pinKeyOf(q.lat, q.lon) === e.selected);
+  const k = p && resKey(curWin, p), res = k && results[k];
+  if (window.TDX.compared(curWin) && res && res.status === 'ok' && res.cmp === undefined) compare(curWin, p, k);
+}
+function othersLanded(job, r) {
+  const res = job.res;
+  if (results[job.k] !== res) return;
+  if (r.ok && r.body) { window.TDX.mergeOthers(res.trend, r.body); res.cmp = 'ok'; }
+  else { res.cmp = 'error'; res.cmpErr = r.status === 429 ? plainError(r) : "We couldn't read the other records just now."; }
+  const t = res.trend, said = res.cmp === 'ok' && [t.thin_note, (t.disagree && t.disagree.line) || t.single_note].filter(Boolean).join(' ');
+  if (othLanded(job.win, job.p, job.k)) TD.announce(res.cmp === 'ok' ? said || 'The other records have loaded.' : res.cmpErr);
+}
+// only the selected pin shows its other records; true when it was redrawn
+function othLanded(win, p, k) {
+  if (win !== curWin || pinKeyOf(p.lat, p.lon) !== store[win].selected || resKey(win, p) !== k) return false;
+  refreshOth(); renderDetail(); renderFoot(); syncTimer();
+  return true;
 }
 function ensureLoaded(win) {
   const e = store[win];
@@ -237,7 +283,7 @@ function landed(win, p, res) {
   const e = store[win];
   if (pinKeyOf(p.lat, p.lon) === e.selected && res.status === 'ok') {
     const c = window.TDX.card(res.trend, imperial());
-    TD.announce(`${p.label}: ${c.fact || c.word}`);
+    TD.announce(`${p.label}: ${c.fact || c.word}${res.cmp === 'loading' ? ' Loading the other records…' : ''}`);
   }
 }
 
@@ -248,7 +294,8 @@ function pinList(win) {
   if (!e) return [];
   return e.pins.map((p) => {
     const key = pinKeyOf(p.lat, p.lon), r = results[resKey(win, p)] || { status: 'loading', trend: null, series: null, error: null };
-    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, none: !!r.none, trend: r.trend, series: r.series, link: !!p.link, started: r.t0 || 0 };
+    return { key, label: p.label, lat: p.lat, lon: p.lon, slot: p.slot, selected: key === e.selected, status: r.status, error: r.error, none: !!r.none, trend: r.trend, series: r.series, link: !!p.link, started: r.t0 || 0,
+      cmp: r.cmp, cmpErr: r.cmpErr, cstarted: r.c0 || 0 };
   });
 }
 function selectedPin(win) { return pinList(win).find((p) => p.selected) || null; }
@@ -267,10 +314,10 @@ function renderSrcNote() {
 let loadTimer = 0;
 const secsSince = (p) => Math.max(0, Math.floor((Date.now() - p.started) / 1000));
 // the usual time for the window's source: weather stations send a long daily record
-function usualSecs() { const v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]); return sid === 'ghcn' ? 20 : 5; }
+function usualSecs() { const v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]); return sid === 'ghcn' ? 60 : 5; }
 function loadingLine(p) {
   const n = secsSince(p), v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]);
-  if (sid === 'ghcn') return `Reading daily weather-station records from NOAA since 1981. ${n > 20 ? 'This is taking longer than usual; still reading.' : 'This usually takes 5 to 20 seconds for each place.'} ${n} s so far.`;
+  if (sid === 'ghcn') return `Reading daily weather-station records from NOAA since 1981. ${n > 120 ? 'This is taking longer than usual; still reading.' : 'This can take a minute or more the first time.'} ${n} s so far.`;
   if (n > 15) return `This is taking longer than usual; still checking. ${n} s so far.`;
   return `Checking ${SOURCES[sid] ? SOURCES[sid].name : 'the records'}. This usually takes about ${usualSecs()} seconds.${n >= 3 ? ` ${n} s so far.` : ''}`;
 }
@@ -280,12 +327,13 @@ function tickLoading() {
     const p = pins.find((x) => x.key === s.getAttribute('data-key'));
     if (p && p.status === 'loading') s.textContent = pinLine(p);
   });
-  const sel = pins.find((p) => p.selected), prog = $('rec-prog');
+  const sel = pins.find((p) => p.selected), prog = $('rec-prog'), st = $('rec-oth-n');
   if (sel && sel.status === 'loading' && prog) { prog.value = Math.min(secsSince(sel), usualSecs() - 0.5); $('rec-load-text').textContent = loadingLine(sel); }
+  if (sel && sel.cmp === 'loading' && st) st.textContent = othSecs(sel);
   syncTimer();
 }
 function syncTimer() {
-  const any = curWin !== 'settings' && pinList(curWin).some((p) => p.status === 'loading');
+  const any = curWin !== 'settings' && pinList(curWin).some((p) => p.status === 'loading' || (p.selected && p.cmp === 'loading'));
   if (any && !loadTimer) loadTimer = setInterval(tickLoading, 1000);
   else if (!any && loadTimer) { clearInterval(loadTimer); loadTimer = 0; }
 }
@@ -302,7 +350,8 @@ function keepTop(box, draw, scrollBy) {
   if (d) scrollBy(d);
 }
 function changed() {
-  const draw = () => { renderSrcNote(); renderSidebar(); renderRec(); renderDetail(); renderFoot(); };
+  if (curWin !== 'settings') askOthers(); // a pin selected or shown: its other records, once
+  const draw = () => { renderSrcNote(); renderSourceSeg(); renderSidebar(); renderRec(); renderDetail(); renderFoot(); };
   if (fromMap) keepTop($('map-slot'), draw, (d) => window.scrollBy({ top: d, behavior: 'instant' }));
   else draw();
   syncTimer();
@@ -349,14 +398,25 @@ function renderControls() {
   buildSeg($('seg-units'), [{ value: 'metric', label: w.units[0] }, { value: 'imperial', label: w.units[1] }], prefs.units, (u) => window.TDPrefs.set({ units: u }));
   const v = varById(curWin), many = !!v && Array.isArray(v.sources) && v.sources.length > 1;
   $('src-field').hidden = !many;
-  if (many) {
-    const cur = sourceFor(curWin) || v.sources[0];
-    buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, pickSource);
-    $('src-help').textContent = SOURCE_HELP[cur] || '';
-  }
+  if (many) renderSourceSeg(true);
+}
+// The highlighted record: the visitor's choice, else the catalog's first (design 12 §6: ERA5 for temperature and hottest
+// day, NASA POWER for rain), except when the selected place's answer used another one (the main record fell back because
+// ERA5 couldn't be read). That is per answer: the choice itself, and so every other place, is left as it is.
+let segShown = '';
+function renderSourceSeg(force) {
+  const v = varById(curWin);
+  if (!v || !Array.isArray(v.sources) || v.sources.length < 2) return;
+  const pin = selectedPin(curWin), used = pin && pin.status === 'ok' && pin.trend && pin.trend.source ? pin.trend.source.id : null;
+  const cur = used && v.sources.includes(used) ? used : sourceFor(curWin) || v.sources[0];
+  if (!force && segShown === `${curWin}|${cur}`) return; // unchanged: the buttons, and focus on them, stay
+  segShown = `${curWin}|${cur}`;
+  $('src-lbl').textContent = window.TDX.compared(curWin) ? 'Main record' : 'Measured by';
+  buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, pickSource);
+  $('src-help').textContent = window.TDX.recHelp(curWin, cur) || SOURCE_HELP[cur] || '';
 }
 
-// Measure the current window with another source (the sidebar's "Measured by", or a button on the card).
+// Measure the current window with another source (the sidebar's "Main record" or "Measured by", or a button on the card).
 function pickSource(s) {
   const v = varById(curWin);
   if (!v || !Array.isArray(v.sources) || !v.sources.includes(s)) return;
@@ -390,6 +450,91 @@ function nextLine(items) {
   const ul = el('ul', {});
   items.forEach((x) => ul.append(el('li', {}, x.href ? el('a', { href: x.href, target: '_blank', rel: 'noopener' }, x.text) : x.text)));
   return el('div', { class: 'next' }, el('span', { class: 'nl' }, 'Where to look next:'), ' ', ul);
+}
+
+/* ---------- "Records for this place" on the card (web/design/12-two-sources.md sections 3 to 5, 12) ---------- */
+
+// the pending line: the other records in catalog order, and the seconds since their call went out
+function othWait(pin) { const v = varById(curWin); return window.TDX.recWait(v && v.sources, (pin.trend.source || {}).id); }
+const othSecs = (pin) => ` ${Math.max(0, Math.floor((Date.now() - pin.cstarted) / 1000))} s so far.`;
+function othModel(pin) {
+  return pin.status === 'ok' ? window.TDX.recBlock(pin.trend, { label: pin.label, imperial: imperial(), cmp: pin.cmp, err: pin.cmpErr, wait: pin.cmp === 'loading' ? othWait(pin) : '' }) : null;
+}
+// the line under the verdict: its confidence and years, then "Other records disagree ↓" when they do
+function confLine(conf, B) {
+  const s = el('span', {}, conf);
+  if (B && B.link) {
+    const a = el('a', { href: '#rec-oth' }, 'Other records disagree ↓');
+    a.addEventListener('click', (e) => { // never through the address: "#rec-oth" is not a window
+      e.preventDefault();
+      const h = $('rec-oth');
+      if (!h) return;
+      h.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      h.focus({ preventScroll: true });
+    });
+    s.append(' · ', a);
+  }
+  return s;
+}
+// the main record is thin, then fewer than two records counted (design 12 §5): the server's sentences under the verdict,
+// once the records land
+const oneNotes = (t) => [t.thin_note, t.single_note].filter((x) => typeof x === 'string' && x).map((x) => el('p', { class: 'one' }, x));
+// One row, and its note in a row under it; explicit roles, because Safari drops table semantics under the narrow card's
+// display: grid. A thin station (not counted when the records are compared) is muted.
+function othRow(r) {
+  const th = el('th', { scope: 'row', role: 'rowheader' }, r.href ? el('a', { href: r.href, target: '_blank', rel: 'noopener' }, `${r.label} ↗`) : r.label);
+  if (r.sub) th.append(el('span', { class: 'k' }, r.sub));
+  const cls = [r.main ? 'is-main' : '', r.thin ? 'thin' : '', r.note ? 'with-note' : ''].filter(Boolean).join(' ');
+  const tr = el('tr', cls ? { role: 'row', class: cls } : { role: 'row' }, th);
+  if (r.why !== undefined) tr.append(el('td', { role: 'cell', class: 'na', colspan: '3' }, r.why));
+  else {
+    const yrs = el('td', { role: 'cell', class: 'y' }, el('span', { class: 'yr' }, r.years));
+    if (r.miss) yrs.append(el('span', { class: 'k' }, r.miss));
+    tr.append(el('td', { role: 'cell', class: 'v' }, el('span', { class: 'sh', 'aria-hidden': 'true' }, r.shape), r.word),
+      el('td', { role: 'cell', class: 'r' }, r.rate, el('span', { class: 'pd' }, ' per decade')), yrs);
+  }
+  return r.note ? [tr, el('tr', { role: 'row', class: 'nt' }, el('td', { role: 'cell', colspan: '4' }, r.note))] : [tr];
+}
+function othRetry(text, pin) {
+  const b = el('button', { type: 'button', class: 'btn' }, text);
+  b.addEventListener('click', () => { const k = resKey(curWin, pin); compare(curWin, pin, k); othLanded(curWin, pin, k); });
+  return b;
+}
+function othBlock(B, pin) {
+  const box = el('div', { class: 'oth' }, el('h3', { id: 'rec-oth', tabindex: '-1' }, 'Records for this place'));
+  if (B.window) box.append(el('p', { class: 'win' }, B.window)); // "Same years for all: 1981 to 2025"
+  const tb = el('tbody', { role: 'rowgroup' });
+  B.rows.forEach((r) => tb.append(...othRow(r)));
+  const hr = el('tr', { role: 'row' });
+  ['Record', 'Trend', 'Rate per decade', 'Years'].forEach((c) => hr.append(el('th', { scope: 'col', role: 'columnheader' }, c)));
+  box.append(el('table', { role: 'table' }, el('caption', { class: 'sr-only' }, B.caption),
+    el('colgroup', {}, el('col', { class: 'c1' }), el('col', { class: 'c2' }), el('col', { class: 'c3' }), el('col', { class: 'c4' })),
+    el('thead', { role: 'rowgroup' }, hr), tb));
+  // the sentence is announced once through #td-live (compare, then landed or failed); the ticking seconds are hidden from screen readers
+  if (B.wait) box.append(el('p', { class: 'st', id: 'rec-oth-st' }, B.wait, el('span', { 'aria-hidden': 'true', id: 'rec-oth-n' }, othSecs(pin))));
+  if (B.fail) box.append(el('p', { class: 'st' }, B.fail), othRetry('Try again', pin));
+  if (B.retry) box.append(othRetry('Try the other records again', pin));
+  if (B.dis) {
+    const ul = el('ul', {});
+    B.dis.reasons.forEach((x) => ul.append(el('li', {}, x)));
+    box.append(el('p', { class: 'dh' }, B.dis.line), el('p', { class: 'dl' }, B.dis.lead), ul, el('p', { class: 'dn' }, B.dis.note));
+  }
+  (B.agree || []).forEach((x) => box.append(el('p', { class: 'agr' }, x)));
+  (B.limits || []).forEach((x) => box.append(el('p', { class: 'lim' }, x)));
+  return box;
+}
+// The other records landed (or are asked again): the block and the verdict line are redrawn in place, so focus stays
+// where it is; a removed retry button sends it to the block's heading (§5).
+function refreshOth() {
+  const box = $('rec'), old = box.querySelector('.oth'), pin = selectedPin(curWin), vs = box.querySelector('.verdict > span');
+  if (!old || !vs || !pin || pin.status !== 'ok') { renderRec(); return; }
+  const had = old.contains(document.activeElement) || vs.contains(document.activeElement), B = othModel(pin);
+  if (B) old.replaceWith(othBlock(B, pin)); else old.remove();
+  const vd = vs.parentNode;
+  vs.replaceWith(confLine(window.TDX.card(pin.trend, imperial()).conf, B));
+  box.querySelectorAll('.one').forEach((x) => x.remove());
+  vd.after(...oneNotes(pin.trend));
+  if (had && !box.contains(document.activeElement)) { const h = $('rec-oth'); if (h) h.focus({ preventScroll: true }); }
 }
 
 // A re-render removes whatever had focus in the card (a button that switched the source, a link): focus then goes to the
@@ -435,31 +580,21 @@ function drawRec(box) {
     return;
   }
 
-  const t = pin.trend, g = t.guidance || {}, X = window.TDX, C = X.card(t, imperial()), url = X.recordUrl(t.source);
+  const t = pin.trend, g = t.guidance || {}, X = window.TDX, C = X.card(t, imperial()), url = X.recordUrl(t.source), B = othModel(pin);
   const meta = el('p', { class: 'meta' }, url ? el('a', { href: url, target: '_blank', rel: 'noopener' }, `${X.srcText(t)} ↗`) : X.srcText(t));
   if (t.latest && t.latest.text) meta.append(' · ', el('span', { class: 'nw' }, t.latest.text)); // never split (QA N4)
-  box.append(el('div', { class: 'where' }, h2(pin.label), meta));
-  box.append(el('div', { class: 'verdict' }, el('b', {}, el('span', { class: 'shape', 'aria-hidden': 'true' }, C.shape), C.word), el('span', {}, C.conf)));
+  const pre = X.preMonths(pin.series);
+  if (pre) meta.append(' ', el('span', { class: 'nw' }, `(${pre.meta})`)); // ERA5T (design 12 §7)
+  // the main record fell back (ERA5 couldn't be read): the server's sentence, under the source line
+  box.append(el('div', { class: 'where' }, h2(pin.label), meta, typeof t.main_note === 'string' && t.main_note ? el('p', { class: 'mnote' }, t.main_note) : ''));
+  box.append(el('div', { class: 'verdict' }, el('b', {}, el('span', { class: 'shape', 'aria-hidden': 'true' }, C.shape), C.word), confLine(C.conf, B)));
+  box.append(...oneNotes(t));
   if (C.fact) box.append(el('p', { class: 'say' }, C.fact));
   if (C.old) return; // a cached answer from before the rework: the verdict only, until it is asked again
   if (C.world) { // the two rates, then the world figure's source
     const wl = el('p', { class: 'world' }, C.world.text);
     if (C.world.src) wl.append(' World figure: ', C.world.href ? el('a', { href: C.world.href, target: '_blank', rel: 'noopener' }, `${C.world.src}\u00a0↗`) : C.world.src);
     box.append(wl);
-  }
-  // NASA POWER's grid against the nearest weather station (QA B10): the line, the switch, and after it whether they
-  // disagree, from the POWER answer this page already has (the default source's result)
-  const v = varById(curWin), prev = results[`${curWin}||${pin.key}`];
-  const note = X.modelNote(t, prev && prev.status === 'ok' ? prev.trend : null);
-  if (note) {
-    const box2 = el('div', { class: note.strong ? 'model strong' : 'model' }, el('p', {}, note.line));
-    if (note.offer && v && Array.isArray(v.sources) && v.sources.includes(note.offer)) {
-      const b = el('button', { type: 'button', class: 'btn' }, 'Compare with the nearest weather station');
-      b.addEventListener('click', () => pickSource(note.offer));
-      box2.append(b);
-    }
-    box.append(box2);
-    if (note.next) box.append(el('div', { class: 'model' }, el('p', {}, note.next))); // a plain next step under the strong line
   }
   // R3: the chosen scenario's 2050 projection (design 11 §3; CMIP6 design 15 §2, rain's "of the usual yearly rain" small); without one, why there is none
   const r3 = C.r3f ? el('div', {}, el('p', { class: 'rl' }, C.r3f.label), el('p', { class: 'rv' }, C.r3f.value, C.r3f.per ? ' ' : '', C.r3f.per ? el('small', {}, C.r3f.per) : ''), el('p', { class: 'rs' }, C.r3f.line))
@@ -470,6 +605,7 @@ function drawRec(box) {
     C.r1 ? el('div', {}, el('p', { class: 'rl' }, C.r1.label), el('p', { class: 'rv' }, C.r1.value), el('p', { class: 'rs' }, C.r1.line)) : '',
     el('div', {}, el('p', { class: 'rl' }, C.r2.label), el('p', { class: 'rv' }, C.r2.value, C.r2.per ? ' ' : '', C.r2.per ? el('small', {}, C.r2.per) : ''), el('p', { class: 'rs' }, C.r2.line)),
     r3));
+  if (B) box.append(othBlock(B, pin));
   if (C.next.length) box.append(nextLine(C.next));
   const how = el('button', { type: 'button', class: 'btn', id: 'how-open' }, 'How we calculated this ↓');
   how.addEventListener('click', goHow);
@@ -490,12 +626,16 @@ let shown = { trend: null, units: null };
 const loadStart = () => document.dispatchEvent(new CustomEvent('td:load-start', { detail: { id: 0, params: null, place: null, origin: 'window' } }));
 function renderDetail() {
   const pin = curWin === 'settings' ? null : selectedPin(curWin), units = window.TDPrefs.get().units;
-  const ctx = pin && { label: pin.label, name: nameOf(curWin), slug: winOf(curWin).slug, imperial: units === 'imperial' };
+  const ctx = pin && { label: pin.label, name: nameOf(curWin), slug: winOf(curWin).slug, imperial: units === 'imperial', cmp: pin.cmp, err: pin.cmpErr };
   if (pin && pin.status === 'ok') {
-    if (pin.trend === shown.trend && units === shown.units) return; // another pin landed: nothing here changed
+    if (pin.trend === shown.trend && units === shown.units) { // another pin landed: nothing here changed
+      // or this answer's other records did: they go into the same answer, so only the steps follow, never the chart
+      if (pin.cmp !== shown.cmp) { shown.cmp = pin.cmp; window.TDX.others(pin, ctx); }
+      return;
+    }
     const fresh = pin.trend !== shown.trend;
     if (fresh && shown.trend) loadStart();
-    shown = { trend: pin.trend, units };
+    shown = { trend: pin.trend, units, cmp: pin.cmp };
     window.TDX.show(pin, ctx, fresh);
     // Real or noise? (in step 5) waits for a finished answer
     if (fresh) document.dispatchEvent(new CustomEvent('td:load-end', { detail: compatDetail(pin) }));
@@ -528,19 +668,26 @@ function renderFoot() {
   const w = winOf(curWin);
   if (!w) return;
   const v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]);
-  const src = SOURCES[sid];
+  const src = SOURCES[sid], pin = selectedPin(curWin), t = pin && pin.status === 'ok' ? pin.trend : null;
   p.append('Data: ');
   if (src) srcLink(p, src, true); else p.append('public records');
+  // the other records on the card (design 12 §3), each by its own source
+  (t && Array.isArray(t.comparisons) ? t.comparisons : []).forEach((x) => {
+    const s = x && !x.main && x.available === true && SOURCES[(x.source || {}).id];
+    if (s) { p.append(' · '); srcLink(p, s, true); }
+  });
   // with an expert projection on the page, the foot names it too
-  const pin = selectedPin(curWin), pj = pin && pin.status === 'ok' ? window.TDX.projOf(pin.trend) : null, ps = pj && pj.source;
+  const pj = t ? window.TDX.projOf(t) : null, ps = pj && pj.source;
   if (ps && typeof ps.record_url === 'string' && ps.record_url.startsWith('https://')) {
     p.append('. Future: ', el('a', { href: ps.record_url, class: 'srclink' }, pj.windows ? 'IPCC AR6 Interactive Atlas, CMIP6 projections ↗' : 'IPCC AR6 sea level projections ↗'), ` (${ps.licence})`);
   }
   p.append(`. Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed against ${curWin === 'water_storage' ? "the provider's own reference period" : 'the 1995–2014 average'}).`);
-  // the Open-Meteo attribution travels with its data
+  const cop = t ? window.TDX.attribution(t) : ''; // ERA5 and the CMIP6 files are Copernicus products: once, as the server words it
+  if (cop) p.append(` ${cop}`);
+  // the Open-Meteo attribution travels with its data: on every tab that sets ERA5 beside the main record too (design 12 §15)
   const ul = $('footer-sources');
   let li = Array.prototype.find.call(ul.children, (x) => x.dataset.credit === 'era5');
-  if (sid === 'era5' && SOURCES.era5) {
+  if ((sid === 'era5' || (v && Array.isArray(v.sources) && v.sources.includes('era5'))) && SOURCES.era5) {
     if (!li) { li = el('li', {}); li.dataset.credit = 'era5'; ul.append(li); }
     clear(li);
     li.append(el('a', { href: SOURCES.era5.url, class: 'srclink' }, SOURCES.era5.credit), `, ${SOURCES.era5.dataset}, `, el('a', { href: SOURCES.era5.licence.url, class: 'srclink' }, SOURCES.era5.licence.name));
@@ -840,7 +987,7 @@ window.TD = {
   },
   // for "Real or noise?" (it was written for the old page)
   get state() { return compatState(); },
-  fetchTrend(params) { return api('/api/trend', params).then((r) => ({ ok: r.ok, status: r.status, body: r.body, retryAfter: r.retryAfter === undefined ? null : r.retryAfter })); },
+  fetchTrend(params) { return api('/api/trend', noCompare(params)).then((r) => ({ ok: r.ok, status: r.status, body: r.body, retryAfter: r.retryAfter === undefined ? null : r.retryAfter })); },
   loadPlace(spec) {
     spec = spec || {};
     return TD.addPlace({ lat: spec.lat, lon: spec.lon, label: spec.label }).then((r) => Object.assign({ ok: r.ok }, r));

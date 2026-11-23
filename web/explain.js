@@ -232,19 +232,86 @@
     return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, fact: factOf(t, imp),
       world: cardWorld(t, imp), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f, next: next, disc: str(g.disclaimer) };
   }
-  // The NASA POWER grid against the nearest weather station (QA B10). other: this place's POWER answer the page
-  // already has (or null); nothing is fetched for it.
-  // The grid size comes from explain.data.where ("a grid cell about 50 km wide").
-  function modelNote(t, other) {
-    var id = (t.source || {}).id, size = /\babout \d[\d,.]* km\b/.exec(str(((t.explain || {}).data || {}).where));
-    if (id === 'power' && (t.variable === 'air_temp' || t.variable === 'air_temp_max')) {
-      return { line: 'This comes from a weather model grid' + (size ? ' ' + size[0] + ' wide' : '') + '. A weather station nearby can tell a different story.', offer: 'ghcn' };
-    }
-    if (id !== 'ghcn' || !other || (other.source || {}).id !== 'power' || !other.verdict) return null;
-    if (other.verdict === t.verdict) return { line: 'The weather station and the model agree here.' };
-    return { line: 'The weather station and the model disagree here.', strong: true,
-      next: 'For the heat you feel day to day, the station is closer to the ground; the model covers a wider area.' };
+  /* Records for this place (web/design/12-two-sources.md): the main record and the others side by side. Agreement,
+     reasons and drift are the server's words (comparisons, disagree, drift); the page lays them out, never works them out. */
+  var COMPARED = { air_temp: 1, air_temp_max: 1, precip: 1 }; // the measurements with records side by side
+  var OTHERS = ['comparisons', 'comparisons_window', 'disagree', 'drift', 'thin_note', 'single_note']; // what the second /api/trend call adds (§2)
+  var CANT = "The records can't tell us which of these reasons applies here, so we show every record as it is.";
+  // the second call's answer: only its records go into the answer on the page, in place, so the chart is not redrawn
+  function mergeOthers(t, b) { OTHERS.forEach(function (k) { t[k] = b && b[k] !== undefined ? b[k] : null; }); return t; }
+  function rowsOf(t) { return Array.isArray(t.comparisons) ? t.comparisons.filter(function (x) { return !!x && typeof x === 'object'; }) : null; }
+  function hasOthers(t, ctx) { return !!rowsOf(t) || ctx.cmp === 'loading' || ctx.cmp === 'error'; } // step 8 is on the page
+  function shapeOf(v) { return v === 'rising' ? '▲' : v === 'falling' ? '▼' : '≈'; }
+  function lowV(x) { return clearV(x) && str(x.confidence) ? verdictWord(x).toLowerCase() + ', ' + x.confidence.toLowerCase() : verdictWord(x).toLowerCase(); }
+  // a table row (§3): a row without a trend keeps its name and gives `why` in one cell; "none" has no link and no where line
+  function recRow(x, imp) {
+    var none = x.status === 'none', where = none ? '' : str(x.where);
+    var r = { main: !!x.main, label: str(x.label), href: none ? '' : https((x.source || {}).record_url), sub: x.main ? 'Main record' + (where ? ' · ' + where : '') : where,
+      note: str(x.note) }; // under the row: why a thin station isn't counted when the records are compared
+    if (x.available !== true) { r.why = str(x.why); return r; }
+    var q = rate(x, imp);
+    r.thin = x.counted === false; // its own verdict, shown muted; the server leaves it out of agree, disagree and drift
+    r.shape = shapeOf(x.verdict); r.word = verdictWord(x); r.rate = q ? bare(q) : '—'; r.years = str(x.years);
+    r.miss = isNum(x.n_missing) && x.n_missing > 0 ? commas(x.n_missing) + (x.n_missing === 1 ? ' month missing' : ' months missing') : '';
+    return r;
   }
+  // the main record alone while the others are read, or when they couldn't be: the card's own numbers
+  function mainRow(t, imp) {
+    var fit = t.fit || {}, d = (t.explain || {}).data || {}, q = rate(t, imp);
+    var r = recRow({ main: true, source: t.source, label: srcText(t), status: 'ok', available: true, verdict: t.verdict, years: Y(fit.start) + '–' + Y(fit.end), n_missing: d.n_missing }, imp);
+    r.rate = q ? bare(q) : '—'; // the card's own rate (R2)
+    return r;
+  }
+  // "Records for this place" (§3 to §5). c: { label, imperial, cmp ('loading' | 'error' | 'ok'), err, wait (the pending line) }
+  function recBlock(t, c) {
+    var rows = rowsOf(t), b = { caption: 'Records for ' + c.label + ': the main record first, then the others, each with its own trend.'
+      + (t.variable === 'precip' ? " Rates are % of each record's own usual yearly rain." : '') };
+    if (!rows) {
+      if (c.cmp !== 'loading' && c.cmp !== 'error') return null; // no other records for this answer
+      b.rows = [mainRow(t, c.imperial)];
+      if (c.cmp === 'loading') b.wait = str(c.wait); else b.fail = str(c.err) || "We couldn't read the other records just now.";
+      return b;
+    }
+    var d = t.disagree, dr = t.drift;
+    b.rows = rows.map(function (x) { return recRow(x, c.imperial); });
+    b.window = str((t.comparisons_window || {}).label);
+    b.retry = rows.some(function (x) { return x.status === 'error' || x.status === 'pending'; }); // "pending" (Ask, MCP) as "error"
+    b.link = !!(d && d.any);
+    if (d && d.any) b.dis = { line: str(d.line), lead: 'Why records can differ:', note: CANT,
+      reasons: (Array.isArray(d.reasons) ? d.reasons : []).map(function (x) { return str(x && x.text); }).filter(Boolean) };
+    else if (d) b.agree = [str(d.line)].concat(dr && str(dr.text) ? [dr.text] : []).filter(Boolean);
+    b.limits = [];
+    rows.forEach(function (x) { var l = str((x.source || {}).limit); if (l && b.limits.indexOf(l) < 0) b.limits.push(l); });
+    return b;
+  }
+  // §5 pending line: the other records named from the catalog order (the page adds "{n} s so far." where screen readers skip it)
+  function recWait(sources, main) {
+    var o = (sources || []).filter(function (x) { return x !== main; });
+    return 'Reading the other records for this place: ' + andList(o.map(function (x) { return x === 'ghcn' ? 'the nearest weather station within 25 km' : PLAIN[x] || x; })) + '.'
+      + (o.indexOf('ghcn') >= 0 ? ' A weather station can take a minute or more the first time.' : '');
+  }
+  // the sidebar's help under "Main record" (§6); '' for a measurement without records side by side
+  var REC_HELP = { era5: 'ERA5: a European weather model of past weather, on a grid about 25 km wide.', power: 'NASA POWER: a NASA weather model on a grid about 50 km wide.',
+    ghcn: 'The nearest weather station within 25 km with 30 years of records.' };
+  function recHelp(v, id) {
+    var x = REC_HELP[id];
+    if (!COMPARED[v] || !x) return '';
+    return (v === 'precip' && id === 'power' ? x.replace(/\.$/, ', its rain corrected every day to rain-gauge maps.') : x) + ' The other records are listed on the card.';
+  }
+  // ERA5T (§7): the months the provider may still correct, first to last. meta: "August to October" within a year,
+  // "November 2026 to January 2027" across two; full: always with the year
+  function preMonths(s) {
+    var pre = [];
+    ((s && s.flags) || []).forEach(function (x, i) { if (x === 'preliminary' && s.values[i] != null) pre.push(s.times[i]); });
+    if (!pre.length) return null;
+    var a = pre[0], z = pre[pre.length - 1], one = Y(a) === Y(z), nm = function (x) { return MONTHS_LONG[mi(x) % 12]; };
+    var span = pre.length === 1 ? nm(a) : one ? nm(a) + ' to ' + nm(z) : M(a) + ' to ' + M(z);
+    return { n: pre.length, meta: span + ' preliminary', full: one ? span + ' ' + Y(a) : span };
+  }
+  // the Copernicus attribution (ERA5, the CMIP6 files): the server's sentence, once, from the first source that has it
+  function recSources(t) { return [t.source].concat((rowsOf(t) || []).map(function (x) { return x.source; })); }
+  function attrOf(srcs) { for (var i = 0; i < srcs.length; i++) if (srcs[i] && str(srcs[i].attribution)) return srcs[i].attribution; return ''; }
+  function attribution(t) { return attrOf(recSources(t).concat([((t.projection || {}).source)])); }
 
   // Rain's trend runs on yearly values (trend.yearly, in fit.units): the chart plots those. An answer without them, or
   // without a baseline, keeps the monthly plot.
@@ -318,7 +385,7 @@
       }
     }
     return {
-      title: ctx.name + ' at ' + place + ', ' + Y(first) + ' to ' + (both ? '2100' : Y(t.period.end)), sub: sub, src: srcText(t), url: recordUrl(src),
+      title: ctx.name + ' at ' + place + ', ' + Y(first) + ' to ' + (both ? '2100' : Y(t.period.end)), sub: sub, src: srcText(t), url: recordUrl(src), pre: preLine(t, s),
       latest: str(t.latest && t.latest.text), ytitle: ytitle, ytitleNarrow: ytitleNarrow, summary: summary, none: none, hasPre: pre.length > 0, yearly: yearly, fu: fu,
       hint: cm ? 'Hover, tap or use the arrow keys to read a year, then each 20-year period after the record ends.'
         : both ? 'Hover, tap or use the arrow keys to read a month, then each decade after the record ends.' : 'Hover, tap or use the arrow keys to read ' + (yearly ? 'a year.' : 'a month.'),
@@ -328,6 +395,12 @@
       drawn: drawn, endLabel: drawn ? f.val(fit.level_end, fit.units) : '', endSub: fit.end ? 'trend line, ' + Mo(fit.end) : '',
       cols: cols, caption: 'Records: ' + srcText(t) + '. ' + str(t.latest && t.latest.text) + '.' + (yearly ? ' One row a year, as the chart shows; the CSV has every month.' : ''),
     };
+  }
+  // the chart's sub-line after "{latest.text}." (§7): why the trend and the dots leave the preliminary months out
+  function preLine(t, s) {
+    var pm = preMonths(s);
+    var who = STATION[(t.source || {}).id] ? 'the provider' : srcText(t) + "'s makers"; // "ERA5's makers"
+    return pm ? pm.full + (pm.n === 1 ? ' is' : ' are') + ' an early release that ' + who + ' may still correct, so the trend and the dots leave ' + (pm.n === 1 ? 'it' : 'them') + ' out.' : '';
   }
   // rain on yearly values: the table's rows, printed as the chart's readout prints them
   function yearRows(t, imp) {
@@ -384,7 +457,55 @@
     return out;
   }
 
-  // "How we calculated this": nine steps, each { title, short, words: [string | {list} | {text, csv}], work, link, fig, csv, noise }.
+  // a yearly rain total as step 3 says it, "about 1,239 mm a year" (inches with the Units setting)
+  function yearMm(mm, imp) { return 'about ' + (imp ? fmtNum(mm / 25.4, false) + NB + 'in' : commas(Math.round(mm)) + NB + 'mm') + ' a year'; }
+  // step 8 "Other records" (§9): the rows' own numbers side by side; while they are read, or when they couldn't be, one line
+  var DRIFT_W = { cooling: 'cooler', warming: 'warmer', drier: 'drier', wetter: 'wetter' };
+  function step8(t, ctx) {
+    var rows = rowsOf(t), title = 'Other records';
+    if (!rows) { var w = ctx.cmp === 'error' ? str(ctx.err) || "We couldn't read the other records just now." : 'Reading the other records for this place…'; return { title: title, short: w, words: [w] }; }
+    var imp = ctx.imperial, f = F(t, imp), d = t.disagree, dr = t.drift || null, mn = srcIn(t), rain = t.variable === 'precip'; // rain drifts on yearly % values
+    var on = rows.filter(function (x) { return x.available === true; }), more = on.filter(function (x) { return !x.main; }).length;
+    var cnt = on.filter(function (x) { return x.counted !== false; }); // the rows the server compared
+    var dw = dr && dr.source && str(dr.label) ? DRIFT_W[str(dr.direction).replace(/^getting /, '')] : '';
+    var short = d && d.any ? 'They disagree: ' + cnt.map(function (x) { return lc1(str(x.label)) + ' ' + verdictWord(x).toLowerCase(); }).join(', ')
+      : d ? str(d.line).replace(' records agree', ' agree').replace(/\.$/, '') + (dw ? '; ' + dr.label + ' has been drifting ' + dw : '')
+      : on.length === 1 ? 'Only ' + str(on[0].label) + ' has a trend here' : 'Too few records to compare here';
+    var words = [(more ? 'We ran steps 1 to 6 on ' + (more === 1 ? 'one more record' : 'two more records') + ' for this place, each against its own 1995–2014 average. ' : '')
+      + cap(mn) + ', the main record, leads the card and the chart; the others are here so you can see whether they agree.'];
+    if (d) words.push(str(d.line) + (str(d.say) ? ' ' + d.say : ''));
+    if (d && d.any) words.push('The reasons are listed on the card.');
+    // the working: the records as columns, main first; a record without a trend has "—" and its why under the table
+    var col = function (fn) { return rows.map(function (x) { if (x.available !== true) return '—'; var v = fn(x); return v === '' || v == null ? '—' : v; }); };
+    var rt = function (x) { return rate(x, imp); };
+    var table = { label: 'Other records, scrolls sideways', cols: [''].concat(rows.map(function (x) { return str(x.label) + (x.main ? ' (main)' : ''); })), rows: [
+      ['Months used'].concat(col(function (x) { return isNum(x.n_months) ? commas(x.n_months) + ', ' + str(x.years) : str(x.years); })),
+      ['Months missing'].concat(col(function (x) { return commas(x.n_missing || 0) + (x.n_preliminary > 0 ? ' (' + x.n_preliminary + ' preliminary)' : ''); })),
+      // rain: the rate a day, then the yearly total (the rates beside it are % of that), as step 7 says it
+      [yrsOf(t.baseline) + ' average'].concat(col(function (x) { return isNum(x.baseline_value) ? f.lvl(x.baseline_value, t.units) + (rain ? ', ' + yearMm(x.baseline_value * 365.25, imp) : '') : ''; })),
+      ['Rate per decade'].concat(col(function (x) { var q = rt(x); return q ? bare(q) : ''; })),
+      ['95% range'].concat(col(function (x) { var q = rt(x); return q && q.range ? bare({ text: q.range, per: q.per }) : ''; })),
+      ['By chance, in 100'].concat(col(function (x) { return x.in_100 == null ? '' : String(x.in_100); })),
+      ['Trend'].concat(col(lowV))] };
+    var work = [].concat(str((t.comparisons_window || {}).label) ? [t.comparisons_window.label] : [], [{ table: table }],
+      rows.filter(function (x) { return x.available !== true && str(x.why); }).map(function (x) { return str(x.label) + ': ' + x.why; }),
+      rows.filter(function (x) { return x.available === true && str(x.note); }).map(function (x) { return str(x.label) + ': ' + x.note; }));
+    // drift, pair by pair, in the Units setting with the server's digits
+    var other = function (id) { var x = rows.filter(function (y) { return (y.source || {}).id === id; })[0]; return !x ? id : x.station || x.kind === 'station' ? 'the ' + lc1(str(x.label)) : str(x.label); };
+    var pairs = dr && str(dr.label) && Array.isArray(dr.pairs) ? dr.pairs.filter(function (q) { return q && isNum(q.rate) && isNum(q.low) && isNum(q.high); }) : [];
+    // the shared rounding (as headline_rate): the rate to 2 significant figures, a range's ends to the same decimals; °F or inches converted first
+    var du = dr ? rconv(imp, 0, dr.unit).unit : '', dv = function (x) { return rconv(imp, x, dr.unit).v; };
+    work.push(pairs.length ? 'Drift, ' + (rain ? 'year by year' : 'month by month') + ', each record against its own 1995–2014 average: ' + pairs.map(function (q, i) {
+      return dr.label + ' minus ' + other(q.against) + ' ' + withUnit(sig2Text(dv(q.rate)), du) + (str(dr.per) ? ' ' + dr.per : '') + ' (' + (i ? '' : '95% range ') + spanText(dv(q.low), dv(q.high)) + ')';
+    }).join('; ') + '. We flag a model when it drifts the same way against every other record.' : dr && str(dr.text) ? dr.text : 'No drift flagged at this spot.');
+    return { title: title, short: short, words: words, work: work, one: true, open: !!(d && d.any) || !!dr };
+  }
+  // the lead of "How we calculated this" (§8)
+  function howLead(t, ctx) {
+    return 'For ' + ctx.label + '.' + (hasOthers(t, ctx) ? ' Steps 1 to 7 use the main record, ' + srcIn(t) + '; step 8 sets the other records beside it.' : '') + ' Every number below is the one the card and the chart use.';
+  }
+
+  // "How we calculated this": nine steps (ten with "Other records"), each { title, short, words: [string | {list} | {text, csv}], work, link, fig, csv, noise }.
   function steps(t, s, ctx) {
     var imp = ctx.imperial, f = F(t, imp), b = t.baseline || {}, fit = t.fit || {}, w = t.world || {}, src = t.source || {}, g = t.guidance || {};
     var ex = t.explain || {}, dat = ex.data || {}, sea = ex.seasons, real = ex.real || {}, rec = t.record || {}, m = t.meaning || {}, a = s.anomaly || {};
@@ -394,7 +515,7 @@
     // a change is shown like a level (cm for sea level), a rate in its own unit (mm a year): cu is the rate's unit
     var cu = rconv(imp, 0, fit.units).unit, ch = function (x) { return withUnit(fmtNum(rconv(imp, x, fit.units).v, true), cu); };
     var nPre = (s.flags || []).filter(function (x, i) { return x === 'preliminary' && s.values[i] != null; }).length;
-    var out = [];
+    var out = [], h8 = hasOthers(t, ctx), mn = srcIn(t); // h8: step 8 sets other records beside the main one, mn (§8)
 
     var nMiss = dat.n_missing_years, s1 = byYear
       ? ['We used ' + commas(dat.n_years) + ' yearly values of rain from ' + str(src.name) + ', for ' + str(dat.where) + ', built from ' + commas(dat.n_months) + ' monthly values. They run from '
@@ -442,7 +563,7 @@
     out.push(s2);
 
     // the level at this place: rain says its annual total as the API gives it ("about 1,239 mm a year"), never converted from a rate
-    var lvl3 = isNum(b.annual_total_mm) ? 'about ' + (imp ? fmtNum(b.annual_total_mm / 25.4, false) + NB + 'in' : commas(Math.round(b.annual_total_mm)) + NB + 'mm') + ' a year'
+    var lvl3 = isNum(b.annual_total_mm) ? yearMm(b.annual_total_mm, imp)
       : LEVELS[t.variable] && t.variable !== 'precip' && isNum(b.value) ? f.lvl(b.value, s.units) : '';
     var s3 = { title: 'One baseline' };
     if (b.method === 'provider') {
@@ -453,9 +574,10 @@
       s3.words = ['This record has too few years from 1995 to 2014 to make that average, so this page shows no levels for it, only the rate.'];
       s3.work = [b.years_covered + ' of the 20 years have at least 9 months of data. We need at least 15, or a record of 30 years or more with at least 5 of the 20 years counted and data both before 1995 and after 2014.'];
     } else {
-      s3.short = 'Every level is compared with ' + b.text + (lvl3 ? ' here, ' + lvl3 : '');
-      s3.words = ['Every level on this page is compared with ' + b.text + ' at this place' + (lvl3 ? ', ' + lvl3 : '') + ', so 0 means that average. '
-        + 'The card, the chart, the table and the CSV all use it. Expert projections from the IPCC use the same years, so past and future can share one axis.'];
+      s3.short = 'Every level is compared with ' + (h8 ? mn + "'s " + own(b.text) : b.text) + (lvl3 ? ' here, ' + lvl3 : '');
+      s3.words = ['Every level on this page is compared with ' + b.text + ' at this place' + (h8 ? ' in ' + mn + ', the main record' : '') + (lvl3 ? ', ' + lvl3 : '') + ', so 0 means that average. '
+        + 'The card, the chart, the table and the CSV all use it. Expert projections from the IPCC use the same years, so past and future can share one axis.'
+        + (h8 ? ' The other records in step 8 each use their own 1995–2014 average.' : '')];
       s3.work = [b.method === 'fitted'
         ? b.years_covered + ' of the 20 years have at least 9 months of data; we need 15. The record spans ' + Math.round(rec.years) + " years, at least 5 of the 20 years are counted, and it has data both before 1995 and after 2014, so we fit the trend and the seasons together and take the line's 1995–2014 average (" + b.label + ').'
         : b.years_covered + ' of the 20 years from 1995 to 2014 have at least 9 months of data. We need at least 15.'];
@@ -533,15 +655,22 @@
     var pj = str(t.projection && t.projection.why), fl = g.future_link, flink = fl && https(fl.url) && str(fl.label) ? { text: fl.label + ' ↗', href: fl.url } : null;
     out.push(fx && fx.cm ? cmStep7(t, fx, t.variable === 'precip' ? f.lvl(b.value, s.units) + (lvl3 ? ', ' + lvl3 : '') : lvl3)
       : fx ? step7(t, fx, imp, flink) : { title: 'What comes next', short: pj, words: [pj, NO_FUTURE], link: flink });
+    if (h8) out.push(step8(t, ctx));
 
     var notes = [];
-    (t.caveats || []).concat(s.notes || [], fx ? [str(fx.p.models_note)] : []).forEach(function (n) { if (str(n) && notes.indexOf(n) < 0) notes.push(n); });
+    [str(src.limit)].concat(t.caveats || [], s.notes || [], fx ? [str(fx.p.models_note)] : []).forEach(function (n) { if (str(n) && notes.indexOf(n) < 0) notes.push(n); });
     var last = 'This shows whether ' + measure + " changed here. It doesn't say why.";
     out.push({ title: 'Things to keep in mind', short: notes.length ? notes[0] + (notes.length > 1 ? ' And ' + (notes.length - 1) + ' more' : '') : last,
       words: [{ list: notes.concat([last]) }] });
 
     var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', ' + ver(src.version, 'version ') : '') + '. Retrieved ' + D(src.retrieved) + '. ',
       link: url ? { text: 'Open this exact record ↗', href: url } : null }];
+    var oth = (rowsOf(t) || []).filter(function (x) { return !x.main && x.available === true; }); // §8: each other record with a trend
+    oth.forEach(function (x) {
+      var q = x.source || {};
+      list.push({ text: 'Other record: ' + str(q.name) + (str(q.dataset_id) ? ', ' + q.dataset_id : '') + '.' + (str(q.retrieved) ? ' Retrieved ' + D(q.retrieved) + '.' : '') + ' ',
+        link: https(q.record_url) ? { text: 'Open this exact record ↗', href: q.record_url } : null });
+    });
     if (wp && w.source) list.push({ text: 'World figure: ' + w.source.name + (str(w.source.dataset_id) ? ', ' + w.source.dataset_id : '') + '. Retrieved ' + D(w.source.retrieved) + '. ', link: https(w.source.record_url) ? { text: 'Open it ↗', href: w.source.record_url } : null });
     var ps = fx && (fx.p.source || {}), s9 = [{ list: list }];
     if (ps) {
@@ -552,7 +681,8 @@
       s9.push({ cite: (ps.citation || []).filter(str), ack: str(ps.acknowledgement) ? 'Acknowledgement: ' + ps.acknowledgement : '' });
     }
     list.push({ text: "Our calculation: the Mann-Kendall test and Sen's slope on " + (byYear ? 'yearly rain' : 'monthly values with seasons removed') + (b.method === 'none' ? '.' : ', against ' + b.text + '.') });
-    out.push({ title: 'Sources', short: str(src.name) + (wp && w.source ? '; world figure from ' + lc1(str(w.source.name)) : '') + (ps ? (fx.cm ? '; future from the IPCC AR6 Atlas (CMIP6)' : '; future from IPCC AR6') : ''),
+    if (attribution(t)) list.push({ text: attribution(t) });
+    out.push({ title: 'Sources', short: [str(src.name)].concat(oth.map(function (x) { return str((x.source || {}).name); })).filter(Boolean).join('; ') + (wp && w.source ? '; world figure from ' + lc1(str(w.source.name)) : '') + (ps ? (fx.cm ? '; future from the IPCC AR6 Atlas (CMIP6)' : '; future from IPCC AR6') : ''),
       words: s9, csv: true, csvFut: !!ps });
     return out;
   }
@@ -910,7 +1040,7 @@
       '# Baseline: ' + str((p.baseline || {}).text) + "; each model's 20-year mean minus its own 1995–2014 mean" + (rain ? ', as % of it' : '') + ", added to this place's observed 1995–2014 average",
       '# Ranges: p10-p90 is the range across climate models (10th-90th percentile)']
       .concat((src.citation || []).map(function (c) { return '# Cite: ' + c; }), str(src.acknowledgement) ? ['# Acknowledgement: ' + src.acknowledgement] : [],
-        ['# Built with AI assistance. bhoomi.earth']).map(headLine);
+        str(src.attribution) ? ['# ' + src.attribution] : [], ['# Built with AI assistance. bhoomi.earth']).map(headLine);
     head.push('scenario,name,window_start,window_end,p10_' + u + ',p50_' + u + ',p90_' + u + ',models' + (rain ? ',agree_share,models_disagree' : ''));
     var body = [];
     p.scenarios.forEach(function (S) {
@@ -955,20 +1085,42 @@
       return (place ? [csvField(place)] : []).concat([tm, cell(s.values[i]), none ? '' : cell(a.values[i]), s.flags && s.flags[i] === 'preliminary' ? 'preliminary' : '']).join(',');
     });
   }
+  // the other records in the place CSV (design 12 §10), metric, with the ASCII hyphen-minus
+  function csvOther(x) {
+    if (x.available !== true) return 'Other record: ' + str(x.label) + ': ' + str(x.why);
+    var q = x.source || {}, st = x.station || {}, h = x.headline_rate || {}, asc = function (v) { return str(v).replace(/−/g, '-'); };
+    return 'Other record: ' + str(q.name) + (str(st.name) ? ', station ' + st.name + ' (' + str(st.id) + ')' + (isNum(x.km) ? ', ' + x.km + ' km away' : '') : '')
+      + '; ' + str(x.years) + (x.n_missing > 0 ? ', ' + x.n_missing + ' months missing' : '')
+      + '; ' + asc(bare({ text: str(h.text), per: str(h.per) })) + ' ' + str(h.per) + ' (95% range ' + asc(h.range_text) + '); ' + verdictWord(x).toLowerCase()
+      + (str(x.note) ? '; ' + x.note : '') + '; ' + https(q.record_url);
+  }
+  function csvRecords(t, s) {
+    var rows = rowsOf(t), d = t.disagree, dr = t.drift, pm = preMonths(s), out = [], cop = attrOf(recSources(t));
+    if (rows) {
+      out.push('Main record: ' + str((t.source || {}).name) + ' (chart, trend and projection baseline)');
+      rows.filter(function (x) { return !x.main; }).forEach(function (x) { out.push(csvOther(x)); });
+      if (d) out.push('Records agree: ' + (d.any ? 'no' : 'yes'));
+      if (dr && str(dr.text)) out.push('Drift: ' + dr.text);
+    }
+    if (pm) out.push('Preliminary: ' + pm.full + '; ' + ((t.source || {}).id === 'era5' ? 'ERA5T, ' : '') + 'an early release that may still change; left out of the trend');
+    if (cop) out.push(cop);
+    return out.map(function (x) { return '# ' + x; });
+  }
   function csvPlace(t, s, ctx) {
     var src = t.source || {}, a = s.anomaly || {}, pl = placeLine(t), thru = str(t.latest && t.latest.text).replace(/^Data through /, '');
     // no "# Datum:" line: the API has no datum field (source.method names it in words)
     var head = ['# Bhoomi: ' + ctx.name + ' at ' + ctx.label, '# Source: ' + str(src.name),
       '# Dataset: ' + str(src.dataset_id) + '; version: ' + (src.version || 'not named by the provider'), '# Record: ' + recordUrl(src)]
       .concat(pl ? ['# ' + pl] : [], ['# Baseline: ' + baseLine(t.baseline, a.kind === 'percent', true), '# Method: ' + str(src.method), '# Retrieved: ' + str(src.retrieved)],
-        thru ? ['# Data through: ' + thru] : [], ['# Built with AI assistance. bhoomi.earth']).map(headLine);
+        csvRecords(t, s), thru ? ['# Data through: ' + thru] : [], ['# Built with AI assistance. bhoomi.earth']).map(headLine);
     head.push('time,value_' + s.units + ',anomaly_' + (a.units || s.units) + ',flag');
     return { name: 'bhoomi-' + ctx.slug + '-' + slug(ctx.label) + '.csv', text: head.concat(rows(s)).join('\n') + '\n' };
   }
   // list: [{label, t, s}], the plotted places in pin order
   function csvCompare(list, ctx) {
     var s0 = list[0].s, a0 = s0.anomaly || {};
-    var head = ['# Bhoomi: ' + ctx.name + ' at your places', '# Baseline: ' + baseLine(list[0].t.baseline, a0.kind === 'percent', false), '# Built with AI assistance. bhoomi.earth'];
+    var cop = attrOf(list.map(function (p) { return p.t.source; }));
+    var head = ['# Bhoomi: ' + ctx.name + ' at your places', '# Baseline: ' + baseLine(list[0].t.baseline, a0.kind === 'percent', false)].concat(cop ? ['# ' + cop] : [], ['# Built with AI assistance. bhoomi.earth']);
     list.forEach(function (p) {
       var src = p.t.source || {};
       head.push('# Place: ' + p.label + '; Source: ' + str(src.name) + '; Dataset: ' + str(src.dataset_id) + '; version: ' + (src.version || 'not named by the provider')
@@ -1135,7 +1287,7 @@
     clear(sec);
     sec.dataset.verdict = vkey(t);
     var sub = h('p', { class: 'csub' });
-    sub.append((T.sub ? T.sub + ' ' : '') + 'Records: ', T.url ? h('a', { href: T.url, target: '_blank', rel: 'noopener' }, T.src + NB + '↗') : T.src, '. ' + T.latest + '.');
+    sub.append((T.sub ? T.sub + ' ' : '') + 'Records: ', T.url ? h('a', { href: T.url, target: '_blank', rel: 'noopener' }, T.src + NB + '↗') : T.src, '. ' + T.latest + '.' + (T.pre ? ' ' + T.pre : ''));
     if (T.fu) sub.append(' Future: ', T.fu.link.href ? h('a', { href: T.fu.link.href, target: '_blank', rel: 'noopener' }, T.fu.link.text.replace(' ↗', NB + '↗')) : T.fu.link.text.replace(' ↗', ''), T.fu.tail);
     sec.append(h('div', { class: 'chead' }, h('div', {}, h('h2', { id: 'pc-h' }, T.title), sub), csvButton(function () { return csvPlace(t, s, ctx); })));
     if (both) futureTop(t, fx, ctx).forEach(function (n) { sec.append(n); });
@@ -1506,8 +1658,19 @@
     btn.setAttribute('aria-expanded', String(all));
   }
 
-  function showHow(pin, ctx, fresh) {
-    var sec = $('how'), ol = $('how-steps'), slot = $('noise-slot'), t = pin.trend, s = pin.series, keep = [], all = $('how-all');
+  // the records as columns in step 8's working (design 12 §9); under 600 px it scrolls sideways in its own box
+  function workTable(T) {
+    var hr = h('tr'), tb = h('tbody');
+    T.cols.forEach(function (c, i) { hr.append(i ? h('th', { scope: 'col' }, c) : h('td', {})); });
+    T.rows.forEach(function (r) { var tr = h('tr'); r.forEach(function (c, i) { tr.append(i ? h('td', {}, c) : h('th', { scope: 'row' }, c)); }); tb.append(tr); });
+    return h('div', { class: 'work-x', tabindex: '0', role: 'region', 'aria-label': T.label }, h('table', { class: 'wt' }, h('thead', {}, hr), tb));
+  }
+
+  // fresh: a new answer, steps go back to their defaults; otherwise open steps stay open (by title, so step 8 coming or
+  // going moves nothing). arrived: the other records just came, so step 8 opens by its own default (design 12 §9).
+  function showHow(pin, ctx, fresh, arrived) {
+    var sec = $('how'), ol = $('how-steps'), slot = $('noise-slot'), t = pin.trend, s = pin.series, keep = {}, all = $('how-all');
+    var ae = document.activeElement, fd = ae && ol.contains(ae) ? ae.closest('details') : null, ft = fd ? fd.getAttribute('data-t') : null; // focus stays on its step
     if (!all) { // made once and kept, so focus stays on it; the steps are rebuilt under it
       all = h('button', { type: 'button', class: 'btn', id: 'how-all', 'aria-controls': 'how-steps' });
       all.addEventListener('click', function () {
@@ -1517,13 +1680,15 @@
       });
       ol.before(all);
     }
-    if (!fresh) Array.prototype.forEach.call(ol.querySelectorAll(':scope > li > details'), function (d, i) { keep[i] = d.open; });
+    if (!fresh) Array.prototype.forEach.call(ol.querySelectorAll(':scope > li > details'), function (d) { keep[d.getAttribute('data-t')] = d.open; });
     sec.append(slot); // park "Real or noise?" while the steps are rebuilt
     clear(ol);
-    $('how-lead').textContent = 'For ' + ctx.label + '. Every number below is the one the card and the chart use.';
+    $('how-lead').textContent = howLead(t, ctx);
+    var refocus = null;
     steps(t, s, ctx).forEach(function (st, i) {
-      var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 || !!st.open : !!keep[i]; // st.open: step 7 when the check falls outside
-      var det = h('details', open ? { open: '' } : {}, h('summary', {},
+      // st.open: step 7 when the check falls outside; step 8 when the records disagree or one drifts
+      var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 || !!st.open : !!keep[st.title] || (!!arrived && st.title === 'Other records' && !!st.open);
+      var det = h('details', open ? { open: '', 'data-t': st.title } : { 'data-t': st.title }, h('summary', {},
         h('span', { class: 'step-n' }, String(i + 1)), h('span', { class: 'step-t' }, st.title), h('span', { class: 'step-s' }, st.short), h('span', { class: 'step-c', 'aria-hidden': 'true' })));
       det.addEventListener('toggle', function () { syncAll(all, ol); }); // a step opened or closed by hand
       var words = h('div', { class: 'words' }), side = h('div', { class: 'step-w' });
@@ -1542,18 +1707,28 @@
       }
       if (st.work && st.work.length) {
         var wk = h('div', { class: 'work' }, h('p', { class: 'wl' }, 'The working'));
-        st.work.forEach(function (x) { wk.append(typeof x === 'string' ? h('p', {}, x) : h('p', { class: x.bad ? 'bad' : '' }, x.text)); });
+        st.work.forEach(function (x) { wk.append(typeof x === 'string' ? h('p', {}, x) : x.table ? workTable(x.table) : h('p', { class: x.bad ? 'bad' : '' }, x.text)); });
         side.append(wk);
       }
       if (st.fig) side.append(figure(t, s, ctx));
       var body = h('div', { class: 'step-b' }, words);
-      if (side.firstChild) body.append(side); else body.classList.add('one');
+      if (side.firstChild) body.append(side);
+      if (!side.firstChild || st.one) body.classList.add('one'); // one: the working goes full width under the words
       if (st.noise) body.append(slot);
       det.append(body);
       ol.append(h('li', {}, det));
+      if (st.title === ft) refocus = det;
     });
     syncAll(all, ol);
     sec.hidden = false;
+    if (refocus) refocus.firstChild.focus({ preventScroll: true });
+  }
+  // The other records arrived (or failed, or are asked again) for the answer on screen: "How we calculated this" again,
+  // open steps kept, step 8 by its own default. The chart is not redrawn (design 12 §2).
+  function others(pin, ctx) {
+    if (!last || last.pin.trend !== pin.trend) return;
+    last = { pin: pin, ctx: ctx };
+    try { showHow(pin, Object.assign({}, ctx, { sel: SEL, today: estMonth() }), false, true); } catch (e) { console.error(e); }
   }
 
   // pin: the selected pin (or null); fresh: a new answer, so the steps go back to their default state
@@ -1582,6 +1757,7 @@
   // redraw a chart when its box changes width
   function redraw() { charts.forEach(function (c) { if (Math.round(c.box.clientWidth) !== c.W) draw(c); }); }
 
-  window.TDX = { show: show, redraw: redraw, card: function (t, imp) { return card(t, imp, SEL); }, rate: rate, sig2Text: sig2Text, spanText: spanText, worldParts: worldParts, srcText: srcText, recordUrl: recordUrl,
-    csvCompare: csvCompare, download: download, Mo: Mo, Y: Y, conv: conv, metric: metric, modelNote: modelNote, projOf: projOf };
+  window.TDX = { show: show, others: others, redraw: redraw, card: function (t, imp) { return card(t, imp, SEL); }, rate: rate, sig2Text: sig2Text, spanText: spanText, worldParts: worldParts, srcText: srcText, recordUrl: recordUrl,
+    csvCompare: csvCompare, download: download, Mo: Mo, Y: Y, conv: conv, metric: metric, projOf: projOf,
+    compared: function (v) { return !!COMPARED[v]; }, mergeOthers: mergeOthers, recBlock: recBlock, recWait: recWait, recHelp: recHelp, preMonths: preMonths, attribution: attribution };
 })();

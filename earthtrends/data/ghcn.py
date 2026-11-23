@@ -1,4 +1,5 @@
 """NOAA NCEI GHCN-Daily (nearest station) through the Access Data Service, no key."""
+import re
 import time
 from datetime import date, datetime
 from functools import lru_cache
@@ -8,12 +9,12 @@ from urllib.parse import quote
 import httpx
 
 from .coops import haversine_km
-from .upstream import LIMIT, NAME, fit, readable, source_block, text
+from .upstream import LIMIT, NAME, fit, source_block, text
 
 SEARCH = "https://www.ncei.noaa.gov/access/services/search/v1/data"
 DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
 SOURCE = {"id": "ghcn", "name": "NOAA NCEI GHCN-Daily", "url": "https://www.ncei.noaa.gov/"}
-MAX_KM = 50
+MAX_KM = 25  # the nearest-station radius everywhere (docs/CONTRACTS.md, PR4a)
 MIN_YEARS = 30  # of the needed data type, since 1981
 FIRST_DAY = "1981-01-01"  # the data requests start here
 # The agent gives one question 120 s. One lookup stops starting requests after DEADLINE_S. httpx timeouts are per
@@ -37,6 +38,32 @@ METHOD = {  # by the data types used
     ("TMAX",): f"Each month is the highest of the station's daily maximum temperatures in NOAA's GHCN-Daily, {_QC}.",
     ("PRCP",): f"Each month is the mean of the station's daily precipitation totals in NOAA's GHCN-Daily, in mm a day, {_QC}.",
 }
+# NOAA's station list lost the minus sign of some longitudes between 1° W and 0° ("-0° 10' 44"" read as +0.1789): no
+# ECA&D (E) or WBAN (W) network station anywhere is listed between 1° W and 0°, while 82 are listed between 0° and 1° E
+# (ghcnd-stations.txt, 2026-11-22). The number can't tell which: Writtle (0.43° E) and Goudhurst (0.46° E) are listed
+# the same way and are right. These UK stations are really west of Greenwich (checked against NOAA's ISD station
+# history where it lists them, else the place's own position); parse_search() puts the sign back.
+# ponytail: UK only; Spain (35), France (8) and Algeria (3) E stations show the same pattern and are not checked yet.
+LOST_MINUS = {  # id: place
+    "UKE00100808": "Hull", "UKE00105894": "High Mowthorpe", "UKE00105900": "Rothamsted", "UKE00105915": "Hampstead",
+    "UKE00105919": "Bognor Regis", "UKE00105926": "Hayling Island", "UKE00105927": "Alice Holt Lodge",
+    "UKE00107650": "Heathrow", "UKE00156848": "Cranwell", "UKE00156864": "Monks Wood", "UKE00156884": "Wisley",
+    "UKE00156888": "Woburn", "UKW00015014": "Molesworth", "UKW00015015": "Chelveston", "UKW00015018": "Bassingbourn",
+    "UKW00015033": "Huntingdon", "UKW00015034": "Wyton", "UKW00015035": "Waddington", "UKW00015041": "Sturgate",
+}
+
+
+def display_name(name: str) -> str:
+    """NOAA's station name for people: "NY CITY CENTRAL PARK, NY US" -> "NY City Central Park, NY", "SYDNEY BOTANIC
+    GARDENS, AS" -> "Sydney Botanic Gardens". Words of two letters or fewer stay in capitals (a state, "W", "AP"). A US
+    station keeps its state; any other trailing code is dropped: GHCN's are FIPS codes, and AS is Australia, not
+    American Samoa. A name with a lowercase letter keeps its casing; one NOAA cut short ("SAFDARJUN") stays cut short."""
+    m = re.fullmatch(r"(.+?),\s*([A-Z]{2})(\s+US)?", name)
+    head, state = (m.group(1), m.group(2) if m.group(3) else None) if m else (name, None)
+    if not any(c.islower() for c in head):  # all capitals: title case, never longer ("İ" lowercases to two characters)
+        head = re.sub(r"[^\W\d_]+", lambda w: w[0] if len(w[0]) <= 2 or len(w[0].capitalize()) != len(w[0])
+                      else w[0].capitalize(), head)
+    return head + (f", {state}" if state else "")
 
 
 def record_url(station_id: str) -> str:
@@ -79,7 +106,9 @@ def parse_search(resp: dict) -> list[dict]:
             sid = text(st["id"], 40)
             if not sid:
                 continue
-            out.append({"id": sid, "name": readable(text(st["name"], NAME)) or sid, "lat": lat, "lon": lon, "types": types})
+            if sid in LOST_MINUS and lon > 0:
+                lon = -lon
+            out.append({"id": sid, "name": display_name(text(st["name"], NAME)) or sid, "lat": lat, "lon": lon, "types": types})
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             continue
     return out
@@ -103,7 +132,10 @@ def search(lat: float, lon: float, types: tuple[str, ...]) -> list[dict]:
     dlat = MAX_KM / 111 * 1.05
     # ponytail: the box does not wrap at +-180 degrees longitude; near there it is cut off. Query a second box on the other side to fix.
     dlon = min(180.0, dlat / max(cos(radians(lat)), 0.01))
-    box = (min(90, lat + dlat), max(-180, lon - dlon), max(-90, lat - dlat), min(180, lon + dlon))  # N,W,S,E
+    w, e = max(-180, lon - dlon), min(180, lon + dlon)
+    if w < 0 and e > -1:  # NOAA lists a LOST_MINUS station at +lon: reach the place it lists one that is really in the box
+        e = max(e, min(1.0, -w))
+    box = (min(90, lat + dlat), w, max(-90, lat - dlat), e)  # N,W,S,E
     r = _get(SEARCH, {"dataset": "daily-summaries", "bbox": ",".join(f"{x:.3f}" for x in box), "dataTypes": ",".join(types),
                       "startDate": FIRST_DAY, "endDate": last_day(), "limit": 1000})
     return parse_search(r.json())
@@ -120,17 +152,32 @@ def _years(span: tuple[str, str, float]) -> float:
     return min(since, whole * coverage / 100)
 
 
-def _no_station(variable: str, nearest: tuple[float, dict] | None) -> ValueError:
+class NoStation(ValueError):
+    """No usable weather station. `status`: "short" (the nearest within MAX_KM has too short a record) or "none".
+    `station`: the nearest one NOAA lists, {"id", "name", "lat", "lon", "km" (1 decimal), "record_url"}, or None."""
+
+    def __init__(self, msg: str, status: str, station: dict | None):
+        super().__init__(msg)
+        self.status, self.station = status, station
+
+
+def _no_station(variable: str, nearest: tuple[float, dict] | None) -> NoStation:
     """One wording for every measurement, using the catalog's plain name. `nearest` is (km, station)."""
     what = PLAIN_NAME.get(variable, variable.replace("_", " "))
+    station = None
+    if nearest:
+        km, st = nearest
+        sid = st.get("id")  # parse_search's stations have every key; a hand-made one may carry only a name
+        station = {"id": sid, "name": text(st["name"], NAME), "lat": st.get("lat"), "lon": st.get("lon"), "km": round(km, 1),
+                   "record_url": record_url(sid) if sid else None}
     if nearest and round(nearest[0]) <= MAX_KM:  # a station is in range but too short: say that, so it does not read as a contradiction
         msg = (f"The nearest weather station, {text(nearest[1]['name'], NAME)} ({nearest[0]:.0f} km away), does not have "
                f"{MIN_YEARS} years of {what} data since 1981, and no other station within {MAX_KM} km does either.")
-        return ValueError(text(msg, LIMIT))
+        return NoStation(text(msg, LIMIT), "short", station)
     msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {what} data since 1981."
     if nearest:
         msg += f" The nearest is {text(nearest[1]['name'], NAME)}, {nearest[0]:.0f} km away."
-    return ValueError(text(msg, LIMIT))
+    return NoStation(text(msg, LIMIT), "none", station)
 
 
 def ranked(lat: float, lon: float, candidates: list[dict], variable: str) -> list[tuple[dict, float, tuple[str, ...]]]:
@@ -138,7 +185,7 @@ def ranked(lat: float, lon: float, candidates: list[dict], variable: str) -> lis
     seen = sorted(((haversine_km(lat, lon, s["lat"], s["lon"]), s) for s in candidates), key=lambda t: t[0])
     out = []
     for km, s in seen:
-        if round(km) > MAX_KM:  # the same rounding the message prints, so a station shown as "50 km" was checked
+        if round(km) > MAX_KM:  # the same rounding the message prints, so a station shown as "25 km" was checked
             break
         for group in NEED[variable]:
             if all(t in s["types"] and _years(s["types"][t]) >= MIN_YEARS for t in group):

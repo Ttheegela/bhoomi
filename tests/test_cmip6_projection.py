@@ -53,8 +53,9 @@ def test_princeton_air_temperature():
     assert (s["p50"][1], s["p10"][1], s["p90"][1], s["models"][1]) == (1.89, 1.2, 2.31, 34)
     assert (s["range_kind"], s["agree"], s["disagree"]) == (SPREAD, None, None)
     src = p["source"]
-    assert (src["name"], src["version"], src["licence"]) == (
-        "IPCC AR6 Interactive Atlas, CMIP6 projections", "v2.0-final", "CC BY 4.0")
+    assert (src["name"], src["version"], src["licence"], src["attribution"]) == (
+        "IPCC AR6 Interactive Atlas, CMIP6 projections", "v2.0-final", "CC BY 4.0",
+        "Contains modified Copernicus Climate Change Service information 2026.")
     got = atlas.at("air_temp", 40.35, -74.66)["source"]
     assert {k: src[k] for k in ("dataset_id", "record_url", "retrieved_from", "citation", "acknowledgement")} == {
         k: got[k] for k in ("dataset_id", "record_url", "retrieved_from", "citation", "acknowledgement")}
