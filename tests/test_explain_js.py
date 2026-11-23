@@ -89,7 +89,7 @@ var PR = copy(P); PR.trend.world.text += ' Here: ' + fixed(pw.ratio_low, 1) + ' 
 assert.ok(!/times \(95% range\)/.test(steps(PR.trend, PR.series, pc)[5].work[0]));
 // the card: the fact, where to look next (no url: plain text) and the disclaimer
 assert.deepStrictEqual(pk.next, [{ text: 'Your national weather service', href: '' }]);
-assert.strictEqual(pk.disc, 'This shows past measurements only. It is not a prediction and not professional advice.');
+assert.strictEqual(pk.disc, 'This shows past measurements and IPCC projections, which depend on how much the world emits. It is not a prediction and not professional advice.'); // PR3: a CMIP6 projection, so the projection disclaimer
 // item 6: every caveat is in "Things to keep in mind", the POWER model-data one too
 assert.ok(P.trend.caveats.some(function (x) { return /weather model, MERRA-2/.test(x); }));
 P.trend.caveats.forEach(function (x) { assert.ok(pS[7].words[0].list.indexOf(x) >= 0, x); });
@@ -394,7 +394,7 @@ var H = load('delhi_hottest_day'), hdc = ctx(H, 'Delhi'), hk = card(H.trend, fal
 assert.strictEqual(hk.world, null);
 assert.strictEqual(hk.fact, H.trend.guidance.fact);
 assert.deepStrictEqual(hk.next, [{ text: 'Your national weather service', href: '' }]);
-assert.strictEqual(hk.disc, 'This shows past measurements only. It is not a prediction and not professional advice.');
+assert.strictEqual(hk.disc, 'This shows past measurements and IPCC projections, which depend on how much the world emits. It is not a prediction and not professional advice.');
 assert.strictEqual(card(H.trend, true).fact, H.trend.guidance.fact.replace(/\.$/, ' (in metric).')); // °C in a °F page
 assert.strictEqual(hS[5].short, 'There is no matching world figure for the hottest day of the month.');
 assert.strictEqual(hS[5].work, undefined);
@@ -450,7 +450,7 @@ clean(G, gc);
 // no clear change: a card like any other, the fact as given; the range includes zero
 var S = load('seattle_air_temp_no_change'), sc = ctx(S, 'Seattle'), sk = card(S.trend, false), sS = steps(S.trend, S.series, sc);
 assert.ok(sk.word === 'No clear change' && sk.fact === S.trend.guidance.fact && /^No clear change \(/.test(sk.fact));
-assert.ok(sk.next.length === 1 && /^This shows past measurements only\./.test(sk.disc));
+assert.ok(sk.next.length === 1 && /^This shows past measurements and IPCC projections/.test(sk.disc));
 assert.strictEqual(sk.conf, '45 years of records');
 assert.ok(/, which includes no change$/.test(sk.r2.line));
 assert.ok(/^That does not mean nothing changed/.test(sS[4].words[2]));
