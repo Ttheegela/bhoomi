@@ -9,6 +9,7 @@ import subprocess
 
 import pytest
 
+from earthtrends.agent import tools
 from earthtrends.stats import trend
 from earthtrends.stats.meaning import UNITS
 
@@ -80,8 +81,10 @@ eq([-3.1, -3, -0.1, 0, 1.9, 2, 7, 14.6].map(function (x) { return step(se, x); }
 eq(seaWords(false), 'Colours: blue for falling (darker: 3 mm a year or more), orange to wine for rising, darker for faster: 0 to 2, 2 to 4, 4 to 7, 7 or more mm a year. A grey ring means no clear change.');
 
 // 2. the base64 decode: little-endian int16 and bytes, lat and lon / 100, fill and "no data" dropped, a clamped end kept as wide
-eq(Array.from(b64('AQD//wCA/38=', true)), [1, -1, -32768, 32767]);
-eq(Array.from(b64(G.sig, false)), [2, 0, 255, 0]);
+eq(Array.from(ints('AQD//wCA/38=', 4)), [1, -1, -32768, 32767]);
+eq(Array.from(ints(Buffer.from(new Int32Array([5707, -475, -2147483648, 2147483647]).buffer).toString('base64'), 4)), [5707, -475, -2147483648, 2147483647]);
+eq(Array.from(ints(G.sig, 4)), [2, 0, 255, 0]);
+eq(ints('AQD//wCA', 4), null); // 6 bytes for 4 values: no width fits
 var bs = graceBlocks(G);
 eq(bs.length, 3);
 eq(bs[0], { lat: 29, lon: 77.39, area: 12406, slope: -4.31, lo: -4.76, hi: -3.81, wide: false, v: 'falling' });
@@ -121,9 +124,32 @@ eq([0.94, 3.04, -13.62, 0, 99.6, -0.004].map(function (x) { return num(x, false,
 eq(rng(-0.004, 11, false, 'mm'), M + '0.004 to +11.000');  // no non-zero end reads 0
 eq(rng(0.941, 0.944, false, 'mm'), '+0.941 to +0.944');    // the ends differ
 // the card's own words for the same numbers (the stats lane's _headline_rate, passed in): the hover equals the card
+// the card joins number and unit with a no-break space in inches; the hover uses a plain one
+function sp(r) { return { text: r.text.replace(/\u00a0/g, " "), range: r.range.replace(/\u00a0/g, " ") }; }
 JSON.parse(process.env.CARD).forEach(function (c) {
-  eq([num(c.v, false, 'mm') + ' mm a year', rng(c.lo, c.hi, false, 'mm') + ' mm a year'], [c.text, c.range_text], JSON.stringify(c));
+  eq([num(c.v, false, 'mm') + ' mm a year', rng(c.lo, c.hi, false, 'mm') + ' mm a year'], [c.h.text, c.h.range_text], JSON.stringify(c));
+  var r = sp(EX.rate({ headline_rate: c.h }, true));
+  eq([num(c.v, true, 'mm') + ' in a year', rng(c.lo, c.hi, true, 'mm') + ' in a year'], [r.text, r.range], JSON.stringify(c));
 });
+// inches from headline_rate's 3 significant figures, as the card: 3.4285 mm is 3.43 on the card, so +0.14, not +0.13
+eq(inch(3.4285 / 25.4), '+0.13'); // the map's old way
+eq(num(3.4285, true, 'mm'), '+0.14');
+// "which includes no change" only for no clear change: a clear verdict's range end can round to 0
+var edge = { lat: 0, lon: 0, area: 1, slope: -0.25, lo: -0.49, hi: 0, wide: false, v: 'falling' };
+eq(blockTip(edge, G, false)[1], 'Falling: ' + M + '0.25 cm of water a year, 95% range ' + M + '0.49 to 0.');
+eq(blockTip(Object.assign({}, edge, { v: 'no_clear_change' }), G, false)[1], 'No clear change: ' + M + '0.25 cm of water a year, 95% range ' + M + '0.49 to 0, which includes no change.');
+eq(gaugeTip(Object.assign({}, d[3], { hi: 0 }), false)[1], 'Falling: ' + M + '14 mm a year, 95% range ' + M + '14 to 0.');
+// the water file as int32 with its own scale and no clamp: each block's hover equals its card (Delhi, Princeton, Chennai)
+var W = JSON.parse(process.env.WATER), wb = graceBlocks(W.file);
+eq(wb.length, W.cards.length);
+W.cards.forEach(function (c, i) {
+  var b = wb[i], nc = c.verdict === 'no_clear_change' && c.h.low <= 0 && c.h.high >= 0 ? ', which includes no change' : '';
+  eq([b.v, b.wide], [c.verdict, false]);
+  eq(blockTip(b, W.file, false)[1], VERDICT[c.verdict] + ': ' + c.h.text + ', 95% range ' + c.h.range_text.replace(' cm of water a year', '') + nc + '.');
+  var r = sp(EX.rate({ headline_rate: c.h }, true));
+  eq(blockTip(b, W.file, true)[1], VERDICT[c.verdict] + ': ' + r.text + ', 95% range ' + r.range.replace(' in of water a year', '') + nc + '.');
+});
+eq(W.cards.map(function (c) { return c.h.text; }), [M + '4.3 cm of water a year', '+0.057 cm of water a year', M + '0.026 cm of water a year']);
 
 // the in-view lines
 var world = [-540, -85, 540, 85];
@@ -187,20 +213,41 @@ console.log('ok');
 """
 
 
+EXPLAIN = (ROOT / "web" / "explain.js").read_text(encoding="utf-8").split("/* PURE START */")[1].split("/* PURE END */")[0]
+
+
 def card_texts():
-    """The answer card's rate and range words (headline_rate, built by the stats lane) for rates given to 2 decimals."""
+    """The answer card's headline_rate (built by the stats lane) for gauge rates a year, as the file gives them."""
     out = []
     for v, lo, hi in ((0.94, 0.9, 0.98), (3.04, 2.86, 3.21), (-13.62, -14.1, -13.1), (-0.4, -1.2, 0.5), (12.34, 11.95, 12.05),
-                      (0.06, -0.15, 0.26), (2.0, 1.995, 2.004)):
+                      (0.06, -0.15, 0.26), (2.0, 1.995, 2.004), (3.9, 3.4285, 4.5), (-0.0933, -0.21, 0.02), (7.1, 0.005, 14.0),
+                      (-0.8, -1.3, -0.005)):  # the last two: an end that reads 0.000 in inches
         h = trend._headline_rate("sea_level", UNITS["sea_level"], tuple(round(x * 10, 6) for x in (v, lo, hi)), None)
-        out.append({"v": v, "lo": lo, "hi": hi, "text": h["text"], "range_text": h["range_text"]})
+        out.append({"v": v, "lo": lo, "hi": hi, "h": h})
     return out
+
+
+def water_file():
+    """grace-trends.json as int32 with its own scale and no clamp (the data lane's new format) for three real blocks, with
+    the point answer's headline_rate at each block centre (local GRACE file, no network)."""
+    spots = ((2900, 7739), (4000, -7527), (1300, 8051), (0, 0))  # Delhi, Princeton, Chennai, one with no data
+    rs = [tools.detect_trend("water_storage", la / 100, lo / 100) for la, lo in spots[:3]]
+    i32 = lambda xs: base64.b64encode(struct.pack("<%di" % len(xs), *xs)).decode()
+    dig = lambda k: [round(r[k] * 10**4) for r in rs] + [-2147483648]  # 4-decimal digits a decade
+    sig = {"no_clear_change": 0, "rising": 1, "falling": 2}
+    f = {"v": 1, "enc": "i32le-b64", "scale": 0.00001, "fill": -2147483648, "n": 4, "lat_lon_scale": 0.01,
+         "lat": i16([la for la, _ in spots]), "lon": i16([lo for _, lo in spots]), "area": i16([12406, 12392, 12000, 100]),
+         "slope": i32(dig("slope_per_decade")), "lo": i32(dig("ci_low")), "hi": i32(dig("ci_high")),
+         "sig": u8([sig[r["verdict"]] for r in rs] + [255]), "start": "2002-04", "end": "2026-06", "footprint_km": 444}
+    return {"file": f, "cards": [{"verdict": r["verdict"], "h": r["headline_rate"]} for r in rs]}
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_map_pure_logic():
-    env = {"GRACE": json.dumps(GRACE), "GAUGES": json.dumps(GAUGES), "CARD": json.dumps(card_texts()), "PATH": ""}
-    r = subprocess.run([shutil.which("node"), "-"], input=PURE + CHECK, capture_output=True, text=True, env=env)
+    env = {"GRACE": json.dumps(GRACE), "GAUGES": json.dumps(GAUGES), "CARD": json.dumps(card_texts()),
+           "WATER": json.dumps(water_file()), "PATH": ""}
+    card = "var EX = (function () {" + EXPLAIN + "; return { rate: rate }; })();\n"
+    r = subprocess.run([shutil.which("node"), "-"], input=card + PURE + CHECK, capture_output=True, text=True, env=env)
     assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr or r.stdout
 
 

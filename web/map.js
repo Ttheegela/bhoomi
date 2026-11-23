@@ -45,20 +45,23 @@
   }
   // Rates as the answer card prints them (the stats lane's headline_rate text): the rate to 2 significant figures, half away
   // from zero; both range ends to the same decimals, enough that they differ and no non-zero end reads 0. In inches as the card
-  // converts them: 2 decimals under 1, else 1 (3 if that reads 0).
+  // converts them (explain.js rate): headline_rate's value, low and high (3 significant figures) times 1/25.4 or 1/2.54, then
+  // 2 decimals under 1, else 1 (3 if that reads 0).
   function adj(x) { return +Math.abs(x).toExponential().split('e')[1]; } // the power of ten of the first digit
   function units(x, e) { return Math.floor(Number((Math.abs(x) * Math.pow(10, -e)).toPrecision(12)) + 0.5); } // |x| in steps of 10^e
   function atText(x, e) {
     var r = units(x, e);
     return r ? (x < 0 ? MINUS : '+') + (e < 0 ? (r / Math.pow(10, -e)).toFixed(-e) : String(r * Math.pow(10, e))) : '0';
   }
-  function inch(x) {
+  function sig3(x) { if (!x) return 0; var e = adj(x) - 2, r = (x < 0 ? -1 : 1) * units(x, e); return e < 0 ? r / Math.pow(10, -e) : r * Math.pow(10, e); }
+  function inch(x) { // explain.js fmtNum(x, true): a positive value that reads 0 keeps its "+" ("+0.000"), a negative one loses its minus
     var d = Math.abs(x) < 1 ? 2 : 1;
     if (x !== 0 && Number(x.toFixed(d)) === 0) d = 3;
-    var s = Math.abs(x).toFixed(d);
-    return (Number(s) === 0 ? '' : x > 0 ? '+' : MINUS) + s;
+    var s = x.toFixed(d);
+    if (Number(s) === 0) s = (0).toFixed(d);
+    return x > 0 ? '+' + s : s.replace('-', MINUS);
   }
-  function num(x, imp, u) { return imp ? inch(x * INCH[u]) : x ? atText(x, adj(x) - 1) : '0'; }
+  function num(x, imp, u) { return imp ? inch(sig3(x) * INCH[u]) : x ? atText(x, adj(x) - 1) : '0'; }
   function rng(lo, hi, imp, u) {
     if (imp) return num(lo, imp, u) + ' to ' + num(hi, imp, u);
     var m = Math.max(Math.abs(lo), Math.abs(hi)), e = m ? adj(m) - 1 : 0;
@@ -66,9 +69,10 @@
     while (e > -6 && ((lo !== hi && s(lo) === s(hi)) || (lo && !units(lo, e)) || (hi && !units(hi, e)))) e--;
     return atText(lo, e) + ' to ' + atText(hi, e);
   }
+  // "which includes no change" only for no clear change, as the card (a clear verdict's end can round to 0)
   function rateLine(v, x, lo, hi, wide, imp, u, per) {
     return VERDICT[v] + ': ' + num(x, imp, u) + ' ' + (imp ? 'in' : u) + ' ' + per + ', 95% range ' + (wide ? 'very wide' : rng(lo, hi, imp, u)) +
-      (lo <= 0 && hi >= 0 ? ', which includes no change' : '') + '.';
+      (v === 'no_clear_change' && lo <= 0 && hi >= 0 ? ', which includes no change' : '') + '.';
   }
   function month(t) { var p = String(t).split('-'); return MONTHS[+p[1] - 1] + ' ' + p[0]; }
   function about(km) { return 'about ' + Math.round(km / 100) * 100 + ' km'; }
@@ -105,28 +109,32 @@
     });
     return out;
   }
-  // base64 of little-endian int16 (or bytes)
-  function b64(s, i16) {
-    var bin = atob(s), out = i16 ? new Int16Array(bin.length >> 1) : new Uint8Array(bin.length);
-    for (var i = 0; i < out.length; i++) {
-      if (!i16) { out[i] = bin.charCodeAt(i); continue; }
-      var v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8);
-      out[i] = v > 32767 ? v - 65536 : v;
+  // n little-endian integers from base64: bytes (sig), int16 (enc i16le-b64) or int32 (i32le-b64), by the bytes per value; null
+  // if the length fits none (the typed array wraps each unsigned value to its signed one)
+  function ints(s, n) {
+    var bin = atob(s), w = bin.length / n, out = w === 1 ? new Uint8Array(n) : w === 2 ? new Int16Array(n) : w === 4 ? new Int32Array(n) : null;
+    for (var i = 0; out && i < n; i++) {
+      var v = 0;
+      for (var j = w - 1; j >= 0; j--) v = v * 256 + bin.charCodeAt(i * w + j);
+      out[i] = v;
     }
     return out;
   }
-  // grace-trends.json to blocks with a value; null if the file does not read
+  // a stored integer to its value with the file's scale: a divide when the scale is 1/an integer (0.01, 0.00001), so 431
+  // reads -4.31, not -4.3100000000000005
+  function scaler(s) { var q = Math.round(1 / s); return Math.abs(q * s - 1) < 1e-9 ? function (x) { return x / q; } : function (x) { return x * s; }; }
+  // grace-trends.json to blocks with a value; null if the file does not read. "very wide" only where the file has a clamp.
   function graceBlocks(f) {
-    if (!f || f.enc !== 'i16le-b64' || !(f.n > 0) || !fin(f.scale) || !fin(f.lat_lon_scale) || !/^\d{4}-\d\d$/.test(f.start) || !/^\d{4}-\d\d$/.test(f.end)) return null;
+    if (!f || !/^i(16|32)le-b64$/.test(f.enc) || !(f.n > 0) || !fin(f.scale) || !fin(f.lat_lon_scale) || !/^\d{4}-\d\d$/.test(f.start) || !/^\d{4}-\d\d$/.test(f.end)) return null;
     var a;
-    try { a = ['lat', 'lon', 'area', 'slope', 'lo', 'hi'].map(function (k) { return b64(f[k], true); }).concat([b64(f.sig, false)]); } catch (e) { return null; }
-    if (a.some(function (x) { return x.length !== f.n; })) return null;
-    var ds = Math.round(1 / f.scale), dl = Math.round(1 / f.lat_lon_scale), out = [];
+    try { a = ['lat', 'lon', 'area', 'slope', 'lo', 'hi', 'sig'].map(function (k) { return ints(f[k], f.n); }); } catch (e) { return null; }
+    if (a.some(function (x) { return !x; }) || !(a[6] instanceof Uint8Array)) return null;
+    var sv = scaler(f.scale), sl = scaler(f.lat_lon_scale), cl = fin(f.clamp) ? f.clamp : Infinity, out = [];
     for (var i = 0; i < f.n; i++) {
       var v = SIG[a[6][i]];
       if (!v || a[3][i] === f.fill || !(a[2][i] > 0)) continue;
-      out.push({ lat: a[0][i] / dl, lon: a[1][i] / dl, area: a[2][i], slope: a[3][i] / ds, lo: a[4][i] / ds, hi: a[5][i] / ds,
-        wide: a[4][i] <= -f.clamp || a[5][i] >= f.clamp, v: v });
+      out.push({ lat: sl(a[0][i]), lon: sl(a[1][i]), area: a[2][i], slope: sv(a[3][i]), lo: sv(a[4][i]), hi: sv(a[5][i]),
+        wide: a[4][i] <= -cl || a[5][i] >= cl, v: v });
     }
     return out.length ? out : null;
   }
