@@ -200,6 +200,28 @@ def test_ghcn_station_rule():
         ghcn.ranked(28.567, 77.117, palam_only, "air_temp_max")[0]
 
 
+def test_no_station_error_keeps_the_nearest_station_for_the_records_row(offline2, monkeypatch):
+    found = {s["id"]: s for s in ghcn.parse_search(load("ghcn_search_delhi.json"))}
+    palam = found["IN022023000"]
+    km = ghcn.haversine_km(28.567, 77.117, palam["lat"], palam["lon"])
+    with pytest.raises(ghcn.NoStation) as short:
+        ghcn.ranked(28.567, 77.117, [palam], "air_temp_max")
+    assert short.value.status == "short" and short.value.station == {
+        "id": "IN022023000", "name": "New Delhi Palam, IN", "lat": palam["lat"], "lon": palam["lon"], "km": round(km, 1),
+        "record_url": "https://www.ncei.noaa.gov/cdo-web/datasets/GHCND/stations/GHCND:IN022023000/detail"}
+    with pytest.raises(ghcn.NoStation) as far:
+        ghcn.ranked(29.2, 77.2, list(found.values()), "air_temp_max")
+    assert far.value.status == "none" and far.value.station["name"] == "New Delhi Safdarjun, IN" and far.value.station["km"] > 25
+    with pytest.raises(ghcn.NoStation) as nothing:
+        ghcn.ranked(0, -30, [], "precip")
+    assert (nothing.value.status, nothing.value.station) == ("none", None)
+    # the rows failing their own check: get_series raises the same error, station kept
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: [{"DATE": "2022-01-01", "TMAX": "30"}])
+    with pytest.raises(ghcn.NoStation) as rows:
+        data.get_series("air_temp_max", 28.58, 77.21, source="ghcn")
+    assert rows.value.status == "short" and rows.value.station["id"] == "IN022021900" and isinstance(rows.value, ValueError)
+
+
 def test_ghcn_station_rule_thin_record():
     thin = {"id": "X", "name": "THIN", "lat": 40.7, "lon": -74.0, "types": {"TMAX": ("1871-07-01", "2024-06-17", 1.5)}}
     with pytest.raises(ValueError, match=r"The nearest weather station, THIN \(1 km away\)"):

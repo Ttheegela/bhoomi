@@ -138,17 +138,32 @@ def _years(span: tuple[str, str, float]) -> float:
     return min(since, whole * coverage / 100)
 
 
-def _no_station(variable: str, nearest: tuple[float, dict] | None) -> ValueError:
+class NoStation(ValueError):
+    """No usable weather station. `status`: "short" (the nearest within MAX_KM has too short a record) or "none".
+    `station`: the nearest one NOAA lists, {"id", "name", "lat", "lon", "km" (1 decimal), "record_url"}, or None."""
+
+    def __init__(self, msg: str, status: str, station: dict | None):
+        super().__init__(msg)
+        self.status, self.station = status, station
+
+
+def _no_station(variable: str, nearest: tuple[float, dict] | None) -> NoStation:
     """One wording for every measurement, using the catalog's plain name. `nearest` is (km, station)."""
     what = PLAIN_NAME.get(variable, variable.replace("_", " "))
+    station = None
+    if nearest:
+        km, st = nearest
+        sid = st.get("id")  # parse_search's stations have every key; a hand-made one may carry only a name
+        station = {"id": sid, "name": text(st["name"], NAME), "lat": st.get("lat"), "lon": st.get("lon"), "km": round(km, 1),
+                   "record_url": record_url(sid) if sid else None}
     if nearest and round(nearest[0]) <= MAX_KM:  # a station is in range but too short: say that, so it does not read as a contradiction
         msg = (f"The nearest weather station, {text(nearest[1]['name'], NAME)} ({nearest[0]:.0f} km away), does not have "
                f"{MIN_YEARS} years of {what} data since 1981, and no other station within {MAX_KM} km does either.")
-        return ValueError(text(msg, LIMIT))
+        return NoStation(text(msg, LIMIT), "short", station)
     msg = f"No weather station within {MAX_KM} km has {MIN_YEARS} years of {what} data since 1981."
     if nearest:
         msg += f" The nearest is {text(nearest[1]['name'], NAME)}, {nearest[0]:.0f} km away."
-    return ValueError(text(msg, LIMIT))
+    return NoStation(text(msg, LIMIT), "none", station)
 
 
 def ranked(lat: float, lon: float, candidates: list[dict], variable: str) -> list[tuple[dict, float, tuple[str, ...]]]:
