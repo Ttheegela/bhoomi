@@ -90,7 +90,7 @@ CASES = [
          normals=[24.1, 28.2, 34.0, 40.1, 43.2, 42.6, 37.4, 35.2, 35.1, 34.2, 30.1, 25.3],
          others=[dict(id="era5", seed=104, slope=0.0, jitter=0.3, offset=0.6, notes=ERA5_NOTES,
                       source=era5("temperature_2m_max", 28.58, 77.21, "Open-Meteo's daily maximum of ERA5 hourly 2 m air temperature for the grid cell (about 25 km); each month is its hottest day.")),
-                 dict(id="ghcn", seed=105, slope=0.045, jitter=0.6, offset=-0.3, missing=0.14,
+                 dict(id="ghcn", seed=105, slope=0.045, jitter=0.6, offset=-0.3, missing=0.11,
                       place={"name": "New Delhi Safdarjun, IN", "lat": 28.583, "lon": 77.2},
                       notes=["Weather station New Delhi Safdarjun, IN (IN022021900), 1 km from the point you asked about."],
                       source=ghcn("IN022021900", f"Each month is the highest of the station's daily maximum temperatures in NOAA's GHCN-Daily, {QC}."))]),

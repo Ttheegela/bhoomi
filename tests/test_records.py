@@ -143,33 +143,51 @@ def test_compare_false_and_measurements_without_records(monkeypatch):
 
 # ---- the shared years ----
 
-def test_same_years_for_all():
+def test_same_years_for_all_come_from_the_two_models():
     era = record("era5", 0.3, y1=2026, m1=10, prelim=3)  # ERA5T: 2026 is not a whole year
     r = run("air_temp", ("era5", era), ("power", record("power", 0.3, seed=2)), ("ghcn", record("ghcn", 0.3, seed=3)))
     assert r["comparisons_window"] == {"start": 1981, "end": 2025, "label": "Same years for all: 1981 to 2025"}
     assert [c["years"] for c in r["comparisons"]] == ["1981–2025"] * 3 and r["comparisons"][0]["n_preliminary"] == 3
-    assert all(c["note"] is None for c in r["comparisons"])
-    # a station with 82% of those months: every record over its years
+    assert [(c["note"], c["counted"]) for c in r["comparisons"]] == [(None, True)] * 3
+    # a station never shrinks the window: one from 1989 (82% of the months) is counted over its own years in it
     r = run("air_temp", ("era5", era), ("power", record("power", 0.3, seed=2)),
             ("ghcn", record("ghcn", 0.3, seed=3, y0=1989)))
-    assert r["comparisons_window"]["start"] == 1989 and [c["years"] for c in r["comparisons"]] == ["1989–2025"] * 3
-    # a shorter station keeps its row over its own years inside the window, and says so
-    r = run("air_temp", ("era5", era), ("power", record("power", 0.3, seed=2)),
-            ("ghcn", record("ghcn", 0.3, seed=3, y0=2000)))
     assert r["comparisons_window"]["start"] == 1981 and [c["years"] for c in r["comparisons"]] == [
-        "1981–2025", "1981–2025", "2000–2025"]
-    assert r["comparisons"][2]["note"] == "Covers only 2000–2025 of these years"
-    # a gappy one: 9 months a year to 2018, then whole years (79% of the months); its trend starts where its
-    # coverage reaches 80%, as any trend's does
-    r = run("air_temp", ("era5", era), ("power", record("power", 0.3, seed=2)),
-            ("ghcn", record("ghcn", 0.3, seed=3, keep=lambda y, m: y >= 2019 or m % 4)))
-    st = r["comparisons"][2]
-    assert r["comparisons_window"]["start"] == 1981 and st["note"] == "Misses 21% of these years"
-    assert (st["status"], st["years"]) == ("ok", "1991–2025")
-    # 75% everywhere: no stretch reaches 80%, so the row has no trend, and says why
-    st = run("air_temp", ("era5", era), ("power", record("power", 0.3, seed=2)),
-             ("ghcn", record("ghcn", 0.3, seed=3, keep=lambda y, m: m % 4)))["comparisons"][2]
-    assert (st["status"], st["note"], st["why"][:4]) == ("short", "Misses 25% of these years", "Too ")
+        "1981–2025", "1981–2025", "1989–2025"]
+    assert r["comparisons"][2]["counted"] and r["disagree"]["line"] == "All three records agree: rising."
+
+
+@pytest.mark.parametrize("keep, note", [
+    (lambda y, m: y < 2005, "Covers only 1981–2004 of these years, so it isn't counted when we compare."),
+    (lambda y, m: y >= 2000, "Covers only 2000–2025 of these years, so it isn't counted when we compare."),
+    (lambda y, m: y not in (2017, 2019, 2021) or m < 6,  # 3 short years, not at the end
+     "Few readings in 3 of the last 10 years, so this row covers less and isn't counted when we compare."),
+    (lambda y, m: y >= 2019 or m % 4,  # 9 months a year to 2018: 79% of the months
+     "Misses 21% of these years, so it isn't counted when we compare."),
+])
+def test_thin_stations_keep_their_verdict_and_are_not_counted(keep, note):
+    st, *_ = rows = run("air_temp", ("ghcn", record("ghcn", 0.3, seed=3, keep=keep)),
+                        ("era5", record("era5", 0.3)), ("power", record("power", 0.3, seed=2)))["comparisons"]
+    assert (st["status"], st["verdict"], st["note"], st["counted"]) == ("ok", "rising", note, False)
+    assert all(c["counted"] and c["note"] is None for c in rows[1:])
+
+
+CHENNAI_AFTER_2015 = [6, 3, 4, 1, 4, 3, 6, 8, 8, 3]  # Madras Minambakkam's months of daily highs a year, 2016-2025
+
+
+def test_chennai_hottest_day_keeps_1981_to_2025_and_its_thin_station_is_not_counted():
+    st = record("ghcn", 0.5, seed=3, variable="air_temp_max", keep=lambda y, m: y < 2016 or m <= CHENNAI_AFTER_2015[y - 2016])
+    r = run("air_temp_max", ("power", record("power", 0.0, variable="air_temp_max")),
+            ("era5", record("era5", 0.0, seed=2, variable="air_temp_max")), ("ghcn", st))
+    assert r["comparisons_window"]["label"] == "Same years for all: 1981 to 2025"
+    row = r["comparisons"][2]
+    assert (row["status"], row["verdict"], row["counted"]) == ("ok", "rising", False)
+    assert row["note"] == ("Few readings after 2015 (1 to 8 months a year), so this row covers less and isn't counted "
+                           "when we compare.")
+    # the two models agree; the station's different verdict is shown, not counted
+    assert r["disagree"] == {"any": False, "line": "Both records agree: no clear change.",
+                             "say": "NASA POWER shows no clear change. ERA5 shows no clear change.", "reasons": []}
+    assert r["drift"] is None
 
 
 def test_the_main_row_uses_the_shared_years_and_the_headline_its_own(monkeypatch):
@@ -210,10 +228,9 @@ def test_agree_and_disagree_lines_and_say(variable, rising, falling):
     assert r["disagree"] is None and r["drift"] is None and r["comparisons"][0]["available"]
 
 
-def fit(sid, verdict, p=0.001, *, missing=0, months=540, status="ok", years=45.0, km=3.4):
-    """A row with a trend as _disagree sees it."""
-    return {"sid": sid, "label": records.LABEL[sid], "r": {"verdict": verdict, "p_value": p,
-                                                          "record": {"status": status, "years": years}},
+def fit(sid, verdict, p=0.001, *, missing=0, months=540, km=3.4):
+    """A counted row with a trend as _disagree sees it."""
+    return {"sid": sid, "label": records.LABEL[sid], "r": {"verdict": verdict, "p_value": p},
             "row": {"n_months": months - missing, "n_missing": missing, "km": km}}
 
 
@@ -239,16 +256,13 @@ def test_each_reason_rule():
     assert ids(d) == ["point_vs_grid"] and d["reasons"][0]["text"] == (
         "The weather station is one rain gauge at one spot, under 1 km away; one storm can miss it or hit only it. "
         "The weather models give the average over a grid cell 25 to 50 km wide.")
-    # station gaps: 10% or more of the months in its fit span, or a short record
+    # station gaps: 10% or more of the months in its fit span
     d = records._disagree(t, [fit("era5", "no_clear_change", p=0.5), fit("ghcn", "rising", missing=54)], None)
     assert ids(d) == ["station_gaps", "point_vs_grid"] and d["reasons"][0]["text"] == (
         "The station's record has gaps: 54 of its 540 months are missing. Stations also move and change "
         "instruments, and NOAA doesn't adjust these daily records for that.")
     assert ids(records._disagree(t, [fit("era5", "no_clear_change", p=0.5), fit("ghcn", "rising", missing=53)],
                                  None)) == ["point_vs_grid"]
-    d = records._disagree(t, [fit("era5", "no_clear_change", p=0.5),
-                              fit("ghcn", "rising", status="short", years=24.5)], None)
-    assert d["reasons"][0]["text"].startswith("The station's record is short: 24.5 years. Stations also move")
     # near the line: a p-value from 0.01 to 0.15
     for p, near in ((0.009, False), (0.01, True), (0.15, True), (0.151, False)):
         d = records._disagree(t, [fit("era5", "rising", p=p if p < 0.05 else 0.001),
@@ -302,6 +316,18 @@ def test_drift_needs_every_difference_clear_the_same_way_and_big_enough():
                ("ghcn", record("ghcn", 0.9, seed=3, own=0.02)))["drift"] is None
 
 
+def test_drift_needs_both_models_so_a_station_gap_alone_never_fires_it():
+    """Princeton: NASA POWER warms 0.12 °C per decade faster than the station, clearly; with ERA5 missing there is
+    nothing to say which one moved."""
+    for era5_row in (httpx.ConnectError("x"), records.Pending()):
+        r = run("air_temp", ("power", record("power", 0.42)), ("era5", era5_row), ("ghcn", record("ghcn", 0.30, seed=3)))
+        assert r["drift"] is None and r["disagree"]["line"] == "Both records agree: rising."
+    # with ERA5 back and agreeing with the station, POWER is the one that moved
+    r = run("air_temp", ("power", record("power", 0.42)), ("era5", record("era5", 0.30, seed=2)),
+            ("ghcn", record("ghcn", 0.30, seed=3)))
+    assert (r["drift"]["source"], r["drift"]["direction"]) == ("power", "warming")
+
+
 def test_two_models_only_drift_apart_and_agreeing_records_keep_the_drift_line():
     r = run("air_temp", ("era5", record("era5", 0.3)), ("power", record("power", 0.6, seed=2)),
             ("ghcn", ghcn._no_station("air_temp", None)))
@@ -312,7 +338,7 @@ def test_two_models_only_drift_apart_and_agreeing_records_keep_the_drift_line():
     assert len(dr["pairs"]) == 1 and dr["pairs"][0]["against"] == "era5" and abs(dr["pairs"][0]["rate"] - 0.3) < .05
 
 
-def test_rain_drift_uses_yearly_percent_anomalies():
+def test_sydney_rain_drift_uses_yearly_percent_anomalies():
     r = run("precip", ("power", record("power", -8, variable="precip")),
             ("era5", record("era5", 0, seed=2, variable="precip")), ("ghcn", record("ghcn", 0, seed=3,
                                                                                     variable="precip")))
@@ -323,6 +349,32 @@ def test_rain_drift_uses_yearly_percent_anomalies():
     # 1.5% of the usual yearly rain per decade is under the 2% line
     assert run("precip", ("power", record("power", -1.5, variable="precip", own=0.01)),
                ("era5", record("era5", 0, seed=2, variable="precip", own=0.01)))["drift"] is None
+
+
+# ---- Ask and MCP don't wait ----
+
+def test_a_slow_record_is_pending_within_the_budget_and_the_page_waits(monkeypatch):
+    import threading
+    import time
+    got = {"era5": record("era5", 0.3), "power": record("power", 0.3, seed=2), "ghcn": record("ghcn", 0.3, seed=3)}
+    late = threading.Event()
+
+    def get_series(variable, lat, lon, start=None, end=None, source=None):
+        if source == "ghcn":
+            time.sleep(0.6)
+            late.set()
+        return got[source]
+    monkeypatch.setattr(data, "get_series", get_series)
+    monkeypatch.setattr(tools, "BUDGET_S", 0.1)
+    t0 = time.monotonic()
+    r = tools.detect_trend("air_temp", 0, 0, source="era5")
+    assert time.monotonic() - t0 < 0.5 and not late.is_set()
+    st = r["comparisons"][2]
+    assert (st["status"], st["why"], st["counted"], st["available"]) == ("pending", "Not loaded yet.", False, False)
+    assert r["disagree"]["line"] == "Both records agree: rising."  # the pending row stays out
+    assert late.wait(2)  # the late read still finishes (in the app, it fills the cache)
+    r = tools.detect_trend("air_temp", 0, 0, source="era5", wait=True)  # the page's call waits for every row
+    assert r["comparisons"][2]["status"] == "ok" and r["disagree"]["line"] == "All three records agree: rising."
 
 
 # ---- real records: Delhi's hottest day, 1981-2015 (the ERA5 and station fixtures end in 2015) ----
