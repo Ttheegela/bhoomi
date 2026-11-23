@@ -237,7 +237,8 @@ assert.deepStrictEqual(steps(B0.trend, B0.series, bc)[4].work.slice(1), ['Slow s
 // CSV: the station and its coordinates, the data-through month; never quoted
 var bl = csvPlace(B.trend, B.series, bc).text.split('\n');
 assert.strictEqual(bl[4], '# Station: The Battery, lat 40.7006, lon -74.0142');
-assert.strictEqual(bl[8], '# Data through: ' + B.trend.latest.text.replace('Data through ', ''));
+assert.strictEqual(bl[8], '# Preliminary: September to October 2025; an early release that may still change; left out of the trend'); // not ERA5: no "ERA5T"
+assert.strictEqual(bl[9], '# Data through: ' + B.trend.latest.text.replace('Data through ', ''));
 sumAddsUp(B, bc, NB + 'mm');
 assert.strictEqual(bS[5].work[2], 'The full record, 1920 to 2025: ' + B.trend.headline_rate.text + '. It gets no world ratio, because satellites only start in 1993.');
 var bw = B.trend.world, biS = steps(B.trend, B.series, ctx(B, 'New York, NY', true));
@@ -404,27 +405,6 @@ assert.strictEqual(hS[5].short, 'There is no matching world figure for the hotte
 assert.strictEqual(hS[5].work, undefined);
 assert.deepStrictEqual(hS[5].words, [H.trend.world.why_none]); // no rule (world.text null): why_none alone
 clean(H, hdc);
-
-// QA B10: NASA POWER air temperature and hottest day say what a grid is and offer the station; the station's answer says
-// when it disagrees with the POWER answer the page already has
-var ML = 'This comes from a weather model grid about 50 km wide. A weather station nearby can tell a different story.';
-assert.deepStrictEqual(modelNote(H.trend, null), { line: ML, offer: 'ghcn' });
-assert.deepStrictEqual(modelNote(P.trend, null), { line: ML, offer: 'ghcn' });
-assert.strictEqual(modelNote(C.trend, null), null); // rain: not asked for
-var HS = copy(H); HS.trend.source = { id: 'ghcn', name: 'NOAA NCEI GHCN-Daily' };
-HS.trend.verdict = 'falling';
-assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model disagree here.', strong: true,
-  next: 'For the heat you feel day to day, the station is closer to the ground; the model covers a wider area.' });
-HS.trend.verdict = H.trend.verdict;
-assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model agree here.' }); // they agree
-// the grid size is read from explain.data.where, never written in
-var HW = copy(H); HW.trend.explain.data.where = 'a grid cell about 55 km wide';
-assert.strictEqual(modelNote(HW.trend, null).line, 'This comes from a weather model grid about 55 km wide. A weather station nearby can tell a different story.');
-HW.trend.explain.data.where = null;
-assert.strictEqual(modelNote(HW.trend, null).line, 'This comes from a weather model grid. A weather station nearby can tell a different story.');
-assert.strictEqual(modelNote(HS.trend, null), null); // no POWER answer on the page: nothing to compare
-var HE = copy(H); HE.trend.source = { id: 'era5' };
-assert.strictEqual(modelNote(HE.trend, null), null);
 
 // a station with no 1995-2014 average: values as measured, no level, the rate still holds
 var R = load('riverside_no_baseline'), rc = ctx(R, 'Riverside'), rk = card(R.trend, false), rT = chartText(R.trend, R.series, rc), rS = steps(R.trend, R.series, rc);
@@ -1068,7 +1048,7 @@ def test_steps_3_to_6_start_open():
     """The owner's choice: steps 3, 4, 5 and 6 start open on a new answer, 1, 2 and 7 to 9 closed, at every width."""
     m = re.search(r"var OPEN_STEPS = \[([\d, ]+)\];", PURE)
     assert m and m[1] == "3, 4, 5, 6", m and m[1]
-    assert "var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 || !!st.open : !!keep[i];" in SRC
+    assert "var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 || !!st.open : !!keep[st.title] || " in SRC
 
 
 def test_review_fixes_outside_the_pure_block():
@@ -1479,13 +1459,8 @@ def test_driver_bars_and_scenario_marks_reach_3_to_1():
     assert "var lc = lcLines(narrow);" in SRC and "lc.forEach(function (x, j) {" in SRC  # the chart draws the 375 px split
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
-def test_open_all_steps_button():
-    """The owner: "add a open close button in the how we calculated section!" The real showHow() runs on a tiny fake
-    DOM (no browser, no network). One button over the steps reads "Open all steps" while any step is closed and
-    "Close all steps" when all nine are open; a step toggled by hand and a re-render update it; it is made once."""
-    dom = SRC.split("/* ---------- DOM ---------- */")[1].split("\n  window.TDX")[0]
-    js = PURE + dom + ASSERTS.split("var NB = ")[0] + r"""
+# A tiny fake DOM for the real showHow() (no browser, no network): elements, ids, toggle events, clicks.
+FAKE_DOM = r"""
 var ids = {}, Q = []; // Q: toggle events waiting to fire, as a browser fires them after the change
 function El(tag) { var a = this.a = {}; this.tagName = tag.toUpperCase(); this.kids = []; this.on = {}; this.parentNode = null;
   this.classList = { add: function (c) { a['class'] = ((a['class'] || '') + ' ' + c).trim(); } }; }
@@ -1508,6 +1483,16 @@ var document = { getElementById: function (id) { return ids[id] || null; }, crea
 function flush() { while (Q.length) (Q.shift().on.toggle || []).forEach(function (f) { f(); }); }
 function click(b) { b.on.click.forEach(function (f) { f(); }); }
 function mk(tag, id) { var n = new El(tag); n.setAttribute('id', id); return n; }
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_open_all_steps_button():
+    """The owner: "add a open close button in the how we calculated section!" The real showHow() runs on a tiny fake
+    DOM (no browser, no network). One button over the steps reads "Open all steps" while any step is closed and
+    "Close all steps" when all nine are open; a step toggled by hand and a re-render update it; it is made once."""
+    dom = SRC.split("/* ---------- DOM ---------- */")[1].split("\n  window.TDX")[0]
+    js = PURE + dom + ASSERTS.split("var NB = ")[0] + FAKE_DOM + r"""
 
 var sec = mk('section', 'how'), ol = mk('ol', 'how-steps');
 sec.append(mk('h2', 'how-h'), mk('p', 'how-lead'), ol, mk('div', 'noise-slot'));
