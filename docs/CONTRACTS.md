@@ -11,7 +11,7 @@ One variable can come from several sources. Tools take an optional `source`; res
 | id | Dataset | Covers |
 |---|---|---|
 | `power` | NASA POWER (MERRA-2), https://power.larc.nasa.gov/ | any point, 1981 on |
-| `era5` | ERA5 reanalysis via Open-Meteo archive, https://open-meteo.com/ | any point, 1940 on |
+| `era5` | ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset, CDS `multi-origin-c3s-atlas`, doi:10.24381/cds.h35hb680), monthly, from our own pack of 10° land tiles on a public Vercel Blob store; Open-Meteo's ERA5 archive (https://open-meteo.com/) only when the pack can't be read or has no land cell near the point | land points (the nearest land cell within the 3×3 block), 1981-01 to 2025-12 (pack); any point, to the latest month (fallback) |
 | `ghcn` | NOAA NCEI GHCN-Daily, nearest station, https://www.ncei.noaa.gov/ | weather stations worldwide |
 | `coops` | NOAA CO-OPS tide gauges, nearest station, https://tidesandcurrents.noaa.gov/ | US coasts |
 | `psmsl` | Permanent Service for Mean Sea Level (PSMSL), RLR monthly means, nearest tide gauge, https://psmsl.org/ | tide gauges worldwide |
@@ -218,7 +218,7 @@ For `air_temp`, `air_temp_max` and `precip`, `detect_trend` and `/api/trend` add
 
 ```json
 "comparisons": [
-  {"main": true, "source": {"id": "era5", "name": "ERA5 reanalysis via Open-Meteo archive", "record_url": "https://…"},
+  {"main": true, "source": {"id": "era5", "name": "ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)", "record_url": "https://…"},
    "label": "ERA5", "kind": "grid", "where": "Weather model, grid cell about 25 km wide", "km": null, "station": null,
    "status": "ok", "available": true, "why": null, "years": "1981–2026", "n_months": 549, "n_missing": 0, "n_preliminary": 3,
    "baseline_value": 33.6, "verdict": "no_clear_change", "confidence": "Not clear", "p_value": 0.09, "in_100": "9",
@@ -246,7 +246,8 @@ For `air_temp`, `air_temp_max` and `precip`, `detect_trend` and `/api/trend` add
 - **Thin main record (`thin_note`, domain review 2026-11-23):** top-level `thin_note`. When the main row has a trend but is thin (so `counted` is false; only a station picked as main can be), it is "This record has few readings in recent years, so it isn't counted when we compare." (no layout words, so it reads the same on the page, in MCP and in voice). When `thin_note` is set, `single_note` is `null`: the table rows already show what is missing. `null` otherwise, and with `compare=false`. The page prints it under the verdict; Ask and MCP pass it.
 - **Copernicus attribution (domain review):** ERA5 (also via Open-Meteo) and the CMIP6 Atlas files retrieved from the Copernicus Climate Data Store are Copernicus products. Their `source` blocks (ERA5's `source`, every ERA5 row's `source`, and the CMIP6 `projection.source`) carry `attribution`: "Contains modified Copernicus Climate Change Service information 2026." The page prints it in the footer data line and in the Sources step, and the CSV header carries it for ERA5 records and CMIP6 projection rows; Open-Meteo's own credit stays. `attribution` is `null` for every other source.
 - **`source.limit`** (data lane): for NASA POWER rain, "NASA POWER's rain is corrected every day to rain-gauge maps. Where gauges are few (much of Africa, inland Australia, South America and the far north), it can drift.", plus "This far north it gets no gauge correction." above 62.5° N ("This far south …" below 62.5° S) or "At this latitude the correction is only partial." between 42.5° and 62.5°. `null` for every other source and measurement.
-- **ERA5T:** ERA5 is fetched through the latest complete month; months that end less than 3 months before retrieval are flagged "preliminary" (data lane) and, as today, left out of the baseline, the trend, `now` and the yearly values. The page names them (design 12 §7).
+- **ERA5 pack (owner 2026-11-23, "Own ERA5 pack before release"):** an answer from the pack names it in `source` (name above, `url` the CDS dataset page, `dataset_id` the DOI, `record_url` the tile's public URL, `retrieved` and `version` from the pack manifest, `attribution` the Copernicus line), has no preliminary months, and carries the note "ERA5 data through December 2025." (the pack's last month). An answer from the fallback keeps Open-Meteo's own `source` block and credit, so the page and Ask always name the one they got; the footer and the Sources step credit Open-Meteo only for a fallback answer. The pack and the fallback are never spliced into one series. Pack format and cell choice: `earthtrends/data/era5.py` docstring.
+- **ERA5T (fallback only):** ERA5 from Open-Meteo is fetched through the latest complete month; months that end less than 3 months before retrieval are flagged "preliminary" (data lane) and, as today, left out of the baseline, the trend, `now` and the yearly values. The page names them (design 12 §7).
 - **Stations:** the nearest-station radius is 25 km everywhere (`ghcn` `MAX_KM`), and station results carry `place.km` and `place.id`.
 - **Caching:** an answer with `main_note` set or any row "error" or "pending" is sent `no-store`; only complete answers get the normal cache.
 - **`/api/trend`** gains `compare` (default `true`); `compare=false` returns the same answer with `comparisons`, `comparisons_window`, `disagree`, `drift`, `thin_note` and `single_note` `null` (the page draws the card first, then fills the rows). MCP `detect_trend` always compares.
