@@ -385,7 +385,8 @@ def test_era5_series(offline2):
 def test_ghcn_series(offline2):
     s = data.get_series("air_temp_max", 28.58, 77.21, start="1990", end="1991", source="ghcn")
     assert s["freq"] == "monthly" and s["source"]["id"] == "ghcn" and len(s["times"]) == len(s["values"]) == 24
-    assert s["place"] == {"name": "New Delhi Safdarjun, IN", "lat": 28.583, "lon": 77.2, "km": 1.0}  # km: 1 decimal
+    assert s["place"] == {"name": "New Delhi Safdarjun, IN", "lat": 28.583, "lon": 77.2, "km": 1.0,  # km: 1 decimal
+                          "id": "IN022021900"}
     assert "IN022021900" in s["notes"][0] and "km from the point" in s["notes"][0]
     assert any("fewer than 20 valid days" in n for n in s["notes"])
 
@@ -1334,7 +1335,7 @@ def test_power_record_url_is_the_request_made(monkeypatch):
 @pytest.mark.parametrize("lat, extra", [(13.08, ""), (-42.4, ""), (42.5, " At this latitude the correction is only partial."),
                                         (-62.5, " At this latitude the correction is only partial."),
                                         (64.84, " This far north it gets no gauge correction."),
-                                        (-77.85, " This far north it gets no gauge correction.")])
+                                        (-77.85, " This far south it gets no gauge correction.")])
 def test_power_rain_names_its_limit(lat, extra):
     reply = load("power_monthly.json")
     assert power.source(reply, "PRECTOTCORR", lat, 10.0, "2026-11-23")["limit"] == (
@@ -1438,3 +1439,25 @@ def test_coops_retrieved_is_the_gauge_records_first_fetch_date(monkeypatch):
     assert coops.series(40.0, -74.0)[4]["retrieved"] == "2026-01-01"
     monkeypatch.setattr(upstream, "utc_today", lambda: "2026-01-02")
     assert coops.series(40.0, -74.0)[4]["retrieved"] == "2026-01-01" and fetched == ["C1"]  # the record is cached by id
+
+
+def test_one_upstream_call_for_the_same_record_asked_twice_at_once(monkeypatch):
+    """Two threads asking for the same record share one fetch (Open-Meteo's daily quota); both get the series."""
+    import threading
+    import time
+    calls = []
+
+    def fetch(param, lat, lon):
+        calls.append(param)
+        time.sleep(0.3)  # the second asker arrives while this fetch is in flight
+        return load("power_monthly.json")
+    monkeypatch.setattr(power, "fetch", fetch)
+    out = []
+    ts = [threading.Thread(target=lambda: out.append(data.get_series("air_temp", 39.36, -74.42, source="power")))
+          for _ in range(2)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(5)
+    assert calls == ["T2M"] and len(out) == 2 and out[0] == out[1] and out[0] is not out[1]
+    assert not data._flying

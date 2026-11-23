@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from earthtrends import data
 from earthtrends.agent import tools
-from earthtrends.app import app
+from earthtrends.app import CACHE, app
 from earthtrends.data import era5, ghcn, power
 from earthtrends.stats import compute_trend, records
 from earthtrends.stats.baseline import baseline
@@ -21,7 +21,7 @@ FX = Path(__file__).parent / "fixtures"
 NORMALS = [5, 6, 9, 12, 16, 20, 23, 22, 18, 13, 9, 6]
 RAIN = [0.8, 0.3, 0.2, 0.4, 1.3, 1.6, 2.9, 3.9, 4.2, 8.7, 11.8, 4.8]
 WEATHER = np.random.default_rng(99).normal(0, 0.8, 70 * 12)  # one place's weather, 1970 on: every record shares it
-STATION = {"name": "TEST STATION", "lat": 0.05, "lon": 0.0}  # 5.6 km north of (0, 0)
+STATION = {"name": "TEST STATION", "lat": 0.05, "lon": 0.0, "id": "XX000000001"}  # 5.6 km north of (0, 0)
 KEYS = ("comparisons", "comparisons_window", "disagree", "drift")
 NEAR = {"id": "IN020040900", "name": "Madras Minambakkam, IN", "lat": 12.99, "lon": 80.18}
 
@@ -146,9 +146,37 @@ def test_the_main_record_falls_back_when_the_default_cannot_be_read(monkeypatch)
         ("power", "ok", True), ("era5", "error", False), ("ghcn", "ok", False)]
     with pytest.raises(httpx.HTTPStatusError):  # a named source never falls back
         tools.detect_trend("air_temp", 0, 0, source="era5")
+    # only an outage or a refusal falls back: bad input stays a 400 and a code bug surfaces, though POWER would answer
+    for err in (ValueError("Latitude must be between -90 and 90, got 200."), KeyError("daily"), TypeError("x")):
+        refused = err
+        with pytest.raises(type(err)):
+            tools.detect_trend("air_temp", 0, 0)
     monkeypatch.setattr(data, "get_series", real)
-    with pytest.raises(ValueError, match="Latitude"):  # bad input stays a 400
+    with pytest.raises(ValueError, match="Latitude"):
         tools.detect_trend("air_temp", 200, 0)
+
+
+def test_answers_with_a_fallback_or_an_unread_row_are_never_cached(monkeypatch):
+    got = {"era5": record("era5", 0.3), "power": record("power", 0.3, seed=2), "ghcn": record("ghcn", 0.3, seed=3)}
+    down = set()
+
+    def get_series(variable, lat, lon, start=None, end=None, source=None):
+        if (source or "era5") in down:
+            raise httpx.ConnectError("down")
+        return got[source or "era5"]
+    monkeypatch.setattr(data, "get_series", get_series)
+    monkeypatch.setattr(data, "CATALOG", [dict(v, sources=["era5", "power", "ghcn"]) if v["id"] == "air_temp" else v
+                                          for v in data.CATALOG])
+    c, q = TestClient(app), {"variable": "air_temp", "lat": 0, "lon": 0}
+    assert c.get("/api/trend", params=q).headers["cache-control"] == CACHE  # complete
+    assert c.get("/api/trend", params={**q, "compare": "false"}).headers["cache-control"] == CACHE
+    down.add("ghcn")  # a row reads "error"
+    assert c.get("/api/trend", params=q).headers["cache-control"] == "no-store"
+    down.clear()
+    down.add("era5")  # main_note: the page's first call too
+    for extra in ({}, {"compare": "false"}):
+        r = c.get("/api/trend", params={**q, **extra})
+        assert r.json()["main_note"] and r.headers["cache-control"] == "no-store"
 
 
 def test_compare_false_and_measurements_without_records(monkeypatch):
@@ -198,11 +226,12 @@ def test_same_years_for_all_come_from_the_two_models():
 
 @pytest.mark.parametrize("keep, note", [
     (lambda y, m: y < 2005, "Covers only 1981–2004 of these years, so it isn't counted when we compare."),
-    # London's Hampstead: half of 2016, then nothing: it stopped, so "covers only", not "few readings after"
+    # London's Hampstead: half of 2016, then nothing: it stopped, so "covers only" the row's own years
     (lambda y, m: y < 2016 or (y == 2016 and m <= 6),
-     "Covers only 1981–2015 of these years, so it isn't counted when we compare."),
+     "Covers only 1981–2016 of these years, so it isn't counted when we compare."),
     (lambda y, m: y >= 2000, "Covers only 2000–2025 of these years, so it isn't counted when we compare."),
-    (lambda y, m: y not in (2017, 2019, 2021) or m < 6,  # 3 short years, not at the end
+    # the reviewer's: whole years except 2018 (none), 2020 (5 months) and 2022 (6): 95% of the months
+    (lambda y, m: (y != 2018) and (y != 2020 or m <= 5) and (y != 2022 or m <= 6),
      "Few readings in 3 of the last 10 years, so this row covers less and isn't counted when we compare."),
     (lambda y, m: y >= 2019 or m % 4,  # 9 months a year to 2018: 79% of the months
      "Misses 21% of these years, so it isn't counted when we compare."),

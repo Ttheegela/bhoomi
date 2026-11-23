@@ -4,6 +4,7 @@ records disagree and why, and whether a weather model has drifted against the ot
 which record to trust. numpy + stdlib only; the caller (agent/tools.py) fetches the records."""
 
 import json
+import logging
 
 import numpy as np
 
@@ -12,6 +13,7 @@ from earthtrends.data.coops import haversine_km
 from earthtrends.stats.baseline import columns, normals_at
 from earthtrends.stats.trend import _mk_sen, compute_trend
 
+log = logging.getLogger(__name__)
 VARIABLES = ("air_temp", "air_temp_max", "precip")
 LABEL = {"era5": "ERA5", "power": "NASA POWER", "ghcn": "Weather station"}
 SOURCE = {"era5": era5.SOURCE, "power": power.SOURCE, "ghcn": ghcn.SOURCE}  # for a row whose record never came
@@ -24,7 +26,7 @@ WINDOW = "Same years for all: {} to {}"
 UNCOUNTED = "so this row covers less and isn't counted when we compare."
 FEW_AFTER = "Few readings after {} ({} to {} months a year), " + UNCOUNTED
 FEW_IN = "Few readings in {} of the last 10 years, " + UNCOUNTED
-COVERS = "Covers only {}–{} of these years, so it isn't counted when we compare."
+COVERS = "Covers only {} of these years, so it isn't counted when we compare."  # the row's own `years`
 MISSES = "Misses {}% of these years, so it isn't counted when we compare."
 SHARE = 0.8  # a station row covering less of the window's months is thin
 RECENT, RECENT_SHORT = 10, 2  # ... and so is one with more than 2 short years among the window's last 10
@@ -75,6 +77,8 @@ def compare(variable: str, records: list, lat: float, lon: float) -> dict:
         row = _row(sid, k == 0, rec, lat, lon)
         if isinstance(rec, BaseException):
             row.update(zip(("status", "why"), failed(rec)))
+            if row["status"] == "error":  # the type only: an upstream error's text carries the request URL
+                log.warning("records: %s could not be read (%s)", sid, type(rec).__name__)
         else:
             s, _, base = rec
             cut = _cut(s, a, b)
@@ -82,10 +86,12 @@ def compare(variable: str, records: list, lat: float, lon: float) -> dict:
                 r = compute_trend(cut, base=base)
             except ValueError as e:  # too short or gappy over these years
                 row.update(status="short", why=str(e))
-            except Exception:  # noqa: BLE001 - one record never sinks the answer
+            except Exception as e:  # noqa: BLE001 - one record never sinks the answer; the log shows a bug
+                log.warning("records: %s trend failed (%s)", sid, type(e).__name__)
                 row.update(status="error", why=ERROR)
             else:
-                row.update(_summary(r), note=None if sid in GRID_KM else _thin(cut, a, b))
+                row.update(_summary(r))
+                row["note"] = None if sid in GRID_KM else _thin(cut, a, b, row["years"])
                 fits.append({"sid": sid, "label": row["label"], "s": cut, "base": base, "r": r, "row": row})
         row["available"] = row["status"] == "ok"
         row["counted"] = row["available"] and row["note"] is None
@@ -114,10 +120,12 @@ def _window(got: list) -> tuple[int, int]:
     return a, b
 
 
-def _thin(s: dict, a: int, b: int) -> str | None:
+def _thin(s: dict, a: int, b: int, years: str) -> str | None:
     """A station row with a trend is thin when more than 2 of the window's last 10 years have under 9 usable months, or
     it has a value in under 80% of the window's months. -> its note (the first of the contract's four that applies),
-    or None. "Few readings" needs a reading in every year it counts; a station that stopped "covers only" its years."""
+    or None. A station that stopped (no reading in the window's last year) "covers only" its years, never "few
+    readings"; "Few readings after" also needs a reading in every later year. "Covers only" names the row's own
+    `years`, so the note and the row agree."""
     year, _, _, _, use = columns(s)
     per = {y: int(np.sum(use & (year == y))) for y in range(a, b + 1)}
     short = [per[y] for y in range(max(a, b - RECENT + 1), b + 1) if per[y] < STATION_MONTHS]
@@ -126,12 +134,13 @@ def _thin(s: dict, a: int, b: int) -> str | None:
         return None
     full = [y for y, n in per.items() if n >= STATION_MONTHS]
     later = [per[y] for y in range(full[-1] + 1, b + 1)] if full else []
-    if len(later) > RECENT_SHORT and min(later) > 0:  # every year after its last good one is short, none empty
+    going = per[b] > 0  # still reporting at the window's end
+    if going and len(later) > RECENT_SHORT and min(later) > 0:  # every year after its last good one is short
         return FEW_AFTER.format(full[-1], min(later), max(later))
-    if len(short) > RECENT_SHORT and min(short) > 0:
+    if going and len(short) > RECENT_SHORT:
         return FEW_IN.format(len(short))
     if full and (full[0] > a or full[-1] < b):
-        return COVERS.format(full[0], full[-1])
+        return COVERS.format(years)
     return MISSES.format(round(100 * (1 - share)))
 
 
@@ -175,8 +184,7 @@ def _row(sid: str, main: bool, rec, lat: float, lon: float) -> dict:
         km = round(float(km if km is not None else haversine_km(round(float(lat), 2), round(float(lon), 2), place["lat"],
                                                                  place["lon"])), 1)
         where = f"{place['name']}, {_km(km)} km away"
-        url = (s["source"] or {}).get("record_url") or ""
-        st = {"id": url.split("GHCND:")[1].split("/")[0] if "GHCND:" in url else None, "name": place["name"]}
+        st = {"id": place.get("id"), "name": place["name"]}
     elif not station:
         where = WHERE.format(GRID_KM[sid])
     full = None if s is None else rec[1]

@@ -26,9 +26,11 @@ def empty_cache():
     """Every test in the suite starts and ends with no cached series, so patched fetchers are really called
     and an entry cached by one test cannot answer a later one."""
     data._cache.clear()
+    data._flying.clear()
     coops._record.cache_clear()
     yield
     data._cache.clear()
+    data._flying.clear()
     coops._record.cache_clear()
 
 
