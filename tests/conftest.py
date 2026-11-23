@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from earthtrends import data
-from earthtrends.data import coops
+from earthtrends.data import coops, era5
 from earthtrends.app import app
 
 
@@ -19,6 +19,13 @@ def no_network(monkeypatch):
     def down(*_, **__):
         raise httpx.ConnectError("tests do not call providers")
     monkeypatch.setattr(httpx, "get", down)
+
+
+@pytest.fixture(autouse=True)
+def no_pack(monkeypatch):
+    """era5.PACK_URL defaults to our public Blob store; no test reads it. A pack test sets BHOOMI_ERA5_PACK to a local
+    folder, or to a URL that its own patched httpx.get serves."""
+    monkeypatch.setattr(era5, "PACK_URL", None)
 
 
 @pytest.fixture(autouse=True)

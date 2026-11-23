@@ -153,7 +153,8 @@ def tried_sources(call: dict) -> list[dict]:
     src = args.get("source")
     # Only a source left out (None) gets the sea-level fallback, as in the data layer; "" is its default alone.
     ids = entry["sources"][:2 if entry["id"] == "sea_level" else 1] if src is None else [src or entry["sources"][0]]
-    return [{"name": SOURCES[i]["name"], "url": SOURCES[i]["url"]} for i in ids if i in entry["sources"] and i in SOURCES]
+    known = {**SOURCES, "era5": era5.default_source()}  # ERA5: our pack's when one is configured, else Open-Meteo's
+    return [{"name": known[i]["name"], "url": known[i]["url"]} for i in ids if i in entry["sources"] and i in known]
 
 
 # ---- sources that agree: the code writes their sentence, the model never sees their numbers ----

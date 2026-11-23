@@ -1,6 +1,7 @@
 """ERA5 pack (format: earthtrends/data/era5.py's docstring). Packs are built by scripts/build_era5_pack.py's pure functions
-from a synthetic grid in both file conventions, then read back. No network: conftest's no_network makes httpx.get
-raise, and the HTTP cases serve the local pack through a patched httpx.get."""
+from a synthetic grid in both file conventions, then read back; the real-data tests read fixtures/era5_pack_mini, a
+mini pack built with --points from the real CDS files. No network: conftest's no_network makes httpx.get raise, and the
+HTTP cases serve the local pack through a patched httpx.get."""
 import importlib.util
 import io
 import json
@@ -237,7 +238,7 @@ def test_an_unlisted_tile_is_no_land_and_never_requested(packs, monkeypatch, cap
 
 
 def test_no_pack_base_and_replay_keep_open_meteo(packs, monkeypatch):
-    assert era5.PACK_URL is None and era5.pack_series("air_temp", 28.61, 77.21) is None  # no base: Open-Meteo, as today
+    assert era5.PACK_URL is None and era5.pack_series("air_temp", 28.61, 77.21) is None  # conftest: no base, Open-Meteo
     monkeypatch.setenv(era5.PACK, str(packs / "a"))
     monkeypatch.setenv(era5.REPLAY, str(Path(__file__).parent / "fixtures" / "era5_replay"))
     s = data.get_series("air_temp", 28.61, 77.21, source="era5")  # replay keeps priority over the pack
@@ -340,3 +341,47 @@ def test_main_refuses_a_mask_with_another_md5(tmp_path, capsys):
         "--mask", str(tmp_path / "mask.nc4"), "--out", str(tmp_path / "out"), "--retrieved", "2026-11-20",
         "--product-version", "x"]
     assert bep.main(args) == 1 and "refused mask" in capsys.readouterr().err and not (tmp_path / "out").exists()
+
+
+MINI = Path(__file__).parent / "fixtures" / "era5_pack_mini"  # real: build_era5_pack.py --points, CDS files of 2026-11-23
+
+
+def no_open_meteo(*_):
+    raise AssertionError("a pack read must never fall back to Open-Meteo here")
+
+
+@pytest.mark.parametrize("variable, lat, lon, cell, values", [  # values: 1981-01, 2000-07, 2025-12
+    ("air_temp_max", 28.61, 77.21, "28.50° N, 77.25° E", (23.81, 38.64, 25.32)),  # Delhi, the hottest day
+    ("air_temp", 40.35, -74.66, "40.25° N, 74.75° W", (-4.28, 22.52, 0.56)),  # Princeton
+    ("precip", 13.08, 80.27, "13.00° N, 80.25° E", (0.72, 2.74, 3.08)),  # Chennai, mm a day
+])
+def test_the_real_mini_pack(monkeypatch, variable, lat, lon, cell, values):
+    monkeypatch.setenv(era5.PACK, str(MINI))
+    monkeypatch.setattr(era5, "fetch", no_open_meteo)
+    s = data.get_series(variable, lat, lon, source="era5")
+    assert len(s["times"]) == len(s["values"]) == 540 and (s["times"][0], s["times"][-1]) == ("1981-01", "2025-12")
+    assert (s["values"][0], s["values"][s["times"].index("2000-07")], s["values"][-1]) == values
+    assert None not in s["values"] and s["flags"] == [None] * 540
+    src = s["source"]
+    assert {k: src[k] for k in ("id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "attribution")} == {
+        "id": "era5", "name": "ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)",
+        "url": "https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas", "dataset_id": "doi:10.24381/cds.h35hb680",
+        "version": "v2.0", "record_url": "https://doi.org/10.24381/cds.h35hb680", "retrieved": "2026-11-23",
+        "attribution": upstream.COPERNICUS}
+    assert f"for the grid cell centred at {cell}, about 25 km across" in src["method"]
+    assert "ERA5 data through December 2025." in s["notes"]
+
+
+def test_a_record_that_could_not_be_read_names_the_pack_when_one_is_set(monkeypatch):
+    from earthtrends.agent import loop
+    from earthtrends.stats import records
+    tried = {"name": "detect_trend", "arguments": {"variable": "air_temp", "lat": 28.61, "lon": 77.21}}  # ERA5 first
+    for base, want in ((None, era5.SOURCE), (str(MINI), era5.PACK_SOURCE)):
+        if base:
+            monkeypatch.setenv(era5.PACK, base)
+        assert era5.default_source() is want
+        row = records._row("era5", True, httpx.ConnectError("down"), 28.61, 77.21)
+        assert row["source"] == {**want, "record_url": None}  # no tile, no request to point at
+        assert loop.tried_sources(tried) == [{"name": want["name"], "url": want["url"]}]
+    monkeypatch.setenv(era5.REPLAY, str(Path(__file__).parent / "fixtures" / "era5_replay"))
+    assert era5.default_source() is era5.SOURCE  # replay reads Open-Meteo's recordings, so it keeps their name

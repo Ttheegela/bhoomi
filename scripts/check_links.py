@@ -2,8 +2,10 @@
 Live, by hand, never in tests or on Vercel (about 40 small requests):  uv run python scripts/check_links.py
 
 The series come from the real data code (earthtrends.data.get_series), so the URLs checked are the ones users get.
-ERA5: record_url is the Open-Meteo archive request the fetcher makes, and this project never calls that API from a
-developer machine, so only the ERA5 DOI page is fetched here (tests/test_data.py checks the URL is the request made).
+ERA5: record_url is our pack's tile file (era5.PACK_URL; not a page, checked when the pack is uploaded), or for a
+fallback the Open-Meteo archive request the fetcher makes. This project never calls that API from a developer machine,
+so only the dataset pages are fetched here: the pack's CDS page and DOI, and Open-Meteo ERA5's DOI (tests/test_data.py
+checks the fallback URL is the request made).
 CO-OPS station pages are filled in by JavaScript, so their HTML never holds the station's name: the page must answer 200,
 and the station metadata it loads (the CO-OPS metadata API, same id) must name the station.
 Exit status 1 if any check fails. Hosts it reaches: power.larc.nasa.gov, www.ncei.noaa.gov, tidesandcurrents.noaa.gov,
@@ -62,6 +64,9 @@ def main() -> None:
                 check(label, url, [grace.ZIP])
         rows.append((f"{place}: era5 (not fetched)", era5.request_url(era5.PARAMS["air_temp_max"], lat, lon), "-", "the fetcher's own request"))
     check("ERA5 dataset DOI", "https://doi.org/" + era5.DATASET_ID[4:], ["ERA5 hourly data on single levels"])
+    atlas = ["Gridded dataset underpinning the Copernicus Interactive Climate Atlas"]  # the ERA5 pack's dataset
+    check("ERA5 pack dataset page", era5.PACK_PAGE, atlas)
+    check("ERA5 pack dataset DOI", era5.PACK_DOI_URL, atlas)
     check("GHCN-Daily DOI", "https://doi.org/10.7289/V5D21VHZ", ["GHCN", "Global Historical Climatology Network"])
     for name, want in (("land_temp", ["Global Land Average Temperature"]), ("gmsl", ["MERGED_TP_J1_OSTM_OST_GMSL_ASCII_V52"])):
         src = world.reference(name)["source"]

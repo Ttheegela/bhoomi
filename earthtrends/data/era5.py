@@ -1,7 +1,8 @@
 """ERA5 reanalysis: our own pack of the Copernicus Interactive Climate Atlas dataset, else the Open-Meteo archive API.
 
 Order (get_series): the replay folder (BHOOMI_ERA5_REPLAY, tests and QA only), then the pack when a base is set
-(BHOOMI_ERA5_PACK, else PACK_URL: a base URL such as https://…/era5/v1, or a local folder), then Open-Meteo, no key.
+(BHOOMI_ERA5_PACK, else PACK_URL: a base URL such as https://…/era5/v2025-12, or a local folder), then Open-Meteo,
+no key.
 Open-Meteo runs only when no base is set, a pack read fails (a warning names the file), or the pack has no land cell
 for the place. A pack series names its own source, so a visitor always sees which one they got.
 
@@ -170,7 +171,8 @@ def fetch(param: str, lat: float, lon: float) -> dict:
 # ---- our ERA5 pack (format in the module docstring) ----
 
 PACK = "BHOOMI_ERA5_PACK"  # env: the pack's base URL or local folder; overrides PACK_URL
-PACK_URL = None  # the public Blob store's base, https://…/era5/v1, once it exists; None: Open-Meteo only
+# the public Vercel Blob store (a public URL, no key); None: Open-Meteo only
+PACK_URL = "https://cwdhfa4n9sdqfokd.public.blob.vercel-storage.com/era5/v2025-12"
 PACK_TIMEOUT_S = 5
 PACK_VARS = ("t", "txx", "r")
 PACK_START = "1981-01"
@@ -187,6 +189,19 @@ PACK_METHOD = {
                     "days run midnight to midnight UTC.",
     "precip": "The Atlas dataset's monthly mean of ERA5 daily precipitation totals, in mm a day, for {cell}.",
 }
+
+
+def pack_base() -> str | None:
+    """The pack's base URL or local folder (BHOOMI_ERA5_PACK, else PACK_URL), or None when none is set or replay is on:
+    then ERA5 comes from Open-Meteo only."""
+    base = os.environ.get(PACK) or PACK_URL
+    return None if os.environ.get(REPLAY) or not base else base.rstrip("/")
+
+
+def default_source() -> dict:
+    """ERA5's source for a record that couldn't be read: the pack's when a pack is configured, else Open-Meteo's. The
+    caller adds record_url (None: no tile or request to point at)."""
+    return PACK_SOURCE if pack_base() else SOURCE
 
 
 def _wrap(qlon: int) -> int:
@@ -259,10 +274,9 @@ def pack_series(variable: str, lat: float, lon: float) -> tuple[list[str], list[
     """(times, values, source, notes) for a place from the pack: monthly, values in °C or mm a day, None for a missing
     month, no preliminary months. None when replay is on, no base is set, the place's 3 × 3 block has no land cell, or
     a read fails (logged as a warning naming the file): the caller then uses Open-Meteo."""
-    base = os.environ.get(PACK) or PACK_URL
-    if os.environ.get(REPLAY) or not base:
+    if not (base := pack_base()):
         return None
-    base, name = base.rstrip("/"), "manifest.json"
+    name = "manifest.json"
     try:
         m = _manifest(base)
         retrieved, version, listed = m["retrieved"], m["product_version"], m["tiles"]
