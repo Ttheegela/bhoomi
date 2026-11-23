@@ -158,6 +158,17 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - Single-page flow: question and search box, then the map slot, measurement, verdict and chart (it was: place chips, then measurement, then verdict and chart).
 - Map pins (`web/design/13-maps.md` §2a, 2026-11-22, QA B1): every pinned place is an ink teardrop, 14 × 22 px (selected 18 × 28), tip on the place, 1.5 px `--surface` halo, 48 px target; the key adds "Your places". It replaced the grey round pin, which read as the "No clear change" ring. Not picked: a 25 px ink ring. Pictures for the owner: `rework-pr5-pins/` in the side-session notes.
 - CMIP6 future for air temperature, hottest day and rain (`web/design/15-cmip6.md`, 2026-11-22): each 20-year window is a box across its 20 years (10th–90th percentile, the median as a bar; other scenarios as median bars only), not a point with a bar and not a band joining the windows; rain windows where models disagree get a dashed box and "Models disagree"; with a projection these charts plot yearly dots, not the monthly line; card R3 reads "Around 2050, {scenario}" (not "By 2050": the value is a 2041–2060 average); no "What experts project" card (a projections table under the chart and a CSV in step 9 instead); a flag when the records and the models point opposite ways. Pictures for the owner: `rework-pr3-design/` in the side-session notes.
+- Records side by side (`web/design/12-two-sources.md`, PR4a, 2026-11-22; the main record per measurement is the owner's):
+  - The other records are one compact table, "Records for this place", under the readouts. The main record is its first row, in bold, so the rates line up.
+  - The chart keeps the main record only, and the other records' series are never fetched for the page.
+  - The card loads with `compare=false`, then a second `/api/trend` fills the table. The server computes agreement, reasons and drift for the page, Ask and MCP alike.
+  - The card names up to 4 reasons, chosen by server rules: drift, station gaps, close to the clear-change line, station against grid, two models.
+  - A drift line shows even when the records agree (Sydney).
+  - A "Other records disagree ↓" link sits on the verdict line.
+  - The sidebar label is "Main record" on the temperature and rain tabs.
+  - The new step 8 "Other records" leaves steps 1 to 7 numbered as before.
+  - ERA5T months are named in the card meta and the chart sub-line, with no new chart mark.
+  - Pictures for the owner: `rework-pr4-records-design/` in the side-session notes.
 - Hand-written SVG chart and no JS libraries or CDN fonts.
 - Two stacked chart panels (raw, then seasons removed with trend and band).
 - Tab icon `web/favicon.svg`: a rising line, then a dot, white on a black rounded square (plain presentation attributes, no embedded style, so a strict Content-Security-Policy cannot block it; reads on light and dark tabs); no text, no NASA imagery. Link previews use title and description only (no og:image).
