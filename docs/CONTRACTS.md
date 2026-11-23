@@ -398,6 +398,7 @@ time,value_degC,anomaly_degC,flag
 | `list_variables` | none | list of catalog entries |
 | `get_series` | `variable`, `lat`, `lon`, `start?`, `end?`, `source?` | `TimeSeries` |
 | `detect_trend` | `variable`, `lat`, `lon`, `start?`, `end?`, `source?` | `TrendResult` |
+| `get_projection` (PR6) | `variable`, `lat`, `lon`, `scenario?`, `year?`, `source?` | the projection answer in `web/design/16-plain-language.md` §5 (`plain` first; `high_end`; `model_range` for CMIP6, `likely_range` for AR6 sea level only); unknown variable or scenario, a year not offered, or no tide gauge within 100 km give a `ToolError` with a plain message. MCP only: the page reads `projection` from `/api/trend`. |
 
 - `source` left out: use the variable's default source; for `sea_level`, if the default source has no tide gauge within 100 km of the point, the next source in the variable's list is used. A point with no gauge in any source gives a clear 4xx. A source the variable doesn't have, an unknown variable, a bad lat/lon, or a point with no data gives a clear 4xx error, never a 500.
 
