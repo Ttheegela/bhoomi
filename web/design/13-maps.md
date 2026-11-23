@@ -48,7 +48,7 @@ Numbers use the card's own formatter (signs, true minus, 1 decimal; inches with 
 ```
 Near {lat}° N, {lon}° E                                      (600; S and W as needed, 1 decimal)
 {Rising|Falling|No clear change}: {±x.x} cm of water a year, 95% range {±lo} to {±hi}[, which includes no change].
-{Month YYYY} to {Month YYYY} · averaged over about 300 km · GRACE                  (grey)
+{Month YYYY} to {Month YYYY} · averaged over about 400 km · GRACE                  (grey)
 Click for the full answer.                                                         (grey)
 ```
 **Click** pins the clicked point, as today (it reads the same block).
@@ -58,9 +58,9 @@ Click for the full answer.                                                      
 3. [pale block] "No clear change"
 4. Pointer: "Point at a block to read it. Click it to open the answer for that spot." Touch: "Tap a block to open the answer for that spot."
 5. `--ink`, weighted by block area: "In view, by area: {a}% losing water, {b}% gaining, {c}% no clear change."
-6. "Each block is the satellites' average over about 300 km: read regions, not towns. A pale block is not proof of no change, and even with no real change anywhere, about 1 block in 20 would look clear by chance."
+6. "Each block is the satellites' average over about 400 km: read regions, not towns. A pale block is not proof of no change, and even with no real change anywhere, about 1 block in 20 would look clear by chance."
 7. "Rates: our calculation from NASA GSFC GRACE and GRACE-FO mascons, {Month YYYY} to {Month YYYY}. Levels on this tab are compared with the provider's 2004–2009 average. Greenland, Antarctica and the Gulf of Alaska glaciers are left out."
-- The page head says "an average over about 400 km" today; it changes to "about 300 km" so the page says one number (data lane to confirm, section 11).
+- The page head and the map both say "about 400 km": the point answer averages a 4° box (`grace-trends.json` `footprint_km` 444).
 
 ## 5. Tokens (style.css; light, then dark) and the checks they passed
 | Token | Light | Dark | Use |
@@ -121,5 +121,5 @@ The options as they were offered:
 ## 11. Chosen by the agent (swappable), left out, needs and risks
 - Chosen: the breaks (−3, 0, 2, 4, 7 mm; ±1, ±2 cm) and token values; the grey conversion factors; sizes, rings, 24 px touch radius, zoom 2 for hover and snap; draw order by rate; hiding gauges under 20 years; the in-view line and its "Fastest rise"; hover and key words; the key under the map, not over it; the water layer always on; the detailed base map greyed under a colour layer; GRACE blocks under labels with water above.
 - Left out: a histogram and stats row under the map (the in-view line says the shares in one sentence; no persona needs a distribution); numbers drawn on the map; clustering; a "fastest gauges" list (the line names the fastest); a reset-view button (a pick re-centres); a globe or equal-area projection (shares are by area, so numbers stay right); a Settings switch for the water layer; the world warming grid and "conditions now" (spec: after the release).
-- Needs, data and stats lanes: `gauge-trends.json` lists every gauge in both lists with `id`, `lat`, `lon` (`slope`, `lo`, `hi`, `verdict` null under 20 years), plus `data_through` and each source's name and URL; rates from the same code as the point answer. `grace-trends.json` adds `lo`, `hi`, `lat`, `lon`, `area` per mascon, plus start and end months, source name and URL, and the reference period. Confirm 300 km against the page head's 400 km.
+- Needs, data and stats lanes: `gauge-trends.json` lists every gauge in both lists with `id`, `lat`, `lon` (`slope`, `lo`, `hi`, `verdict` null under 20 years), plus `data_through` and each source's name and URL; rates from the same code as the point answer. `grace-trends.json` adds `lo`, `hi`, `lat`, `lon`, `area` per mascon, plus start and end months, source name and URL, and the reference period. Footprint settled: about 400 km (§10).
 - Risks: (1) whole-record rates mix periods: a gauge that starts in 1984 looks faster partly because the sea rises faster now; the key says so and the hover shows the years. (2) The style walk may miss a colour a future OpenFreeMap style adds; QA looks for any hue in the base map. (3) A pin on top of a gauge (Lower Manhattan) must not block the gauge's hover; check the map still gets `mousemove` over the pin. (4) Tritan and deutan users see neighbouring classes close (ΔE 6.7); the hover gives the number. (5) Mercator makes northern blocks look bigger than they are. (6) Outside PR5 but against the owner's checks: the sidebar's ALL-CAPS labels, and the sticky top bar at 375.
