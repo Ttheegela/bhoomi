@@ -33,6 +33,7 @@ Pictures: `rework-pr4-records-design/` in the side-session notes (static mock, "
 .where    h2#rec-h {pin.label}
           p.meta   {main src} ↗ · {latest.text}[ ({months} preliminary)]          §7
 .verdict  {▲|▼|≈} {word}   {conf}[ · <a href="#rec-oth">Other records disagree ↓</a>]
+[p.one     {single_note}]                                                          domain review 2026-11-23
 p.say · p.world · .reads R1|R2|R3                                                   main record, unchanged
 .oth      Records for this place                                                    new
 .next · .acts · p.disc                                                              unchanged
@@ -83,7 +84,7 @@ p.dn  "The records can't tell us which of these reasons applies here, so we show
 | No station within 25 km (`status` "none") | Row "Weather station", with no link and no `where` line. Spanning cell `why`: "No weather station within 25 km has 30 years of daily {mean temperature \| high temperature \| rain} data since 1981." |
 | Station too short (`status` "short") | "Weather station ↗" and "{name}, {km} km away". Spanning cell `why`, e.g. "This station has fewer than 30 years of daily rain data since 1981, and no other station within 25 km does either." |
 | One record couldn't be read (`status` "error") | Its spanning cell: "We couldn't read this record just now." Under the table, a button "Try the other records again". |
-| Fewer than two rows with a trend | Rows only; `disagree` is null, so there is no line and no reasons. |
+| Fewer than two counted rows (ERA5 down, station thin or missing, any mix) | Rows only; `disagree` is null, so there is no line and no reasons. Under `.verdict`, `p.one` (15 px `--ink-2`, margin 4 px 0 0) prints `single_note` verbatim, e.g. "Only one record could be compared here, so this answer rests on a single weather model." The verdict stays as it is. |
 - The block's arrival never moves focus. A re-render that removes a focused retry button sends focus to `h3#rec-oth`. The card's `aria-busy` is false once the main record is drawn.
 
 ## 6. Sidebar "Main record"
