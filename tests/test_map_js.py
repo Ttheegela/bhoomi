@@ -352,6 +352,36 @@ def test_pins_are_ink_teardrops_with_a_key_line():
             assert "--mk-mod" not in f.read_text(encoding="utf-8"), f
 
 
+def test_the_hover_sits_above_the_selected_pin_and_its_tag():
+    """QA B6: the selected pin's black tag covered the hover's last line ("Click for the full answer."): the popup's z-index
+    must be above .map-mk.sel's."""
+    css = (ROOT / "web" / "map.css").read_text(encoding="utf-8")
+    z = lambda sel: int(re.search(r"(?:^|\n)%s \{[^}]*z-index: (\d+);" % re.escape(sel), css)[1])
+    assert z(".map-tip") > z(".map-mk.sel") >= 1
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_a_redraw_after_a_map_tap_keeps_the_map_in_place():
+    """QA B4 residual: at 375 the card and sidebar sit above the map. After a tap on the map, a redraw that makes them taller
+    (or shorter) scrolls the page by the same amount, so the map stays put; a redraw that leaves the map alone scrolls none.
+    Only a tap or key press inside #map-slot turns it on."""
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    fn = re.search(r"^function keepTop\(.*?^}$", app, re.M | re.S)[0]
+    changed = app.split("function changed() {")[1].split("\n}\n")[0]
+    assert "if (fromMap) keepTop($('map-slot'), draw," in changed and "behavior: 'instant'" in changed
+    assert "e.target.closest('#map-slot')" in app
+    js = fn + r"""
+var box = { top: 157, getBoundingClientRect: function () { return { top: this.top }; } }, moved = [];
+keepTop(box, function () { box.top += 98; }, function (d) { moved.push(d); });   // a taller answer above the map
+keepTop(box, function () { box.top -= 60; }, function (d) { moved.push(d); });   // a shorter one
+keepTop(box, function () {}, function (d) { moved.push(d); });                   // the map did not move: no scroll
+console.log(JSON.stringify(moved));
+"""
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == [98, -60]
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_map_key_and_card_height_lines():
     """QA B3: the water key says a block's rate is for its centre. QA B4: while a place loads the card keeps its last height
