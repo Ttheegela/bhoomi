@@ -95,6 +95,15 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
     It also carries guidance: fact (one sentence on what the records show), look_next (where to look next: labels,
     with a url or null) and disclaimer. These are facts, not advice: pass them on as given, and give no risk level
     or recommendation of your own.
+    It also carries projection: the experts' projection for this place under emission scenarios, not a prediction
+    and not the past trend carried on. available false: `why` says why there is none. Sea level: IPCC AR6 at the
+    tide gauge; readouts.by_2050 is 2050, and its range is the "likely range (about 2 in 3 chance)" (medium
+    confidence; low-confidence scenarios give the "17th to 83rd percentile", never "likely"). Air temperature,
+    hottest day of the month and rain: CMIP6 from the IPCC AR6 Interactive Atlas; readouts.by_2050 is 2041–2060 and
+    its range is the "range across climate models (10th–90th percentile)", never "likely" or a chance; for rain,
+    by_2050.disagree true means models disagree on wetter or drier. Quote readouts.by_2050.text with its range_kind
+    and scenario, readouts.more_than_today only where it is given, and models_note when it is set; every level is
+    against the 1995–2014 average.
     verdict is one of "rising", "falling" or "no_clear_change" (p >= 0.05 or the CI crosses 0).
     When you report it, give the slope with its CI, name the source, and keep the caveats.
     """

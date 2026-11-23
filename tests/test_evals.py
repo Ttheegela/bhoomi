@@ -913,9 +913,9 @@ def agent_case(cid):
 def test_agent_case_file_loads_after_cases_toml():
     ids = [c["id"] for c in run.load_cases()]
     n = len(run.load_cases(run.CASES))
-    assert ids[n:n + 4] == ["followup-jakarta-sea-level", "followup-explain-range", "manhattan-build-house",
-                            "asia-sea-level-broad"]
-    assert len(ids) == n + 15 and ids[-1] == "atlantic-city-many-measurements"
+    assert ids[n:n + 5] == ["followup-jakarta-sea-level", "followup-explain-range", "followup-explain-likely-range",
+                            "manhattan-build-house", "asia-sea-level-broad"]
+    assert len(ids) == n + 17 and ids[-1] == "atlantic-city-many-measurements"
     jak = agent_case("followup-jakarta-sea-level")
     assert [m["role"] for m in jak["history"]] == ["user", "assistant"] and "expect_verdict" not in jak
     assert agent_case("followup-explain-range")["history"] == jak["history"]
