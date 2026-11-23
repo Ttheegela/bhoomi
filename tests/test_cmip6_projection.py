@@ -75,7 +75,10 @@ def test_delhi_hottest_day():
     assert (p["units"], p["change_kind"], p["caveat"], p["models_note"]) == ("degC", "difference", GRID, RAW)
     r = p["readouts"]
     assert r["by_2050"]["text"] == "+1.3 °C (range across climate models +0.5 to +1.8 °C)"
-    assert r["more_than_today"] == {"value": 0.75, "text": "about 0.75 °C more than today", "approximate": True}
+    assert r["now"] == t["now"] and r["now"] is not None
+    assert r["more_than_today"] is None  # one year's hottest days swing more than the change (PR3 QA)
+    cool = {**t["now"], "value": -1.6}  # the QA case: a cool year read "about 2.9 °C more than today"
+    assert projection.cmip6(series("delhi_hottest_day"), t["baseline"], cool)["readouts"]["more_than_today"] is None
     assert t["guidance"]["disclaimer"] == DISCLAIMER_PROJECTION
 
 

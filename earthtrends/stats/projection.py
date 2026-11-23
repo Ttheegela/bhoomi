@@ -250,7 +250,9 @@ def cmip6(series: dict, base: dict, now: dict | None) -> dict:
     d = next(s for s in scenarios if s["id"] == CMIP6_DEFAULT)
     p50, low, high = d["p50"][w], d["p10"][w], d["p90"][w]
     more = None
-    if not rain and now is not None:  # rain: one year's rain swings more than the change
+    # air temperature only: one year's rain or hottest days swing more than the change (PR3 QA: Delhi's hottest day
+    # read "about 2.9 °C more than today" after a cool year)
+    if var == "air_temp" and now is not None:
         diff = _dec(p50) - _dec(now["value"])
         diff = sig2(diff) if q(diff, "0.01") else Decimal(0)  # p50 has 2 decimals: closer than that is the same
         more = _more(float(diff), now["end"], f"{abs(diff):f} °C")
