@@ -127,7 +127,7 @@ Every rate shown anywhere comes from the result's `headline_rate`, in the unit p
 
 - `headline_rate` has `value`, `low` and `high` to 3 significant figures.
 - Its `text` is 2 significant figures, signed with a true minus: "+4.3 mm a year". For rainfall it is the share worked out from the 4-decimal `slope_per_decade`, so it always matches `guidance.rate.text`: 0.049496 mm/day per decade on a 1.0 mm/day average reads "+5.0%", not "+4.9%".
-- Its `range_text` shows both ends to the same decimals, with enough decimals that the ends differ: "+4.1 to +4.4 mm a year". A rainfall end that would read on or across 5% or 10% shows the share as `guidance.rate` works it out, to 2 significant figures ("+4.5 to +17%", not "+5 to +17%"); a leftover of the old rain levels, harmless now.
+- Its `range_text` shows both ends to the same decimals, with enough decimals that the ends differ: "+4.1 to +4.4 mm a year". Rainfall has no special case near any value: "+5 to +17%".
 - Rainfall with no 1995–2014 average above 0 has `headline_rate` null.
 - Levels (`fit`, `anomaly`) keep the series units, and the page may show them in the `display` unit.
 
