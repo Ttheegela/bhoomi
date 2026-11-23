@@ -286,24 +286,32 @@ var NAME = { air_temp: 'Air temperature', air_temp_max: 'Hottest days', precip: 
 function real(n, label) { var d = load(n), t = d.trend; return { t: t, s: d.series, c: { label: label, name: NAME[t.variable], slug: SLUG[t.variable], imperial: false, cmp: 'ok' } }; }
 function rowsText(b) { return b.rows.map(function (r) { return r.why !== undefined ? [r.label, r.sub, r.why] : [r.label + (r.href ? ' ↗' : ''), r.sub, r.shape + ' ' + r.word, r.rate, r.years, r.miss, r.note]; }); }
 
-// Delhi, hottest day: the records disagree; the headline (main record's full window) and the main row (shared years) differ
-var RD = real('delhi_hottest_day', 'Delhi, India'), rb = recBlock(RD.t, RD.c), rs = steps(RD.t, RD.s, RD.c);
-assert.strictEqual(rb.window, 'Same years for all: 1981 to 2024');
+// Delhi, hottest day: the records disagree. Numbers come from the fixture as the server made them; the words around them are fixed.
+var RD = real('delhi_hottest_day', 'Delhi, India'), rb = recBlock(RD.t, RD.c), rs = steps(RD.t, RD.s, RD.c), RC3 = RD.t.comparisons;
+var asGiven = function (x) { return x.headline_rate.text.replace(/ per decade$/, ''); }; // a row's rate: the server's text without "per decade"
+var missing = function (x) { return x.n_missing > 0 ? x.n_missing + ' months missing' : ''; };
+assert.strictEqual(rb.window, RD.t.comparisons_window.label);
+assert.ok(/^Same years for all: 1981 to 20\d\d$/.test(rb.window), rb.window);
 assert.deepStrictEqual(rowsText(rb), [
-  ['NASA POWER ↗', 'Main record · Weather model, grid cell about 50 km wide', '▲ Rising', '+0.22 °C', '1981–2024', '', ''],
-  ['ERA5 ↗', 'Weather model, grid cell about 25 km wide', '≈ No clear change', MN + '0.022 °C', '1981–2024', '', ''],
-  ['Weather station ↗', 'New Delhi Safdarjun, IN, 1 km away', '▲ Rising', '+0.39 °C', '1981–2024', '81 months missing', '']]);
-assert.strictEqual(card(RD.t, false).r2.value, '+0.23' + NB + '°C'); // the card's headline, as given
-assert.ok(rb.link && rb.dis.line === 'The records disagree here.' && rb.dis.reasons.length === 4);
+  ['NASA POWER ↗', 'Main record · Weather model, grid cell about 50 km wide', '▲ Rising', asGiven(RC3[0]), RC3[0].years, '', ''],
+  ['ERA5 ↗', 'Weather model, grid cell about 25 km wide', '≈ No clear change', asGiven(RC3[1]), RC3[1].years, '', ''],
+  ['Weather station ↗', RC3[2].where, '▲ Rising', asGiven(RC3[2]), RC3[2].years, missing(RC3[2]), '']]);
+assert.ok(/^New Delhi Safdarjun, IN, 1 km away$/.test(RC3[2].where));
+var rq = rate(RD.t, false); assert.strictEqual(card(RD.t, false).r2.value, bare(rq)); // the card's headline: its own full window, as given
+assert.ok(rb.link && rb.dis.line === 'The records disagree here.' && rb.dis.reasons.length >= 2 && rb.dis.note === CANT);
 assert.deepStrictEqual(rb.dis.reasons, RD.t.disagree.reasons.map(function (x) { return x.text; }));
 assert.strictEqual(rs[7].short, 'They disagree: NASA POWER rising, ERA5 no clear change, weather station rising');
 assert.ok(rs[7].open === true);
-assert.strictEqual(rs[7].work[rs[7].work.length - 1], 'Drift, month by month, each record against its own 1995–2014 average: ERA5 minus NASA POWER ' + MN + '0.25' + NB + '°C per decade (95% range '
-  + MN + '0.27 to ' + MN + '0.23); ERA5 minus the weather station ' + MN + '0.44' + NB + '°C per decade (' + MN + '0.49 to ' + MN + '0.38). We flag a model when it drifts the same way against every other record.');
-var rl = csvPlace(RD.t, RD.s, RD.c).text.split('\n');
+var dr = RD.t.drift, sg = function (x) { return (x > 0 ? '+' : x < 0 ? MN : '') + Math.abs(x); };
+assert.strictEqual(rs[7].work[rs[7].work.length - 1], 'Drift, month by month, each record against its own 1995–2014 average: ERA5 minus NASA POWER ' + sg(dr.pairs[0].rate) + NB + '°C per decade (95% range '
+  + sg(dr.pairs[0].low) + ' to ' + sg(dr.pairs[0].high) + '); ERA5 minus the weather station ' + sg(dr.pairs[1].rate) + NB + '°C per decade (' + sg(dr.pairs[1].low) + ' to ' + sg(dr.pairs[1].high)
+  + '). We flag a model when it drifts the same way against every other record.');
+var rl = csvPlace(RD.t, RD.s, RD.c).text.split('\n'), ascii = function (s) { return s.replace(/−/g, '-'); };
 assert.ok(rl.indexOf('# Main record: NASA POWER (MERRA-2) (chart, trend and projection baseline)') > 0);
-assert.ok(rl.indexOf('# Other record: ERA5 reanalysis via Open-Meteo archive; 1981–2024; -0.022 °C per decade (95% range -0.11 to +0.06 °C per decade); no clear change; ' + RD.t.comparisons[1].source.record_url) > 0);
-assert.ok(rl.some(function (l) { return l.indexOf('# Other record: NOAA NCEI GHCN-Daily, station New Delhi Safdarjun, IN (IN022021900), 1 km away; 1981–2024, 81 months missing; +0.39 °C per decade (95% range ') === 0; }));
+assert.ok(rl.indexOf('# Other record: ERA5 reanalysis via Open-Meteo archive; ' + RC3[1].years + '; ' + ascii(RC3[1].headline_rate.text) + ' (95% range ' + ascii(RC3[1].headline_rate.range_text) + '); no clear change; '
+  + RC3[1].source.record_url) > 0, rl.join('\n'));
+assert.ok(rl.indexOf('# Other record: NOAA NCEI GHCN-Daily, station New Delhi Safdarjun, IN (IN022021900), 1 km away; ' + RC3[2].years + (RC3[2].n_missing ? ', ' + missing(RC3[2]) : '') + '; '
+  + ascii(RC3[2].headline_rate.text) + ' (95% range ' + ascii(RC3[2].headline_rate.range_text) + '); rising; ' + RC3[2].source.record_url) > 0, rl.join('\n'));
 assert.ok(rl.indexOf('# Records agree: no') > 0 && rl.indexOf('# Drift: ' + RD.t.drift.text) > 0 && rl.indexOf('# ' + COP) > 0); // an ERA5 row: Copernicus
 nothingBanned([rb, rs, rl]);
 
