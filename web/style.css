@@ -146,6 +146,7 @@ span.srclink { color: var(--ink-2); }
 .rec .meta { color: var(--ink-2); font-size: 14px; margin: 4px 0 0; }
 .rec .meta a { color: var(--ink-2); }
 .rec .meta .nw { white-space: nowrap; }
+.rec .mnote { font-size: 14px; margin: 2px 0 0; max-width: none; } /* main_note: ink, so the fallback is seen */
 .verdict { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin: 18px 0 6px; }
 .verdict b { font-family: var(--font-head); font-size: 40px; font-weight: 700; line-height: 1.1; }
 .verdict .shape { font-size: 30px; margin-right: 8px; position: relative; top: -3px; }
@@ -153,11 +154,6 @@ span.srclink { color: var(--ink-2); }
 .rec .say { font-size: 18px; line-height: 1.45; margin: 0 0 14px; max-width: none; }
 .rec .world { font-size: 15px; color: var(--ink-2); margin: -6px 0 16px; max-width: none; }
 .rec .world a { font-size: 14px; color: var(--ink-2); }
-/* the model grid against the nearest weather station (QA B10): a grey line and its button; a disagreement in ink */
-.rec .model { margin: -6px 0 16px; }
-.rec .model p { font-size: 15px; color: var(--ink-2); margin: 0 0 8px; max-width: none; }
-.rec .model.strong p { font-size: 16px; font-weight: 600; color: var(--ink); }
-.rec .model .btn { white-space: normal; text-align: left; padding: 8px 16px; max-width: 100%; } /* wraps on a phone */
 .reads { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 0 18px; }
 .reads > div { padding: 14px 14px 14px 0; min-width: 0; }
 .reads > div + div { padding-left: 14px; border-left: 1px solid var(--line); }
@@ -193,6 +189,52 @@ span.srclink { color: var(--ink-2); }
   .next .nl, .next ul { display: block; }
   .next li { display: flex; align-items: center; min-height: 44px; }
   .next li + li::before { content: none; }
+}
+.verdict > span a { color: var(--ink-2); }
+/* "Records for this place" (12-two-sources.md sections 3 to 5, 12): the main record first, the others under it */
+.oth { margin: 0 0 18px; }
+.oth h3 { font-family: inherit; font-size: 16px; font-weight: 650; margin: 0 0 4px; }
+.oth .win { font-size: 14px; color: var(--ink-2); margin: 0 0 4px; }
+.oth table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 15px; line-height: 1.35; }
+.oth col.c1 { width: 34%; } .oth col.c2 { width: 30%; } .oth col.c3 { width: 18%; } .oth col.c4 { width: 18%; }
+.oth thead th { position: static; background: none; font-size: 14px; font-weight: 400; color: var(--ink-2); text-align: left; vertical-align: bottom; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); }
+.oth tbody th, .oth td { text-align: left; vertical-align: top; font-weight: 400; padding: 10px 10px 10px 0; border-bottom: 1px solid var(--line); }
+.oth tr.is-main > * { font-weight: 650; border-bottom: 1.5px solid var(--ink); }
+.oth .k { display: block; font-size: 14px; font-weight: 400; color: var(--ink-2); margin-top: 2px; }
+.oth .sh { margin-right: 6px; }
+.oth td.r, .oth .yr { white-space: nowrap; }
+.oth td.na { font-size: 14px; color: var(--ink-2); }
+/* a thin station: its own verdict in muted ink, and under the row why it isn't counted when the records are compared */
+.oth tr.thin > td { color: var(--ink-2); }
+.oth tr.with-note > * { border-bottom: 0; padding-bottom: 4px; }
+.oth tr.nt td { font-size: 14px; color: var(--ink-2); padding: 0 10px 10px 0; }
+.oth .pd { display: none; }
+.oth p { max-width: none; }
+.oth .agr { font-size: 15px; margin: 10px 0 0; }
+.oth .dh { font-size: 16px; font-weight: 650; margin: 12px 0 2px; }
+.oth .dl { font-size: 14px; color: var(--ink-2); margin: 0 0 4px; }
+.oth ul { margin: 0; padding-left: 20px; font-size: 15px; line-height: 1.45; }
+.oth li + li { margin-top: 4px; }
+.oth .dn, .oth .lim { font-size: 14px; color: var(--ink-2); margin: 8px 0 0; }
+.oth .st { font-size: 15px; color: var(--ink-2); margin: 10px 0 0; }
+.oth .btn { margin-top: 10px; white-space: normal; }
+/* under 520 px each row is a block: name and where left, the verdict right; then the rate left, the years right */
+@container (max-width: 519px) {
+  .oth thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .oth table, .oth tbody { display: block; }
+  .oth colgroup { display: none; }
+  /* the right column takes at most 45% (a station's long years note wraps), never less than the one-line verdict */
+  .oth tr { display: grid; grid-template-columns: minmax(0, 1fr) fit-content(45%); column-gap: 12px; row-gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .oth tr.is-main { border-bottom: 1.5px solid var(--ink); }
+  .oth tbody th, .oth tbody td, .oth tr.is-main > * { padding: 0; border: 0; }
+  .oth tbody th { grid-column: 1; grid-row: 1 / span 2; }
+  .oth td.v { grid-column: 2; grid-row: 1; text-align: right; white-space: nowrap; }
+  .oth td.r { grid-column: 1; grid-row: 3; }
+  .oth td.y { grid-column: 2; grid-row: 3; text-align: right; font-size: 14px; color: var(--ink-2); }
+  .oth td.na { grid-column: 1 / -1; grid-row: 3; }
+  .oth tr.with-note { border-bottom: 0; padding-bottom: 4px; }
+  .oth tr.nt { display: block; padding: 0 0 10px; }
+  .oth .pd { display: inline; font-weight: 400; color: var(--ink-2); font-size: 14px; }
 }
 /* loading bar in the answer card: thin, full width, ink on the line colour */
 progress { display: block; appearance: none; -webkit-appearance: none; width: 100%; height: 6px; margin: 12px 0; border: 0; border-radius: 3px; overflow: hidden; background: var(--line); color: var(--ink); }
@@ -372,6 +414,12 @@ thead th { position: sticky; top: 0; background: var(--surface); }
 .work p { margin: 0; }
 .work p + p { margin-top: 4px; }
 .work .wl { font-size: 13px; color: var(--ink-2); margin-bottom: 2px; }
+/* step 8's working: the records as columns (12-two-sources.md section 9); it scrolls sideways in its own box when narrow */
+.work-x { overflow-x: auto; margin: 4px 0 8px; }
+.wt { min-width: 520px; font-size: 14px; }
+.wt th, .wt td { padding: 5px 12px 5px 8px; vertical-align: top; }
+.wt thead th { position: static; background: none; font-weight: 650; }
+.wt tbody th { font-weight: 400; color: var(--ink-2); white-space: nowrap; }
 .check { margin-top: 10px; }
 .check .btn { margin-top: 4px; }
 .caveats { margin: 0; padding-left: 20px; }

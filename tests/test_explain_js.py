@@ -95,7 +95,7 @@ assert.deepStrictEqual(pk.next, [{ text: 'Your national weather service', href: 
 assert.strictEqual(pk.disc, 'This shows past measurements and IPCC projections, which depend on how much the world emits. It is not a prediction and not professional advice.'); // PR3: a CMIP6 projection, so the projection disclaimer
 // item 6: every caveat is in "Things to keep in mind", the POWER model-data one too
 assert.ok(P.trend.caveats.some(function (x) { return /weather model, MERRA-2/.test(x); }));
-P.trend.caveats.forEach(function (x) { assert.ok(pS[7].words[0].list.indexOf(x) >= 0, x); });
+P.trend.caveats.forEach(function (x) { assert.ok(pS[8].words[0].list.indexOf(x) >= 0, x); });
 // widened on: the exact sentence with the month count; no sea-level or water-storage line here
 assert.ok(P.trend.explain.real.widened);
 assert.strictEqual(pS[4].work[1], 'Months next to each other can be alike, and so can whole years in a row. We allow for that, so this range is wider than 540 separate months would give.');
@@ -111,7 +111,7 @@ assert.deepStrictEqual(pk.world, { text: 'Over those years: here ' + fmtNum(pw.l
 var PH = copy(P); PH.trend.world.source.record_url = 'http://example.org/'; // not https: the name, no link
 assert.strictEqual(card(PH.trend, false).world.href, '');
 assert.ok(pS[5].work[0].slice(-(pw.method.length + 1)) === pw.method + '.' || pS[5].work[0].slice(-pw.method.length) === pw.method, pS[5].work[0]);
-assert.strictEqual(pS.length, 9);
+assert.strictEqual(pS.length, 10); // PR4a: step 8 "Other records" (the answer carries comparisons)
 assert.strictEqual(pS[0].link.href, P.trend.source.record_url);
 assert.deepStrictEqual(pS[6].link, { text: 'IPCC AR6 Atlas, CMIP6 projections ↗', href: 'https://digital.csic.es/handle/10261/332744' }); // PR3
 // step 6 prints world.ratio as given, never one worked out from the rates
@@ -154,15 +154,18 @@ clean(P, pc);
 var csv = csvPlace(P.trend, P.series, pc), lines = csv.text.split('\n'), src = P.trend.source;
 assert.strictEqual(csv.name, 'bhoomi-air-temperature-princeton-nj.csv');
 // header lines start with # and are never quoted (pandas comment='#' skips them); a grid source names its point
-assert.deepStrictEqual(lines.slice(0, 11), [
+// PR4a: after "# Retrieved:", the main record, the other records, whether they agree, and the Copernicus line (an ERA5 row)
+var rec = ['# Main record: ' + src.name + ' (chart, trend and projection baseline)'].concat(P.trend.comparisons.slice(1).map(function (x) { return '# ' + csvOther(x); }),
+  ['# Records agree: yes', '# ' + P.trend.comparisons[1].source.attribution]);
+assert.deepStrictEqual(lines.slice(0, 11 + rec.length), [
   '# Bhoomi: Air temperature at Princeton, NJ', '# Source: ' + src.name, '# Dataset: ' + src.dataset_id + '; version: ' + src.version,
   '# Record: ' + src.record_url, '# Grid point: Princeton, lat 40.35, lon -74.66',
   '# Baseline: the 1995–2014 average (observed); anomaly = value minus the 1995–2014 mean of its calendar month',
-  '# Method: ' + src.method, '# Retrieved: ' + src.retrieved, '# Data through: December 2025', '# Built with AI assistance. bhoomi.earth', 'time,value_degC,anomaly_degC,flag']);
-assert.ok(lines.slice(0, 10).every(function (l) { return /^# /.test(l) && l.indexOf('"') < 0; }));
-assert.strictEqual(lines.length, 11 + P.series.times.length + 1);
-assert.strictEqual(lines[11], P.series.times[0] + ',' + P.series.values[0] + ',' + P.series.anomaly.values[0] + ',');
-assert.ok(lines.slice(11).every(function (l) { return l.indexOf("'") < 0; })); // number cells, negative ones too, are left alone
+  '# Method: ' + src.method, '# Retrieved: ' + src.retrieved].concat(rec, ['# Data through: December 2025', '# Built with AI assistance. bhoomi.earth', 'time,value_degC,anomaly_degC,flag']));
+assert.ok(lines.slice(0, 10 + rec.length).every(function (l) { return /^# /.test(l) && l.indexOf('"') < 0; }));
+assert.strictEqual(lines.length, 11 + rec.length + P.series.times.length + 1);
+assert.strictEqual(lines[11 + rec.length], P.series.times[0] + ',' + P.series.values[0] + ',' + P.series.anomaly.values[0] + ',');
+assert.ok(lines.slice(11 + rec.length).every(function (l) { return l.indexOf("'") < 0; })); // number cells, negative ones too, are left alone
 var PG = copy(P); PG.trend.place.name = '40.35, -74.66'; // the API names a grid point by its coordinates: said once
 assert.strictEqual(csvPlace(PG.trend, PG.series, pc).text.split('\n')[4], '# Grid point: lat 40.35, lon -74.66');
 // only fields the API gives: no latest, no "Data through" line; no coordinates, no place line
@@ -237,7 +240,8 @@ assert.deepStrictEqual(steps(B0.trend, B0.series, bc)[4].work.slice(1), ['Slow s
 // CSV: the station and its coordinates, the data-through month; never quoted
 var bl = csvPlace(B.trend, B.series, bc).text.split('\n');
 assert.strictEqual(bl[4], '# Station: The Battery, lat 40.7006, lon -74.0142');
-assert.strictEqual(bl[8], '# Data through: ' + B.trend.latest.text.replace('Data through ', ''));
+assert.strictEqual(bl[8], '# Preliminary: September to October 2025; an early release that may still change; left out of the trend'); // not ERA5: no "ERA5T"
+assert.strictEqual(bl[9], '# Data through: ' + B.trend.latest.text.replace('Data through ', ''));
 sumAddsUp(B, bc, NB + 'mm');
 assert.strictEqual(bS[5].work[2], 'The full record, 1920 to 2025: ' + B.trend.headline_rate.text + '. It gets no world ratio, because satellites only start in 1993.');
 var bw = B.trend.world, biS = steps(B.trend, B.series, ctx(B, 'New York, NY', true));
@@ -362,7 +366,7 @@ assert.ok(!cyT.yearly && cyT.ytitle === '% of the usual rain, compared with the 
 clean(CY, cc);
 var cl = csvPlace(C.trend, C.series, cc).text.split('\n');
 assert.strictEqual(cl[5], '# Baseline: the 1995–2014 average (observed); anomaly = the difference from the 1995–2014 mean of its calendar month, as a % of the 1995–2014 average rate');
-assert.strictEqual(cl[10], 'time,value_mm/day,anomaly_%,flag');
+assert.strictEqual(cl[cl.indexOf('# Built with AI assistance. bhoomi.earth') + 1], 'time,value_mm/day,anomaly_%,flag'); // after the records' lines (PR4a)
 assert.strictEqual(cS[1].short, 'Wettest in ' + MONTHS_LONG[cb.high_month - 1] + ' (' + fmtNum(cb.high, false) + NB + 'mm), driest in ' + MONTHS_LONG[cb.low_month - 1] + ' (' + fmtNum(cb.low, false) + NB + 'mm)');
 assert.ok(/^Here the wettest month, /.test(cS[1].words[0]));
 assert.ok(/ ÷ .*the usual rate = /.test(cS[1].work[0]) && /mm a day/.test(cS[1].work[0]) && !/a year/.test(cS[1].work[0]), cS[1].work[0]);
@@ -376,7 +380,7 @@ assert.deepStrictEqual(steps(CR.trend, CR.series, cc)[5].words, [C.trend.world.w
 assert.strictEqual(ck.fact, C.trend.guidance.fact);
 assert.ok(ck.world === null && card(C.trend, true).fact === C.trend.guidance.fact && !/mm/.test(ck.fact));
 assert.deepStrictEqual(ck.next, [{ text: 'Your national weather service', href: '' }]);
-assert.strictEqual(cS[2].short, 'Every level is compared with the 1995–2014 average here, about ' + commas(Math.round(C.trend.baseline.annual_total_mm)) + NB + 'mm a year');
+assert.strictEqual(cS[2].short, "Every level is compared with NASA POWER's 1995–2014 average here, about " + commas(Math.round(C.trend.baseline.annual_total_mm)) + NB + 'mm a year'); // PR4a: the main record named (design 12 §8)
 assert.ok(/ of the 1995–2014 average per decade × 4\.50 decades = /.test(cS[3].work[0]), cS[3].work[0]);
 sumAddsUp(C, cc, '%');
 all(C, cc).forEach(function (x) { if (/mm a year/.test(x)) assert.ok(/about [\d,]+ mm a year|mm (more|less) a year/.test(x), x); });
@@ -404,27 +408,6 @@ assert.strictEqual(hS[5].short, 'There is no matching world figure for the hotte
 assert.strictEqual(hS[5].work, undefined);
 assert.deepStrictEqual(hS[5].words, [H.trend.world.why_none]); // no rule (world.text null): why_none alone
 clean(H, hdc);
-
-// QA B10: NASA POWER air temperature and hottest day say what a grid is and offer the station; the station's answer says
-// when it disagrees with the POWER answer the page already has
-var ML = 'This comes from a weather model grid about 50 km wide. A weather station nearby can tell a different story.';
-assert.deepStrictEqual(modelNote(H.trend, null), { line: ML, offer: 'ghcn' });
-assert.deepStrictEqual(modelNote(P.trend, null), { line: ML, offer: 'ghcn' });
-assert.strictEqual(modelNote(C.trend, null), null); // rain: not asked for
-var HS = copy(H); HS.trend.source = { id: 'ghcn', name: 'NOAA NCEI GHCN-Daily' };
-HS.trend.verdict = 'falling';
-assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model disagree here.', strong: true,
-  next: 'For the heat you feel day to day, the station is closer to the ground; the model covers a wider area.' });
-HS.trend.verdict = H.trend.verdict;
-assert.deepStrictEqual(modelNote(HS.trend, H.trend), { line: 'The weather station and the model agree here.' }); // they agree
-// the grid size is read from explain.data.where, never written in
-var HW = copy(H); HW.trend.explain.data.where = 'a grid cell about 55 km wide';
-assert.strictEqual(modelNote(HW.trend, null).line, 'This comes from a weather model grid about 55 km wide. A weather station nearby can tell a different story.');
-HW.trend.explain.data.where = null;
-assert.strictEqual(modelNote(HW.trend, null).line, 'This comes from a weather model grid. A weather station nearby can tell a different story.');
-assert.strictEqual(modelNote(HS.trend, null), null); // no POWER answer on the page: nothing to compare
-var HE = copy(H); HE.trend.source = { id: 'era5' };
-assert.strictEqual(modelNote(HE.trend, null), null);
 
 // a station with no 1995-2014 average: values as measured, no level, the rate still holds
 var R = load('riverside_no_baseline'), rc = ctx(R, 'Riverside'), rk = card(R.trend, false), rT = chartText(R.trend, R.series, rc), rS = steps(R.trend, R.series, rc);
@@ -866,15 +849,15 @@ assert.strictEqual(ccR.b + ccR.rest, '+11% around 2050 under intermediate emissi
 assert.ok(/It is the change in each month's hottest day, averaged over the year, not in the year's single hottest day\.$/.test(futRead(CD.trend, cdx, false).sub));
 assert.ok(cpR.note === NOTE && CP.trend.projection.models_note === NOTE && ccR.note === '' && cpR.vs === '' && cpR.regional === '');
 var CNT = copy(CP); CNT.trend.projection.models_note = 'A different note.'; // never written in: the server's words
-var cnS = steps(CNT.trend, CNT.series, cpc)[7];
+var cnS = steps(CNT.trend, CNT.series, cpc)[8];
 assert.ok(futRead(CNT.trend, futOf(CNT.trend, null, false, TODAY), false).note === 'A different note.' && cnS.words[0].list.indexOf('A different note.') >= 0);
 CNT.trend.projection.models_note = null;
 assert.ok(futRead(CNT.trend, futOf(CNT.trend, null, false, TODAY), false).note === '' && all(CNT, cpc).every(function (x) { return x.indexOf(NOTE) < 0; }));
-// step 8: the note is a thing to keep in mind (temperature and hottest day), never for rain
-var cp8 = steps(CP.trend, CP.series, cpc)[7];
+// step 9 (step 8 is "Other records" since PR4a): the note is a thing to keep in mind (temperature and hottest day), never for rain
+var cp8 = steps(CP.trend, CP.series, cpc)[8];
 assert.deepStrictEqual(cp8.words[0].list, CP.trend.caveats.concat([NOTE, 'This shows whether air temperature changed here. It doesn\'t say why.']));
 assert.strictEqual(cp8.short, CP.trend.caveats[0] + ' And 2 more');
-assert.ok(steps(CC.trend, CC.series, ccc)[7].words[0].list.indexOf(NOTE) < 0);
+assert.ok(steps(CC.trend, CC.series, ccc)[8].words[0].list.indexOf(NOTE) < 0);
 // §1.3 records against models: opposite signs, not disagreeing; both stated, no cause
 var CDF = copy(CD); CDF.trend.verdict = 'falling';
 assert.strictEqual(futRead(CDF.trend, futOf(CDF.trend, null, false, TODAY), false).vs, 'Here the records show the hottest day of the month falling, while the climate models project it rising by 2041–2060. The records describe this place since 1981; the models give a 20-year average for a grid cell about 100 km wide under one emissions path. We show both as they are.');
@@ -1030,8 +1013,8 @@ delete CE.trend.projection.baseline_record; // an answer from before the field: 
 assert.ok(/^This place's 1995–2014 average from ERA5 reanalysis via Open-Meteo archive: /.test(steps(CE.trend, CE.series, cec)[6].work[0]));
 var CFB = copy(CP); CFB.trend.baseline.method = 'fitted';
 assert.ok(/: 11\.9\s°C \(estimated from the fitted trend\) \(step 3\)\. /.test(steps(CFB.trend, CFB.series, cpc)[6].work[0]));
-// step 9: the Atlas, where it was retrieved, the citations, the projections CSV
-var cp9 = steps(CP.trend, CP.series, cpc)[8], ps9 = CP.trend.projection.source;
+// step 10: the Atlas, where it was retrieved, the citations, the projections CSV
+var cp9 = steps(CP.trend, CP.series, cpc)[9], ps9 = CP.trend.projection.source;
 assert.ok(/; future from the IPCC AR6 Atlas \(CMIP6\)$/.test(cp9.short) && cp9.csvFut);
 assert.ok(cp9.words[0].list.some(function (x) { return x.text === 'Future: IPCC AR6 Interactive Atlas, CMIP6 projections, doi:10.20350/digitalCSIC/15492, version v2.0-final, CC BY 4.0. Retrieved from '
   + ps9.retrieved_from.name + ' (doi:10.24381/cds.5292a2b0). ' && x.link.href === ps9.record_url && x.link.text === 'Open it ↗'; }));
@@ -1045,7 +1028,7 @@ assert.deepStrictEqual(cl1.slice(0, 8), ['# Bhoomi: Air temperature projections 
   "# Baseline: the 1995–2014 average; each model's 20-year mean minus its own 1995–2014 mean, added to this place's observed 1995–2014 average",
   '# Ranges: p10-p90 is the range across climate models (10th-90th percentile)']);
 assert.strictEqual(cl1.filter(function (l) { return /^# Cite: /.test(l); }).length, ps9.citation.length);
-assert.ok(cl1[hd1 - 2].indexOf('# Acknowledgement: ') === 0 && cl1[hd1 - 1] === '# Built with AI assistance. bhoomi.earth');
+assert.ok(cl1[hd1 - 3].indexOf('# Acknowledgement: ') === 0 && cl1[hd1 - 2] === '# ' + CP.trend.projection.source.attribution && cl1[hd1 - 1] === '# Built with AI assistance. bhoomi.earth'); // Copernicus (PR4a)
 assert.ok(cl1.slice(0, hd1).every(function (l) { return /^# /.test(l) && l.indexOf('"') < 0; }));
 assert.strictEqual(cl1.length, hd1 + 1 + 4 * 3 + 1);
 assert.strictEqual(cl1[hd1 + 1 + 3 + 1], 'ssp245,intermediate emissions,2041,2060,1.2,1.89,2.31,34');
@@ -1068,7 +1051,7 @@ def test_steps_3_to_6_start_open():
     """The owner's choice: steps 3, 4, 5 and 6 start open on a new answer, 1, 2 and 7 to 9 closed, at every width."""
     m = re.search(r"var OPEN_STEPS = \[([\d, ]+)\];", PURE)
     assert m and m[1] == "3, 4, 5, 6", m and m[1]
-    assert "var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 || !!st.open : !!keep[i];" in SRC
+    assert "var open = fresh ? OPEN_STEPS.indexOf(i + 1) >= 0 || !!st.open : !!keep[st.title] || " in SRC
 
 
 def test_review_fixes_outside_the_pure_block():
@@ -1479,13 +1462,8 @@ def test_driver_bars_and_scenario_marks_reach_3_to_1():
     assert "var lc = lcLines(narrow);" in SRC and "lc.forEach(function (x, j) {" in SRC  # the chart draws the 375 px split
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
-def test_open_all_steps_button():
-    """The owner: "add a open close button in the how we calculated section!" The real showHow() runs on a tiny fake
-    DOM (no browser, no network). One button over the steps reads "Open all steps" while any step is closed and
-    "Close all steps" when all nine are open; a step toggled by hand and a re-render update it; it is made once."""
-    dom = SRC.split("/* ---------- DOM ---------- */")[1].split("\n  window.TDX")[0]
-    js = PURE + dom + ASSERTS.split("var NB = ")[0] + r"""
+# A tiny fake DOM for the real showHow() (no browser, no network): elements, ids, toggle events, clicks.
+FAKE_DOM = r"""
 var ids = {}, Q = []; // Q: toggle events waiting to fire, as a browser fires them after the change
 function El(tag) { var a = this.a = {}; this.tagName = tag.toUpperCase(); this.kids = []; this.on = {}; this.parentNode = null;
   this.classList = { add: function (c) { a['class'] = ((a['class'] || '') + ' ' + c).trim(); } }; }
@@ -1508,10 +1486,21 @@ var document = { getElementById: function (id) { return ids[id] || null; }, crea
 function flush() { while (Q.length) (Q.shift().on.toggle || []).forEach(function (f) { f(); }); }
 function click(b) { b.on.click.forEach(function (f) { f(); }); }
 function mk(tag, id) { var n = new El(tag); n.setAttribute('id', id); return n; }
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_open_all_steps_button():
+    """The owner: "add a open close button in the how we calculated section!" The real showHow() runs on a tiny fake
+    DOM (no browser, no network). One button over the steps reads "Open all steps" while any step is closed and
+    "Close all steps" when all nine are open; a step toggled by hand and a re-render update it; it is made once."""
+    dom = SRC.split("/* ---------- DOM ---------- */")[1].split("\n  window.TDX")[0]
+    js = PURE + dom + ASSERTS.split("var NB = ")[0] + FAKE_DOM + r"""
 
 var sec = mk('section', 'how'), ol = mk('ol', 'how-steps');
 sec.append(mk('h2', 'how-h'), mk('p', 'how-lead'), ol, mk('div', 'noise-slot'));
 var P = load('princeton_air_temp'), B = load('battery_sea_level');
+P.trend.comparisons = null; // nine steps here; step 8 "Other records" has its own test (test_records_js.py)
 function cx(d, label) { return Object.assign(ctx(d, label), { today: 2026 * 12 + 10, sel: null }); }
 function opened() { return ol.querySelectorAll(':scope > li > details').map(function (d, i) { return d.open ? i + 1 : 0; }).filter(Boolean); }
 function says(label) { var b = ids['how-all']; assert.strictEqual(b.textContent, label); assert.strictEqual(b.a['aria-expanded'], String(label === 'Close all steps')); }
