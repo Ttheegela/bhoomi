@@ -12,8 +12,9 @@ Retrieved from the Copernicus CDS copy: "Gridded monthly climate projection data
   Interactive Atlas" (projections-climate-atlas, doi:10.24381/cds.5292a2b0, CC-BY 4.0), because digital.csic.es cuts
   every transfer at about 1.08 GB. download_cds.sh (on the HPC node) leaves WORK/raw/<var>_<experiment>.zip and a .ok
   marker; each zip holds the .nc under the CSIC name and size, provenance.json and provenance.png. Most .nc md5s equal
-  CSIC's but not all (the ssp245 files differ), so `check` records the md5 match and proves the values equal the CSIC
-  originals bit for bit against OPeNDAP point dumps from the THREDDS mirror (WORK/points/<cell>/<var>.<exp>.txt: every member and month, historical 1995-2014 or the whole SSP run,
+  CSIC's, not all: checked by hand on 2026-11-23, each of the 4 that differ equals the CSIC THREDDS mirror's file byte for
+  byte, and the digital.csic.es copy holds a damaged chunk (its Fletcher-32 and zlib checks fail). So `check` records the
+  md5 match and proves the values equal the CSIC originals bit for bit against OPeNDAP point dumps from the THREDDS mirror (WORK/points/<cell>/<var>.<exp>.txt: every member and month, historical 1995-2014 or the whole SSP run,
   at 40.5N 74.5W (nj) and 28.5N 77.5E (delhi)), and lists every attribute that differs from the mirror's DAS (cached in
   WORK/csic).
 Land: the Atlas's own 1-degree land-sea mask (IPCC-WG1/Atlas, reference-grids/land_sea_mask_1degree.nc4, CC-BY 4.0,
