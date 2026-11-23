@@ -44,6 +44,10 @@ INVENTED_ASK = ("Your first answer stated numbers that are in no tool result: {n
 FIGURES_ASK = ("Your first answer stated figures: {numbers}. This is a simple-words answer: write no number, range or "
                "year at all; the plain lines code puts first already carry them.")
 # A request for simple words (design 16 §4); voice forwards every question with "Explain in simple words."
+# A question about where the data come from (design 17 §8): the answer ends with guidance.SOURCES_LINE, as the
+# first answer of a conversation does. "resources" is no source; "this data comes from" is one.
+SOURCES_Q = re.compile(r"\bsources?\b|\blicen[cs]|\bwhere do(?:es)? (?:the|this|that|your|these|you get) data\b"
+                       r"|\bdata comes? from\b|\bwhere do you get\b|\bcite\b|\bcitations?\b|\bcredits?\b", re.I)
 SIMPLE = re.compile(r"\b(?:simple|simply|plain words|plain english|everyday words|like i'm 10|for a child"
                     r"|what does that mean for me)\b", re.I)
 NO_NUMBERS = ("I can only give numbers that come from a data lookup, and I did not look anything up for that. "
@@ -797,9 +801,11 @@ def found_answer(calls: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def ask(question: str, model: str | None = None, history: list[dict] | None = None) -> dict:
+def ask(question: str, model: str | None = None, history: list[dict] | None = None, voice: bool = False) -> dict:
     """`history`: earlier turns of the chat (see history_error), sent as plain text before the question; no tool
-    call or result from them is carried over."""
+    call or result from them is carried over. `voice`: the answer will be spoken (the caller marks it), so it never
+    ends with the sources pages line; otherwise that line closes the first answer of a conversation and any answer
+    to a question about sources."""
     history = history or []
     t0 = time.monotonic()
     try:
@@ -945,7 +951,10 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
             ((compose("", calls, agree=False) or FOUND_HEAD) if simple else found_answer(calls)) if ok_calls(calls)
             else NO_NUMBERS if numbered else GAVE_UP)
         if answer not in (GAVE_UP, NO_NUMBERS):
-            answer = guidance.fill(answer, ok_calls(calls), simple)  # the tool's own guidance, word for word
+            asked = not voice and bool(SOURCES_Q.search(question))
+            first = not voice and not any(m.get("role") == "assistant" for m in history)
+            # the tool's own guidance, word for word; the sources pages line on the first answer or when asked
+            answer = guidance.fill(answer, ok_calls(calls), simple, sources=first or asked, alone=asked)
             answer = add_examples(answer, calls)
             head = guidance.lead(ok_calls(calls))  # the plain lines first, outside the word count
             answer = f"{head}\n\n{answer}" if head else answer

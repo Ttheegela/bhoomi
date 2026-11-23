@@ -6,8 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from fastapi.testclient import TestClient
+
 from evals import run
 from earthtrends.agent import guidance, loop, projection_answer, providers, tools
+from earthtrends.app import app
 from earthtrends.stats import records
 
 RW = Path(__file__).parent / "fixtures" / "rework"
@@ -64,14 +67,14 @@ def step(text=None, calls=()):
             "usage": {"prompt_tokens": 1, "completion_tokens": 1, "cost_usd": 0.0}}
 
 
-def ask(fake, monkeypatch, question, results, *texts, history=None):
+def ask(fake, monkeypatch, question, results, *texts, history=None, voice=False):
     """One step that looks every result up, then the model's replies in order; every reply must be read."""
     by = {(r["variable"], round(r["place"]["lat"], 2), round(r["place"]["lon"], 2)): r for r in results}
     monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw:
                         by[(variable, round(float(lat), 2), round(float(lon), 2))])
     fake.script = [step(calls=[{"id": str(i), "name": "detect_trend", "arguments": args(r), "arguments_error": None}
                                for i, r in enumerate(results)])] + [step(t) for t in texts]
-    out = loop.ask(question, model="fake:m", history=history)
+    out = loop.ask(question, model="fake:m", history=history, voice=voice)
     assert fake.script == []
     return out["answer"], out
 
@@ -218,7 +221,8 @@ def test_simple_words_follow_up(fake, monkeypatch):
     g = BATTERY["guidance"]
     assert lead_of(a) == [f"{BATTERY['meaning']['headline']} {BATTERY['plain'][0]}", *BATTERY["plain"][1:]]
     assert SIMPLE_TEXT in a and "Where to look next" in a
-    assert a.rstrip().endswith(f"{g['disclaimer']}\n{guidance.SOURCES_LINE}")
+    # a follow-up that asks nothing about sources: no sources pages line (only the first answer carries it)
+    assert a.rstrip().endswith(g["disclaimer"]) and guidance.SOURCES_LINE not in a
     assert g["fact"] not in a and "95% range" not in a and "times as fast" not in a
     assert "experts' projection for 2050" not in a and "(likely" not in a  # the plain lines carry the projection
     assert loop.invented_numbers(a, loop.model_results(out["tool_calls"])) == []
@@ -296,3 +300,62 @@ def test_dataset_and_scenario_names_are_no_numbers(text):
     assert run.invented_numbers(text, []) == []  # the scorer shares the check
     assert loop.invented_numbers(f"{text} put it 4.5 °C warmer.", []) == ["4.5"]  # a real number still counts
     assert 4.5 not in loop._pool({"scenario": "intermediate emissions (SSP2-4.5)"}, [])  # nor is it allowed by one
+
+
+# ---- the sources pages line: the first answer, or a question about sources; never spoken ----
+
+SOURCES = guidance.SOURCES_LINE
+TEXT = f"About 3 mm higher each year. {NOAA} [GUIDANCE]"
+
+
+def test_the_first_answer_ends_with_the_sources_line(fake, monkeypatch):
+    a, _ = ask(fake, monkeypatch, "Is sea level rising at The Battery?", [BATTERY], TEXT)
+    assert a.endswith(f"{BATTERY['guidance']['disclaimer']}\n{SOURCES}") and a.count(SOURCES) == 1
+
+
+def test_a_later_turn_without_a_sources_question_has_none(fake, monkeypatch):
+    a, _ = ask(fake, monkeypatch, "Is it still rising there?", [BATTERY], TEXT, history=HISTORY)
+    assert SOURCES not in a and a.endswith(BATTERY["guidance"]["disclaimer"])
+
+
+def test_a_later_turn_asking_where_the_data_come_from_has_it(fake, monkeypatch):
+    a, _ = ask(fake, monkeypatch, "Where does this data come from?", [BATTERY], TEXT, history=HISTORY)
+    assert a.endswith(SOURCES)
+    # with nothing looked up there is no guidance: the line comes alone, after the model's words
+    said = "These numbers come from NOAA's tide gauges and the IPCC's sea level projections."
+    fake.script = [step(said)]
+    out = loop.ask("where does this data come from?", model="fake:m", history=HISTORY)
+    assert out["tool_calls"] == [] and out["answer"] == f"{said}\n\n{SOURCES}"
+
+
+def test_voice_never_has_it(fake, monkeypatch):
+    first, _ = ask(fake, monkeypatch, "Is the sea going up at the Battery? Explain in simple words.", [BATTERY],
+                   SIMPLE_TEXT + " [GUIDANCE]", voice=True)
+    asked, _ = ask(fake, monkeypatch, "Where does this data come from?", [BATTERY], TEXT, history=HISTORY, voice=True)
+    assert SOURCES not in first and SOURCES not in asked
+    fake.script = [step("These numbers come from NOAA's tide gauges.")]
+    assert SOURCES not in loop.ask("Which sources do you use?", model="fake:m", voice=True)["answer"]
+
+
+@pytest.mark.parametrize("q", ["Where does this data come from?", "where does the data come from", "Which sources?",
+                               "What's the licence?", "Is it licensed?", "Where do you get your numbers?",
+                               "How do I cite this?", "Who should I credit?", "Where does your data come from?"])
+def test_sources_questions_are_detected(q):
+    assert loop.SOURCES_Q.search(q)
+
+
+@pytest.mark.parametrize("q", ["Is sea level rising in New York?", "What official resources should I check?",
+                               "Explain in simple words.", "I'm excited about this, is it warming?"])
+def test_other_questions_are_not_sources_questions(q):
+    assert not loop.SOURCES_Q.search(q)
+
+
+def test_the_voice_header_reaches_the_loop(monkeypatch):
+    """Nothing marked voice before PR6: the voice assistant's tool sends X-Bhoomi-Voice: 1, and only then does
+    /api/ask pass voice to the loop (every other call is exactly as before)."""
+    seen = []
+    monkeypatch.setattr(loop, "ask", lambda q, **kw: seen.append(kw) or {"answer": "ok"})
+    client = TestClient(app)
+    for headers in ({"X-Bhoomi-Voice": "1"}, {"x-bhoomi-voice": "true"}, {}, {"X-Bhoomi-Voice": "0"}):
+        assert client.post("/api/ask", json={"question": "hi"}, headers=headers).status_code == 200
+    assert seen == [{"voice": True}, {"voice": True}, {}, {}]

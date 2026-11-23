@@ -67,10 +67,10 @@ def test_the_guidance_no_longer_repeats_the_projection():
     sea = guidance.block([ok(BATTERY)])
     for said in ("experts' projection", "+36 cm", "likely", "2 in 3", "more than today"):
         assert said not in sea, said
-    # order: fact, where to look next, the future link, the disclaimer, the sources pages line
+    # order: fact, where to look next, the future link, the disclaimer
     at = [sea.index(s) for s in (BATTERY["guidance"]["fact"], "Where to look next",
-                                 BATTERY["guidance"]["future_link"]["url"], DISCLAIMER_PROJECTION, guidance.SOURCES_LINE)]
-    assert at == sorted(at) and sea.endswith(f"{DISCLAIMER_PROJECTION}\n{guidance.SOURCES_LINE}")
+                                 BATTERY["guidance"]["future_link"]["url"], DISCLAIMER_PROJECTION)]
+    assert at == sorted(at) and sea.endswith(DISCLAIMER_PROJECTION)
     # the range words come in the plain lines that lead the answer: AR6's chance, the climate models' agreement
     assert "about a 2 in 3 chance" in guidance.lead([ok(BATTERY)])
     for r in (PRINCETON, CHENNAI, DELHI):
@@ -83,11 +83,11 @@ def test_mixed_answer_shows_the_projection_disclaimer():
     """Water storage first (no projection, the plain disclaimer), then air temperature with one: the IPCC wording
     is not hidden behind the first result's."""
     out = guidance.block([ok(PUNJAB), ok(PRINCETON)])
-    assert out.endswith(f"{DISCLAIMER_PROJECTION}\n{guidance.SOURCES_LINE}") and DISCLAIMER not in out
+    assert out.endswith(DISCLAIMER_PROJECTION) and DISCLAIMER not in out
     assert out.count("not professional advice") == 1 and "experts' projection" not in out
     assert f"Princeton, air temperature: {PRINCETON['meaning']['headline']} {PRINCETON['plain'][0]}" in (
         guidance.lead([ok(PUNJAB), ok(PRINCETON)]))
-    assert guidance.block([ok(PUNJAB)]).endswith(f"{DISCLAIMER}\n{guidance.SOURCES_LINE}")  # no projection anywhere
+    assert guidance.block([ok(PUNJAB)]).endswith(DISCLAIMER)  # no projection anywhere: the plain one
 
 
 def test_one_projection_per_place_and_measurement_when_sources_disagree():
@@ -120,7 +120,7 @@ def test_projection_years_and_the_baseline_are_no_wrong_period():
 def test_scorer_passes_an_answer_with_the_code_written_projection():
     answer = guidance.lead([ok(PRINCETON)]) + "\n\n" + guidance.fill(
         "About 0.4 °C warmer every 10 years. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. [GUIDANCE]",
-        [ok(PRINCETON)])
+        [ok(PRINCETON)], sources=True)
     case = {"id": "p", "question": "q", "expect_tool": "detect_trend",
             "must_say": ["8 in 10 climate models", "IPCC projections", "bhoomi.earth/sources"],
             "must_not_say": ["likely range", "in 3 chance", "risk"]}
