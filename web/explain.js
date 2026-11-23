@@ -147,7 +147,10 @@
   var WSRC = { sea_level: 'NASA satellite record', air_temp: 'NOAA global land record' };
   function cardWorld(t, imp) {
     var w = t.world || {}, p = worldParts(t, imp), s = w.source || {};
-    if (p) return { text: (p.ratio ? 'Over those years: here ' + p.here + (w.ratio < 0 ? '' : ', world ' + p.world) : p.since + ': here ' + p.here + ', world ' + p.world) + '.',
+    // "Over those years" only when the fact is the world comparison: the server writes it when the ratio's sign agrees
+    // with the verdict (guidance.py); otherwise the fact is the full record's rate and years, so the line says its own years
+    var same = !!p && !!p.ratio && (w.ratio > 0 ? t.verdict === 'rising' : w.ratio < 0 && t.verdict === 'falling');
+    if (p) return { text: (same ? 'Over those years: here ' + p.here + (w.ratio < 0 ? '' : ', world ' + p.world) : p.since + ': here ' + p.here + ', world ' + p.world) + '.',
       src: WSRC[t.variable] || str(s.name), href: https(s.record_url) };
     return WSRC[t.variable] && w.available === false && str(w.why_none) ? { text: w.why_none, src: '', href: '' } : null;
   }
