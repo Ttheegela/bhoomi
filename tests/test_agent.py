@@ -1510,7 +1510,7 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     # PR6: the records in one call, said by code; simple words
     "call detect_trend once with source left out: its result already compares the other records at that place",
     "Never say which record is right, better or more reliable, never average them, and give no other reason.",
-    "call detect_trend again for the place and measurement it is about (for a follow-up, the earlier answer's)",
+    "call detect_trend again for the place this question is about (the earlier answer's unless it names another)",
     "in at most 40 words, with no number, range, year, p-value or list of caveats",
     "quote meaning.comparison exactly as given",
     'Never use the word "slope"',

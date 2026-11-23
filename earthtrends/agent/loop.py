@@ -48,10 +48,13 @@ FIGURES_ASK = ("Your first answer stated figures: {numbers}. This is a simple-wo
 # first answer of a conversation does. "resources" is no source; "this data comes from" is one.
 SOURCES_Q = re.compile(r"\bsources?\b|\blicen[cs]|\bwhere do(?:es)? (?:the|this|that|your|these|you get) data\b"
                        r"|\bdata comes? from\b|\bwhere do you get\b|\bcite\b|\bcitations?\b|\bcredits?\b", re.I)
-SIMPLE = re.compile(r"\b(?:in simple words|explain (?:it |that |this )?simply|say it simply|simple terms|plain words"
-                    r"|plain english|everyday words|like i'm 10|for a child|what does that mean for me)\b", re.I)
-SIMPLE_LOOKUP = ("\n\nThis asks for simple words about the earlier answer: call detect_trend again for its place and "
-                 "measurement, so every number comes from this turn.")
+SIMPLE = re.compile(r"\b(?:" + "|".join(re.escape(p) for p in prompts.SIMPLE_PHRASES) + r")\b", re.I)
+SIMPLE_LOOKUP = ("\n\nThis asks for simple words: call detect_trend again for the place this question is about (the "
+                 "earlier answer's unless it names another) and its measurement, so every number comes from this turn.")
+# A question about what a word means ("What does 95% range mean?") needs no lookup, even in simple words; "what does
+# that mean for me" asks about the place, so it still looks up.
+WORD_MEANING = re.compile(r"\bwhat (?:does|do) .{1,60}? mean\b(?! for me)|\bwhat is meant by\b|\bmeaning of\b"
+                          r"|\bdefine\b|\bdefinition\b", re.I)
 NO_NUMBERS = ("I can only give numbers that come from a data lookup, and I did not look anything up for that. "
               "Ask about a place and a measurement and I will check.")
 NO_TOOL = " Do not call a tool: these are the tool results you already got:\n"
@@ -354,9 +357,12 @@ def add_links(out: str, links: list[tuple[str, str]]) -> str:
 
 
 def without_sources(text: str, calls: list[dict]) -> str:
-    """The text with every web address and each source's name (and the short forms _forms gives) blanked, so a
-    simple-words answer's figures are only the model's own: "(Garner et al. 2021)" names a dataset."""
-    text = re.sub(r"https?://\S+", " ", text)
+    """The text with this turn's own addresses (each record's, each projection's, the official resources') and each
+    source's name (and the short forms _forms gives) blanked, so a simple-words answer's figures are only the model's
+    own: "(Garner et al. 2021)" names a dataset. Any other address keeps its digits."""
+    for u in sorted({u for _, u in record_links(calls) + projection_links(calls)} | set(resources.URLS), key=len,
+                    reverse=True):
+        text = text.replace(u, " ")
     names = {f for name, _ in record_links(calls) + projection_links(calls) for f in _forms(name)}
     for f in sorted(names, key=len, reverse=True):
         text = re.sub(re.escape(f), " ", text, flags=re.I)
@@ -886,8 +892,12 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                         checked = True  # nothing fetched yet: the failed-check restart, once, tools offered
                         provider.start(system, question, TOOLS, history=history)
                         continue
-                    if simple and history and not calls and not checked and i < MAX_CALLS - 1:
+                    if (simple and history and not calls and not checked and i < MAX_CALLS - 1
+                            and not WORD_MEANING.search(question)):
                         checked = True  # simple words about an earlier answer: look it up again, once (§4)
+                        first = compose(text, calls, agree=False)
+                        if not stated_numbers(UNDER_001.sub(" ", first)):  # no number, so it may stand as a fallback
+                            kept.append(first)
                         provider.start(system, question + SIMPLE_LOOKUP, TOOLS, history=history)
                         continue
                     text = compose(text, calls, agree=not simple)  # before the checks: they hold for what users see

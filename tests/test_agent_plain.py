@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from evals import run
-from earthtrends.agent import guidance, loop, projection_answer, providers, resources, tools
+from earthtrends.agent import guidance, loop, projection_answer, prompts, providers, resources, tools
 from earthtrends.app import app
 from earthtrends.stats import records
 
@@ -250,7 +250,8 @@ def test_simple_words_twice_wrong_gives_the_lines_and_the_sources(fake, monkeypa
 
 @pytest.mark.parametrize("q", ["Explain in simple words.", "Say it simply", "in plain words please", "Plain English?",
                                "in everyday words", "explain like I’m 10", "for a child", "What does that mean for me?",
-                               "Can you explain it simply?", "Put it in simple terms."])
+                               "Can you explain it simply?", "Put it in simple terms.", "Use simple words",
+                               "And Mumbai, in simple words?"])
 def test_simple_words_are_detected(q):
     assert loop.SIMPLE.search(q.replace("’", "'"))
 
@@ -406,3 +407,47 @@ def test_a_simple_words_follow_up_that_looks_nothing_up_restarts_once_with_tools
     assert out["answer"].startswith(f"{BATTERY['meaning']['headline']} {BATTERY['plain'][0]}")
     fake.script = [step("Which place do you mean?")]  # no earlier answer to look up: no restart
     assert loop.ask("Explain in simple words.", model="fake:m")["answer"] == "Which place do you mean?"
+
+
+# ---- PR6 review, round 2 ----
+
+def test_one_phrase_list_for_code_and_prompt():
+    for phrase in prompts.SIMPLE_PHRASES:
+        assert f'"{phrase}"' in prompts.SYSTEM and loop.SIMPLE.search(phrase.replace("\u2019", "'")), phrase
+    assert '"simple", "simply"' not in prompts.SYSTEM  # no single word: "Is it simply this year?" asks no such thing
+
+
+def test_a_word_meaning_question_in_simple_words_is_not_looked_up_again(fake, monkeypatch):
+    said = "It is the band where the real rate most likely sits, given the ups and downs."
+    fake.script = [step(said)]
+    out = loop.ask("What does 95% range mean? Explain in simple words.", model="fake:m", history=HISTORY)
+    assert out["answer"] == said and len(fake.starts) == 1 and fake.script == []  # the first reply, no restart
+
+
+def test_what_does_that_mean_for_me_still_looks_up_again(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: BATTERY)
+    lookup = {"id": "a", "name": "detect_trend", "arguments": args(BATTERY), "arguments_error": None}
+    fake.script = [step("It means the sea is going up."), step(calls=[lookup]), step(SIMPLE_TEXT + " [GUIDANCE]")]
+    out = loop.ask("What does that mean for me?", model="fake:m", history=HISTORY)
+    assert fake.starts[1].endswith(loop.SIMPLE_LOOKUP) and len(out["tool_calls"]) == 1
+
+
+def test_the_first_reply_stays_as_a_fallback_after_the_restart(fake, monkeypatch):
+    first = "It means the sea near you is going up."
+    fake.script = [step(first), step("")]  # the restart comes back empty
+    out = loop.ask("What does that mean for me?", model="fake:m", history=HISTORY)
+    assert out["answer"] == first and fake.script == []
+
+
+def test_the_restart_asks_for_the_place_the_question_names(fake, monkeypatch):
+    fake.script = [step("Mumbai is a coastal city."), step("Mumbai is a coastal city.")]
+    loop.ask("And Mumbai, in simple words?", model="fake:m", history=HISTORY)
+    assert fake.starts[1] == "And Mumbai, in simple words?" + loop.SIMPLE_LOOKUP
+    assert "the place this question is about (the earlier answer's unless it names another)" in loop.SIMPLE_LOOKUP
+
+
+def test_a_made_up_address_with_digits_is_still_a_figure(fake, monkeypatch):
+    made_up = "This comes from NOAA's gauges, see https://example.org/sea/2024 for more."
+    a, _ = ask(fake, monkeypatch, "Is the sea going up at the Battery? Explain in simple words.", [BATTERY], made_up,
+               SIMPLE_TEXT)
+    assert loop.FIGURES_ASK.format(numbers="2024") in fake.starts[-1] and "example.org" not in a

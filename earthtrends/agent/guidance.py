@@ -1,5 +1,5 @@
 """The tool's own guidance: the model writes MARKER, the code puts each result's guidance strings there word for word
-(the fact, then where to look next, the future links, the disclaimer once and the sources pages line). The model
+(the fact, then where to look next, the future links and the disclaimer once). The model
 never composes them. A result without a guidance fact adds nothing. The experts' projection reaches the answer in the
 plain lines that lead it (lead), not here."""
 import re
