@@ -5,8 +5,10 @@ a.st-navlink { text-decoration: none; }
 a.st-navlink:hover { color: var(--ink); }
 .st-nav .lbl { margin: 0 0 6px 12px; }
 .st-sec, .src-card, .wf th[id] { scroll-margin-top: calc(var(--top-h) + 16px); }
-/* the 44 px brand link makes the bar 20 px taller than the app's where brand and Settings sit on two rows (measured at 375 and 320) */
-@media (max-width: 399px) { :root { --top-h: 169px; } }
+/* this bar's real height, measured from 320 to 414 px: brand and Settings share a row down to 384 px (117 px, where
+   style.css's 399 px rule says 149 for the app), then wrap to two rows, 20 px taller than the app's with the 44 px brand link */
+@media (max-width: 399px) { :root { --top-h: 117px; } }
+@media (max-width: 383px) { :root { --top-h: 169px; } }
 
 /* the page: head across the top, then "On this page" beside the sections (the Settings layout's columns) */
 .src-wrap { padding: 28px 32px 0; max-width: 1312px; }

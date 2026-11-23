@@ -150,6 +150,10 @@ def test_projection_cards_print_their_manifests(cid, mod, name, version):
 def test_place_names_row():
     text, hrefs = part(SOURCES, '<table class="wf three">', "</table>")
     assert f"{places.SOURCE['name']}" in text and places.SOURCE["url"] in hrefs
+    # the licence cell: Open-Meteo's API data licence, which code records on era5.SOURCE (places.SOURCE is /api/places'
+    # source block, whose shape the contract fixes at name and url)
+    row = re.search(r'<th scope="row">Place names in the search box</th>(.*?)</tr>', SOURCES, re.S).group(1)
+    assert [read(c)[0] for c in re.findall(r"<td>(.*?)</td>", row, re.S)][1] == era5.SOURCE["licence"]
 
 
 @pytest.mark.parametrize("col, var, name", [("air-temperature", "air_temp", "land_temp"), ("sea-level", "sea_level", "gmsl")])
@@ -238,9 +242,13 @@ def test_both_pages_are_served():
 
 
 def test_deep_links_clear_the_taller_bar():
-    """QA: the brand is a 44 px link here, so below 400 px, where the brand and Settings sit on two rows, the bar is 169 px
-    (the app's 149 plus 20), measured at 375 and 320; scroll-margin-top follows --top-h."""
+    """QA: --top-h is this bar's real height, measured from 320 to 414 px. The 44 px brand link shares a row with Settings
+    down to 384 px (117 px, where style.css's 399 px rule gives the app 149) and wraps below that (169 px); 390 and 393
+    are common phone widths. scroll-margin-top follows --top-h."""
     css = (ROOT / "web" / "sources.css").read_text(encoding="utf-8")
     assert "min-height: 44px; }" in css.split(".top .brand {")[1].split("\n")[0]
-    assert "@media (max-width: 399px) { :root { --top-h: 169px; } }" in css
+    tall = re.findall(r"@media \(max-width: (\d+)px\) \{ :root \{ --top-h: 169px; \} \}", css)
+    assert len(tall) == 1 and int(tall[0]) <= 383, tall
+    assert "@media (max-width: 399px) { :root { --top-h: 117px; } }" in css  # undoes the app's 149 px from 384 to 399 px
+    assert css.index("--top-h: 117px") < css.index("--top-h: 169px")  # the narrower query comes last, so it wins
     assert ".st-sec, .src-card, .wf th[id] { scroll-margin-top: calc(var(--top-h) + 16px); }" in css
