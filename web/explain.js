@@ -457,12 +457,14 @@
     return out;
   }
 
+  // a yearly rain total as step 3 says it, "about 1,239 mm a year" (inches with the Units setting)
+  function yearMm(mm, imp) { return 'about ' + (imp ? fmtNum(mm / 25.4, false) + NB + 'in' : commas(Math.round(mm)) + NB + 'mm') + ' a year'; }
   // step 8 "Other records" (§9): the rows' own numbers side by side; while they are read, or when they couldn't be, one line
   var DRIFT_W = { cooling: 'cooler', warming: 'warmer', drier: 'drier', wetter: 'wetter' };
   function step8(t, ctx) {
     var rows = rowsOf(t), title = 'Other records';
     if (!rows) { var w = ctx.cmp === 'error' ? str(ctx.err) || "We couldn't read the other records just now." : 'Reading the other records for this place…'; return { title: title, short: w, words: [w] }; }
-    var imp = ctx.imperial, f = F(t, imp), d = t.disagree, dr = t.drift || null, mn = srcIn(t);
+    var imp = ctx.imperial, f = F(t, imp), d = t.disagree, dr = t.drift || null, mn = srcIn(t), rain = t.variable === 'precip'; // rain drifts on yearly % values
     var on = rows.filter(function (x) { return x.available === true; }), more = on.filter(function (x) { return !x.main; }).length;
     var cnt = on.filter(function (x) { return x.counted !== false; }); // the rows the server compared
     var dw = dr && dr.source && str(dr.label) ? DRIFT_W[str(dr.direction).replace(/^getting /, '')] : '';
@@ -479,7 +481,8 @@
     var table = { label: 'Other records, scrolls sideways', cols: [''].concat(rows.map(function (x) { return str(x.label) + (x.main ? ' (main)' : ''); })), rows: [
       ['Months used'].concat(col(function (x) { return isNum(x.n_months) ? commas(x.n_months) + ', ' + str(x.years) : str(x.years); })),
       ['Months missing'].concat(col(function (x) { return commas(x.n_missing || 0) + (x.n_preliminary > 0 ? ' (' + x.n_preliminary + ' preliminary)' : ''); })),
-      [yrsOf(t.baseline) + ' average'].concat(col(function (x) { return isNum(x.baseline_value) ? f.lvl(x.baseline_value, t.units) : ''; })),
+      // rain: the rate a day, then the yearly total (the rates beside it are % of that), as step 7 says it
+      [yrsOf(t.baseline) + ' average'].concat(col(function (x) { return isNum(x.baseline_value) ? f.lvl(x.baseline_value, t.units) + (rain ? ', ' + yearMm(x.baseline_value * 365.25, imp) : '') : ''; })),
       ['Rate per decade'].concat(col(function (x) { var q = rt(x); return q ? bare(q) : ''; })),
       ['95% range'].concat(col(function (x) { var q = rt(x); return q && q.range ? bare({ text: q.range, per: q.per }) : ''; })),
       ['By chance, in 100'].concat(col(function (x) { return x.in_100 == null ? '' : String(x.in_100); })),
@@ -491,7 +494,7 @@
     var other = function (id) { var x = rows.filter(function (y) { return (y.source || {}).id === id; })[0]; return !x ? id : x.station || x.kind === 'station' ? 'the ' + lc1(str(x.label)) : str(x.label); };
     var pairs = dr && str(dr.label) && Array.isArray(dr.pairs) ? dr.pairs.filter(function (q) { return q && isNum(q.rate) && isNum(q.low) && isNum(q.high); }) : [];
     var du = dr ? rconv(imp, 0, dr.unit).unit : '';
-    work.push(pairs.length ? 'Drift, month by month, each record against its own 1995–2014 average: ' + pairs.map(function (q, i) {
+    work.push(pairs.length ? 'Drift, ' + (rain ? 'year by year' : 'month by month') + ', each record against its own 1995–2014 average: ' + pairs.map(function (q, i) {
       return dr.label + ' minus ' + other(q.against) + ' ' + withUnit(given(imp, q.rate, dr.unit), du) + (str(dr.per) ? ' ' + dr.per : '') + ' (' + (i ? '' : '95% range ') + given(imp, q.low, dr.unit) + ' to ' + given(imp, q.high, dr.unit) + ')';
     }).join('; ') + '. We flag a model when it drifts the same way against every other record.' : dr && str(dr.text) ? dr.text : 'No drift flagged at this spot.');
     return { title: title, short: short, words: words, work: work, one: true, open: !!(d && d.any) || !!dr };
@@ -559,7 +562,7 @@
     out.push(s2);
 
     // the level at this place: rain says its annual total as the API gives it ("about 1,239 mm a year"), never converted from a rate
-    var lvl3 = isNum(b.annual_total_mm) ? 'about ' + (imp ? fmtNum(b.annual_total_mm / 25.4, false) + NB + 'in' : commas(Math.round(b.annual_total_mm)) + NB + 'mm') + ' a year'
+    var lvl3 = isNum(b.annual_total_mm) ? yearMm(b.annual_total_mm, imp)
       : LEVELS[t.variable] && t.variable !== 'precip' && isNum(b.value) ? f.lvl(b.value, s.units) : '';
     var s3 = { title: 'One baseline' };
     if (b.method === 'provider') {

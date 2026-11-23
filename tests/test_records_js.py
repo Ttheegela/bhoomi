@@ -199,7 +199,7 @@ assert.deepStrictEqual(sb.agree, ['All three records agree: no clear change.', S
 assert.deepStrictEqual(sb.limits, [LIMIT]);
 var cS = steps(CT, C.series, sc), c8 = cS[7];
 assert.ok(c8.short === 'All three agree: no clear change; NASA POWER has been drifting drier' && c8.open === true, c8.short);
-assert.ok(/^Drift, month by month, each record against its own 1995–2014 average: NASA POWER minus ERA5 −5\.8% per decade \(95% range −9\.1 to −2\.4\); NASA POWER minus the weather station −8\.2% per decade \(−13 to −3\.1\)\. /.test(c8.work[c8.work.length - 1]), c8.work[c8.work.length - 1]);
+assert.ok(/^Drift, year by year, each record against its own 1995–2014 average: NASA POWER minus ERA5 −5\.8% per decade \(95% range −9\.1 to −2\.4\); NASA POWER minus the weather station −8\.2% per decade \(−13 to −3\.1\)\. /.test(c8.work[c8.work.length - 1]), c8.work[c8.work.length - 1]);
 assert.strictEqual(cS[8].words[0].list[0], LIMIT); // step 9: the main record's source.limit first
 assert.ok(csvPlace(CT, C.series, sc).text.split('\n').indexOf('# Drift: ' + SYD) > 0);
 assert.ok(/; -5\.4% of the 1995–2014 average per decade \(95% range -11\.8 to \+1\.3% of the 1995–2014 average per decade\); no clear change; /.test(csvOther(CT.comparisons[0])));
@@ -329,6 +329,10 @@ assert.deepStrictEqual(rowsText(cb2)[2], ['Weather station', RC.t.comparisons[2]
 assert.deepStrictEqual(rowsText(cb2).slice(0, 2).map(function (r) { return r[3]; }), ['+6.1%', '+7.0%']);
 assert.deepStrictEqual(cb2.agree, ['Both records agree: rising.']);
 assert.ok(cs2[7].short === 'Both agree: rising' && /^We ran steps 1 to 6 on one more record /.test(cs2[7].words[0]));
+var avg8 = cs2[7].work[1].table.rows[2], yr8 = function (x) { return F(RC.t, false).lvl(x.baseline_value, RC.t.units) + ', about ' + commas(Math.round(x.baseline_value * 365.25)) + NB + 'mm a year'; };
+assert.deepStrictEqual(avg8, ['1995–2014 average', yr8(RC.t.comparisons[0]), yr8(RC.t.comparisons[1]), '—']);
+assert.ok(/ mm a day, about 1,363 mm a year$/.test(avg8[1]) && / here, about 1,363 mm a year$/.test(cs2[2].short), avg8[1] + ' | ' + cs2[2].short); // the same total as step 3
+assert.ok(/ in a day, about [\d.]+ in a year$/.test(steps(RC.t, RC.s, Object.assign({}, RC.c, { imperial: true }))[7].work[1].table.rows[2][1])); // inches
 nothingBanned([cb2, cs2]);
 
 // Sydney, rain: all three show no clear change; the drift line follows the agree line
@@ -452,14 +456,16 @@ var location = { hash: '#air-temperature' }, history = { replaceState: function 
 var VARS = [{ id: 'sea_level', sources: ['coops', 'psmsl'] }, { id: 'air_temp', sources: ['era5', 'power', 'ghcn'] }, { id: 'air_temp_max', sources: ['era5', 'power', 'ghcn'] },
   { id: 'precip', sources: ['power', 'era5', 'ghcn'] }, { id: 'water_storage', sources: ['grace'] }];
 var FX = load('princeton_air_temp'), calls = [], live = 0, most = 0;
+var answer = function (u, others) { // a test may swap this: { status, body } for a request
+  return { status: 200, body: u.pathname === '/api/variables' ? VARS : u.pathname === '/api/series' ? copy(FX.series) : others ? copy(FX.trend)
+    : Object.assign(copy(FX.trend), { comparisons: null, comparisons_window: null, disagree: null, drift: null }) };
+};
 globalThis.fetch = function (url) {
-  var u = new URL(url, 'http://page'), trend = u.pathname === '/api/trend', others = trend && u.searchParams.get('compare') !== 'false';
-  var body = u.pathname === '/api/variables' ? VARS : u.pathname === '/api/series' ? copy(FX.series) : others ? copy(FX.trend)
-    : Object.assign(copy(FX.trend), { comparisons: null, comparisons_window: null, disagree: null, drift: null });
+  var u = new URL(url, 'http://page'), trend = u.pathname === '/api/trend', others = trend && u.searchParams.get('compare') !== 'false', a = answer(u, others);
   calls.push(url);
   if (trend) { live++; most = Math.max(most, live); } // one /api/trend per job: a pin's card, or a pin's other records
   return new Promise(function (r) { setTimeout(function () { if (trend) live--;
-    r({ ok: true, status: 200, json: function () { return Promise.resolve(body); }, headers: { get: function () { return null; } } }); }, others ? 60 : 5); });
+    r({ ok: a.status < 400, status: a.status, json: function () { return Promise.resolve(a.body); }, headers: { get: function () { return null; } } }); }, others ? 60 : 5); });
 };
 """
 
@@ -473,7 +479,7 @@ function othersCalls() { return calls.filter(function (u) { return /^\/api\/tren
   // six pinned places: six cards, one call for the other records, for the pin on screen (New York, the first)
   assert.strictEqual(calls.filter(function (u) { return /^\/api\/series\?/.test(u); }).length, 6);
   assert.strictEqual(calls.filter(function (u) { return /compare=false/.test(u); }).length, 6);
-  assert.deepStrictEqual(othersCalls(), ['/api/trend?variable=air_temp&lat=40.71&lon=-74.01']);
+  assert.deepStrictEqual(othersCalls(), ['/api/trend?variable=air_temp&lat=40.71&lon=-74.01&source=' + FX.trend.source.id]); // pinned to the card's record
   assert.ok(most <= MAX_FLIGHT, 'in flight: ' + most);
   await new Promise(function (r) { setTimeout(r, 40); });
   assert.strictEqual(ids['td-live'].textContent, FX.trend.disagree.line); // announced once more when they land
@@ -485,7 +491,7 @@ function othersCalls() { return calls.filter(function (u) { return /^\/api\/tren
   await new Promise(function (r) { setTimeout(r, 40); });
   assert.strictEqual(ids['td-live'].textContent, 'Loading the other records…'); // announced once while they load
   await settle();
-  assert.deepStrictEqual(othersCalls().slice(1), ['/api/trend?variable=air_temp&lat=40.35&lon=-74.66']);
+  assert.deepStrictEqual(othersCalls().slice(1), ['/api/trend?variable=air_temp&lat=40.35&lon=-74.66&source=' + FX.trend.source.id]);
   // back to New York, and to Princeton again: kept on the stored answer, never asked twice
   TD.select('40.71,-74.01'); await settle(); TD.select('40.35,-74.66'); await settle();
   assert.strictEqual(othersCalls().length, 2);
@@ -564,3 +570,67 @@ def test_narrow_card_turns_rows_into_blocks():
     assert ".oth tr.nt { display: block; padding: 0 0 10px; }" in oth[0] and ".oth tr.with-note { border-bottom: 0;" in oth[0]
     # the first 519 px block is still the readouts' (test_narrow_readout_value_column_is_capped reads the first one)
     assert ".reads > div, .reads > div + div {" in blocks[0]
+
+
+FALLBACK_TEST = r"""
+window.TDX.others = function () {}; window.TDX.redraw = function () {};
+var drawn = []; window.TDX.show = function (pin) { if (pin && pin.status === 'ok') drawn.push(pin); }; // what the chart and the CSV get
+function settle() { return new Promise(function (r) { (function w() { setTimeout(function () { if (!flight && !queue.length) r(); else w(); }, 10); })(); }); }
+var NOTE = "ERA5 couldn't be read just now; showing NASA POWER.";
+assert.strictEqual(FX.trend.source.id, 'power'); // the fixture's answer is NASA POWER's, its records' main row too
+assert.ok(FX.trend.comparisons[0].main && FX.trend.comparisons[0].source.id === 'power');
+answer = function (u, others) {
+  var src = u.searchParams.get('source'), princeton = u.searchParams.get('lat') === '40.35';
+  if (u.pathname === '/api/variables') return { status: 200, body: VARS };
+  if (u.pathname === '/api/series') { // ERA5, the default, can't be read: New York's series fails; Princeton's comes from an old ERA5 cache
+    if (src === 'power') return { status: 200, body: copy(FX.series) };
+    return princeton ? { status: 200, body: Object.assign(copy(FX.series), { source: Object.assign(copy(FX.series.source), { id: 'era5', name: 'ERA5 reanalysis via Open-Meteo archive' }) }) }
+      : { status: 502, body: { detail: 'upstream' } };
+  }
+  var t = copy(FX.trend); // the trend falls back to NASA POWER and says so
+  return { status: 200, body: others ? t : Object.assign(t, { main_note: src ? null : NOTE, comparisons: null, comparisons_window: null, disagree: null, drift: null }) };
+};
+(async function () {
+  docOn.DOMContentLoaded[0]();
+  await settle();
+  var ny = TD.pins().filter(function (p) { return p.selected; })[0];
+  assert.ok(ny.status === 'ok' && ny.trend.main_note === NOTE, ny.status + ' ' + ny.error); // the failed ERA5 series never errors the card
+  assert.deepStrictEqual(calls.filter(function (u) { return /^\/api\/series\?.*lat=40\.71/.test(u); }),
+    ['/api/series?variable=air_temp&lat=40.71&lon=-74.01', '/api/series?variable=air_temp&lat=40.71&lon=-74.01&source=power']);
+  // the card: NASA POWER and the note under its source line; the chart and the CSV: NASA POWER's series
+  var meta = ids['rec'].querySelector('.meta');
+  assert.ok(/^NASA POWER\s↗$/.test(meta.kids[0].kids[0]), JSON.stringify(meta.kids[0].kids));
+  assert.strictEqual(ids['rec'].querySelector('.mnote').kids[0], NOTE);
+  var last = drawn[drawn.length - 1];
+  assert.ok(last.series.source.id === 'power' && last.trend.source.id === 'power');
+  // the other records are asked for NASA POWER, so their main row is the card's record
+  assert.ok(calls.indexOf('/api/trend?variable=air_temp&lat=40.71&lon=-74.01&source=power') >= 0, JSON.stringify(calls.filter(function (u) { return !/compare=false/.test(u); })));
+  assert.ok(ny.trend.comparisons[0].main && ny.trend.comparisons[0].source.id === 'power');
+  assert.ok(/^NASA POWER\s↗$/.test(ids['rec'].querySelector('.is-main').kids[0].kids[0].kids[0]));
+  // Princeton: its series came from ERA5 while its answer is NASA POWER's: asked again, so the chart can't show ERA5
+  var pr = TD.pins().filter(function (p) { return p.key === '40.35,-74.66'; })[0];
+  assert.ok(pr.status === 'ok' && pr.series.source.id === 'power' && pr.trend.source.id === 'power', pr.series && pr.series.source.id);
+  process.exit(0);
+})().catch(function (e) { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_main_record_fallback_on_the_page():
+    """Review fix (high): when ERA5 can't be read, /api/trend falls back to NASA POWER with main_note while /api/series
+    fails (or comes from an old ERA5 cache). The page takes the record from the trend answer, asks the series again for it
+    before any error, pins it on the stored answer, and asks the other records for it: the card, the chart and the
+    records all show NASA POWER, with main_note under the source line."""
+    js = APP_DOM + SRC + "\n" + APP + FALLBACK_TEST
+    env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env, timeout=60)
+    assert r.returncode == 0, r.stderr + r.stdout
+
+
+def test_retry_never_reuses_a_cached_error():
+    """Review fix 2: the server sends no-store for an answer with main_note or with error or pending rows; the page's
+    fetch sets no cache mode of its own, so "Try the other records again" always reaches the server."""
+    api = re.search(r"\nasync function api\(path, params\) \{(.*?)\n\}", APP, re.S)[1]
+    assert "fetch(path + (q.toString() ? '?' + q : ''), { headers: { Accept: 'application/json' } })" in api
+    assert APP.count("fetch(") == 1 and "force-cache" not in APP and "no-cache" not in APP  # api() is the page's only fetch
+

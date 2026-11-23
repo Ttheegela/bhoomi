@@ -218,17 +218,25 @@ function pump() {
         pump();
         return;
       }
-      const s = sr.ok ? sr.body : null;
-      const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
-      if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); res.none = sr.status === 400; } // none: a real "no record here", not asked again on every click
-      else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; res.none = true; }
-      else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; res.none = tr.status === 400; }
-      else { res.status = 'ok'; res.series = s; res.trend = tr.body; }
-      flight--;
-      landed(job.win, job.p, res);
-      pump();
+      // The record the card's answer used: when ERA5 can't be read the trend falls back to the next record (main_note) and
+      // the series doesn't, so the series is asked again for that record before anything fails; the records call follows it
+      const tid = tr.ok && tr.body && tr.body.source ? tr.body.source.id : null, sid = sr.ok && sr.body && sr.body.source ? sr.body.source.id : null;
+      if (tid) res.params = Object.assign({}, job.params, { source: tid }); // pinned on the stored answer
+      (tid && (tr.body.main_note || sid !== tid) ? api('/api/series', res.params) : Promise.resolve(sr)).then((sr2) => cardLanded(job, res, sr2, tr));
     });
   }
+}
+function cardLanded(job, res, sr, tr) {
+  if (results[job.k] !== res) { flight--; pump(); return; } // removed meanwhile
+  const s = sr.ok ? sr.body : null;
+  const has = s && Array.isArray(s.values) && s.values.some((v) => v != null);
+  if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); res.none = sr.status === 400; } // none: a real "no record here", not asked again on every click
+  else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; res.none = true; }
+  else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; res.none = tr.status === 400; }
+  else { res.status = 'ok'; res.series = s; res.trend = tr.body; }
+  flight--;
+  landed(job.win, job.p, res);
+  pump();
 }
 // The other records for this place (design 12 §2, §5): the same /api/trend with them, once the card is drawn (the main
 // record is cached by then), and only for the pin on screen: every call reads ERA5, and Open-Meteo's free allowance is
