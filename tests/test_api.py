@@ -15,7 +15,8 @@ FX = Path(__file__).parent / "fixtures"
 SERIES_KEYS = {"variable", "units", "freq", "place", "times", "values", "source", "notes", "flags", "anomaly"}
 TREND_KEYS = {"variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
               "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "baseline", "record",
-              "range_kind", "headline_rate", "fit", "latest", "now", "world", "projection", "explain", "caveats", "meaning", "guidance"}
+              "range_kind", "headline_rate", "fit", "latest", "now", "world", "projection", "explain", "caveats", "meaning", "guidance",
+              "comparisons", "comparisons_window", "disagree", "drift"}  # PR4a: null for sea level
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 client = TestClient(app)
 

@@ -132,9 +132,9 @@ def series(request: Request, response: Response, variable: str, lat: float, lon:
 
 @app.get("/api/trend")
 def trend(request: Request, response: Response, variable: str, lat: float, lon: float,
-          start: str | None = None, end: str | None = None, source: str | None = None) -> dict:
+          start: str | None = None, end: str | None = None, source: str | None = None, compare: bool = True) -> dict:
     limit_data(request)
-    out = tools.detect_trend(variable, lat, lon, start, end, source)
+    out = tools.detect_trend(variable, lat, lon, start, end, source, compare)
     response.headers["Cache-Control"] = CACHE
     return out
 
