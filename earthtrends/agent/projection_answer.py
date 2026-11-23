@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from earthtrends.agent import tools
 from earthtrends.stats.guidance import DISCLAIMER_PROJECTION, q, sig2
-from earthtrends.stats.plain import BASE, NB, range_text, scenario_lines
+from earthtrends.stats.plain import BASE, NB, range_text, scenario_lines, spoken
 from earthtrends.stats.projection import _dec, _mm, _more  # the readouts' own "more than today"
 from earthtrends.stats.trend import PROJECTION
 
@@ -50,7 +50,7 @@ def _span(variable: str, lo, hi, k: Decimal) -> str:
 
 
 def _none(variable: str, measure: str, place: dict, why: str) -> dict:
-    return {**dict.fromkeys(KEYS), "available": False, "plain": [why], "variable": variable, "measure": measure,
+    return {**dict.fromkeys(KEYS), "available": False, "plain": [spoken(why)], "variable": variable, "measure": measure,
             "place": place, "why": why}
 
 
@@ -93,7 +93,7 @@ def get_projection(variable: str, lat: float, lon: float, scenario: str | None =
     if year not in (SEA_YEARS if sea else CMIP6_YEARS):
         raise ValueError(SEA_YEARS_TEXT if sea else CMIP6_YEARS_TEXT)
 
-    r = tools.detect_trend(variable, lat, lon, source=source)
+    r = tools.detect_trend(variable, lat, lon, source=source, compare=False)  # the other records go unused here
     p = r["projection"]
     if not p.get("available"):
         return _none(variable, names[variable], r["place"], p["why"])

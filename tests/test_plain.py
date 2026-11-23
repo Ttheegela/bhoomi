@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from earthtrends.stats import compute_trend
-from earthtrends.stats.plain import AGREE, NO_PROJECTION, check_text, plain_lines, scenario_lines
+from earthtrends.stats.plain import AGREE, NO_PROJECTION, check_text, plain_lines, scenario_lines, spoken
 
 RW = Path(__file__).parent / "fixtures" / "rework"
 CASES = sorted(f.stem for f in RW.glob("*.json") if f.stem != "variables")
@@ -106,8 +106,11 @@ def test_water_storage_has_no_projection():
 
 
 def test_no_projection_uses_why_and_how_sure():
-    assert plain_lines(trend("riverside_no_baseline")) == [
-        "This record has no 1995–2014 average to start the projection from, so we don't show one.",
+    t = trend("riverside_no_baseline")
+    assert t["projection"]["why"] == ("This record has no 1995–2014 average to start the projection from, so we "
+                                      "don't show one.")  # the field keeps its dash; the line says it aloud
+    assert plain_lines(t) == [
+        "This record has no 1995 to 2014 average to start the projection from, so we don't show one.",
         "A change like this would be unlikely if nothing were really changing.",
         "About 0.4 °C warmer every 10 years."]
     # an empty comparison leaves two lines; no projection at all says so
@@ -115,6 +118,11 @@ def test_no_projection_uses_why_and_how_sure():
                         "meaning": {"confidence": "Not clear", "comparison": ""}}) == [
         "Why.", "The data do not show a clear change: the ups and downs are too large to tell."]
     assert plain_lines({"meaning": {"confidence": "Clear", "comparison": ""}})[0] == NO_PROJECTION
+
+
+def test_spoken_year_ranges_in_passed_through_text():
+    assert spoken("no 1995–2014 average; 2041—2060 and 1981-2025") == "no 1995 to 2014 average; 2041 to 2060 and 1981 to 2025"
+    assert spoken("SSP2-4.5, 12–15 km, 1995 to 2014") == "SSP2-4.5, 12–15 km, 1995 to 2014"  # only year ranges
 
 
 # ---- the other rows and special cases of §1 ----

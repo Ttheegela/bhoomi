@@ -552,20 +552,24 @@ def test_expect_source_among_those_called_and_its_verdict_scored():
     assert run.check(case, fake_run(DISAGREE, multi([POWER, ERA5])))["source"] is False
 
 
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_verdict_without_expect_source_uses_default_source():
-    case = {**DELHI_CASE, "expect_verdict": "falling", "must_say": []}
-    assert run.check(case, fake_run(DISAGREE, multi([ERA5, GHCN, POWER])))["verdict"]  # power: first in the catalog
-    out = run.check({**case, "expect_verdict": "rising"}, fake_run(DISAGREE, multi([ERA5, GHCN, POWER])))
+    case = {**DELHI_CASE, "expect_verdict": "no_clear_change", "must_say": []}
+    assert run.check(case, fake_run(DISAGREE, multi([POWER, GHCN, ERA5])))["verdict"]  # era5: first in the catalog
+    out = run.check({**case, "expect_verdict": "falling"}, fake_run(DISAGREE, multi([POWER, GHCN, ERA5])))
     assert out["verdict"] is False
 
 
-@pytest.mark.usefixtures("power_first_for_heat")
+# ERA5 is the hottest day's default (PR4a): when the three agree it leads, and NASA POWER and the station get the
+# code's sentences. ERA5_FALLING agrees with POWER's fall.
+ERA5_FALLING = {**ERA5, "verdict": "falling", "slope_per_decade": -0.1187, "ci_low": -0.27, "ci_high": -0.03}
+ERA5_LEAD = "Delhi's hottest days are clearly falling, by 0.12 °C per decade (range -0.27 to -0.03)"
+
+
 def test_agreeing_sources_use_single_verdict_wording():
-    era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
-    answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 "
-              f"to December 2025. {agree_sentence(era5, POWER)} {agree_sentence(ghcn, POWER)} Sources: "
-              "NASA POWER (MERRA-2), https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
+    era5, ghcn = ERA5_FALLING, {**GHCN, "verdict": "falling"}
+    answer = (f"{ERA5_LEAD}, January 1981 to December 2025. {agree_sentence(POWER, era5)} "
+              f"{agree_sentence(ghcn, era5)} Sources: ERA5 reanalysis via Open-Meteo archive, https://open-meteo.com/, "
+              "https://power.larc.nasa.gov/, https://www.ncei.noaa.gov/")
     case = {**DELHI_CASE, "must_say": []}
     assert all(run.check(case, fake_run(answer, multi([POWER, era5, ghcn]))).values())
     contradicted = answer.replace("are clearly falling", "are falling, but we can't rule out no change")
@@ -585,22 +589,19 @@ def test_differently_is_not_disagree():
     assert run.DISAGREE.search("they differ") and not run.DISAGREE.search("different grids, differently")
 
 
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_false_disagree_when_sources_agree_fails():
-    era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
-    answer = ("The sources disagree. Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to "
-              f"-0.09). {agree_sentence(era5, POWER)} {agree_sentence(ghcn, POWER)} Sources: "
-              "https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
+    era5, ghcn = ERA5_FALLING, {**GHCN, "verdict": "falling"}
+    answer = (f"The sources disagree. {ERA5_LEAD}. {agree_sentence(POWER, era5)} {agree_sentence(ghcn, era5)} "
+              "Sources: https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
     case = {**DELHI_CASE, "must_say": []}
     assert run.check(case, fake_run(answer, multi([POWER, era5, ghcn])))["wording"] is False
     assert run.check(case, fake_run(answer.replace("The sources disagree. ", ""), multi([POWER, era5, ghcn])))["wording"]
 
 
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_models_disagree_sentence_is_not_a_false_disagree():
-    era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
-    answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09). "
-              f"{agree_sentence(era5, POWER)} {agree_sentence(ghcn, POWER)} Models disagree on wetter or drier. "
+    era5, ghcn = ERA5_FALLING, {**GHCN, "verdict": "falling"}
+    answer = (f"{ERA5_LEAD}. {agree_sentence(POWER, era5)} {agree_sentence(ghcn, era5)} Models disagree on wetter or "
+              "drier. The models disagree on wetter or drier: 8 in 10 of them put it between 3% less and 24% more rain. "
               "Sources: https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
     case = {**DELHI_CASE, "must_say": []}
     assert run.check(case, fake_run(answer, multi([POWER, era5, ghcn])))["wording"]
@@ -723,15 +724,14 @@ def test_same_gauge_claim_fails_wording():
     assert run.check(NY_CASE, fake_run(answer, multi([CO_OPS, PSMSL])))["wording"] is False
 
 
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_agree_answer_may_repeat_caveat_numbers():
-    era5 = {**ERA5, "verdict": "falling"}
+    era5 = ERA5_FALLING
     ghcn = {**GHCN, "verdict": "falling", "caveats": ["Weather station X (id), 6 km from the point you asked about."]}
-    answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 "
-              f"to December 2025. {agree_sentence(era5, POWER)} {agree_sentence(ghcn, POWER)} The "
-              "station is 6 km from the point you asked about. Sources: NASA POWER (MERRA-2), "
-              "https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
-    assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([POWER, era5, ghcn])))["wording"]
+    answer = (f"{ERA5_LEAD}, January 1981 to December 2025. {agree_sentence(POWER, era5)} "
+              f"{agree_sentence(ghcn, era5)} The station is 6 km from the point you asked about. Sources: ERA5 "
+              "reanalysis via Open-Meteo archive, https://power.larc.nasa.gov/, https://open-meteo.com/, "
+              "https://www.ncei.noaa.gov/")
+    assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, multi([era5, POWER, ghcn])))["wording"]
     psmsl = {**PSMSL, "caveats": ["30 monthly values that PSMSL flags as doubtful were left out."]}
     ny = NY_OK.replace(" Sources:", " 30 monthly values that PSMSL flags as doubtful were left out. Sources:")
     assert run.check(NY_CASE, fake_run(ny, multi([CO_OPS, psmsl])))["wording"]
@@ -820,18 +820,19 @@ def test_own_record_misattributed_or_shared_gauge_fails(sentence):
 
 
 POWER_LINK = "Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/."
+ERA5_LINK = "Source: ERA5 reanalysis via Open-Meteo archive, https://open-meteo.com/."
 
 
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_default_source_link_added_when_all_agree():
     rising = [{**r, "verdict": "rising"} for r in (POWER, ERA5, GHCN)]
     calls = multi(rising)
-    raw = ("London is getting warmer, by 0.25 °C per decade (range -0.41 to -0.09), January 1981 to December 2025. "
-           "[AGREEING SOURCES] Sources: NASA POWER, ERA5 (https://open-meteo.com/) and NOAA NCEI GHCN-Daily "
-           "(https://www.ncei.noaa.gov/).")
+    # ERA5 leads the hottest day (PR4a); the answer names the other two with their links but not ERA5's
+    raw = ("Delhi's hottest days are getting hotter, by 0.12 °C per decade (range -0.03 to 0.27), January 1981 to "
+           "December 2025. [AGREEING SOURCES] Sources: ERA5, NASA POWER (https://power.larc.nasa.gov/) and NOAA NCEI "
+           "GHCN-Daily (https://www.ncei.noaa.gov/).")
     assert not run.check({**DELHI_CASE, "must_say": []}, fake_run(raw, calls))["source_named"]
     answer = compose(raw, calls)
-    assert answer.count("power.larc.nasa.gov") == 1 and answer.endswith(POWER_LINK)
+    assert answer.count("open-meteo.com") == 1 and answer.endswith(ERA5_LINK)
     assert run.check({**DELHI_CASE, "must_say": []}, fake_run(answer, calls))["source_named"]
 
 
@@ -931,7 +932,8 @@ def test_agent_case_file_loads_after_cases_toml():
     n = len(run.load_cases(run.CASES))
     assert ids[n:n + 5] == ["followup-jakarta-sea-level", "followup-explain-range", "followup-explain-likely-range",
                             "manhattan-build-house", "asia-sea-level-broad"]
-    assert len(ids) == n + 17 and ids[-1] == "atlantic-city-many-measurements"
+    assert len(ids) == n + 19 and ids[-3] == "atlantic-city-many-measurements"
+    assert ids[-2:] == ["battery-simple-words-voice", "followup-simple-words-chennai"]  # PR6 simple words
     jak = agent_case("followup-jakarta-sea-level")
     assert [m["role"] for m in jak["history"]] == ["user", "assistant"] and "expect_verdict" not in jak
     assert agent_case("followup-explain-range")["history"] == jak["history"]

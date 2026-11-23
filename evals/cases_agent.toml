@@ -254,3 +254,35 @@ max_km = 40
 multi_measure = true
 must_say = ["sea level", "temperature", "IPCC projections"]
 must_not_say = ["[GUIDANCE", "[OFFICIAL"]
+
+# ---- simple words and voice (PR6, web/design/16-plain-language.md §4) ----
+# Code puts the plain lines first (the past clause, then what experts project, how sure they are, what it means day
+# to day), then the model's one sentence naming the sources, then [GUIDANCE] without the fact (it carries the 95% range
+# and the world ratio). The model writes no figure of its own.
+
+# The grandparent on voice: the voice agent forwards every question with "Explain in simple words." The Battery has
+# an AR6 projection, so the lines give the experts' 2 in 3 chance.
+[[case]]
+id = "battery-simple-words-voice"
+question = "Is the sea going up at the Battery? Explain in simple words."
+expect_tool = "detect_trend"
+expect_variable = "sea_level"
+expect_place = [40.70, -74.01]
+must_say = ["2 in 3 chance", "Where to look next", "not professional advice"]
+must_not_say = ["95% range", "times as fast", "p-value", "slope", "[GUIDANCE", "[OFFICIAL", "you should"]
+
+# A simple-words follow-up: it looks the earlier place and measurement up again, so every number is this turn's. The
+# earlier answer carries no number. Chennai's CMIP6 rain lines say how many of 10 climate models put it where.
+[[case]]
+id = "followup-simple-words-chennai"
+question = "What does that mean for me?"
+expect_tool = "detect_trend"
+expect_variable = "precip"
+expect_place = [13.08, 80.27]
+max_km = 40
+must_say = ["8 in 10", "not professional advice"]
+must_not_say = ["95% range", "p-value", "slope", "[GUIDANCE", "[OFFICIAL", "likely range", "in 3 chance"]
+history = [
+  { role = "user", content = "Is Chennai really getting more rain, or is it just this year?" },
+  { role = "assistant", content = "It has clearly been getting wetter here, over the whole record, not just this year. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/." },
+]
