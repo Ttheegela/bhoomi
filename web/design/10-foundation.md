@@ -99,11 +99,13 @@ details  "Show the data as a table"
 section#how.card  aria-labelledby=how-h
   h2#how-h tabindex=-1  "How we calculated this"
   p.lead "For {pin.label}. Every number below is the one the card and the chart use."
-  ol.steps > li > details  (summary: number · title · short answer · chevron)
+  button#how-all.btn  "Open all steps" | "Close all steps"   aria-controls=how-steps
+  ol#how-steps.steps > li > details  (summary: number · title · short answer · chevron)
                            (body: words on the left, "The working" box on the right; one column under 900 px)
   p "Numbers are rounded, so the last digit of a sum can differ by 1."
 ```
 - Steps 3, 4, 5 and 6 start open; 1, 2, 7, 8 and 9 start closed, at every width (the owner's choice). A closed step shows its short answer in grey on the summary row (under the title below 900 px); an open step hides it (`visibility: hidden`), so nothing is said twice. Every new answer renders the steps in this default state. Summary rows at least 52 px; the whole row toggles.
+- One button over the steps (the owner asked for it): "Open all steps" while any step is closed (it opens all nine), "Close all steps" when all nine are open (it closes them). `aria-expanded` is "true" only when all nine are open. Opening or closing one step by hand, or a re-render for a new place or window, updates its words. The page's quiet `.btn`, 44 px; focus stays on it.
 - The working box: `--work` fill, 8 px radius, 15 px, a 13 px grey label "The working".
 - Months in words come from `MONTHS_LONG`. Pluralise counts ("1 month is missing").
 
