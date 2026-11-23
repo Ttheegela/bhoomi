@@ -98,10 +98,13 @@ def open_meteo(monkeypatch):
     return calls
 
 
-def serve(folder: Path, broken: dict | None = None):
-    """httpx.get for the pack at URL, from a local folder: 404 for a missing file; broken: {name: status, or bytes}."""
+def serve(folder: Path, broken: dict | None = None, seen: list | None = None):
+    """httpx.get for the pack at URL, from a local folder: 404 for a missing file; broken: {name: status, or bytes};
+    seen: gets every file name requested."""
     def get(url, **_):
         name, req = url.rsplit("/", 1)[1], httpx.Request("GET", url)
+        if seen is not None:
+            seen.append(name)
         how = (broken or {}).get(name)
         if isinstance(how, int):
             return httpx.Response(how, request=req)
@@ -161,7 +164,8 @@ def test_a_land_cell_gives_its_exact_values(packs, monkeypatch):
 def test_an_ocean_cell_takes_its_nearest_land_neighbour(packs, monkeypatch, lat, lon, cell, tile):
     monkeypatch.setenv(era5.PACK, str(packs / "a"))
     times, values, src, _ = era5.pack_series("air_temp", lat, lon)
-    assert values == expect("t", *cell) and src["record_url"] == f"{packs / 'a'}/{tile}"
+    assert values == expect("t", *cell) and era5.tile_name(*cell) == tile
+    assert src["record_url"] == "https://doi.org/10.24381/cds.h35hb680"  # a local folder never reaches the page
     where = f"{abs(cell[0] / 4):.2f}° {'N' if cell[0] >= 0 else 'S'}, {abs(cell[1] / 4):.2f}° {'E' if cell[1] >= 0 else 'W'}"
     assert f"the nearest land grid cell centred at {where}, about 25 km across" in src["method"]
 
@@ -182,7 +186,7 @@ def test_source_block_and_notes(packs, monkeypatch):
                                 "cadence", "deseasoned_upstream", "limit")} == {
         "id": "era5", "name": "ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)",
         "url": "https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas", "dataset_id": "doi:10.24381/cds.h35hb680",
-        "version": "test-1", "record_url": f"{packs / 'a'}/n20e070.npz", "retrieved": "2026-11-20",
+        "version": "test-1", "record_url": "https://doi.org/10.24381/cds.h35hb680", "retrieved": "2026-11-20",
         "attribution": upstream.COPERNICUS, "cadence": "monthly", "deseasoned_upstream": False, "limit": None}
     assert src["method"] == ("The Atlas dataset's hottest daily maximum of ERA5 2 m air temperature in each month for the grid "
                              "cell centred at 28.50° N, 77.25° E, about 25 km across; days run midnight to midnight UTC.")
@@ -200,8 +204,8 @@ def _wrong_vars(body: bytes) -> bytes:
     return buf.getvalue()
 
 
-@pytest.mark.parametrize("break_it", [lambda b: 500, lambda b: b[: len(b) // 2], _wrong_vars],
-                         ids=["http-500", "truncated", "wrong-vars"])
+@pytest.mark.parametrize("break_it", [lambda b: 500, lambda b: 404, lambda b: b[: len(b) // 2], _wrong_vars],
+                         ids=["http-500", "listed-but-404", "truncated", "wrong-vars"])
 def test_a_failed_tile_falls_back_with_a_warning_and_is_not_cached(packs, monkeypatch, open_meteo, caplog, break_it):
     tile = packs / "a" / "n20e070.npz"
     monkeypatch.setenv(era5.PACK, URL)
@@ -222,11 +226,14 @@ def test_a_missing_manifest_or_an_outage_falls_back(packs, monkeypatch, caplog):
     assert era5.pack_series("air_temp", 28.61, 77.21) is None and len(caplog.records) == 2
 
 
-def test_404_means_no_land(packs, monkeypatch, caplog):
+def test_an_unlisted_tile_is_no_land_and_never_requested(packs, monkeypatch, caplog):
+    seen = []
     monkeypatch.setenv(era5.PACK, URL)
-    monkeypatch.setattr(httpx, "get", serve(packs / "a", {"n20e070.npz": 404}))
-    assert era5.pack_series("air_temp", 28.61, 77.21) is None  # every cell of its 3 x 3 block is in that tile
-    assert era5.pack_series("air_temp", 0.0, -30.0) is None and not caplog.records
+    monkeypatch.setattr(httpx, "get", serve(packs / "a", seen=seen))
+    assert era5.pack_series("air_temp", 0.0, -30.0) is None and seen == ["manifest.json"] and not caplog.records
+    assert era5.pack_series("air_temp", 29.95, 75.0)[1] == expect("t", 119, 300)  # own tile n30e070, cell in n20e070
+    assert era5.pack_series("air_temp", -17.0, -179.95)[1] == expect("t", -68, 719)  # s20w180 is not listed
+    assert seen == ["manifest.json", "n30e070.npz", "n20e070.npz", "s20e170.npz"] and not caplog.records
 
 
 def test_no_pack_base_and_replay_keep_open_meteo(packs, monkeypatch):
@@ -252,8 +259,25 @@ def test_the_mini_pack_gives_the_reader_the_full_packs_values(packs, monkeypatch
             if full is None:
                 assert mini is None and (lat, lon) == (0.0, -30.0)
                 continue
-            assert full[:2] == mini[:2] and full[3] == mini[3] and full[2]["method"] == mini[2]["method"], (lat, lon)
-            assert full[2]["record_url"].rsplit("/", 1)[1] == mini[2]["record_url"].rsplit("/", 1)[1]
+            assert full[:2] == mini[:2] and full[2:] == mini[2:], (lat, lon)
+
+
+def test_a_land_cell_with_no_values_is_left_out(packs, tmp_path, monkeypatch, capsys):
+    read, land = file_reader(*CONVENTIONS["a"], land_grid())
+
+    def no_rain_west_of_the_hole(v, a, b):  # the cell west of the ocean hole has no rain at all
+        x = read(v, a, b)
+        if v == "r" and a - 360 <= HOLE[0] < a - 320:
+            x[:, HOLE[0] - (a - 360), HOLE[1] - 1 + 720] = np.nan
+        return x
+    m = bep.build(no_rain_west_of_the_hole, land, tmp_path / "full", MONTHS, META)
+    assert m["checks"]["empty_cells"] == {"-20": 0, "20": 1, "30": 0} and m["checks"]["empty_cells_total"] == 1
+    assert m["tiles"]["n20e070.npz"]["cells"] == 34 and "1 land cells left out" in capsys.readouterr().out
+    mini = bep.build(no_rain_west_of_the_hole, land, tmp_path / "mini", MONTHS, META, points=[(28.5, 77.75)])
+    assert mini["points"] == [{"lat": 28.5, "lon": 77.75, "cell": [28.5, 78.0]}]  # the east neighbour, as the reader
+    for folder in ("full", "mini"):
+        monkeypatch.setenv(era5.PACK, str(tmp_path / folder))
+        assert era5.pack_series("precip", 28.5, 77.75)[1] == expect("r", HOLE[0], HOLE[1] + 1), folder
 
 
 def test_build_checks(packs, tmp_path, monkeypatch, capsys):
@@ -262,8 +286,9 @@ def test_build_checks(packs, tmp_path, monkeypatch, capsys):
     with pytest.raises(ValueError, match="wrong units"):
         bep.build(kelvin, land, tmp_path / "k", MONTHS, META)
     hot = lambda v, a, b: read("txx", a, b) + 1 if v == "t" else read(v, a, b)  # noqa: E731
-    with pytest.raises(ValueError, match="t is above txx in 887 of 887"):  # 37 cells x 24 months, less the txx hole
+    with pytest.raises(ValueError, match="t is above txx in 24 of 24 land cell-months from -20 to"):  # the first band
         bep.build(hot, land, tmp_path / "h", MONTHS, META)
+    assert not (tmp_path / "h" / "s20e170.npz").exists()  # failed before that band's tile was written
     assert not (tmp_path / "k" / "manifest.json").exists() and not (tmp_path / "h" / "manifest.json").exists()
     def once(v, a, b):  # t above txx in one cell-month: Delhi, January 1981
         x = read(v, a, b)
@@ -294,6 +319,18 @@ def test_script_helpers():
     assert len(labels) == 1032 and bep.first_month(labels, MONTHS) == 492
     with pytest.raises(ValueError, match="one by one"):
         bep.first_month(["1980-12", "1981-01", "1981-03"], ["1981-01", "1981-02"])
+    # CDO-style reference dates, which datetime.fromisoformat rejects
+    assert bep.time_ref("days since 1940-1-1 00:00:00") == ("days", bep.datetime(1940, 1, 1))
+    assert bep.month_labels([0, 31.5], "days since 1940-1-1") == ["1940-01", "1940-02"]
+    with pytest.raises(ValueError, match="not supported"):
+        bep.time_ref("months since 1940-01-01")
+    assert bep.check_months({v: labels for v in bep.VARS}, MONTHS) == 492
+    with pytest.raises(ValueError, match="time axes differ"):
+        bep.check_months({"t": labels, "txx": labels, "r": labels[:-1]}, MONTHS)
+    stamped_at_the_end = bep.month_labels([31 + 30.4 * i for i in range(12)], "days since 1940-01-01")
+    assert stamped_at_the_end[0] == "1940-02"  # [31] days since 1940-01-01 reads as February
+    with pytest.raises(ValueError, match="start in 1940-02, not 1940-01"):
+        bep.check_months({v: stamped_at_the_end for v in bep.VARS}, MONTHS)
     assert bep.parse_points("28.61,77.21; -17,179.95;") == [(28.61, 77.21), (-17.0, 179.95)]
 
 

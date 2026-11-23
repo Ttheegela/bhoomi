@@ -55,6 +55,7 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
         times, values, src, notes = pack
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
     elif source == "era5":  # Open-Meteo: no pack base, a failed pack read (logged), or no land cell near
+        # a fallback series is cached like any other (TTL_S), so after a pack outage this point stays on Open-Meteo up to 12 h
         param = era5.PARAMS[variable]
         times, values = monthly.daily_to_monthly(*era5.parse(era5.fetch(param, lat, lon), param), era5.HOW[variable])
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}

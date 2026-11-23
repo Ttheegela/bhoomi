@@ -11,20 +11,26 @@ Land: the IPCC Atlas reference grid land_sea_mask_025degree_binary.nc4 (github.c
 
 Run from a checkout of the repo: it imports earthtrends.data.era5 for the tile names and the choice of a place's cell, so
 the build and the reader cannot disagree, and scripts/build_grace.py's write_npz (byte-identical npz from run to run).
-Needs numpy, httpx (earthtrends.data imports it) and h5py; h5py is imported only where the files are read: install it
-in the HPC env, never in the app.
+Needs Python 3.11 or later (hashlib.file_digest), numpy, httpx (earthtrends.data imports it) and h5py. Run it with the
+repo's Python 3.12 through `uv run --with h5py python scripts/build_era5_pack.py ...`, or with an HPC env's python that
+has those packages. h5py is imported only where the files are read: never an app dependency.
+On Lustre or GPFS, set HDF5_USE_FILE_LOCKING=FALSE if h5py refuses to open the files.
 
-  python scripts/build_era5_pack.py --t t.nc --txx txx.nc --r r.nc --mask land_sea_mask_025degree_binary.nc4 \\
-      --out WORK/era5/v1 --retrieved 2026-11-20 --product-version <CDS version> [--start 1981-01 --end 2025-12]
+  uv run --with h5py python scripts/build_era5_pack.py --t t.nc --txx txx.nc --r r.nc \\
+      --mask land_sea_mask_025degree_binary.nc4 --out WORK/era5/v1 --retrieved 2026-11-20 \\
+      --product-version <CDS version> [--start 1981-01 --end 2025-12]
   --points "28.61,77.21;40.71,-74.01"   a mini pack (same format and tile names) holding only the cells the reader
                                         picks for those points (rounded to 2 decimals, as get_series does): test fixtures
 
-One 10-degree latitude band at a time (about 1 GB in memory). Checks (exit 1, and no manifest.json, on any failure):
-before reading, the mask's md5, --out empty, the grid (each file's own coordinates) and the month count (end - start
-+ 1, one by one in each file); before a band's tiles are written, every value inside the int16 range, the quantisation
-round trip within 0.005, and each variable's land mean in a plausible range (catches kelvin or m/day); at the end,
-t <= txx where both exist (a count; days are UTC, so a few may differ; fails above 1 in 10,000 land cell-months).
-Prints the land-cell count. manifest.json is written last, so a folder without one is an unfinished build.
+One 10-degree latitude band at a time, in float32; request 8 GB of memory or more. Checks (exit 1, and no
+manifest.json, on any failure): before reading, the mask's md5, --out empty, the grid (each file's own coordinates), and
+the time axes (printed for each file: the three files' months identical, starting in 1940-01, so a time stamp at the end
+of each month fails, and holding start..end one by one). Before a band's tiles are written: every value inside the int16
+range, the quantisation round trip within 0.005, each variable's land mean in a plausible range (catches kelvin or
+m/day), and t <= txx where both exist (a count; days are UTC, so a few may differ; fails above 1 in 10,000 of the band's
+land cell-months). A land cell with a variable that has no value at all is left out, so the reader treats it as ocean
+and moves on to the next neighbour; those cells are counted per band. Prints the land-cell count. manifest.json is
+written last, so a folder without one is an unfinished build.
 """
 import argparse
 import hashlib
@@ -46,6 +52,7 @@ from earthtrends.data.upstream import COPERNICUS  # noqa: E402
 VARS = era5.PACK_VARS
 SCALE, FILL = 0.01, -32768
 MASK_MD5 = "778eee304a1e8b4025556aedb95c5219"
+SOURCE_START = "1940-01"  # the first month of every source file
 ROW0 = era5.Q_SOUTH + 360  # normalised grid: row r is latitude (r - 360) / 4, column c longitude (c - 720) / 4
 BANDS = (era5.Q_NORTH - era5.Q_SOUTH + 1) // 40  # 15 bands of 40 rows: -60 to 89.75
 T_ABOVE_TXX_MAX = 1e-4
@@ -59,6 +66,9 @@ DOI = "10.24381/cds.h35hb680"
 CITATION = ("Copernicus Climate Change Service, Climate Data Store, (2024): Gridded dataset underpinning the Copernicus "
             "Interactive Climate Atlas. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). "
             "DOI: 10.24381/cds.h35hb680 (Accessed on {date})")
+# a CF reference date, CDO style too: "1940-1-1 00:00:00", "1900-01-01 00:00:00.0", "1940-01-01T00:00:00Z"
+REF_DATE = re.compile(r"\s*(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.\d*)?)?)?"
+                      r"\s*(?:Z|UTC|[+-]00:?00)?\s*")
 
 
 # ---- pure numpy: no h5py, no files read ----
@@ -83,10 +93,11 @@ def grid_order(lat, lon) -> tuple[np.ndarray, np.ndarray]:
 
 
 def normalised_band(get, rows, cols, a: int, b: int) -> np.ndarray:
-    """Rows a..b-1 of the normalised grid from a file. get(lo, hi): the file's rows lo..hi-1, [months, rows, lon]."""
+    """Rows a..b-1 of the normalised grid from a file, in one copy. get(lo, hi): the file's rows lo..hi-1,
+    [months, rows, lon]."""
     fr = rows[a:b]
     lo = int(fr.min())
-    return get(lo, int(fr.max()) + 1)[:, fr - lo][:, :, cols]
+    return get(lo, int(fr.max()) + 1)[:, (fr - lo)[:, None], cols[None, :]]
 
 
 def month_range(start: str, end: str) -> list[str]:
@@ -99,13 +110,20 @@ def month_range(start: str, end: str) -> list[str]:
     return [f"{k // 12:04d}-{k % 12 + 1:02d}" for k in range(k0, k1 + 1)]
 
 
-def month_labels(time, units: str, calendar: str = "standard") -> list[str]:
-    """A CF time axis ("days since 1940-01-01", hours, minutes or seconds; standard calendar) -> "YYYY-MM" labels."""
+def time_ref(units: str) -> tuple[str, datetime]:
+    """CF time units -> (unit, reference date): "days since 1940-1-1 00:00:00" -> ("days", 1940-01-01 00:00)."""
     unit, _, ref = units.partition(" since ")
-    unit = unit.strip()
-    if unit not in ("days", "hours", "minutes", "seconds") or calendar not in ("standard", "gregorian", "proleptic_gregorian"):
-        raise ValueError(f"time units {units!r} with calendar {calendar!r} are not supported")
-    t0 = datetime.fromisoformat(ref.strip().removesuffix("UTC").strip()).replace(tzinfo=None)
+    m = REF_DATE.fullmatch(ref)
+    if unit.strip() not in ("days", "hours", "minutes", "seconds") or not m:
+        raise ValueError(f"time units {units!r} are not supported")
+    return unit.strip(), datetime(*(int(g or 0) for g in m.groups()))
+
+
+def month_labels(time, units: str, calendar: str = "standard") -> list[str]:
+    """A CF time axis (days, hours, minutes or seconds since a date; standard calendar) -> "YYYY-MM" labels."""
+    if calendar not in ("standard", "gregorian", "proleptic_gregorian"):
+        raise ValueError(f"calendar {calendar!r} is not supported")
+    unit, t0 = time_ref(units)
     return [(t0 + timedelta(**{unit: float(v)})).strftime("%Y-%m") for v in np.ravel(time)]
 
 
@@ -118,10 +136,24 @@ def first_month(labels: list[str], months: list[str]) -> int:
     return t0
 
 
+def check_months(labels: dict[str, list[str]], months: list[str]) -> int:
+    """The source files' month labels -> the index of months[0] in all of them. Fails unless the files' labels are
+    identical, start in SOURCE_START (a time stamp at the end of each month reads as the next month) and hold
+    `months` one by one."""
+    first = next(iter(labels.values()))
+    if any(ls != first for ls in labels.values()):
+        raise ValueError("the files' time axes differ: " + "; ".join(f"{k} {ls[0]} to {ls[-1]} ({len(ls)})"
+                                                                    for k, ls in labels.items()))
+    if first[0] != SOURCE_START:
+        raise ValueError(f"the files start in {first[0]}, not {SOURCE_START}: time stamps at the end of each month?")
+    return first_month(first, months)
+
+
 def quantise(x: np.ndarray) -> tuple[np.ndarray, float]:
-    """Values (NaN = missing) -> (int16 hundredths with FILL for missing, the largest round-trip error)."""
+    """Values (NaN = missing) -> (int16 hundredths with FILL for missing, the largest round-trip error), worked out in
+    float64. Call it on one variable at a time: it makes a few float64 copies of x."""
     ok = np.isfinite(x)
-    v = np.where(ok, x, 0)
+    v = np.where(ok, x, 0).astype(np.float64)
     q = np.rint(v / SCALE)
     if np.abs(q).max(initial=0) > 32767:
         raise ValueError(f"a value outside the int16 range: {v.flat[np.abs(q).argmax()]}")
@@ -132,10 +164,9 @@ def quantise(x: np.ndarray) -> tuple[np.ndarray, float]:
 
 
 def chosen(points: list[tuple[float, float]], land: np.ndarray) -> tuple[np.ndarray, list[dict]]:
-    """The mini pack's cells: for each point, the cell the reader picks (era5.candidates), on the normalised grid."""
+    """The mini pack's cells: for each (rounded) point, the cell the reader picks (era5.candidates) among `land`."""
     keep, picked = np.zeros_like(land), []
     for lat, lon in points:
-        lat, lon = round(lat, 2) + 0.0, round(lon, 2) + 0.0  # get_series's rounding
         cell = next((c for c in era5.candidates(lat, lon) if land[c[0] + 360, c[1] + 720]), None)
         if cell is None:
             print(f"no land cell near {lat}, {lon}: the reader uses Open-Meteo there")
@@ -150,6 +181,19 @@ def file_hash(path: Path, algo: str) -> str:
         return hashlib.file_digest(f, algo).hexdigest()
 
 
+def band_cells(read, land: np.ndarray, a: int):
+    """The land cells of the band starting at normalised row a: (rows, cols, values [months, var, cell] float32,
+    empty [cell]: True where a variable has no value in any month)."""
+    r, c = np.nonzero(land[a:a + 40])  # row-major
+    x = np.stack([read(v, a, a + 40)[:, r, c].astype(np.float32, copy=False) for v in VARS], axis=1)
+    return r, c, x, (~np.isfinite(x).any(axis=0)).any(axis=0)
+
+
+def band_of(ql: int) -> int:
+    """The normalised row where the band holding quarter-degree latitude ql starts."""
+    return ROW0 + (ql + 360 - ROW0) // 40 * 40
+
+
 def build(read, land: np.ndarray, out: Path, months: list[str], meta: dict, points=None) -> dict:
     """Write the tiles (with points, only the cells the reader picks there) and, when every check passes, manifest.json.
     read(var, a, b): rows a..b-1 of the normalised grid, [months, b - a, 1440] float, NaN where missing.
@@ -157,30 +201,46 @@ def build(read, land: np.ndarray, out: Path, months: list[str], meta: dict, poin
     Returns the manifest; raises ValueError on a failed check."""
     if months[0] != era5.PACK_START:
         raise ValueError(f"the app reads packs that start in {era5.PACK_START}, not {months[0]}")
-    keep, picked = (land, None) if points is None else chosen(points, land)
+    keep, picked = land, None
+    if points is not None:  # choose among the cells that will be written: a land cell with no values is left out
+        points = [(round(lat, 2) + 0.0, round(lon, 2) + 0.0) for lat, lon in points]  # get_series's rounding
+        usable = land.copy()
+        for a in sorted({band_of(ql) for p in points for ql, _ in era5.candidates(*p)}):
+            r, c, _, empty = band_cells(read, land, a)
+            usable[a + r[empty], c[empty]] = False
+        keep, picked = chosen(points, usable)
     out.mkdir(parents=True, exist_ok=True)
-    tiles, checks = {}, {"t_above_txx": 0, "t_txx_pairs": 0, "missing": 0, "max_round_trip_error": 0.0}
+    tiles, checks = {}, {"t_above_txx": 0, "t_txx_pairs": 0, "missing": 0, "max_round_trip_error": 0.0,
+                         "empty_cells": {}, "empty_cells_total": 0}
     for b in range(BANDS):
         a = ROW0 + 40 * b
-        r, c = np.nonzero(land[a:a + 40])  # the band's land cells, row-major
-        kept = keep[a:a + 40][r, c]
-        if not kept.any():
+        if not keep[a:a + 40].any():
             continue
-        x = np.stack([read(v, a, a + 40)[:, r, c] for v in VARS], axis=1)  # [months, var, land cell]
+        r, c, x, empty = band_cells(read, land, a)
         if x.shape[0] != len(months):
             raise ValueError(f"{x.shape[0]} months read, expected {len(months)} ({months[0]} to {months[-1]})")
-        south = (a - 360) / 4
+        south = (a - 360) // 4
+        where = f"from {south} to {south + 9.75} N"
         for i, v in enumerate(VARS):
             lo, hi = PLAUSIBLE[v]
-            if not lo <= (mean := np.nanmean(x[:, i])) <= hi:
-                raise ValueError(f"{v}: land mean {mean:.3f} from {south} to {south + 9.75} N is outside {lo}..{hi} "
-                                 f"{UNITS[v]}: wrong units, or no values?")
+            if not lo <= (mean := np.nanmean(x[:, i], dtype=np.float64)) <= hi:
+                raise ValueError(f"{v}: land mean {mean:.3f} {where} is outside {lo}..{hi} {UNITS[v]}: wrong units, or no values?")
         both = np.isfinite(x[:, 0]) & np.isfinite(x[:, 1])
-        checks["t_above_txx"] += int((x[:, 0][both] > x[:, 1][both]).sum())
-        checks["t_txx_pairs"] += int(both.sum())
-        q, err = quantise(x[..., kept])
+        above, pairs = int((x[:, 0][both] > x[:, 1][both]).sum()), int(both.sum())
+        if above > T_ABOVE_TXX_MAX * pairs:
+            raise ValueError(f"t is above txx in {above} of {pairs} land cell-months {where}")
+        kept = keep[a:a + 40][r, c] & ~empty
+        xk = x[..., kept]
+        del x
+        q = np.empty(xk.shape, np.int16)
+        for i in range(len(VARS)):
+            q[:, i], err = quantise(xk[:, i])
+            checks["max_round_trip_error"] = max(checks["max_round_trip_error"], err)
+        checks["t_above_txx"] += above
+        checks["t_txx_pairs"] += pairs
         checks["missing"] += int((q == FILL).sum())
-        checks["max_round_trip_error"] = max(checks["max_round_trip_error"], err)
+        checks["empty_cells"][str(south)] = int(empty.sum())
+        checks["empty_cells_total"] += int(empty.sum())
         rk, ck = r[kept], c[kept]
         for j in np.unique(ck // 40).tolist():
             s = ck // 40 == j
@@ -190,14 +250,13 @@ def build(read, land: np.ndarray, out: Path, months: list[str], meta: dict, poin
                       start=np.array(months[0]), scale=np.array(SCALE), fill=np.array(FILL))
             tiles[name] = {"cells": int(s.sum()), "bytes": (out / name).stat().st_size,
                            "sha256": file_hash(out / name, "sha256")}
-        print(f"band {south:+.0f}: {len(rk)} cells in {len(np.unique(ck // 40))} tiles")
+        print(f"band {where}: {len(rk)} cells written in {len(np.unique(ck // 40))} tiles; "
+              f"{int(empty.sum())} land cells left out (a variable with no values); t above txx in {above} of {pairs}")
     n_land = int(land[ROW0:ROW0 + 40 * BANDS].sum())
     print(f"land cells: {n_land}; written: {sum(t['cells'] for t in tiles.values())} in {len(tiles)} tiles, "
-          f"{sum(t['bytes'] for t in tiles.values()) / 1e6:.1f} MB")
+          f"{sum(t['bytes'] for t in tiles.values()) / 1e6:.1f} MB; left out: {checks['empty_cells_total']}")
     print(f"t above txx: {checks['t_above_txx']} of {checks['t_txx_pairs']} land cell-months; "
           f"missing values written: {checks['missing']}; largest round-trip error: {checks['max_round_trip_error']:.6f}")
-    if checks["t_above_txx"] > T_ABOVE_TXX_MAX * checks["t_txx_pairs"]:
-        raise ValueError(f"t is above txx in {checks['t_above_txx']} of {checks['t_txx_pairs']} land cell-months")
     manifest = {
         "version": "v1", "dataset": DATASET, "origin": "era5", "doi": DOI, "page": era5.PACK_PAGE,
         "citation": CITATION.format(date=meta["retrieved"]), "licence": "CC-BY-4.0", "attribution": COPERNICUS,
@@ -231,25 +290,33 @@ def _pick(f, path: Path, *names):
 
 
 def _masked(raw: np.ndarray, attrs) -> np.ndarray:
-    """Stored values -> float64 with scale_factor and add_offset applied, NaN for _FillValue, missing_value, non-finite."""
+    """Stored values -> float32 with scale_factor and add_offset applied, NaN for _FillValue, missing_value, non-finite."""
     fills = [v for k in ("_FillValue", "missing_value") if k in attrs for v in np.ravel(attrs[k])]
     bad = ~np.isfinite(raw) | np.isin(raw, np.asarray(fills, raw.dtype))
-    x = raw.astype(np.float64) * float(np.ravel(attrs.get("scale_factor", 1))[0]) + float(np.ravel(attrs.get("add_offset", 0))[0])
+    scale, offset = (float(np.ravel(attrs.get(k, d))[0]) for k, d in (("scale_factor", 1), ("add_offset", 0)))
+    x = raw.astype(np.float32, copy=False)
+    if (scale, offset) != (1, 0):
+        x = x * np.float32(scale) + np.float32(offset)
     x[bad] = np.nan
     return x
 
 
-def open_var(f, path: Path, var: str, months: list[str]):
-    """An open source file -> read(a, b) for `var` on the normalised grid."""
+def open_var(f, path: Path, var: str):
+    """An open source file -> (its month labels, read(t0, n, a, b): rows a..b-1 of the normalised grid for `var`, months
+    t0..t0+n-1). Prints the file's time axis."""
     ds, time = _pick(f, path, var), _pick(f, path, "time", "valid_time")
     lat, lon = _pick(f, path, "lat", "latitude")[:], _pick(f, path, "lon", "longitude")[:]
     rows, cols = grid_order(lat, lon)
     if ds.shape != (len(time), len(lat), len(lon)):
         raise ValueError(f"{path.name}: {var} is {ds.shape}, not (time, lat, lon) {(len(time), len(lat), len(lon))}")
-    t0 = first_month(month_labels(time[:], _plain(time.attrs.get("units", "")),
-                                  _plain(time.attrs.get("calendar", "standard"))), months)
-    get = lambda lo, hi: _masked(ds[t0:t0 + len(months), lo:hi, :], ds.attrs)  # noqa: E731
-    return lambda a, b: normalised_band(get, rows, cols, a, b)
+    units, calendar = _plain(time.attrs.get("units", "")), _plain(time.attrs.get("calendar", "standard"))
+    labels = month_labels(time[:], units, calendar)
+    print(f"{path.name}: {var}, {len(labels)} months, {labels[0]} to {labels[-1]}; time {units!r}, reference date "
+          f"{time_ref(units)[1].isoformat(' ')}, calendar {calendar}")
+
+    def read(t0, n, a, b):
+        return normalised_band(lambda lo, hi: _masked(ds[t0:t0 + n, lo:hi, :], ds.attrs), rows, cols, a, b)
+    return labels, read
 
 
 def read_mask(f, path: Path) -> np.ndarray:
@@ -269,8 +336,9 @@ def load(stack: ExitStack, a, months: list[str]):
     """(read(var, a, b), land) from the files named on the command line, kept open by `stack`."""
     import h5py  # the HPC env only; never an app dependency (as scripts/build_cmip6.py)
     land = read_mask(stack.enter_context(h5py.File(a.mask, "r")), a.mask)
-    readers = {v: open_var(stack.enter_context(h5py.File(getattr(a, v), "r")), getattr(a, v), v, months) for v in VARS}
-    return (lambda v, lo, hi: readers[v](lo, hi)), land
+    opened = {v: open_var(stack.enter_context(h5py.File(getattr(a, v), "r")), getattr(a, v), v) for v in VARS}
+    t0 = check_months({v: labels for v, (labels, _) in opened.items()}, months)
+    return (lambda v, lo, hi: opened[v][1](t0, len(months), lo, hi)), land
 
 
 def parse_points(s: str) -> list[tuple[float, float]]:

@@ -17,8 +17,10 @@ Pack format v1, the contract between scripts/build_era5_pack.py (writes) and pac
   letter, |lat0| in 2 digits, hemisphere letter, |lon0| in 3 digits (n20e070.npz, s10w080.npz, s60w180.npz). Cell
   (qlat, qlon) lies in the tile with lat0 = (qlat // 40) × 10, lon0 = (qlon // 40) × 10, at row = qlat % 40,
   col = qlon % 40 (floor division, so row = (lat - lat0) × 4 and col = (lon - lon0) × 4).
-- A tile stores only its land cells. A tile with none is not written: a missing tile (HTTP 404, no file) means "no land
-  cells here". Each tile is a compressed npz with no object arrays (np.load(..., allow_pickle=False)):
+- A tile stores only its land cells; a land cell with a variable that has no value in any month is left out, so it
+  counts as ocean. A tile with no cells is neither written nor listed in manifest.json. The reader requests only listed
+  tiles: an unlisted tile means "no land cells here", and a listed tile that is missing (HTTP 404, no file) is a failed
+  read. Each tile is a compressed npz with no object arrays (np.load(..., allow_pickle=False)):
     idx    uint16 (n,)             row × 40 + col, ascending
     data   int16  (n, 3, months)   value / scale, var order as `vars`; `fill` for a missing value
     vars   str    (3,)             ["t", "txx", "r"]
@@ -27,8 +29,10 @@ Pack format v1, the contract between scripts/build_era5_pack.py (writes) and pac
     fill   int    ()               -32768
 - manifest.json at the root: version "v1", dataset, doi, citation, licence, attribution, page; retrieved and
   product_version; the sha256 of each source file and of the mask (with the mask's name and md5); grid; vars with units;
-  scale, fill, start, end; every tile with its cell count, bytes and sha256. The reader takes `retrieved` and
-  `product_version` from it.
+  scale, fill, start, end; the build's checks; every tile with its cell count, bytes and sha256. The reader takes
+  `retrieved`, `product_version` and the tile list from it.
+- record_url: the tile's URL for an http(s) base; for a local folder, the dataset's DOI page (a server path never
+  reaches a page).
 - A place's cell (candidates(); the build's --points mini pack uses the same function): its own cell, the one whose
   centre is nearest (a half rounds north or east), if that is land; else the nearest land cell among its 8 neighbours by
   great-circle distance from the place to the cell centre. Distances equal to the millimetre are ties, broken south
@@ -174,6 +178,7 @@ PACK_VAR = {"air_temp": "t", "air_temp_max": "txx", "precip": "r"}
 Q_SOUTH, Q_NORTH = -240, 359  # quarter-degree latitude rows the pack keeps: -60 to 89.75
 PACK_PAGE = "https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas"
 PACK_DATASET_ID = "doi:10.24381/cds.h35hb680"
+PACK_DOI_URL = "https://doi.org/10.24381/cds.h35hb680"  # record_url when the pack is a local folder
 PACK_SOURCE = {"id": "era5", "name": "ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)", "url": PACK_PAGE,
                "attribution": COPERNICUS}
 PACK_METHOD = {
@@ -231,11 +236,12 @@ def _manifest(base: str) -> dict:
 
 
 @lru_cache(maxsize=8)  # decoded, a tile is at most 1600 cells x 3 x 540 months of int16: 5.2 MB
-def _tile(base: str, name: str) -> dict | None:
-    """A decoded tile, or None for "no land cells here". A failed read raises, so lru_cache never keeps it."""
+def _tile(base: str, name: str) -> dict:
+    """A decoded tile that manifest.json lists. Missing (HTTP 404, no file) or bad, it raises, so lru_cache never keeps
+    the failure."""
     raw = _get(base, name)
     if raw is None:
-        return None
+        raise ValueError(f"{name} is listed in manifest.json but missing")
     with np.load(io.BytesIO(raw), allow_pickle=False) as z:
         t = {k: z[k] for k in ("idx", "data", "vars", "start", "scale", "fill")}
     if t["vars"].tolist() != list(PACK_VARS) or t["start"].item() != PACK_START:
@@ -259,10 +265,12 @@ def pack_series(variable: str, lat: float, lon: float) -> tuple[list[str], list[
     base, name = base.rstrip("/"), "manifest.json"
     try:
         m = _manifest(base)
+        retrieved, version, listed = m["retrieved"], m["product_version"], m["tiles"]
         for ql, qn in candidates(lat, lon):
             name = tile_name(ql, qn)
-            if (t := _tile(base, name)) is None:
-                continue
+            if name not in listed:
+                continue  # no land cells there: never requested
+            t = _tile(base, name)
             key = ql % 40 * 40 + qn % 40
             k = int(np.searchsorted(t["idx"], key))
             if k < len(t["idx"]) and t["idx"][k] == key:
@@ -272,16 +280,15 @@ def pack_series(variable: str, lat: float, lon: float) -> tuple[list[str], list[
         scale, fill = float(t["scale"]), int(t["fill"])
         values = [None if v == fill else round(v * scale, 2)
                   for v in t["data"][k, PACK_VARS.index(PACK_VAR[variable])].tolist()]
-        retrieved, version = m["retrieved"], m["product_version"]
-    except Exception as e:  # an HTTP error other than 404, a bad or truncated npz, a vars or start mismatch
+    except Exception as e:  # an HTTP error, a listed tile missing, a bad or truncated npz, a vars or start mismatch
         log.warning("ERA5 pack: reading %s from %s failed (%r); using Open-Meteo.", name, base, e)
         return None
     k0 = int(PACK_START[:4]) * 12 + int(PACK_START[5:7]) - 1
     times = [f"{(k0 + i) // 12:04d}-{(k0 + i) % 12 + 1:02d}" for i in range(len(values))]
     cell = (f"the {'' if (ql, qn) == own_cell(lat, lon) else 'nearest land '}grid cell centred at {_deg(ql / 4, 'N', 'S')}, "
             f"{_deg(qn / 4, 'E', 'W')}, about 25 km across")
-    src = source_block(PACK_SOURCE, PACK_DATASET_ID, version, f"{base}/{name}", retrieved,
-                       PACK_METHOD[variable].format(cell=cell))
+    record = f"{base}/{name}" if base.startswith(("https://", "http://")) else PACK_DOI_URL  # never a server path
+    src = source_block(PACK_SOURCE, PACK_DATASET_ID, version, record, retrieved, PACK_METHOD[variable].format(cell=cell))
     notes = ["Grid cell about 25 km wide, not a single station.",
              f"ERA5 data through {calendar.month_name[int(times[-1][5:])]} {times[-1][:4]}."]
     return times, values, src, notes + ([NOTES[variable]] if variable in NOTES else [])
