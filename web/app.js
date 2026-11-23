@@ -261,7 +261,8 @@ function othersLanded(job, r) {
   if (results[job.k] !== res) return;
   if (r.ok && r.body) { window.TDX.mergeOthers(res.trend, r.body); res.cmp = 'ok'; }
   else { res.cmp = 'error'; res.cmpErr = r.status === 429 ? plainError(r) : "We couldn't read the other records just now."; }
-  if (othLanded(job.win, job.p, job.k)) TD.announce(res.cmp === 'ok' ? (res.trend.disagree && res.trend.disagree.line) || 'The other records have loaded.' : res.cmpErr);
+  const t = res.trend, said = res.cmp === 'ok' && [t.thin_note, (t.disagree && t.disagree.line) || t.single_note].filter(Boolean).join(' ');
+  if (othLanded(job.win, job.p, job.k)) TD.announce(res.cmp === 'ok' ? said || 'The other records have loaded.' : res.cmpErr);
 }
 // only the selected pin shows its other records; true when it was redrawn
 function othLanded(win, p, k) {
@@ -475,6 +476,9 @@ function confLine(conf, B) {
   }
   return s;
 }
+// the main record is thin, then fewer than two records counted (design 12 §5): the server's sentences under the verdict,
+// once the records land
+const oneNotes = (t) => [t.thin_note, t.single_note].filter((x) => typeof x === 'string' && x).map((x) => el('p', { class: 'one' }, x));
 // One row, and its note in a row under it; explicit roles, because Safari drops table semantics under the narrow card's
 // display: grid. A thin station (not counted when the records are compared) is muted.
 function othRow(r) {
@@ -526,7 +530,10 @@ function refreshOth() {
   if (!old || !vs || !pin || pin.status !== 'ok') { renderRec(); return; }
   const had = old.contains(document.activeElement) || vs.contains(document.activeElement), B = othModel(pin);
   if (B) old.replaceWith(othBlock(B, pin)); else old.remove();
+  const vd = vs.parentNode;
   vs.replaceWith(confLine(window.TDX.card(pin.trend, imperial()).conf, B));
+  box.querySelectorAll('.one').forEach((x) => x.remove());
+  vd.after(...oneNotes(pin.trend));
   if (had && !box.contains(document.activeElement)) { const h = $('rec-oth'); if (h) h.focus({ preventScroll: true }); }
 }
 
@@ -581,6 +588,7 @@ function drawRec(box) {
   // the main record fell back (ERA5 couldn't be read): the server's sentence, under the source line
   box.append(el('div', { class: 'where' }, h2(pin.label), meta, typeof t.main_note === 'string' && t.main_note ? el('p', { class: 'mnote' }, t.main_note) : ''));
   box.append(el('div', { class: 'verdict' }, el('b', {}, el('span', { class: 'shape', 'aria-hidden': 'true' }, C.shape), C.word), confLine(C.conf, B)));
+  box.append(...oneNotes(t));
   if (C.fact) box.append(el('p', { class: 'say' }, C.fact));
   if (C.old) return; // a cached answer from before the rework: the verdict only, until it is asked again
   if (C.world) { // the two rates, then the world figure's source

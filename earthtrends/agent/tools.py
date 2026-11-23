@@ -57,7 +57,8 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
     """The TrendResult. For air temperature, hottest day and rain it also sets the other records beside the main one
     (contract "Records for this place (PR4a)"): they are read in parallel threads while the main one is, from the
     same caches, for at most BUDGET_S from the call (Ask and MCP), or for as long as they take with `wait` (the
-    page). `compare=False` leaves those fields null (the page draws the card first).
+    page). `thin_note` says when the main row is thin and `single_note` when fewer than two rows are counted.
+    `compare=False` leaves those fields null (the page draws the card first), and so does a records block that fails.
     Main record fallback: with no source named, a default record that upstream doesn't serve (UPSTREAM: an outage
     or a refusal) gives way to the next one in catalog order, and `main_note` says so."""
     deadline = time.monotonic() + BUDGET_S
@@ -86,7 +87,7 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
         if full is not s and r["variable"] in ("sea_level", "air_temp", "air_temp_max", "precip"):
             whole = compute_trend(full, base=base)
             r["now"], r["projection"] = whole["now"], whole["projection"]
-        extra = dict.fromkeys(("comparisons", "comparisons_window", "disagree", "drift"))
+        extra = dict.fromkeys(("comparisons", "comparisons_window", "disagree", "drift", "thin_note", "single_note"))
         if got:
             futures = [f for f in got.values() if not isinstance(f, BaseException)]
             if not wait:
