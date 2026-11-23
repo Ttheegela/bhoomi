@@ -235,7 +235,7 @@
   /* Records for this place (web/design/12-two-sources.md): the main record and the others side by side. Agreement,
      reasons and drift are the server's words (comparisons, disagree, drift); the page lays them out, never works them out. */
   var COMPARED = { air_temp: 1, air_temp_max: 1, precip: 1 }; // the measurements with records side by side
-  var OTHERS = ['comparisons', 'comparisons_window', 'disagree', 'drift']; // what the second /api/trend call adds (§2)
+  var OTHERS = ['comparisons', 'comparisons_window', 'disagree', 'drift', 'thin_note', 'single_note']; // what the second /api/trend call adds (§2)
   var CANT = "The records can't tell us which of these reasons applies here, so we show every record as it is.";
   // the second call's answer: only its records go into the answer on the page, in place, so the chart is not redrawn
   function mergeOthers(t, b) { OTHERS.forEach(function (k) { t[k] = b && b[k] !== undefined ? b[k] : null; }); return t; }
