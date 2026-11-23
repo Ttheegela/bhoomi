@@ -280,6 +280,16 @@ assert.strictEqual(steps(JU.trend, JU.series, bc)[5].work[1], '1× is the same p
 assert.strictEqual(card(JU.trend, true).fact, 'Falling here, while the world average rose 3.3 mm a year over the same years (1993 to April 2025) (in metric).');
 assert.strictEqual(card(JU.trend, false).fact, JU.trend.guidance.fact);
 clean(JU, bc);
+// review: "Over those years" only when the fact is the world comparison, i.e. the ratio's sign agrees with the verdict
+// (guidance.py). Otherwise the fact gives the full record's rate and years, so the line says "Since 1993" and both rates.
+var SINCE = { src: 'NASA satellite record', href: B.trend.world.source.record_url };
+var FR = copy(B); FR.trend.verdict = 'falling'; FR.trend.world.ratio = 0.5; // falling over the record, rising since 1993
+assert.deepStrictEqual(card(FR.trend, false).world, Object.assign({ text: 'Since 1993: here +2.7' + NB + 'mm a year, world +3.3' + NB + 'mm a year.' }, SINCE));
+var RN = copy(B); RN.trend.world.ratio = -0.3; RN.trend.world.local_rate = -0.5; // rising over the record, falling since 1993
+assert.deepStrictEqual(card(RN.trend, false).world, Object.assign({ text: 'Since 1993: here −0.50' + NB + 'mm a year, world +3.3' + NB + 'mm a year.' }, SINCE));
+var R0 = copy(B); R0.trend.world.ratio = 0; R0.trend.world.local_rate = 0; // a zero ratio says nothing: the fact is the rate
+assert.deepStrictEqual(card(R0.trend, false).world, Object.assign({ text: 'Since 1993: here 0.00' + NB + 'mm a year, world +3.3' + NB + 'mm a year.' }, SINCE));
+[FR, RN, R0].forEach(function (d) { clean(d, bc); });
 // step 6, air temperature: the world figure is station-based; a model source says the two are measured differently
 var AIR6 = 'The world figure is built from weather stations on land.', MOD6 = ' The number here comes from a weather model, so the two are measured in different ways.';
 assert.strictEqual(P.trend.source.id, 'power');
