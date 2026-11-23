@@ -173,7 +173,7 @@ From the IPCC AR6 Interactive Atlas's CMIP6 monthly data (`earthtrends/data/cmip
   "available": true,
   "kind": "cmip6_atlas",
   "source": {"name": "IPCC AR6 Interactive Atlas, CMIP6 projections", "dataset_id": "doi:10.20350/digitalCSIC/15492", "version": "v2.0-final", "record_url": "https://digital.csic.es/handle/10261/332744",
-             "retrieved_from": {"name": "Copernicus Climate Data Store: projections-climate-atlas", "dataset_id": "doi:10.24381/cds.5292a2b0", "url": "https://cds.climate.copernicus.eu/datasets/projections-climate-atlas"},
+             "retrieved_from": {"name": "Gridded monthly climate projection dataset underpinning the IPCC AR6 Interactive Atlas (Copernicus Climate Data Store)", "dataset_id": "doi:10.24381/cds.5292a2b0", "url": "https://cds.climate.copernicus.eu/datasets/projections-climate-atlas"},
              "licence": "CC BY 4.0", "citation": ["…"], "acknowledgement": "…"},
   "location": {"kind": "land cell", "lat": 40.5, "lon": -74.5, "km": 31, "land_pct": 78, "note": null},
   "baseline": {"text": "the 1995–2014 average", "years": [1995, 2014]},
@@ -196,6 +196,7 @@ From the IPCC AR6 Interactive Atlas's CMIP6 monthly data (`earthtrends/data/cmip
 }
 ```
 
+- `source`: the stats lane sets `name` "IPCC AR6 Interactive Atlas, CMIP6 projections", `version` "v2.0-final" and `licence` "CC BY 4.0" (as sea level writes it); `dataset_id`, `record_url`, `retrieved_from` (the dataset's own title, DOI and URL), `citation` and `acknowledgement` come from the manifest via `earthtrends/data/cmip6.py` `at()`, copied exactly.
 - Scenarios, named as for sea level: `ssp126` SSP1-2.6 ("low emissions"), `ssp245` SSP2-4.5 ("intermediate emissions"), `ssp370` SSP3-7.0 ("high emissions"), `ssp585` SSP5-8.5 ("very high emissions"); default `ssp245`. No confidence levels (CMIP6 spread is not AR6's assessed likely range). Arrays follow `windows`; `null` where the cell has no value. `models`: how many models are behind each window's percentiles.
 - `units` and `change_kind`: `air_temp` "degC" and "difference" (the change of the 20-year mean of daily mean temperature); `air_temp_max` "degC" and "difference" (the change of the 20-year mean of each month's hottest day, the same "hottest day of the month" the record measures); `precip` "%" and "percent" (the change of the 20-year mean as % of the model's own 1995–2014 mean, on the same 0-centred axis as the rain chart's yearly values). Text rounds to 2 significant figures with the page's rules (°C with a true minus; rain "+4%").
 - `agree` and `disagree` (rain only; `null` otherwise): per window, the share of models agreeing on the sign of the change (`max(wetter, models − wetter) / models`, 2 decimals), and `disagree` true when that share is under 0.8. The page then says "Models disagree on wetter or drier" for that window, and `readouts.by_2050.disagree` carries the 2041–2060 value.
