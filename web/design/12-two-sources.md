@@ -140,7 +140,7 @@ Numbers use the ASCII hyphen-minus, with PR1's formula guard.
 "comparisons": [
   {"main": true, "source": {"id": "era5", "name": "ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)", "record_url": "https://…"},
    "label": "ERA5", "kind": "grid", "where": "Weather model, grid cell about 25 km wide", "km": null, "station": null,
-   "status": "ok", "available": true, "why": null, "years": "1981–2026", "n_months": 549, "n_missing": 0, "n_preliminary": 3,
+   "status": "ok", "available": true, "why": null, "years": "1981–2025", "n_months": 540, "n_missing": 0, "n_preliminary": 0,
    "baseline_value": 33.6, "verdict": "no_clear_change", "confidence": "Not clear", "p_value": 0.09, "in_100": "9",
    "headline_rate": {"value": 0.13, "low": -0.02, "high": 0.27, "unit": "°C", "per": "per decade", "text": "+0.13 °C", "range_text": "−0.02 to +0.27 °C per decade"}},
   {"main": false, "source": {"id": "ghcn", "…": "…"}, "label": "Weather station", "kind": "station", "where": "New Delhi Safdarjung, 3 km away",
