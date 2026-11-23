@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from earthtrends.data.catalog import CATALOG
+from earthtrends.data.ghcn import NoStation, record_url
 from earthtrends.stats import compute_trend, records
 from earthtrends.stats.baseline import anomaly, baseline
 
@@ -82,7 +83,9 @@ CASES = [
          normals=[0.8, 0.3, 0.2, 0.4, 1.3, 1.6, 2.9, 3.9, 4.2, 8.7, 11.8, 4.8],
          others=[dict(id="era5", seed=103, slope=0.9, jitter=0.1, offset=0.0, notes=ERA5_NOTES,
                       source=era5("precipitation_sum", 13.08, 80.27, "Open-Meteo's daily total of ERA5 hourly precipitation for the grid cell (about 25 km), averaged by us into mm a day for each month.")),
-                 dict(id="ghcn", error="The nearest weather station, Madras Minambakkam, IN (13 km away), does not have 30 years of rainfall data since 1981, and no other station within 25 km does either.")]),
+                 dict(id="ghcn", status="short", error="The nearest weather station, Madras Minambakkam, IN (13 km away), does not have 30 years of rainfall data since 1981, and no other station within 25 km does either.",
+                      station={"id": "IN020040900", "name": "Madras Minambakkam, IN", "lat": 12.994, "lon": 80.181,
+                               "km": 12.8, "record_url": record_url("IN020040900")})]),
     dict(file="delhi_hottest_day", variable="air_temp_max", units="degC", seed=11,
          place={"name": "Delhi", "lat": 28.58, "lon": 77.21}, notes=GRID,
          source=power("T2M_MAX", 28.58, 77.21, "The highest daily maximum 2 m air temperature of each month for the MERRA-2 grid cell (about 50 km)."),
@@ -187,9 +190,9 @@ def series_for(c):
 
 def other_for(c, o):
     """Another record of the case's place: the same weather (the case's seed), its own trend, offset, noise and gaps;
-    or, with `error`, the ValueError its fetch raises."""
+    or, with `error`, what the station lane raises (NoStation, with the nearest station)."""
     if "error" in o:
-        return ValueError(o["error"])
+        return NoStation(o["error"], o["status"], o["station"])
     s = series_for({**c, "slope": o["slope"], "missing": 0, "gaps": [], "prelim": 0})
     rng = np.random.default_rng(o["seed"])
     vals = []
@@ -202,14 +205,14 @@ def other_for(c, o):
 
 
 def trend_for(c, s, base):
-    """compute_trend, plus the four PR4a fields as detect_trend sets them, before meaning and guidance."""
+    """compute_trend, plus main_note and the four PR4a fields as detect_trend sets them, before meaning and guidance."""
     r = compute_trend(s, base=base)
     extra = dict.fromkeys(("comparisons", "comparisons_window", "disagree", "drift"))
     if c.get("others"):
         extra = records.compare(c["variable"], [(s["source"]["id"], (s, s, base))] +
                                 [(o["id"], other_for(c, o)) for o in c["others"]], c["place"]["lat"], c["place"]["lon"])
     tail = {k: r.pop(k) for k in ("meaning", "guidance")}
-    return {**r, **extra, **tail}
+    return {**r, "main_note": None, **extra, **tail}
 
 
 if __name__ == "__main__":

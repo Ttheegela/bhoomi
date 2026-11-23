@@ -74,7 +74,7 @@ def compare(variable: str, records: list, lat: float, lon: float) -> dict:
     for k, (sid, rec) in enumerate(records):
         row = _row(sid, k == 0, rec, lat, lon)
         if isinstance(rec, BaseException):
-            row.update(zip(("status", "why"), _failed(rec)))
+            row.update(zip(("status", "why"), failed(rec)))
         else:
             s, _, base = rec
             cut = _cut(s, a, b)
@@ -117,7 +117,7 @@ def _window(got: list) -> tuple[int, int]:
 def _thin(s: dict, a: int, b: int) -> str | None:
     """A station row with a trend is thin when more than 2 of the window's last 10 years have under 9 usable months, or
     it has a value in under 80% of the window's months. -> its note (the first of the contract's four that applies),
-    or None. "Few readings" needs some reading in the years it names; a station that stopped "covers only" its years."""
+    or None. "Few readings" needs a reading in every year it counts; a station that stopped "covers only" its years."""
     year, _, _, _, use = columns(s)
     per = {y: int(np.sum(use & (year == y))) for y in range(a, b + 1)}
     short = [per[y] for y in range(max(a, b - RECENT + 1), b + 1) if per[y] < STATION_MONTHS]
@@ -126,9 +126,9 @@ def _thin(s: dict, a: int, b: int) -> str | None:
         return None
     full = [y for y, n in per.items() if n >= STATION_MONTHS]
     later = [per[y] for y in range(full[-1] + 1, b + 1)] if full else []
-    if len(later) > RECENT_SHORT and max(later) > 0:  # every year after its last good one is short
+    if len(later) > RECENT_SHORT and min(later) > 0:  # every year after its last good one is short, none empty
         return FEW_AFTER.format(full[-1], min(later), max(later))
-    if len(short) > RECENT_SHORT and max(short) > 0:
+    if len(short) > RECENT_SHORT and min(short) > 0:
         return FEW_IN.format(len(short))
     if full and (full[0] > a or full[-1] < b):
         return COVERS.format(full[0], full[-1])
@@ -142,19 +142,17 @@ def _cut(s: dict, a: int, b: int) -> dict:
             "flags": [flags[i] for i in keep]}
 
 
-def _failed(e: BaseException) -> tuple[str, str]:
-    """A fetch that raised -> (status, why). The station lane's own sentences say why there is no station row.
-    ponytail: told apart by the data lane's wording (tests pin it to ghcn._no_station); a typed error would be safer."""
+def failed(e: BaseException) -> tuple[str, str]:
+    """A read that raised -> (status, why): "pending", the station lane's own "short" or "none" with its sentence,
+    "none" for a source with no data for this place and period, else "error" (an outage or an unexpected reply)."""
     msg = str(e)
     if isinstance(e, Pending):
         return "pending", PENDING
-    if not isinstance(e, ValueError) or isinstance(e, json.JSONDecodeError):  # an outage, not an answer
-        return "error", ERROR
-    if msg.startswith("The nearest weather station"):  # a station in range, without 30 years
-        return "short", msg
-    if msg.startswith("No "):  # no station in range, or no data for this place and period
+    if isinstance(e, ghcn.NoStation):
+        return e.status, msg
+    if isinstance(e, ValueError) and not isinstance(e, json.JSONDecodeError) and msg.startswith("No "):
         return "none", msg
-    return "error", ERROR  # an unexpected reply
+    return "error", ERROR
 
 
 def _km(km: float) -> str:
@@ -166,7 +164,12 @@ def _row(sid: str, main: bool, rec, lat: float, lon: float) -> dict:
     s = None if isinstance(rec, BaseException) else rec[0]
     station = sid not in GRID_KM
     km = where = st = None
-    if s is not None and station:
+    src = {**SOURCE[sid], "record_url": None} if s is None else s["source"]
+    near = rec.station if isinstance(rec, ghcn.NoStation) and rec.status == "short" else None
+    if near:  # a station in range without 30 years: name it and link it; "none" names no station as this place's
+        km, st = near["km"], {"id": near["id"], "name": near["name"]}
+        where, src = f"{near['name']}, {_km(km)} km away", {**src, "record_url": near["record_url"]}
+    elif s is not None and station:
         place = s["place"]
         km = place.get("km")
         km = round(float(km if km is not None else haversine_km(round(float(lat), 2), round(float(lon), 2), place["lat"],
@@ -177,7 +180,7 @@ def _row(sid: str, main: bool, rec, lat: float, lon: float) -> dict:
     elif not station:
         where = WHERE.format(GRID_KM[sid])
     full = None if s is None else rec[1]
-    return {"main": main, "source": dict(SOURCE[sid]) if s is None else s["source"], "label": LABEL[sid],
+    return {"main": main, "source": src, "label": LABEL[sid],
             "kind": "station" if station else "grid", "where": where, "km": km, "station": st, "status": "ok",
             "available": True, "why": None, "note": None, "years": None, "n_months": None, "n_missing": None,
             "n_preliminary": None if full is None else sum(f == "preliminary" for f in full.get("flags") or []),
