@@ -166,7 +166,7 @@ def test_an_ocean_cell_takes_its_nearest_land_neighbour(packs, monkeypatch, lat,
     monkeypatch.setenv(era5.PACK, str(packs / "a"))
     times, values, src, _ = era5.pack_series("air_temp", lat, lon)
     assert values == expect("t", *cell) and era5.tile_name(*cell) == tile
-    assert src["record_url"] == "https://doi.org/10.24381/cds.h35hb680"  # a local folder never reaches the page
+    assert src["record_url"] == "https://doi.org/10.24381/cds.h35hb680"  # the DOI page, never a tile
     where = f"{abs(cell[0] / 4):.2f}° {'N' if cell[0] >= 0 else 'S'}, {abs(cell[1] / 4):.2f}° {'E' if cell[1] >= 0 else 'W'}"
     assert f"the nearest land grid cell centred at {where}, about 25 km across" in src["method"]
 
@@ -189,7 +189,9 @@ def test_source_block_and_notes(packs, monkeypatch):
         "url": "https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas", "dataset_id": "doi:10.24381/cds.h35hb680",
         "version": "test-1", "record_url": "https://doi.org/10.24381/cds.h35hb680", "retrieved": "2026-11-20",
         "licence": "CC BY 4.0", "attribution": upstream.COPERNICUS, "cadence": "monthly", "deseasoned_upstream": False,
-        "limit": None, "method": src["method"]}  # the whole block: method is checked next
+        "limit": None, "method": src["method"], "citation": [src["citation"][0]]}  # the whole block: method, citation next
+    assert src["citation"][0].startswith("Copernicus Climate Change Service") and "10.24381/cds.h35hb680" in src["citation"][0]
+    assert src["citation"][0].endswith("(Accessed on 2026-11-20)")  # the manifest's citation, with its access date
     assert src["method"] == ("The Atlas dataset's hottest daily maximum of ERA5 2 m air temperature in each month for the grid "
                              "cell centred at 28.50° N, 77.25° E, about 25 km across; days run midnight to midnight UTC.")
     assert s["notes"] == ["Grid cell about 25 km wide, not a single station.", "ERA5 data through December 1982.",
@@ -219,7 +221,7 @@ def test_a_failed_tile_falls_back_with_a_warning_and_is_not_cached(packs, monkey
     assert len(warned) == 1 and "n20e070.npz" in warned[0] and URL in warned[0] and "Open-Meteo" in warned[0]
     monkeypatch.setattr(httpx, "get", serve(packs / "a"))  # the store is back: the failure was not kept
     times, values, src, _ = era5.pack_series("air_temp", 28.61, 77.21)
-    assert values == expect("t", *DELHI) and src["record_url"] == f"{URL}/n20e070.npz"
+    assert values == expect("t", *DELHI) and src["record_url"] == era5.PACK_DOI_URL  # an http base: still the DOI page
 
 
 def test_a_missing_manifest_or_an_outage_falls_back(packs, monkeypatch, caplog):
@@ -371,6 +373,10 @@ def test_the_real_mini_pack(monkeypatch, variable, lat, lon, cell, values):
         "url": "https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas", "dataset_id": "doi:10.24381/cds.h35hb680",
         "version": "v2.0", "record_url": "https://doi.org/10.24381/cds.h35hb680", "retrieved": "2026-11-23",
         "licence": "CC BY 4.0", "attribution": upstream.COPERNICUS}
+    assert src["citation"] == [
+        "Copernicus Climate Change Service, Climate Data Store, (2024): Gridded dataset underpinning the Copernicus "
+        "Interactive Climate Atlas. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). DOI: "
+        "10.24381/cds.h35hb680 (Accessed on 2026-11-23)"]  # the real manifest's citation
     assert f"for the grid cell centred at {cell}, about 25 km across" in src["method"]
     assert "ERA5 data through December 2025." in s["notes"]
 

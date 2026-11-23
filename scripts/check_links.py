@@ -2,9 +2,8 @@
 Live, by hand, never in tests or on Vercel (about 40 small requests):  uv run python scripts/check_links.py
 
 The series come from the real data code (earthtrends.data.get_series), so the URLs checked are the ones users get.
-ERA5: record_url is our pack's tile file (era5.PACK_URL; not a page, checked when the pack is uploaded; which tile a
-place uses depends on its land cell, known only by reading the pack, so no tile is listed here), or for a fallback the
-Open-Meteo archive request the fetcher makes. This project never calls that API from a developer machine, so only the
+ERA5: record_url is the pack dataset's DOI page (never a tile: a binary file a visitor can't open), or for a fallback
+the Open-Meteo archive request the fetcher makes. This project never calls that API from a developer machine, so only the
 dataset pages are fetched here: the pack's CDS page and DOI (the dataset title is in the served HTML, not only drawn by
 JavaScript), and Open-Meteo ERA5's DOI (tests/test_data.py checks the fallback URL is the request made).
 CO-OPS station pages are filled in by JavaScript, so their HTML never holds the station's name: the page must answer 200,
