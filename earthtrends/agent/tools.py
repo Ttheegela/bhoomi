@@ -29,7 +29,8 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
                  end: str | None = None, source: str | None = None) -> dict:
     s, full, base = _windowed(variable, lat, lon, start, end, source)
     r = compute_trend(s, base=base)
-    if full is not s and r["variable"] == "sea_level":  # "now" and the projection: the whole record, not the window
+    # "now" and the projection: the whole record, not the window
+    if full is not s and r["variable"] in ("sea_level", "air_temp", "air_temp_max", "precip"):
         whole = compute_trend(full, base=base)
         r["now"], r["projection"] = whole["now"], whole["projection"]
     return r

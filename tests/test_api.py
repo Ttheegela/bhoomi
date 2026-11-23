@@ -89,8 +89,12 @@ def test_sea_level_projection_reads_the_whole_record_whatever_the_window(offline
     assert whole["readouts"]["now"]["end"] == f"{date.today().year - 1}-12" and whole["check"]["inside"] is not None
     for w in ({"start": "1999"}, {"end": "2010"}):  # "now" and the check stay the record's, not the window's
         assert client.get("/api/trend", params={**q, **w}).json()["projection"] == whole, w
-    air = client.get("/api/trend", params={**q, "variable": "air_temp"}).json()["projection"]
-    assert air == {"available": False, "why": "Expert projections for this measurement are not added yet."}
+    q = {**q, "variable": "air_temp"}  # PR3: the CMIP6 projection, also the whole record's whatever the window
+    air = client.get("/api/trend", params=q).json()
+    assert air["projection"]["available"] and air["projection"]["readouts"]["now"] == air["now"]
+    for w in ({"start": "1999"}, {"end": "2010"}):
+        part = client.get("/api/trend", params={**q, **w}).json()
+        assert (part["projection"], part["now"]) == (air["projection"], air["now"]), w
 
 
 def test_rainfall_levels_in_percent_seasons_in_mm_a_month(offline):

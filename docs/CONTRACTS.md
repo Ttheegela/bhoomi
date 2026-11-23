@@ -164,6 +164,52 @@ From IPCC AR6 relative sea level at the tide gauge (`earthtrends/data/ar6_gauges
 - `drivers`: the default scenario's 2050 parts with their own 17th–83rd percentiles.
 - Every sea-level answer keeps `world`, `fit` and the rest of PR1 unchanged; `projection` only adds. One exception: when `projection.available` is true, `guidance.disclaimer` says the future values are IPCC projections that depend on emission scenarios and are not predictions (domain review of the PR2 design); without a projection it stays as in PR1. `readouts.now` equals the TrendResult's `now` (the same 12-month mean, same keys). Like the baseline, `now` and `projection` always come from the whole series, whatever `start` and `end` the request asks for: "now" means the latest 12 months, never the end of a window. `more_than_today.value` is whole mm. Charts break the axis at 2100: AR6 values after 2100 come from a different set of model runs.
 
+### CMIP6 expert projection (PR3) — stats lane fills `projection` for `air_temp`, `air_temp_max` and `precip`
+
+From the IPCC AR6 Interactive Atlas's CMIP6 monthly data (`earthtrends/data/cmip6_atlas.npz` with its manifest `cmip6_atlas.json`, built offline by `scripts/build_cmip6.py` from the Copernicus copy, whose values were checked bit for bit against the CSIC originals; the example's numbers are illustrative). For each 1° cell, scenario and 20-year window, the change of each model's 20-year mean against that model's own 1995–2014 mean, then the 10th, 50th and 90th percentile across models (D7: "range across climate models (10th–90th percentile)"). Delta method (D4): the projected level is this place's observed 1995–2014 mean plus the change, so on the chart's 1995–2014 anomaly axis it is the change itself; never a raw model value, never shifted to meet the observations.
+
+```json
+"projection": {
+  "available": true,
+  "kind": "cmip6_atlas",
+  "source": {"name": "IPCC AR6 Interactive Atlas, CMIP6 projections", "dataset_id": "doi:10.20350/digitalCSIC/15492", "version": "v2.0-final", "record_url": "https://digital.csic.es/handle/10261/332744",
+             "retrieved_from": {"name": "Gridded monthly climate projection dataset underpinning the IPCC AR6 Interactive Atlas (Copernicus Climate Data Store)", "dataset_id": "doi:10.24381/cds.5292a2b0", "url": "https://cds.climate.copernicus.eu/datasets/projections-climate-atlas"},
+             "licence": "CC BY 4.0", "citation": ["…"], "acknowledgement": "…"},
+  "location": {"kind": "land cell", "lat": 40.5, "lon": -74.5, "km": 31, "land_pct": 78, "note": null},
+  "baseline": {"text": "the 1995–2014 average", "years": [1995, 2014]},
+  "units": "degC",
+  "change_kind": "difference",
+  "windows": [{"start": 2021, "end": 2040, "mid": 2030}, {"start": 2041, "end": 2060, "mid": 2050}, {"start": 2081, "end": 2100, "mid": 2090}],
+  "default_scenario": "ssp245",
+  "scenarios": [
+    {"id": "ssp245", "code": "SSP2-4.5", "name": "intermediate emissions",
+     "range_kind": "range across climate models (10th–90th percentile)",
+     "p10": [0.9, 1.3, 2.1], "p50": [1.1, 1.7, 2.7], "p90": [1.4, 2.2, 3.6], "models": [33, 33, 33],
+     "agree": null, "disagree": null}
+  ],
+  "readouts": {
+    "now": {"value": 0.62, "units": "degC", "kind": "12-month mean", "start": "2025-07", "end": "2026-06", "n": 12, "text": "+0.62 °C", "label": "the 12 months to June 2026"},
+    "by_2050": {"scenario": "ssp245", "window": [2041, 2060], "p50": 1.7, "low": 1.3, "high": 2.2, "range_kind": "range across climate models (10th–90th percentile)", "text": "+1.7 °C (range across climate models +1.3 to +2.2 °C)", "disagree": null},
+    "more_than_today": {"value": 1.1, "text": "about 1.1 °C more than today", "approximate": true}},
+  "caveat": "A 1° grid cell is about 100 km wide, so hills or a coast nearby can make the change here differ.",
+  "models_note": "These are the climate models' raw results. The IPCC's assessed warming, which also uses past observations, is a little lower for the world as a whole.",
+  "baseline_record": {"id": "power", "name": "NASA POWER (MERRA-2)"},
+  "why": null
+}
+```
+
+- `source`: the stats lane sets `name` "IPCC AR6 Interactive Atlas, CMIP6 projections", `version` "v2.0-final" and `licence` "CC BY 4.0" (as sea level writes it); `dataset_id`, `record_url`, `retrieved_from` (the dataset's own title, DOI and URL), `citation` and `acknowledgement` come from the manifest via `earthtrends/data/cmip6.py` `at()`, copied exactly.
+- Scenarios, named as for sea level: `ssp126` SSP1-2.6 ("low emissions"), `ssp245` SSP2-4.5 ("intermediate emissions"), `ssp370` SSP3-7.0 ("high emissions"), `ssp585` SSP5-8.5 ("very high emissions"); default `ssp245`. No confidence levels (CMIP6 spread is not AR6's assessed likely range). Arrays follow `windows`; `null` where the cell has no value. `models`: how many models are behind each window's percentiles.
+- `units` and `change_kind`: `air_temp` "degC" and "difference" (the change of the 20-year mean of daily mean temperature); `air_temp_max` "degC" and "difference" (the change of the 20-year mean of each month's hottest day, the same "hottest day of the month" the record measures); `precip` "%" and "percent" (the change of the 20-year mean as % of the model's own 1995–2014 mean, on the same 0-centred axis as the rain chart's yearly values). Text rounds to 2 significant figures with the page's rules (°C with a true minus; rain "+4%"); a range's two ends share the same decimals, by the same rule as `headline_rate.range_text` (Chennai rain "+11% (range across climate models −3 to +24%)"). Values under 1 keep 2 significant figures ("−0.040 °C").
+- `agree` and `disagree` (rain only; `null` otherwise): per window, the share of models agreeing on the sign of the change (`max(wetter, models − wetter) / models`, 2 decimals), and `disagree` true when that share is under 0.8. The page then says "Models disagree on wetter or drier" for that window, and `readouts.by_2050.disagree` carries the 2041–2060 value.
+- `location`: from `earthtrends/data/cmip6.py` `nearest_land_cell` (the Atlas's rule: a cell is land when at least 50% of it is land). `kind` "land cell" (the place's own cell), "nearest land cell" (one of its 8 neighbours, when the place's cell is mostly ocean; `note` "The place's own grid cell is mostly ocean, so this uses the nearest land cell.") or "regional estimate (mostly ocean cell)" (`note`: temperature and hottest day "The models' grid cell here is mostly ocean, which warms less than land."; rain "The models' grid cell here is mostly ocean, so the change over land nearby can differ."). `lat`/`lon` are the cell centre, `km` the distance from the place to it (whole km), `land_pct` the cell's land share.
+- `caveat`: temperature and hottest day "A 1° grid cell is about 100 km wide, so hills or a coast nearby can make the change here differ."; rain "Climate models disagree more about rain than about temperature, and a 1° grid cell is about 100 km wide, so hills or a coast nearby can make the change here differ."
+- `models_note` (domain review of the PR3 design): temperature and hottest day "These are the climate models' raw results. The IPCC's assessed warming, which also uses past observations, is a little lower for the world as a whole."; rain `null`. The Atlas uses the raw, unweighted CMIP6 ensemble, whose world-mean SSP5-8.5 2081–2100 median (+3.87 °C against 1995–2014 in our pack) is above AR6's assessed best estimate (about +3.5 °C against 1995–2014). The page shows it under the projection's readout line and in "Things to keep in mind"; MCP passes it on with the projection. Ask does not see the projection yet (PR6 adds it there).
+- `baseline_record`: the record whose observed 1995–2014 mean the delta method starts from: the answer's own main record (`id` and `name` as in the source list: ERA5, NASA POWER or a station), never fixed to one dataset. Step 7 names it.
+- `readouts.now`: the TrendResult's `now` (same keys). `by_2050`: the default scenario's 2041–2060 window. `more_than_today`: `by_2050.p50` minus `now.value`, labelled approximate (a 12-month mean against a 20-year projection), "than today" or "than in {year}" as for sea level; `null` for rain and for hottest day (one year's rain or hottest days swing more than the change: Delhi's hottest day read "about 2.9 °C more than today" after a cool year, QA of PR3) and when `now` is `null`. So only air temperature carries it.
+- `available: false` with every other key `null` and `why` one plain sentence when the record has no 1995–2014 average to start from (`projection_axis` false, or rain whose 1995–2014 normal is 0 or missing): "This record has no 1995–2014 average to start the projection from, so we don't show one."; and when the cell has no value, including when the default scenario's 2041–2060 value is missing even if other scenarios or windows have one (about 20 rain cells): "The climate models have no value for this place." Water storage keeps its PR1 `why`; sea level is PR2's.
+- When `projection.available` is true, `guidance.disclaimer` is the projection disclaimer, as for sea level. Like sea level, `now` and `projection` come from the whole series whatever `start` and `end` the request asks for. The chart shows the three windows' medians at their mid-years with the selected scenario's 10th–90th range, after the observed record; no annual model values.
+
 ### Facts, not advice (owner, 2026-11-22) — stats lane fills it; UI, agent and MCP show it
 
 Tarun's decision: "Remove both, state facts". Bhoomi is not a house-buying or investment tool. Nothing anywhere (page, agent, MCP, voice, evals) gives a risk level, a recommendation, or buy, build, avoid or invest advice. This supersedes the risk levels in `docs/RISK.md`, "Keep 'advise against'" and the PR4 "span or none" risk rule.

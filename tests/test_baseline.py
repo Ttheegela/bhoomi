@@ -388,7 +388,7 @@ def test_headline_change_is_read_from_the_fitted_line():
     assert e["real"] == {"p_value": r["p_value"], "in_100": "less than 1", "widened": r["autocorrelation_adjusted"],
                          "rule": "We call a change clear when that chance is under 5 in 100 and the whole 95% range "
                                  "is on one side of zero."}
-    assert r["projection"] == {"available": False, "why": trend.PROJECTION_LATER}
+    assert r["projection"]["kind"] == "cmip6_atlas" and r["projection"]["available"] is True  # PR3
 
 
 @pytest.mark.parametrize("p,want", [(0.003, "less than 1"), (0.0153, "2"), (0.08, "8"), (1.0, "100")])

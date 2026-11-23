@@ -11,8 +11,9 @@ import numpy as np
 from earthtrends.data.world import reference as _reference  # the world snapshots (D5); tests replace it
 from earthtrends.stats.baseline import MONTH_DAYS, YEAR_MONTHS, baseline, columns, fit, normals_at, num
 from earthtrends.stats.guidance import DISPLAY, guidance_for, q, sig2, signed
+from earthtrends.stats.guidance import ends as range_ends
 from earthtrends.stats.meaning import UNITS, meaning_for
-from earthtrends.stats.projection import sea_level as _sea_level_projection
+from earthtrends.stats.projection import CMIP6_VARIABLES, cmip6 as _cmip6_projection, sea_level as _sea_level_projection
 
 MIN_DAYS_PER_MONTH = 20
 # Spec D6, in years: (no trend below, "short record" below). GRACE has its own minimum of 10 years.
@@ -190,6 +191,7 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
         "now": now,
         "world": world,
         "projection": _sea_level_projection(s, base, now) if var == "sea_level"
+        else _cmip6_projection(s, base, now) if var in CMIP6_VARIABLES
         else {"available": False, "why": PROJECTION.get(var, PROJECTION_LATER)},
         "explain": {
             "data": data,
@@ -361,10 +363,6 @@ def _sig(d: Decimal, digits: int) -> Decimal:
     return d if not d else d.quantize(Decimal(1).scaleb(d.adjusted() - digits + 1), rounding=ROUND_HALF_UP) + 0
 
 
-def _at(d: Decimal, exp: int) -> Decimal:
-    return d.quantize(Decimal(1).scaleb(exp), rounding=ROUND_HALF_UP) + 0
-
-
 def _signed0(d: Decimal) -> str:
     return "0" if not d else signed(d)
 
@@ -383,11 +381,7 @@ def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict 
     else:  # a measurement we have no reader's unit for: its own units per decade
         factor, unit, per = Decimal(1), units, "per decade"
     v, lo, hi = (Decimal(repr(float(x))) * factor for x in per_decade)
-    exp = sig2(max(abs(lo), abs(hi))).as_tuple().exponent if (lo or hi) else 0
-    # enough decimals that the ends differ and neither non-zero end shows as 0 (a clear rise is never "0 to +11")
-    while exp > -6 and (lo != hi and _at(lo, exp) == _at(hi, exp) or any(v and not _at(v, exp) for v in (lo, hi))):
-        exp -= 1
-    ends, mid = [_at(lo, exp), _at(hi, exp)], sig2(v) + 0
+    ends, mid = range_ends(lo, hi), sig2(v) + 0
     if rain:  # text is the share exactly as guidance.rate works it out, so the two never disagree
         mid = _rain_share(per_decade[0], base_value).copy_sign(v) + 0
     gap = "" if unit == "%" else " "

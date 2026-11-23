@@ -56,6 +56,20 @@ def q(d: Decimal, places: str) -> Decimal:
     return d.quantize(Decimal(places), rounding=ROUND_HALF_UP)
 
 
+def _at(d: Decimal, exp: int) -> Decimal:
+    return d.quantize(Decimal(1).scaleb(exp), rounding=ROUND_HALF_UP) + 0
+
+
+def ends(lo: Decimal, hi: Decimal) -> tuple[Decimal, Decimal]:
+    """A range's two ends to the same decimals, as headline_rate.range_text shows them (and the page's spanText): the
+    larger end to 2 significant figures, then more decimals until the ends differ and neither non-zero end shows as 0
+    (a clear rise is never "0 to +11"). Half away from zero."""
+    exp = sig2(max(abs(lo), abs(hi))).as_tuple().exponent if (lo or hi) else 0
+    while exp > -6 and (lo != hi and _at(lo, exp) == _at(hi, exp) or any(v and not _at(v, exp) for v in (lo, hi))):
+        exp -= 1
+    return _at(lo, exp), _at(hi, exp)
+
+
 def signed(d: Decimal) -> str:
     """"+8.3", "−1.4" (a real minus sign)."""
     return ("−" if d < 0 else "+") + format(abs(d), "f")
