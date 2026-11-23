@@ -279,6 +279,16 @@ assert.deepStrictEqual(card(JU.trend, false).world, { text: 'Over those years: h
 assert.strictEqual(steps(JU.trend, JU.series, bc)[5].work[1], '1× is the same pace as the world. Below 0, the change here went the other way.');
 assert.strictEqual(card(JU.trend, true).fact, 'Falling here, while the world average rose 3.3 mm a year over the same years (1993 to April 2025) (in metric).');
 assert.strictEqual(card(JU.trend, false).fact, JU.trend.guidance.fact);
+// step 6's division shows the world line's digits (review: it printed "−15.0 ÷ 3.3" beside "here −15")
+assert.strictEqual(steps(JU.trend, JU.series, bc)[5].work[0].indexOf(MN + '15 ÷ 3.3 = ' + MN + '4.5×'), 0, steps(JU.trend, JU.series, bc)[5].work[0]);
+var P6 = copy(P); P6.trend.world.local_rate = 0.064; P6.trend.world.world_rate = 0.2; P6.trend.world.ratio = 0.32;
+assert.strictEqual(card(P6.trend, false).world.text, 'Over those years: here +0.064' + NB + '°C per decade, world +0.20' + NB + '°C per decade.');
+assert.strictEqual(steps(P6.trend, P6.series, pc)[5].work[0].indexOf('0.064 ÷ 0.20 = 0.32×'), 0, steps(P6.trend, P6.series, pc)[5].work[0]);
+// in inches without the 4-decimal fields: headline_rate's own numbers converted, never the metric text; without them, null
+var B3 = copy(B); delete B3.trend.slope_per_decade;
+assert.deepStrictEqual([rate(B3.trend, true).text, rate(B3.trend, true).range], ['+0.12' + NB + 'in a year', '+0.11 to +0.13' + NB + 'in a year']);
+delete B3.trend.headline_rate.value;
+assert.strictEqual(rate(B3.trend, true), null);
 clean(JU, bc);
 // review: "Over those years" only when the fact is the world comparison, i.e. the ratio's sign agrees with the verdict
 // (guidance.py). Otherwise the fact gives the full record's rate and years, so the line says "Since 1993" and both rates.
