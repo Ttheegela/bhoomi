@@ -7,7 +7,7 @@ world reference series are snapshot files in the repo). Run: uv run python tests
 
 Records for this place (PR4a): a case's `others` are the other records of the same place, made from the same seeded
 weather with their own trend, noise and gaps (or the error their fetch would raise), and set beside the main record by
-the stats lane's records.compare, as detect_trend does. Cases without `others` carry the five fields null, as
+the stats lane's records.compare, as detect_trend does. Cases without `others` carry the six fields null, as
 /api/trend?compare=false does.
 """
 import json
@@ -205,9 +205,9 @@ def other_for(c, o):
 
 
 def trend_for(c, s, base):
-    """compute_trend, plus main_note and the five PR4a fields as detect_trend sets them, before meaning and guidance."""
+    """compute_trend, plus main_note and the six PR4a fields as detect_trend sets them, before meaning and guidance."""
     r = compute_trend(s, base=base)
-    extra = dict.fromkeys(("comparisons", "comparisons_window", "disagree", "drift", "single_note"))
+    extra = dict.fromkeys(("comparisons", "comparisons_window", "disagree", "drift", "thin_note", "single_note"))
     if c.get("others"):
         extra = records.compare(c["variable"], [(s["source"]["id"], (s, s, base))] +
                                 [(o["id"], other_for(c, o)) for o in c["others"]], c["place"]["lat"], c["place"]["lon"])

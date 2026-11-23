@@ -59,9 +59,13 @@ DRIFT = ("Weather models can drift over decades at some places; at this spot {} 
 DRIFT_APART = ("Weather models can drift over decades at some places; at this spot ERA5 and NASA POWER have drifted "
                "apart.")
 DIRECTION = {False: ("cooling", "warming"), True: ("getting drier", "getting wetter")}
-# single_note (contract "One record"): fewer than two counted rows; the word follows the main row's kind
+# single_note (contract "One record"): fewer than two counted rows; the word follows the counted row's kind (none
+# counted: the main row's)
 SINGLE = {"grid": "Only one record could be compared here, so this answer rests on a single weather model.",
           "station": "Only one record could be compared here, so this answer rests on a single weather station."}
+# thin_note (contract "Thin main record"): the main row has a trend but is thin, so it isn't counted
+THIN_MAIN = ("This record has few readings in recent years, so it isn't counted when we compare; the other records are "
+             "compared below.")
 
 
 class Pending(Exception):
@@ -71,9 +75,10 @@ class Pending(Exception):
 def compare(variable: str, records: list, lat: float, lon: float) -> dict:
     """records: [(source id, (series for the request, whole series, its baseline) or the exception its fetch
     raised, or Pending)], the main record first, then the other model, then the station. -> the contract's
-    `comparisons`, `comparisons_window`, `disagree`, `drift` and `single_note`. One record failing gives its row a
-    status, never an exception. Only counted rows (ok, and not a thin station) take part in agree, disagree and drift;
-    with fewer than two, `single_note` says the answer rests on one record."""
+    `comparisons`, `comparisons_window`, `disagree`, `drift`, `thin_note` and `single_note`. One record failing gives
+    its row a status, never an exception. Only counted rows (ok, and not a thin station) take part in agree, disagree
+    and drift; `thin_note` says when the main row is the thin one, and with fewer than two counted, `single_note` says
+    the answer rests on one record."""
     got = [(sid, rec) for sid, rec in records if not isinstance(rec, BaseException)]
     a, b = _window(got)
     rows, fits = [], []
@@ -104,7 +109,8 @@ def compare(variable: str, records: list, lat: float, lon: float) -> dict:
     drift = _drift(variable, counted)
     return {"comparisons": rows, "comparisons_window": {"start": a, "end": b, "label": WINDOW.format(a, b)},
             "disagree": _disagree(variable, counted, drift), "drift": drift,
-            "single_note": SINGLE[rows[0]["kind"]] if len(counted) < 2 else None}
+            "thin_note": THIN_MAIN if rows[0]["available"] and not rows[0]["counted"] else None,
+            "single_note": SINGLE[(counted[0]["row"] if counted else rows[0])["kind"]] if len(counted) < 2 else None}
 
 
 def _years(s: dict, need: int) -> tuple[int, int] | None:

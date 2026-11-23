@@ -22,7 +22,7 @@ NORMALS = [5, 6, 9, 12, 16, 20, 23, 22, 18, 13, 9, 6]
 RAIN = [0.8, 0.3, 0.2, 0.4, 1.3, 1.6, 2.9, 3.9, 4.2, 8.7, 11.8, 4.8]
 WEATHER = np.random.default_rng(99).normal(0, 0.8, 70 * 12)  # one place's weather, 1970 on: every record shares it
 STATION = {"name": "TEST STATION", "lat": 0.05, "lon": 0.0, "id": "XX000000001"}  # 5.6 km north of (0, 0)
-KEYS = ("comparisons", "comparisons_window", "disagree", "drift", "single_note")
+KEYS = ("comparisons", "comparisons_window", "disagree", "drift", "thin_note", "single_note")
 NEAR = {"id": "IN020040900", "name": "Madras Minambakkam, IN", "lat": 12.99, "lon": 80.18}
 
 
@@ -199,7 +199,7 @@ def test_compare_false_and_measurements_without_records(monkeypatch):
                                            "compare": "false"}).json()[k] is None for k in KEYS)
     assert c.get("/api/trend", params={"variable": "air_temp", "lat": 0, "lon": 0, "source": "era5"}
                  ).json()["comparisons"][0]["main"] is True
-    # sea level: unchanged, the five fields null, nothing else read
+    # sea level: unchanged, the six fields null, nothing else read
     sea = {**record("power", 30), "variable": "sea_level", "units": "mm", "source": {"id": "coops", "name": "x"}}
     monkeypatch.setattr(data, "get_series", lambda *a, **k: calls.append(k.get("source")) or sea)
     calls.clear()
@@ -380,6 +380,9 @@ THIN = dict(seed=3, keep=lambda y, m: y < 2005)  # covers only 1981-2004: shown,
     # the station made main, both models down
     ([("ghcn", record("ghcn", 0.3, seed=3)), ("era5", httpx.ConnectError("x")), ("power", httpx.ConnectError("x"))],
      ONE_STATION),
+    # QA: Delhi's hottest day with the station made main, thin; ERA5 down: the one counted row is NASA POWER's
+    ([("ghcn", record("ghcn", 0.3, **THIN)), ("era5", httpx.ConnectError("x")), ("power", record("power", 0.3, seed=2))],
+     MODEL),
     # two counted rows or more: no note
     ([("era5", record("era5", 0.3)), ("power", record("power", 0.3, seed=2)), ("ghcn", record("ghcn", 0.3, **THIN))],
      None),
@@ -392,6 +395,38 @@ def test_single_note_when_fewer_than_two_records_are_counted(rows, note):
     r = run("air_temp", *rows)
     assert r["single_note"] == note
     assert (sum(c["counted"] for c in r["comparisons"]) < 2) == (note is not None)
+
+
+@pytest.mark.parametrize("station", [
+    # thin: few readings in 3 of the last 10 years
+    record("ghcn", 0.3, seed=3, keep=lambda y, m: (y != 2018) and (y != 2020 or m <= 5) and (y != 2022 or m <= 6)),
+    record("ghcn", 0.3, seed=3, y0=2010),  # too short for a trend
+])
+def test_single_note_with_nothing_counted_follows_the_main_row(station):
+    r = run("air_temp", ("ghcn", station), ("era5", httpx.ConnectError("x")), ("power", httpx.ConnectError("x")))
+    assert not any(c["counted"] for c in r["comparisons"]) and r["single_note"] == ONE_STATION
+
+
+THIN_MAIN = ("This record has few readings in recent years, so it isn't counted when we compare; the other records are "
+             "compared below.")
+
+
+@pytest.mark.parametrize("rows, thin, single", [
+    # a thin station picked as main, both models counted: it says so, and two records are still compared
+    ([("ghcn", record("ghcn", 0.3, **THIN)), ("era5", record("era5", 0.3)), ("power", record("power", 0.3, seed=2))],
+     THIN_MAIN, None),
+    # ... and with ERA5 down, NASA POWER is the one counted record
+    ([("ghcn", record("ghcn", 0.3, **THIN)), ("era5", httpx.ConnectError("x")), ("power", record("power", 0.3, seed=2))],
+     THIN_MAIN, MODEL),
+    # a main row that isn't thin, or has no trend: null
+    ([("era5", record("era5", 0.3)), ("power", record("power", 0.3, seed=2)), ("ghcn", record("ghcn", 0.3, **THIN))],
+     None, None),
+    ([("ghcn", record("ghcn", 0.3, seed=3, y0=2010)), ("era5", record("era5", 0.3)),
+      ("power", record("power", 0.3, seed=2))], None, None),
+])
+def test_thin_note_when_the_main_record_is_thin(rows, thin, single):
+    r = run("air_temp", *rows)
+    assert (r["thin_note"], r["single_note"]) == (thin, single)
 
 
 # ---- drift ----
