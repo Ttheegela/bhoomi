@@ -248,7 +248,7 @@ def test_caveats_by_kind_of_record(var, sid, want):
     assert [c for c in r["caveats"] if c in (trend.POWER_T_CAVEAT, trend.GHCN_CAVEAT)] == want
 
 
-# ---- headline_rate: a rain range end on or across 5% or 10% shows the share to 2 significant figures (RAIN_ROUND_AT) ----
+# ---- headline_rate: a rain range rounds both ends alike, with no special case near any value (no thresholds) ----
 
 RAIN = "% of the 1995–2014 average per decade"
 
@@ -259,23 +259,15 @@ def rain_range(lo, hi):
 
 
 @pytest.mark.parametrize("lo,hi,want", [
-    (4.51, 17, "+4.5 to +17"),  # Mumbai: the share is 4.5; "+5" would round it up across 5
-    (-17, -4.51, "−17 to −4.5"),  # the same, drier
-    (9.6, 23, "+9.6 to +23"),  # the share is 9.6; "+10" would round it up to 10
+    (4.51, 17, "+5 to +17"),  # Mumbai-like: both ends to the same decimals (was "+4.5 to +17", a 5% special case)
+    (-17, -4.51, "−17 to −5"),  # the same, drier
+    (9.6, 23, "+10 to +23"),  # was "+9.6 to +23" (a 10% special case)
+    (5.04, 17, "+5 to +17"),  # was "+5.0 to +17"
+    (4.51, 23.4, "+5 to +23"),  # was "+4.5 to +23"
+    (2.3, 23.4, "+2 to +23"),  # unchanged: the far end is not "+23.4"
 ])
-def test_a_rain_end_near_5_or_10_shows_its_share(lo, hi, want):
+def test_a_rain_range_rounds_both_ends_alike(lo, hi, want):
     assert rain_range(lo, hi) == f"{want}{RAIN}"
-
-
-def test_a_rain_end_just_over_5_never_reads_below_5():
-    text = rain_range(5.04, 17)
-    assert text == f"+5.0 to +17{RAIN}"  # not "+5", which could be anything from 4.5
-    assert float(text.split()[0]) >= 5
-
-
-def test_a_rain_end_away_from_a_threshold_keeps_its_usual_rounding():
-    assert rain_range(4.51, 23.4) == f"+4.5 to +23{RAIN}"  # the far end is not "+23.4"
-    assert rain_range(2.3, 23.4) == f"+2 to +23{RAIN}"  # no end near a threshold: unchanged
 
 
 @pytest.mark.parametrize("slope,verdict,want", [(0.049496, "rising", "+5.0%"), (-0.049496, "falling", "−5.0%")])

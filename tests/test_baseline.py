@@ -515,23 +515,37 @@ def test_headline_rate_uses_the_shown_slope_and_fit_the_unrounded_slope_and_span
 PSMSL_SRC = {"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"}
 
 
-@pytest.mark.parametrize("var,per_year,level,source,want", [
-    ("water_storage", -1.0499996, 0.0, GRACE, "−1.1 cm of water a year"),  # at (33.0, -103.46): slope -10.5, not "-1.0"
-    ("sea_level", 5.549996, 7000.0, PSMSL_SRC, "+5.6 mm a year"),  # Tolchester Beach: 55.5 a decade, not "+5.5"
+@pytest.mark.parametrize("var,per_year,lo,hi,level,source,want,want_range", [
+    # at (33.0, -103.46): slope -10.5, not "-1.0"; unrounded, the range read "-1.1 to -0.9"
+    ("water_storage", -1.0499996, -1.1499996, -0.9499996, 0.0, GRACE, "−1.1 cm of water a year",
+     "−1.2 to −1.0 cm of water a year"),
+    # Tolchester Beach: 55.5 a decade, not "+5.5"; unrounded, the range read "+5.2 to +5.8"
+    ("sea_level", 5.549996, 5.249996, 5.849996, 7000.0, PSMSL_SRC, "+5.6 mm a year", "+5.3 to +5.9 mm a year"),
 ])
-def test_headline_rate_rounds_the_shown_slope(monkeypatch, var, per_year, level, source, want):
-    """A slope whose unrounded and 4-decimal values round differently at 2 significant figures: the headline, its
-    range, guidance.rate and the fact all take slope_per_decade, ci_low and ci_high as shown."""
-    lo, hi = sorted((per_year * 0.9, per_year * 1.1))
+def test_headline_rate_rounds_the_shown_slope(monkeypatch, var, per_year, lo, hi, level, source, want, want_range):
+    """A slope and range whose unrounded and 4-decimal values round differently at the shown precision: the headline,
+    its range, guidance.rate and the fact all take slope_per_decade, ci_low and ci_high as shown."""
     monkeypatch.setattr(trend, "_mk_sen", lambda t, x, k: (per_year, lo, hi, 0.001, False, False, 0.0))
     r = compute_trend(ts(synth(25, start=2002, level=level, sd=1), start=2002, variable=var, source=source))
     h, g = r["headline_rate"], r["guidance"]
-    assert r["slope_per_decade"] == round(per_year * 10, 4) and h["text"] == want
+    assert r["slope_per_decade"] == round(per_year * 10, 4) and (h["text"], h["range_text"]) == (want, want_range)
     assert f"{g['rate']['text']} {g['rate']['per']}" == want  # the card's rate and the headline agree
-    assert h["range_text"] == trend._headline_rate(var, UNITS[var], (r["slope_per_decade"], r["ci_low"], r["ci_high"]),
-                                                   None)["range_text"]
-    if not r["world"]["available"]:  # water storage: the fact states the same number, without its sign
-        assert g["fact"].startswith(f"Falling about {want.lstrip('+−')} (2002 to 2026; 95% range ")
+    if not r["world"]["available"]:  # water storage: the fact states the same numbers, the rate without its sign
+        assert g["fact"] == f"Falling about {want.lstrip('−')} (2002 to 2026; 95% range {want_range})."
+
+
+@pytest.mark.parametrize("per_year,lo,hi,want", [(0.0364999, 0.02, 0.05, 0.37), (-0.0014499, -0.003, -0.0005, -0.015)])
+def test_world_local_rate_is_the_headline_number_over_the_same_months(refs, monkeypatch, per_year, lo, hi, want):
+    """Air temperature whose world window is the whole record (the land reference ends 2025-06, so does the record):
+    world.local_rate rounds the same 4-decimal slope as headline_rate (unrounded, 0.0364999 read 0.36 beside "+0.37",
+    -0.0014499 read -0.014 beside "-0.015"), and the ratio is worked out from it."""
+    monkeypatch.setattr(trend, "_mk_sen", lambda t, x, k: (per_year, lo, hi, 0.001, False, False, 0.0))
+    r = compute_trend(ts(synth(45)[:-6]))
+    w, h = r["world"], r["headline_rate"]
+    assert w["window"] == r["period"] == {"start": "1981-01", "end": "2025-06"}
+    assert w["local_rate"] == want == float(h["text"].split()[0].replace("−", "-"))
+    if w["ratio"] is not None:
+        assert w["ratio"] == float(q(Decimal(repr(want)) / Decimal(repr(w["world_rate"])), "0.1"))
 
 
 def test_headline_text_is_the_shown_slope_rounded():
