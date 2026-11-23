@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 
 from earthtrends.agent import loop, ratelimit, tools
 from earthtrends.agent.providers import NotConfigured, UpstreamError
-from earthtrends.data import coops, psmsl, search_places
+from earthtrends.data import coops, era5, psmsl, search_places
 from earthtrends.mcp_server import SOURCE_DOWN, mcp
 
 # The public domain: always accepted, whatever the environment says.
@@ -126,7 +126,7 @@ def series(request: Request, response: Response, variable: str, lat: float, lon:
            start: str | None = None, end: str | None = None, source: str | None = None) -> dict:
     limit_data(request)
     out = tools.get_series(variable, lat, lon, start, end, source)
-    response.headers["Cache-Control"] = CACHE
+    response.headers["Cache-Control"] = "no-store" if era5.is_fallback(out["source"]) else CACHE  # contract "Caching"
     return out
 
 
@@ -135,8 +135,11 @@ def trend(request: Request, response: Response, variable: str, lat: float, lon: 
           start: str | None = None, end: str | None = None, source: str | None = None, compare: bool = True) -> dict:
     limit_data(request)
     out = tools.detect_trend(variable, lat, lon, start, end, source, compare, wait=True)  # the page waits for every row
-    # a fallback or a row that couldn't be read is never cached: "Try again" must reach the server (contract "Caching")
-    partial = out.get("main_note") or any(c["status"] in ("error", "pending") for c in out.get("comparisons") or [])
+    # a fallback or a row that couldn't be read is never cached: "Try again" must reach the server (contract "Caching");
+    # nor is ERA5 from Open-Meteo while the pack is configured (main or a row), so a pack outage passes
+    rows = out.get("comparisons") or []
+    partial = (out.get("main_note") or any(c["status"] in ("error", "pending") for c in rows)
+               or any(era5.is_fallback(x["source"]) for x in [out, *rows]))
     response.headers["Cache-Control"] = "no-store" if partial else CACHE
     return out
 

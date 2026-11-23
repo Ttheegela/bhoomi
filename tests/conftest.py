@@ -23,9 +23,10 @@ def no_network(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_pack(monkeypatch):
-    """era5.PACK_URL defaults to our public Blob store; no test reads it. A pack test sets BHOOMI_ERA5_PACK to a local
-    folder, or to a URL that its own patched httpx.get serves."""
+    """era5.PACK_URL defaults to our public Blob store, and a developer's shell may set BHOOMI_ERA5_PACK; no test reads
+    either. A pack test sets BHOOMI_ERA5_PACK to a local folder, or to a URL that its own patched httpx.get serves."""
     monkeypatch.setattr(era5, "PACK_URL", None)
+    monkeypatch.delenv(era5.PACK, raising=False)
 
 
 @pytest.fixture(autouse=True)

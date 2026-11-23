@@ -16,6 +16,7 @@ __all__ = ["list_variables", "get_series", "search_places"]
 # Coordinates are rounded to 2 decimals (about 1 km) and the fetch uses the rounded point too, so a cached
 # entry describes exactly the point it was fetched for (and `place` echoes the rounded point).
 TTL_S = 12 * 3600
+FALLBACK_TTL_S = 10 * 60  # ERA5 from Open-Meteo while a pack is configured (era5.is_fallback): a pack outage passes
 MAX_ENTRIES = 256
 _cache: dict[tuple, tuple[float, dict]] = {}  # key -> (time stored, full result); dict order = oldest first
 _lock = threading.Lock()
@@ -55,7 +56,7 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
         times, values, src, notes = pack
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
     elif source == "era5":  # Open-Meteo: no pack base, a failed pack read (logged), or no land cell near
-        # a fallback series is cached like any other (TTL_S), so after a pack outage this point stays on Open-Meteo up to 12 h
+        # with a pack configured this series is kept only FALLBACK_TTL_S, so a pack outage never pins the point here
         param = era5.PARAMS[variable]
         times, values = monthly.daily_to_monthly(*era5.parse(era5.fetch(param, lat, lon), param), era5.HOW[variable])
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
@@ -109,7 +110,8 @@ def _cached_full(entry: dict, variable: str, source: str, lat: float, lon: float
     key = (variable, source, lat, lon)
     with _lock:
         hit = _cache.get(key)
-        if hit and time.monotonic() - hit[0] < TTL_S:
+        ttl = FALLBACK_TTL_S if hit and isinstance(hit[1], dict) and era5.is_fallback(hit[1]["source"]) else TTL_S
+        if hit and time.monotonic() - hit[0] < ttl:
             return _served(hit[1])
         _cache.pop(key, None)  # expired
         flying = _flying.get(key)

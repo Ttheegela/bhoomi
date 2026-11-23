@@ -182,7 +182,7 @@ PACK_PAGE = "https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas"
 PACK_DATASET_ID = "doi:10.24381/cds.h35hb680"
 PACK_DOI_URL = "https://doi.org/10.24381/cds.h35hb680"  # record_url when the pack is a local folder
 PACK_SOURCE = {"id": "era5", "name": "ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)", "url": PACK_PAGE,
-               "attribution": COPERNICUS}
+               "licence": "CC BY 4.0", "attribution": COPERNICUS}
 PACK_METHOD = {
     "air_temp": "The Atlas dataset's monthly mean of ERA5 2 m air temperature for {cell}.",
     "air_temp_max": "The Atlas dataset's hottest daily maximum of ERA5 2 m air temperature in each month for {cell}; "
@@ -202,6 +202,12 @@ def default_source() -> dict:
     """ERA5's source for a record that couldn't be read: the pack's when a pack is configured, else Open-Meteo's. The
     caller adds record_url (None: no tile or request to point at)."""
     return PACK_SOURCE if pack_base() else SOURCE
+
+
+def is_fallback(source: dict) -> bool:
+    """True for an ERA5 record from Open-Meteo while a pack is configured: a pack outage or a place with no land cell
+    near. Such a record is cached only briefly and its answer is sent no-store (contract "Caching")."""
+    return bool(pack_base()) and source.get("url") == SOURCE["url"]
 
 
 def _wrap(qlon: int) -> int:

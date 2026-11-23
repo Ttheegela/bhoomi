@@ -183,12 +183,12 @@ def test_source_block_and_notes(packs, monkeypatch):
     monkeypatch.setenv(era5.PACK, str(packs / "a") + "/")
     s = data.get_series("air_temp_max", 28.61, 77.21, source="era5")
     src = s["source"]
-    assert {k: src[k] for k in ("id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "attribution",
-                                "cadence", "deseasoned_upstream", "limit")} == {
+    assert src == {
         "id": "era5", "name": "ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)",
         "url": "https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas", "dataset_id": "doi:10.24381/cds.h35hb680",
         "version": "test-1", "record_url": "https://doi.org/10.24381/cds.h35hb680", "retrieved": "2026-11-20",
-        "attribution": upstream.COPERNICUS, "cadence": "monthly", "deseasoned_upstream": False, "limit": None}
+        "licence": "CC BY 4.0", "attribution": upstream.COPERNICUS, "cadence": "monthly", "deseasoned_upstream": False,
+        "limit": None, "method": src["method"]}  # the whole block: method is checked next
     assert src["method"] == ("The Atlas dataset's hottest daily maximum of ERA5 2 m air temperature in each month for the grid "
                              "cell centred at 28.50° N, 77.25° E, about 25 km across; days run midnight to midnight UTC.")
     assert s["notes"] == ["Grid cell about 25 km wide, not a single station.", "ERA5 data through December 1982.",
@@ -363,11 +363,12 @@ def test_the_real_mini_pack(monkeypatch, variable, lat, lon, cell, values):
     assert (s["values"][0], s["values"][s["times"].index("2000-07")], s["values"][-1]) == values
     assert None not in s["values"] and s["flags"] == [None] * 540
     src = s["source"]
-    assert {k: src[k] for k in ("id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "attribution")} == {
+    assert {k: src[k] for k in ("id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "licence",
+                                "attribution")} == {
         "id": "era5", "name": "ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)",
         "url": "https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas", "dataset_id": "doi:10.24381/cds.h35hb680",
         "version": "v2.0", "record_url": "https://doi.org/10.24381/cds.h35hb680", "retrieved": "2026-11-23",
-        "attribution": upstream.COPERNICUS}
+        "licence": "CC BY 4.0", "attribution": upstream.COPERNICUS}
     assert f"for the grid cell centred at {cell}, about 25 km across" in src["method"]
     assert "ERA5 data through December 2025." in s["notes"]
 
@@ -385,3 +386,51 @@ def test_a_record_that_could_not_be_read_names_the_pack_when_one_is_set(monkeypa
         assert loop.tried_sources(tried) == [{"name": want["name"], "url": want["url"]}]
     monkeypatch.setenv(era5.REPLAY, str(Path(__file__).parent / "fixtures" / "era5_replay"))
     assert era5.default_source() is era5.SOURCE  # replay reads Open-Meteo's recordings, so it keeps their name
+
+
+def test_open_meteo_while_the_pack_is_configured_is_kept_briefly(monkeypatch, open_meteo):
+    """Contract "Caching": with a pack configured, a series from Open-Meteo's fallback is kept FALLBACK_TTL_S, so a pack
+    outage never pins a place there; a pack series and, with no pack, an Open-Meteo series keep TTL_S."""
+    clock, reads = [5000.0], []
+    monkeypatch.setattr(data.time, "monotonic", lambda: clock[0])
+    pack_series = era5.pack_series
+    monkeypatch.setattr(era5, "pack_series", lambda *a: reads.append(a) or pack_series(*a))
+
+    def fetched_again(seconds, lat, lon):
+        n = len(open_meteo) + len(reads)
+        clock[0] += seconds
+        data.get_series("air_temp", lat, lon, source="era5")
+        return len(open_meteo) + len(reads) > n
+
+    data.get_series("air_temp", 0.0, -30.0, source="era5")  # no pack: Open-Meteo, kept as today
+    assert not fetched_again(data.FALLBACK_TTL_S + 1, 0.0, -30.0) and fetched_again(data.TTL_S, 0.0, -30.0)
+    monkeypatch.setenv(era5.PACK, str(MINI))
+    data._cache.clear()
+    data.get_series("air_temp", 0.0, -30.0, source="era5")  # no land near in the pack: the fallback
+    assert not fetched_again(data.FALLBACK_TTL_S - 1, 0.0, -30.0) and fetched_again(2, 0.0, -30.0)
+    s = data.get_series("air_temp", 40.35, -74.66, source="era5")  # Princeton, from the pack
+    assert s["source"]["url"] == era5.PACK_PAGE and not fetched_again(data.TTL_S - 1, 40.35, -74.66)
+
+
+def test_answers_with_open_meteo_while_the_pack_is_configured_are_never_cached(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from earthtrends.agent import tools
+    from earthtrends.app import CACHE, app
+    om, pack = {"id": "era5", "url": era5.SOURCE["url"]}, {"id": "era5", "url": era5.PACK_PAGE}
+    power = {"id": "power", "url": "https://power.larc.nasa.gov/"}
+    answer = {}
+    monkeypatch.setattr(tools, "detect_trend", lambda *a, **k: answer)
+    monkeypatch.setattr(tools, "get_series", lambda *a, **k: {"source": answer["source"]})
+    c, q = TestClient(app), {"variable": "air_temp", "lat": 0, "lon": 0}
+
+    def headers(main, *rows):
+        answer.clear()
+        answer.update(source=main, main_note=None, comparisons=[{"status": "ok", "source": r} for r in (main, *rows)])
+        return c.get("/api/trend", params=q).headers["cache-control"], c.get("/api/series", params=q).headers["cache-control"]
+
+    assert headers(om, power) == (CACHE, CACHE)  # no pack: Open-Meteo is cached as today
+    monkeypatch.setenv(era5.PACK, str(MINI))
+    assert headers(om, power) == ("no-store", "no-store")  # the main record came from the fallback
+    assert headers(power, om) == ("no-store", CACHE)  # an ERA5 row did
+    assert headers(pack, power) == (CACHE, CACHE)  # the pack: the normal cache
