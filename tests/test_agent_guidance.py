@@ -24,9 +24,10 @@ GI = {"variable": "sea_level", "units": "mm", "place": {"name": "Grand Isle", "l
                   "comparison": "About 8 cm higher every 10 years.", "limit": "It cannot tell the future."},
       "guidance": GUIDE}
 GI_ARGS = {"variable": "sea_level", "lat": 29.26, "lon": -89.96}
+SOURCES = "All our data sources, with licences: bhoomi.earth/sources"  # design 17 §8, the last guidance line
 EXPECT = (f"Sea level: {FACT} Where to look next: Official flood maps (FEMA Flood Map Service Center) "
           "(https://msc.fema.gov/portal/home); Your local planning office. Future flood map (NOAA) "
-          f"(https://coast.noaa.gov/slr/). {DISCLAIMER}")
+          f"(https://coast.noaa.gov/slr/). {DISCLAIMER}\n{SOURCES}")
 
 
 def ok(result, args):
@@ -45,6 +46,9 @@ def test_block_is_the_tools_strings_word_for_word():
     assert guidance.block([ok(GI, GI_ARGS)]) == EXPECT
     for s in (GUIDE["fact"], GUIDE["disclaimer"], FEMA["label"], FEMA["url"], PLANNING["label"]):
         assert s in EXPECT
+    assert guidance.SOURCES_LINE == SOURCES and loop.stated_numbers(SOURCES) == []  # no number: outside every check
+    # simple words: the same block without the fact, still closed by the sources line
+    assert guidance.block([ok(GI, GI_ARGS)], simple=True) == EXPECT.replace(f"Sea level: {FACT} ", "")
     # an old result that still carries a past-trend outlook adds nothing about the future (spec D1)
     old = {**GUIDE, "outlook_label": "If the past trend continues",
            "outlook": [{"year": 2050, "low": 18.2, "high": 21.4, "unit": "cm", "text": "+18 to +21 cm by 2050"}]}
@@ -57,16 +61,17 @@ def test_hottest_day_adds_its_fact():
             "look_next": [{"label": "Your national weather service", "url": None}]}
     hot = {**GI, "variable": "air_temp_max", "units": "degC", "guidance": flat}
     assert guidance.block([ok(hot, {**GI_ARGS, "variable": "air_temp_max"})]) == (
-        f"Hottest day of the month: {fact} Where to look next: Your national weather service. {DISCLAIMER}")
+        f"Hottest day of the month: {fact} Where to look next: Your national weather service. {DISCLAIMER}\n{SOURCES}")
     assert guidance.block([ok({**hot, "guidance": {**flat, "fact": ""}}, GI_ARGS)]) == ""  # no fact: nothing
 
 
 @pytest.mark.parametrize("text,want", [
-    ("Rising. [GUIDANCE] [OFFICIAL RESOURCES]", f"Rising. {EXPECT} [OFFICIAL RESOURCES]"),
+    # the sources pages line closes the guidance on its own line: what follows it starts a new one
+    ("Rising. [GUIDANCE] [OFFICIAL RESOURCES]", f"Rising. {EXPECT}\n[OFFICIAL RESOURCES]"),
     ("Rising.\n[GUIDANCE]", f"Rising.\n{EXPECT}"),
-    ("Rising. [OFFICIAL RESOURCES]", f"Rising.\n\n{EXPECT} [OFFICIAL RESOURCES]"),  # no marker: before the links
+    ("Rising. [OFFICIAL RESOURCES]", f"Rising.\n\n{EXPECT}\n[OFFICIAL RESOURCES]"),  # no marker: before the links
     ("Rising.", f"Rising.\n\n{EXPECT}"),  # no marker at all: at the end
-    ("A. [GUIDANCE] B. [guidance]", f"A. {EXPECT} B."),  # once
+    ("A. [GUIDANCE] B. [guidance]", f"A. {EXPECT}\nB."),  # once
 ])
 def test_fill(text, want):
     assert guidance.fill(text, [ok(GI, GI_ARGS)]) == want
@@ -84,7 +89,8 @@ def test_two_places_are_named_and_the_disclaimer_and_look_next_come_once():
     out = guidance.block([ok(GI, GI_ARGS), ok(ac, {**GI_ARGS, "lat": 39.36, "lon": -74.42})])
     assert out.startswith(f"Grand Isle, sea level: {FACT} Atlantic City, sea level: {other} Where to look next: ")
     assert out.count(GUIDE["disclaimer"]) == 1 and out.count("coast.noaa.gov/slr") == 1
-    assert out.count(FEMA["url"]) == 1 and out.count(PLANNING["label"]) == 1 and out.endswith(DISCLAIMER)
+    assert out.count(FEMA["url"]) == 1 and out.count(PLANNING["label"]) == 1 and out.endswith(f"{DISCLAIMER}\n{SOURCES}")
+    assert out.count(SOURCES) == 1
 
 
 def test_sources_at_one_place_that_disagree_are_both_shown():
@@ -157,7 +163,9 @@ def test_loop_inserts_guidance_outside_the_word_limit(fake, monkeypatch):
     body = " ".join(["word"] * 100) + "."
     fake.script = [step(calls=[call("a", **GI_ARGS)]), step(body + " [GUIDANCE] [OFFICIAL RESOURCES]")]
     r = loop.ask("Should I invest in a house in Grand Isle?", model="fake:m")
-    assert r["answer"] == f"{body} {EXPECT} {resources.US_COAST} Source: NOAA CO-OPS tide gauges, {SRC['url']}."
+    # the missing source link goes in front of the markers: the guidance, ending with the sources pages line, and
+    # the official resources come after the model's text and its sources
+    assert r["answer"] == f"{body} Source: NOAA CO-OPS tide gauges, {SRC['url']}. {EXPECT}\n{resources.US_COAST}"
     assert fake.script == []  # 100 words + code's text: no length retry
     # FEMA's flood maps once, in "Where to look next"; the official-resources sentence doesn't repeat them
     assert r["answer"].count("msc.fema.gov") == 1 and r["answer"].index("msc.fema.gov") < r["answer"].index(resources.US_COAST)

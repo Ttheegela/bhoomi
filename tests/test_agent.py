@@ -1430,7 +1430,8 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "this shape replaces the comparison and the how-sure sentence (the opening already says the records disagree)",
     "if no source returned a result, give the no-data answer, say that past data alone cannot settle it, and still end with the marker",
     "you add none of your own",
-    "Give no number about the future yourself: the experts' projection reaches the answer only through [GUIDANCE].",
+    "Give no number about the future yourself: the experts' projection reaches the answer only through the "
+    "plain lines in the opening.",
     "look up only the measurements it names",
     "Describe each source's gauge or station in its own clause with that source's name",
     "never write \"the same gauge\" or \"the same station\", and never that \"both\" or \"the two\" sources use, share or come from a gauge or station",
@@ -1448,13 +1449,15 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "write as if for a ten-year-old",
     "write [GUIDANCE] on its own",
     # facts, not advice (owner, 2026-11-22)
-    "each result's fact, where to look next, the experts' projection (from its \"projection\", when available), the "
-    "future link and the disclaimer once",
+    "each result's fact, where to look next, the future link, the disclaimer once and a line naming our data "
+    "sources page",
     "Bhoomi states facts, not advice: never give a risk level, a recommendation, or advice on whether to buy, build, "
     "move, avoid or invest, and never call a place risky, safe or dangerous.",
     "from these verdicts only; never a difference, a ratio or a risk level of your own",
     # expert projections and D5 (PR6)
-    'So are its "guidance" strings and its "projection", but code writes those into the answer for you (rule F).',
+    'So are its "guidance" strings, its "plain" lines and its "projection", but code writes the guidance and the '
+    'plain lines into the answer for you (the opening and rule F).',
+    "also name its source (projection.source) and pass on its models_note, location_note and check when set",
     "not a prediction, not a forecast, and not the past trend carried on",
     "Its plain lines, in the opening, already say what is projected, or why there is no projection; never restate them.",
     'Never call a projection\'s range a "95% range": it has its own name, which code writes.',
@@ -1558,7 +1561,10 @@ def test_prompt_rules(phrase):
                                     # PR6 plain lines: code writes the first sentence and the projection's lead
                                     "built on the default source's meaning.headline",
                                     "Your first sentence says plainly that the sources disagree",
-                                    "write one short sentence with no number right before [GUIDANCE]"])
+                                    "write one short sentence with no number right before [GUIDANCE]",
+                                    # PR6: [GUIDANCE] no longer repeats the projection (design 16 §4.3)
+                                    "reaches the answer only through [GUIDANCE]",
+                                    'the experts\' projection (from its "projection", when available)'])
 def test_prompt_rules_removed(phrase):
     assert phrase not in prompts.SYSTEM
 
@@ -2011,7 +2017,8 @@ def test_marker_never_reaches_the_user_on_the_fallback_path(fake, monkeypatch):
     fake.script = [step(tool_calls=[call(arguments=NY)]), step(words(200) + " [OFFICIAL RESOURCES]"),
                    step(words(210) + " [OFFICIAL RESOURCES]")]
     r = loop.ask("q", model="fake:m")  # both too long: the shorter is returned, its marker still replaced
-    assert r["answer"] == f"{words(200)} {resources.US_COAST} {COOPS_LINK}" and "[OFFICIAL" not in r["answer"]
+    # the code's missing link goes in front of the marker, so the official resources stay last
+    assert r["answer"] == f"{words(200)} {COOPS_LINK} {resources.US_COAST}" and "[OFFICIAL" not in r["answer"]
 
 
 def test_marker_removed_when_nothing_was_found(fake, monkeypatch):
