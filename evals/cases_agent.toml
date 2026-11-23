@@ -49,8 +49,8 @@ Data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and 
 ]
 
 # A decision question at a US coast: the data as usual, what past data cannot tell (meaning.limit: "cannot tell"),
-# no advice of the model's own (only the tool's guidance, put in by code), and the official links the code puts at
-# the [OFFICIAL RESOURCES] marker for a CO-OPS result.
+# no advice of the model's own (only the tool's guidance, put in by code), and the official links for a CO-OPS result:
+# NOAA's viewer from the [OFFICIAL RESOURCES] marker, FEMA's flood maps from the guidance's "Where to look next".
 [[case]]
 id = "manhattan-build-house"
 question = "I want to build a house in Lower Manhattan. What are the risks?"
@@ -127,7 +127,8 @@ history = [
   { role = "assistant", content = "No tide gauge near Jakarta has a usable sea-level record, so I cannot say whether the sea there is rising." },
 ]
 
-# Builder: a decision at a US coast; the official US links come from the [OFFICIAL RESOURCES] marker.
+# Builder: a decision at a US coast; NOAA's viewer comes from the [OFFICIAL RESOURCES] marker, FEMA's flood maps from
+# the guidance's "Where to look next".
 [[case]]
 id = "manhattan-family-house"
 question = "I want to build a house in Lower Manhattan for my family's future. Is sea level rising there, and what should I check?"
