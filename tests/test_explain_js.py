@@ -275,7 +275,7 @@ clean(BF, bc);
 // repeat it; step 6 says what below 0 means; in inches the fact (mm) says it is in metric
 var JU = copy(B); JU.trend.verdict = 'falling'; JU.trend.world.local_rate = -15; JU.trend.world.ratio = -4.5; JU.trend.world.ratio_low = -5.2; JU.trend.world.ratio_high = -3.8;
 JU.trend.guidance.fact = 'Falling here, while the world average rose 3.3 mm a year over the same years (1993 to April 2025).';
-assert.deepStrictEqual(card(JU.trend, false).world, { text: 'Over those years: here −15.0' + NB + 'mm a year.', src: 'NASA satellite record', href: B.trend.world.source.record_url });
+assert.deepStrictEqual(card(JU.trend, false).world, { text: 'Over those years: here −15' + NB + 'mm a year.', src: 'NASA satellite record', href: B.trend.world.source.record_url });
 assert.strictEqual(steps(JU.trend, JU.series, bc)[5].work[1], '1× is the same pace as the world. Below 0, the change here went the other way.');
 assert.strictEqual(card(JU.trend, true).fact, 'Falling here, while the world average rose 3.3 mm a year over the same years (1993 to April 2025) (in metric).');
 assert.strictEqual(card(JU.trend, false).fact, JU.trend.guidance.fact);
@@ -288,7 +288,7 @@ assert.deepStrictEqual(card(FR.trend, false).world, Object.assign({ text: 'Since
 var RN = copy(B); RN.trend.world.ratio = -0.3; RN.trend.world.local_rate = -0.5; // rising over the record, falling since 1993
 assert.deepStrictEqual(card(RN.trend, false).world, Object.assign({ text: 'Since 1993: here −0.50' + NB + 'mm a year, world +3.3' + NB + 'mm a year.' }, SINCE));
 var R0 = copy(B); R0.trend.world.ratio = 0; R0.trend.world.local_rate = 0; // a zero ratio says nothing: the fact is the rate
-assert.deepStrictEqual(card(R0.trend, false).world, Object.assign({ text: 'Since 1993: here 0.00' + NB + 'mm a year, world +3.3' + NB + 'mm a year.' }, SINCE));
+assert.deepStrictEqual(card(R0.trend, false).world, Object.assign({ text: 'Since 1993: here 0' + NB + 'mm a year, world +3.3' + NB + 'mm a year.' }, SINCE));
 [FR, RN, R0].forEach(function (d) { clean(d, bc); });
 // step 6, air temperature: the world figure is station-based; a model source says the two are measured differently
 var AIR6 = 'The world figure is built from weather stations on land.', MOD6 = ' The number here comes from a weather model, so the two are measured in different ways.';
@@ -446,11 +446,20 @@ assert.ok(/, which includes no change$/.test(sk.r2.line));
 assert.ok(/^That does not mean nothing changed/.test(sS[4].words[2]));
 assert.ok(/not below 0\.05 · .*which includes zero → not clear\.$/.test(sS[4].work[0]), sS[4].work[0]);
 assert.ok(/Verdict: no clear change\.$/.test(chartText(S.trend, S.series, sc).summary));
+// the world line keeps the API's digits (facts QA bug 1: fmtNum printed -0.014 as -0.01; Chennai's 0.064 as +0.06)
+var SE = load('seattle_air_temp_no_change');
+assert.strictEqual(worldParts(SE.trend, false).here, MN + '0.014' + NB + '°C per decade');
+var SE2 = copy(SE); SE2.trend.world.local_rate = 0.064; SE2.trend.world.world_rate = 0.2;
+assert.deepStrictEqual([worldParts(SE2.trend, false).here, worldParts(SE2.trend, false).world], ['+0.064' + NB + '°C per decade', '+0.20' + NB + '°C per decade']);
+// rain's "Now" is a share: the same text in mm and inches (facts QA bug 2: +126.2% in inches beside +130% in mm)
+var CR = load('chennai_rain'); CR.trend.now.value = 126.2169; CR.trend.now.text = '+130%';
+assert.strictEqual(card(CR.trend, true).r1.value, '+130%');
+assert.strictEqual(card(CR.trend, false).r1.value, '+130%');
 // L1/B6: no ratio for no clear change, only the two rates (even if a ratio came through)
 var S9 = copy(S); S9.trend.world.ratio = -0.4;
 [S, S9].forEach(function (d) {
   var k9 = card(d.trend, false), s9 = steps(d.trend, d.series, sc);
-  assert.ok(/^Since 1981: here −0\.01 °C per decade, world \+0\.35 °C per decade\.$/.test(k9.world.text) && k9.world.src === 'NOAA global land record', k9.world.text);
+  assert.ok(/^Since 1981: here −0\.014 °C per decade, world \+0\.35 °C per decade\.$/.test(k9.world.text) && k9.world.src === 'NOAA global land record', k9.world.text);
   assert.ok(!/×|÷/.test(s9[5].work[0]) && !/×/.test(s9[5].short) && s9[5].work.length === 1, s9[5].work[0]);
 });
 clean(S, sc);
@@ -1010,6 +1019,27 @@ def test_page_cm_equals_the_server_cm():
     page = [x.replace(" ", " ") for x in json.loads(r.stdout)]
     assert page == [_cm(m) for m in mm]
     assert page[mm.index(9)] == "+0.90 cm" and page[mm.index(1036)] == "+100 cm"
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_fahrenheit_readout_and_world_line_round_one_number():
+    """In °F (and inches) the card's rate and its world line convert the same number, slope_per_decade, and round it once to 2
+    significant figures: 0.365 °C a decade reads +0.66 °F in both (the world line converted local_rate's 0.36 to +0.65). A world
+    window shorter than the trend's keeps local_rate, its only source."""
+    js = PURE + r"""
+var t = { variable: 'air_temp', units: 'degC', verdict: 'rising', slope_per_decade: 0.365, ci_low: 0.3, ci_high: 0.43,
+  fit: { start: '1981-01', end: '2025-12' },
+  headline_rate: { value: 0.365, low: 0.3, high: 0.43, unit: '°C', per: 'per decade', text: '+0.37 °C per decade', range_text: '+0.30 to +0.43 °C per decade' },
+  world: { available: true, local_rate: 0.36, world_rate: 0.18, unit: '°C per decade', window: { start: '1981-01', end: '2025-12' },
+    ratio: 2.0, ratio_low: 1.7, ratio_high: 2.4, source: {} } };
+var t2 = JSON.parse(JSON.stringify(t)); t2.world.window.start = '1993-01';
+console.log(JSON.stringify([rate(t, true).text, rate(t, true).range, cardWorld(t, true).text, worldParts(t2, true).here]));
+"""
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert [x.replace(" ", " ") for x in json.loads(r.stdout)] == [
+        "+0.66 °F per decade", "+0.54 to +0.77 °F per decade",
+        "Over those years: here +0.66 °F per decade, world +0.32 °F per decade.", "+0.65 °F per decade"]
 
 
 def test_after_2100_note_wraps_at_the_visible_width():

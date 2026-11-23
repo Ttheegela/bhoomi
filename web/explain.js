@@ -95,8 +95,27 @@
   // A rate or a change in a rate's own unit (°C, mm, cm, %), with the Units setting.
   var RATE_K = { '°C': [1.8, '°F'], mm: [1 / 25.4, 'in'], cm: [1 / 2.54, 'in'] };
   function rconv(imp, x, u) { u = normU(u); var k = imp && RATE_K[u]; return k ? { v: x * k[0], unit: k[1] } : { v: x, unit: u }; }
+  // As the server rounds headline_rate (stats lane, sig2): a rate to 2 significant figures, half away from zero; a range's ends
+  // to the same decimals, enough that they differ and no non-zero end reads 0. The map's hover uses these too (map.js).
+  function pow10(x) { return +Math.abs(x).toExponential().split('e')[1]; } // the power of ten of the first digit
+  function inSteps(x, e) { return Math.floor(Number((Math.abs(x) * Math.pow(10, -e)).toPrecision(12)) + 0.5); } // |x| in steps of 10^e
+  function atE(x, e) {
+    var r = inSteps(x, e);
+    return r ? (x < 0 ? MINUS : '+') + (e < 0 ? (r / Math.pow(10, -e)).toFixed(-e) : String(r * Math.pow(10, e))) : '0';
+  }
+  function sig2Text(x) { return x ? atE(x, pow10(x) - 1) : '0'; }
+  function spanText(lo, hi) {
+    var m = Math.max(Math.abs(lo), Math.abs(hi)), e = m ? pow10(m) - 1 : 0;
+    var s = function (x) { return (x < 0 ? -1 : 1) * inSteps(x, e); };
+    while (e > -6 && ((lo !== hi && s(lo) === s(hi)) || (lo && !inSteps(lo, e)) || (hi && !inSteps(hi, e)))) e--;
+    return atE(lo, e) + ' to ' + atE(hi, e);
+  }
+  // a rate shown "a year" is a tenth of the API's rate per decade
+  function perDecade(per) { return /\ba year$/.test(per) ? 10 : 1; }
 
-  // The rate every view prints (headline_rate): its own text, or converted for the Units setting.
+  // The rate every view prints (headline_rate): its own text. In °F or inches the API's 4-decimal slope_per_decade, ci_low
+  // and ci_high, converted, then rounded once as above: never an already-rounded value converted (QA B2), so the card, the
+  // map's hover and the world line round the same numbers.
   function rate(t, imp) {
     var h = t.headline_rate;
     if (!h || typeof h.text !== 'string') { // null only for rain where the 1995-2014 average is zero: the rate in mm a day
@@ -106,10 +125,10 @@
         value: c(t.slope_per_decade), low: c(t.ci_low), high: c(t.ci_high), unit: cu, per: 'per decade' };
     }
     var u = normU(h.unit), per = str(h.per), k = imp && RATE_K[u];
-    if (k && isNum(h.value) && isNum(h.low) && isNum(h.high)) {
-      var f = function (x) { return fmtNum(x * k[0], true); };
-      return { text: withUnit(f(h.value), k[1]) + ' ' + per, range: f(h.low) + ' to ' + withUnit(f(h.high), k[1]) + ' ' + per,
-        value: h.value * k[0], low: h.low * k[0], high: h.high * k[0], unit: k[1], per: per };
+    if (k && isNum(t.slope_per_decade) && isNum(t.ci_low) && isNum(t.ci_high)) {
+      var d = perDecade(per), v = t.slope_per_decade / d * k[0], lo = t.ci_low / d * k[0], hi = t.ci_high / d * k[0];
+      return { text: withUnit(sig2Text(v), k[1]) + ' ' + per, range: withUnit(spanText(lo, hi), k[1]) + ' ' + per,
+        value: v, low: lo, high: hi, unit: k[1], per: per };
     }
     return { text: h.text, range: str(h.range_text), value: h.value, low: h.low, high: h.high, unit: u, per: per };
   }
@@ -133,8 +152,12 @@
   function worldParts(t, imp) {
     var w = t.world;
     if (!hasWorld(w)) return null;
-    var a = wconv(imp, w.local_rate, str(w.unit)), b = wconv(imp, w.world_rate, str(w.unit)), has = isNum(w.ratio) && clearV(t);
-    return { since: 'Since ' + Y(w.window.start), here: withUnit(fmtNum(a.v, true), a.unit), world: withUnit(fmtNum(b.v, true), b.unit),
+    // both rates to 2 significant figures, the API's own digits (sig2): -0.014, never fmtNum's -0.01. In °F or inches, over the
+    // trend's own months the local rate is the trend's slope: slope_per_decade converted and rounded once, as rate() does, so
+    // the world line and the readout agree; else local_rate, its only source
+    var u = str(w.unit), fit = t.fit || {}, own = imp && isNum(t.slope_per_decade) && w.window.start === fit.start && w.window.end === fit.end;
+    var a = wconv(imp, own ? t.slope_per_decade / perDecade(u) : w.local_rate, u), b = wconv(imp, w.world_rate, u), has = isNum(w.ratio) && clearV(t);
+    return { since: 'Since ' + Y(w.window.start), here: withUnit(sig2Text(a.v), a.unit), world: withUnit(sig2Text(b.v), b.unit),
       ratio: has ? ratioText(w.ratio) + '×' : '', range: has && isNum(w.ratio_low) && isNum(w.ratio_high) ? ratioText(w.ratio_low) + ' to ' + ratioText(w.ratio_high) : '',
       a: a.v, b: b.v };
   }
@@ -174,11 +197,12 @@
 
   // The answer card's words and readouts (section 3).
   function oldAnswer(t) { return !t.fit || !t.baseline; }
-  // The measured level today (trend.now), never the end of the trend line: its own text, converted only for the Units setting.
+  // The measured level today (trend.now), never the end of the trend line: its own text, converted only for the Units setting
+  // (a share in % has no unit to convert: its own text in inches too).
   function nowOf(t, imp) {
     var nw = t.now;
     if (!nw || typeof nw.text !== 'string' || !str(nw.label)) return null;
-    return { value: imp && isNum(nw.value) ? F(t, imp).val(nw.value, nw.units) : nw.text, label: nw.label, rain: nw.kind === '12-month total' };
+    return { value: imp && isNum(nw.value) && nw.units !== '%' ? F(t, imp).val(nw.value, nw.units) : nw.text, label: nw.label, rain: nw.kind === '12-month total' };
   }
   // sel: the emissions scenario on screen ({ssp, low}; ssp null is the default); today: the current month (tests set it)
   function card(t, imp, sel, today) {
@@ -1304,6 +1328,6 @@
   // redraw a chart when its box changes width
   function redraw() { charts.forEach(function (c) { if (Math.round(c.box.clientWidth) !== c.W) draw(c); }); }
 
-  window.TDX = { show: show, redraw: redraw, card: function (t, imp) { return card(t, imp, SEL); }, rate: rate, worldParts: worldParts, srcText: srcText, recordUrl: recordUrl,
+  window.TDX = { show: show, redraw: redraw, card: function (t, imp) { return card(t, imp, SEL); }, rate: rate, sig2Text: sig2Text, spanText: spanText, worldParts: worldParts, srcText: srcText, recordUrl: recordUrl,
     csvCompare: csvCompare, download: download, Mo: Mo, Y: Y, conv: conv, metric: metric, modelNote: modelNote, projOf: projOf };
 })();
