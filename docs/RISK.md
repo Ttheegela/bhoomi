@@ -47,7 +47,7 @@ One plain sentence with its uncertainty in it. It uses only numbers already in `
    - Mumbai: "Rising about 0.94 mm a year (1878 to 2024; 95% range +0.7 to +1.2 mm a year)."
    - Hottest day of the month, the same template with no world clause: "Falling about 0.25 °C per decade (1981 to 2025; 95% range −0.48 to −0.02 °C per decade)."
    - Rainfall reads its share of the usual rain, and its range drops the per that the rate's words already say: "Rising about 5.5% of the usual yearly rain every 10 years (1981 to 2025; 95% range +0.4 to +10.7%)."
-   - Rainfall under 100 mm a year (`world.why_none` "Rain here is too scarce for a percentage rule.") is the same sentence: the rate as the headline shows it.
+   - Rainfall under 100 mm a year (`world.why_none` "Rain here averages under 100 mm a year, so a small change in millimetres is a large percentage.") is the same sentence: the rate as the headline shows it.
    - A direct caller with no `headline_rate` gets the verdict word and the years only ("Rising (1990 to 2025).").
 
 ### `look_next`: where to look next
@@ -101,7 +101,7 @@ A record of 20 to 29 years is shown with `record.status` "short" and the caveat 
    - n/n* = max(f₁, variance ratio, 1) × max(f₂, 1). Yearly values (rainfall totals) use max(f₁, 1).
    - In the simulation this covered 95–99% of AR(1) and white-noise series, and 88–91% of tide-gauge-like ones.
 4. The p-value and the 95% range of Sen's slope (Gilbert's rank method) both use that same corrected variance. `autocorrelation_adjusted` is true when the factor is above 1. `explain.real.widened` is true only when the factor (on the variance) is 1.2 or more, which widens the range by about 10%. So the page never says "we widened the range" about a 1% change.
-5. `headline_rate` and `fit.change` are computed from the unrounded slope, range and span. Only the shown numbers are rounded.
+5. `headline_rate` is computed from `slope_per_decade`, `ci_low` and `ci_high` as shown (4 decimals), so its text, its range, `guidance.rate` and the fact all round the same numbers: a slope of −10.5 cm per decade reads "−1.1 cm of water a year", never "−1.0" from an unrounded −10.499996. `fit.change` is the unrounded slope times the unrounded span, rounded once.
 6. **The trend line** has Sen's slope and passes through the mean of the anomalies at their mean time (not the median: domain review F1), on the same footing as the mean baseline. `fit.level_end` is that line at the last fitted month.
 7. **`now`** is measured, never read off the line. It is the mean of the anomalies in the 12 calendar months to the last fitted month (preliminary values left out), when at least 10 of them have a value (`n`).
    - Rainfall: their day-weighted mean, the 12-month total's departure from the usual total as % of the 1995–2014 annual normal (`kind` "12-month total").
@@ -168,7 +168,7 @@ For rainfall the big number is the share of this place's 1995–2014 average rai
 `world.text` states facts only (design review, 2026-11-22: no level rule anywhere):
 - air_temp: "Over the same years, the average for all land areas warmed {world} °C per decade. Here: {here} °C per decade."
 - sea_level: "Over the same months, {first year} to {last year}, global average sea level measured by satellites rose {world} mm a year. Here: {here} mm a year."
-- precip, water_storage, air_temp_max: null; `why_none` says why there is no world figure. Where the 1995–2014 annual normal is under 100 mm, rain's `why_none` is "Rain here is too scarce for a percentage rule." The old own-place rule sentences ("… is high; 5 to 10% is moderate") are gone, and rain's "It covers total rain, not heavy downpours or floods." is a caveat.
+- precip, water_storage, air_temp_max: null; `why_none` says why there is no world figure. Where the 1995–2014 annual normal is under 100 mm, rain's `why_none` is "Rain here averages under 100 mm a year, so a small change in millimetres is a large percentage." The old own-place rule sentences ("… is high; 5 to 10% is moderate") are gone, and rain's "It covers total rain, not heavy downpours or floods." is a caveat.
 
 ## Future map link (`future_link`)
 
