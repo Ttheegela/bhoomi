@@ -13,7 +13,8 @@ from earthtrends.agent import guidance as agent_guidance
 from earthtrends.agent import loop, resources
 from earthtrends.stats import compute_trend, guidance, trend
 from earthtrends.stats.baseline import baseline
-from earthtrends.stats.guidance import DISCLAIMER, DISCLAIMER_PROJECTION, SCARCE, guidance_for
+from earthtrends.stats.guidance import DISCLAIMER, DISCLAIMER_PROJECTION, guidance_for
+from earthtrends.stats.trend import SCARCE
 
 UNITS = {"sea_level": "mm", "air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "water_storage": "cm"}
 KEYS = ["fact", "ratio", "reference", "rate", "display", "look_next", "future_link", "disclaimer"]

@@ -19,10 +19,6 @@ DISPLAY = {"sea_level": ("cm", "0.1"), "air_temp": ("°C", "1"), "air_temp_max":
 RATE = {"sea_level": ("mm", "0.1", "a year"), "water_storage": ("cm", "0.1", "of water a year")}
 MIN_YEARS = {"water_storage": 10}  # years of record to state a fact, as D6's trend minimum (GRACE 10)
 MIN_YEARS_OTHER = 20
-# trend.py's headline_rate shows a rain range end on or across these the way the share is worked out here
-RAIN_THRESHOLDS = (5, 10)
-RAIN_MIN_MM = 100  # a 1995-2014 annual normal under this many mm a year: world.why_none says so (trend.py)
-SCARCE = "Rain here is too scarce for a percentage rule."
 
 THAN = {"sea_level": "the world average", "air_temp": "the average for all land areas"}
 RAIN = "of the usual yearly rain every 10 years"  # rainfall's fact words for headline_rate's per

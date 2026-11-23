@@ -494,13 +494,14 @@ def test_temperature_world_method_names_the_method_then_the_kinds_of_record(refs
 
 # ---- headline_rate: the rate in the reader's unit ----
 
-def test_headline_rate_and_fit_use_the_unrounded_slope_and_span():
+def test_headline_rate_uses_the_shown_slope_and_fit_the_unrounded_slope_and_span():
     # an annual straight line: Sen's slope is exactly 4.436e-5 a year, shown as 0.0004 per decade (4 decimals)
     years = np.arange(1981, 2021)
     s = {"variable": "air_temp_max", "units": "degC", "freq": "annual", "place": {"name": "X"}, "source": POWER,
          "times": [str(y) for y in years], "values": list(4.436e-5 * (years - 1981)), "notes": []}
     r = compute_trend(s)
-    assert r["slope_per_decade"] == 0.0004 and r["headline_rate"]["value"] == 0.000444  # not 0.0004 rounded again
+    # the headline rounds the slope_per_decade it sits beside (coordinator, 2026-11-22), so the two never disagree
+    assert r["slope_per_decade"] == 0.0004 and r["headline_rate"]["value"] == 0.0004
     assert r["fit"]["change"] == round(4.436e-5 * 40, 4)  # slope x 40 years, rounded once to 4 decimals
     # 291 months (2002-04 to 2026-06, like GRACE): the span is 24.25 years, shown as 24.2
     g = compute_trend(ts(synth(25, start=2002, per_decade=-44, sd=1, level=0.0)[3:294], start=2002,
@@ -509,6 +510,47 @@ def test_headline_rate_and_fit_use_the_unrounded_slope_and_span():
     f = g["fit"]
     assert f["years"] == 24.2 and f["change"] == pytest.approx(g["slope_per_decade"] / 10 * 24.25, abs=1e-3)
     assert abs(f["change"] - g["slope_per_decade"] / 10 * 24.2) > 0.1  # the rounded span would be off by about 0.2
+
+
+PSMSL_SRC = {"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"}
+
+
+@pytest.mark.parametrize("var,per_year,level,source,want", [
+    ("water_storage", -1.0499996, 0.0, GRACE, "−1.1 cm of water a year"),  # at (33.0, -103.46): slope -10.5, not "-1.0"
+    ("sea_level", 5.549996, 7000.0, PSMSL_SRC, "+5.6 mm a year"),  # Tolchester Beach: 55.5 a decade, not "+5.5"
+])
+def test_headline_rate_rounds_the_shown_slope(monkeypatch, var, per_year, level, source, want):
+    """A slope whose unrounded and 4-decimal values round differently at 2 significant figures: the headline, its
+    range, guidance.rate and the fact all take slope_per_decade, ci_low and ci_high as shown."""
+    lo, hi = sorted((per_year * 0.9, per_year * 1.1))
+    monkeypatch.setattr(trend, "_mk_sen", lambda t, x, k: (per_year, lo, hi, 0.001, False, False, 0.0))
+    r = compute_trend(ts(synth(25, start=2002, level=level, sd=1), start=2002, variable=var, source=source))
+    h, g = r["headline_rate"], r["guidance"]
+    assert r["slope_per_decade"] == round(per_year * 10, 4) and h["text"] == want
+    assert f"{g['rate']['text']} {g['rate']['per']}" == want  # the card's rate and the headline agree
+    assert h["range_text"] == trend._headline_rate(var, UNITS[var], (r["slope_per_decade"], r["ci_low"], r["ci_high"]),
+                                                   None)["range_text"]
+    if not r["world"]["available"]:  # water storage: the fact states the same number, without its sign
+        assert g["fact"].startswith(f"Falling about {want.lstrip('+−')} (2002 to 2026; 95% range ")
+
+
+def test_headline_text_is_the_shown_slope_rounded():
+    """headline_rate.text is slope_per_decade (over 10 for the rates read a year) to 2 significant figures; rainfall,
+    its share of the 1995-2014 average as guidance.rate shows it."""
+    fix = Path(__file__).parent / "fixtures" / "rework"
+    for f in sorted(fix.glob("*.json")):
+        if f.stem == "variables":
+            continue
+        s = {k: v for k, v in json.loads(f.read_text())["series"].items() if k != "anomaly"}
+        r = compute_trend(s)
+        slope, var = Decimal(repr(r["slope_per_decade"])), r["variable"]
+        if var == "precip":
+            shown = trend._rain_share(r["slope_per_decade"], r["baseline"]["value"]).copy_sign(slope)
+        else:
+            shown = sig2(slope / 10 if var in ("sea_level", "water_storage") else slope)
+        assert r["headline_rate"]["text"].split()[0].removesuffix("%") == trend._signed0(shown + 0), f.stem
+        if r["guidance"]["rate"]:  # a clear change: the card's rate is the same number
+            assert r["guidance"]["rate"]["text"].split()[0].removesuffix("%") == trend._signed0(shown + 0), f.stem
 
 
 def test_headline_rate_matches_the_contract_example():
