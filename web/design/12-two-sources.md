@@ -33,6 +33,7 @@ Pictures: `rework-pr4-records-design/` in the side-session notes (static mock, "
 .where    h2#rec-h {pin.label}
           p.meta   {main src} ↗ · {latest.text}[ ({months} preliminary)]          §7
 .verdict  {▲|▼|≈} {word}   {conf}[ · <a href="#rec-oth">Other records disagree ↓</a>]
+[p.one     {thin_note}]                                                            domain review 2026-11-23
 [p.one     {single_note}]                                                          domain review 2026-11-23
 p.say · p.world · .reads R1|R2|R3                                                   main record, unchanged
 .oth      Records for this place                                                    new
@@ -85,6 +86,7 @@ p.dn  "The records can't tell us which of these reasons applies here, so we show
 | Station too short (`status` "short") | "Weather station ↗" and "{name}, {km} km away". Spanning cell `why`, e.g. "This station has fewer than 30 years of daily rain data since 1981, and no other station within 25 km does either." |
 | One record couldn't be read (`status` "error") | Its spanning cell: "We couldn't read this record just now." Under the table, a button "Try the other records again". |
 | Fewer than two counted rows (ERA5 down, station thin or missing, any mix) | Rows only; `disagree` is null, so there is no line and no reasons. Under `.verdict`, `p.one` (15 px `--ink-2`, margin 4 px 0 10 px, so it reads as a note on the verdict, not the start of `p.say`) prints `single_note` verbatim, e.g. "Only one record could be compared here, so this answer rests on a single weather model." The verdict stays as it is. When the records land, the block's status message reads `single_note` instead of "The other records have loaded." |
+| Main record thin (a station picked as main, `thin_note` set) | A `p.one` like the one above, printing `thin_note`, placed before the `single_note` line when both are set. The status message reads `thin_note`, then `disagree.line` or `single_note`, joined with a space. |
 - The block's arrival never moves focus. A re-render that removes a focused retry button sends focus to `h3#rec-oth`. The card's `aria-busy` is false once the main record is drawn.
 
 ## 6. Sidebar "Main record"
