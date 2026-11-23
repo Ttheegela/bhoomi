@@ -422,7 +422,7 @@ NY = {"variable": "sea_level", "lat": 40.70, "lon": -74.01}
 
 def seen(m):
     """A module's SOURCE as the model reads it (loop.SOURCE_FIELDS): id, name and url, never licence or credit."""
-    return {k: m.SOURCE[k] for k in loop.SOURCE_FIELDS}
+    return {k: m.SOURCE[k] for k in loop.SOURCE_FIELDS if k in m.SOURCE}  # limit is passed only when set
 
 
 NY_COOPS = {"variable": "sea_level", "units": "mm", "place": {"name": "The Battery", "lat": 40.7, "lon": -74.01},
