@@ -1,6 +1,7 @@
 """The CMIP6 expert projection for air temperature, hottest day and rain (earthtrends/stats/projection.py `cmip6`,
 docs/CONTRACTS.md "CMIP6 expert projection (PR3)"), offline: the rework fixtures' synthetic series and the committed
 Atlas file (earthtrends/data/cmip6_atlas.npz). "Today" is pinned to 2026-11-22, as in test_projection.py."""
+import gzip
 import json
 from pathlib import Path
 
@@ -8,14 +9,18 @@ import pytest
 
 from earthtrends.agent import tools
 from earthtrends.data import cmip6 as atlas
+from earthtrends.data import era5, ghcn
 from earthtrends.stats import compute_trend, projection
 from earthtrends.stats.guidance import DISCLAIMER, DISCLAIMER_PROJECTION
 
-RW = Path(__file__).parent / "fixtures" / "rework"
+FX = Path(__file__).parent / "fixtures"
+RW = FX / "rework"
 KEYS = ["available", "kind", "source", "location", "baseline", "units", "change_kind", "windows", "default_scenario",
-        "scenarios", "readouts", "caveat", "why"]
+        "scenarios", "readouts", "caveat", "models_note", "baseline_record", "why"]
 SPREAD = "range across climate models (10th–90th percentile)"
 GRID = "A 1° grid cell is about 100 km wide, so hills or a coast nearby can make the change here differ."
+RAW = ("These are the climate models' raw results. The IPCC's assessed warming, which also uses past observations, "
+       "is a little lower for the world as a whole.")
 
 
 def series(name: str, **place) -> dict:
@@ -34,6 +39,7 @@ def test_princeton_air_temperature():
     assert list(p) == KEYS and (p["available"], p["kind"], p["why"]) == (True, "cmip6_atlas", None)
     assert p["location"] == {"kind": "land cell", "lat": 40.5, "lon": -74.5, "km": 21, "land_pct": 100, "note": None}
     assert (p["units"], p["change_kind"], p["default_scenario"], p["caveat"]) == ("degC", "difference", "ssp245", GRID)
+    assert p["models_note"] == RAW and p["baseline_record"] == {"id": "power", "name": "NASA POWER (MERRA-2)"}
     assert p["baseline"] == {"text": "the 1995–2014 average", "years": [1995, 2014]}
     assert p["windows"] == [{"start": 2021, "end": 2040, "mid": 2030}, {"start": 2041, "end": 2060, "mid": 2050},
                             {"start": 2081, "end": 2100, "mid": 2090}]
@@ -66,7 +72,7 @@ def test_delhi_hottest_day():
     p = t["projection"]
     s = next(s for s in p["scenarios"] if s["id"] == "ssp245")
     assert (s["p50"][1], s["models"][1], s["agree"]) == (1.26, 27, None)
-    assert (p["units"], p["change_kind"], p["caveat"]) == ("degC", "difference", GRID)
+    assert (p["units"], p["change_kind"], p["caveat"], p["models_note"]) == ("degC", "difference", GRID, RAW)
     r = p["readouts"]
     assert r["by_2050"]["text"] == "+1.3 °C (range across climate models +0.5 to +1.8 °C)"
     assert r["more_than_today"] == {"value": 0.75, "text": "about 0.75 °C more than today", "approximate": True}
@@ -76,7 +82,8 @@ def test_delhi_hottest_day():
 def test_chennai_rain_models_disagree_on_wetter_or_drier():
     t = compute_trend(series("chennai_rain"))
     p = t["projection"]
-    assert (p["units"], p["change_kind"]) == ("%", "percent")
+    assert (p["units"], p["change_kind"], p["models_note"]) == ("%", "percent", None)  # the note is about warming
+    assert p["baseline_record"] == {"id": "power", "name": "NASA POWER (MERRA-2)"}
     assert p["caveat"] == ("Climate models disagree more about rain than about temperature, and a 1° grid cell is "
                            "about 100 km wide, so hills or a coast nearby can make the change here differ.")
     s = next(s for s in p["scenarios"] if s["id"] == "ssp245")
@@ -162,3 +169,20 @@ def test_a_window_keeps_the_whole_records_now_and_projection(monkeypatch):
     assert part["period"]["end"] == "2010-12" and whole["period"]["end"] == "2025-12"
     assert part["now"] == whole["now"] == part["projection"]["readouts"]["now"] and part["now"]["end"] == "2025-12"
     assert part["projection"] == whole["projection"] and part["projection"]["available"] is True
+
+
+@pytest.mark.parametrize("source, name", [("era5", "ERA5 reanalysis via Open-Meteo archive"),
+                                          ("ghcn", "NOAA NCEI GHCN-Daily")])
+def test_baseline_record_is_the_requests_own_record(monkeypatch, source, name):
+    """Delhi's hottest day from ERA5 and from the Safdarjung station (offline fixtures): the projection names the
+    record whose 1995-2014 mean it starts from, whichever source the request used, never a fixed dataset."""
+    gz = lambda f: json.loads(gzip.decompress((FX / f).read_bytes()))  # noqa: E731
+    monkeypatch.setattr(era5, "fetch", lambda p, la, lo: gz("era5_daily_tmax_delhi.json.gz"))
+    monkeypatch.setattr(ghcn, "search", lambda la, lo, types: ghcn.parse_search(json.loads(
+        (FX / "ghcn_search_delhi.json").read_text())))
+    monkeypatch.setattr(ghcn, "fetch", lambda sid, types: gz("ghcn_daily_tmax_safdarjung.json.gz"))
+    t = tools.detect_trend("air_temp_max", 28.58, 77.21, source=source)
+    p = t["projection"]
+    assert p["available"] is True and t["source"]["id"] == source
+    assert p["baseline_record"] == {"id": source, "name": name} == {k: t["source"][k] for k in ("id", "name")}
+    assert p["models_note"] == RAW

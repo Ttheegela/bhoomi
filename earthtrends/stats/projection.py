@@ -47,7 +47,7 @@ SOURCE_NAME = "IPCC AR6 sea level projections (Garner et al. 2021)"
 CMIP6_VARIABLES = tuple(atlas.VARIABLES)  # air_temp, air_temp_max, precip
 CMIP6_SOURCE = {"name": "IPCC AR6 Interactive Atlas, CMIP6 projections", "version": "v2.0-final", "licence": "CC BY 4.0"}
 CMIP6_KEYS = ("kind", "source", "location", "baseline", "units", "change_kind", "windows", "default_scenario",
-              "scenarios", "readouts", "caveat")
+              "scenarios", "readouts", "caveat", "models_note", "baseline_record")
 CMIP6_DEFAULT = "ssp245"
 CODES = {"ssp126": "SSP1-2.6", "ssp245": "SSP2-4.5", "ssp370": "SSP3-7.0", "ssp585": "SSP5-8.5"}
 SPREAD = "range across climate models (10th–90th percentile)"
@@ -60,6 +60,10 @@ CELL_NOTE = {"land cell": None,
              "regional estimate (mostly ocean cell)": "The models' grid cell here is mostly ocean, which warms less "
                                                       "than land."}
 GRID_CAVEAT = "A 1° grid cell is about 100 km wide, so hills or a coast nearby can make the change here differ."
+# temperature and hottest day (domain review of the PR3 design): the Atlas's raw CMIP6 ensemble runs warmer than AR6's
+# assessed warming
+MODELS_NOTE = ("These are the climate models' raw results. The IPCC's assessed warming, which also uses past "
+               "observations, is a little lower for the world as a whole.")
 RAIN_CAVEAT = ("Climate models disagree more about rain than about temperature, and a 1° grid cell is about 100 km "
                "wide, so hills or a coast nearby can make the change here differ.")
 
@@ -266,6 +270,9 @@ def cmip6(series: dict, base: dict, now: dict | None) -> dict:
                         "disagree": d["disagree"][w] if rain else None},
             "more_than_today": more},
         "caveat": RAIN_CAVEAT if rain else GRID_CAVEAT,
+        "models_note": None if rain else MODELS_NOTE,
+        # the record whose observed 1995-2014 mean the delta method starts from: this answer's own, whichever it is
+        "baseline_record": {k: (series.get("source") or {}).get(k) for k in ("id", "name")},
         "why": None,
     }
 
