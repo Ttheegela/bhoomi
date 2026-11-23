@@ -796,6 +796,18 @@ assert.deepStrictEqual(boxes(CASES.power), [FUT]);
 var cd = wordsNode({ cite: PACK.citation, head: 'How to cite the records' });
 assert.ok(cd.tagName === 'DETAILS' && cd.a['class'] === 'cite' && !cd.open && cd.kids[0].textContent === 'How to cite the records' && cd.kids[1].textContent === PACK.citation[0], cd.textContent);
 assert.strictEqual(wordsNode({ cite: ['x'] }).kids[0].textContent, 'How to cite the projections');
+// the pack's record_url is the DOI page: its links in step 1 and step 10 open the dataset; exact records keep their label
+function opens(d) { var S = steps(d.trend, d.series, pc);
+  return [S[0].link.text].concat(S[S.length - 1].words[0].list.filter(function (x) { return /^(Records|Other record): /.test(x.text); }).map(function (x) { return x.link && x.link.text; })); }
+var DS = 'Open the dataset ↗', EX = 'Open this exact record ↗';
+assert.deepStrictEqual(opens(CASES.pack), [DS, DS, EX, EX]); // step 1, Records (the pack), Other records (NASA POWER, the station)
+assert.deepStrictEqual(opens(CASES.powerPack), [EX, EX, DS, EX]); // the pack as another record
+assert.deepStrictEqual(opens(CASES.om), [EX, EX, EX, EX]);
+assert.deepStrictEqual(opens(CASES.power), [EX, EX, EX, EX]);
+var G = load('grace_water_storage'); // a record_url that is the source's own page is the dataset too
+assert.ok(G.trend.source.record_url === G.trend.source.url && steps(G.trend, G.series, { label: 'Here', name: 'Water storage', slug: 'water-storage', imperial: false })[0].link.text === DS);
+var pr = recBlock(CASES.pack.trend, pc).rows[0]; // the records table keeps the record's name on its link
+assert.ok(pr.main && pr.label === 'ERA5' && pr.href === PACK.record_url, JSON.stringify(pr));
 var REC = 'Other record: NASA POWER (MERRA-2), NASA POWER monthly point data, parameter T2M (MERRA-2). Retrieved 22 November 2026. ' + P.trend.source.record_url;
 // the pack: named by its own block with its licence (as the projection's), no Open-Meteo anywhere, the Copernicus line once
 var s = sources(CASES.pack), h = head(CASES.pack);
