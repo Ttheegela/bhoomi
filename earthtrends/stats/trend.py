@@ -13,6 +13,7 @@ from earthtrends.stats.baseline import MONTH_DAYS, YEAR_MONTHS, baseline, column
 from earthtrends.stats.guidance import DISPLAY, guidance_for, q, sig2, signed
 from earthtrends.stats.guidance import ends as range_ends
 from earthtrends.stats.meaning import UNITS, meaning_for
+from earthtrends.stats.plain import check_text, plain_lines, scenario_lines
 from earthtrends.stats.projection import CMIP6_VARIABLES, cmip6 as _cmip6_projection, sea_level as _sea_level_projection
 
 MIN_DAYS_PER_MONTH = 20
@@ -201,6 +202,13 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
         "caveats": caveats,
     }
     result["meaning"] = meaning_for(result)
+    proj = result["projection"]
+    if proj.get("available"):  # the plain lines (PR6): every scenario row, and sea level's check sentence
+        for row in proj["scenarios"]:
+            row["plain"] = scenario_lines(var, proj, row)
+        if "check" in proj:
+            proj["check"]["text"] = check_text(proj["check"])
+    result["plain"] = plain_lines(result)
     try:
         result["guidance"] = guidance_for(result, base["value"])
     except Exception:  # guidance must never sink a result: fall back to the "no guidance rule" object

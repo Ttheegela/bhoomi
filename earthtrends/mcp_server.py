@@ -6,7 +6,7 @@ import httpx
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from earthtrends.agent import tools
+from earthtrends.agent import projection_answer, tools
 
 try:
     VERSION = importlib.metadata.version("bhoomi")
@@ -92,6 +92,8 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
     slope_per_decade (in `units` per decade, e.g. degC per decade or mm per decade), ci_low, ci_high,
     p_value, autocorrelation_adjusted, verdict, source {id, name, url}, caveats, and meaning: four plain-language
     strings computed from the result (headline, confidence, comparison, limit) for readers who are not analysts.
+    It also carries plain: two or three short lines for the public. Start with meaning.headline, then plain, word for
+    word.
     It also carries guidance: fact (one sentence on what the records show), look_next (where to look next: labels,
     with a url or null) and disclaimer. These are facts, not advice: pass them on as given, and give no risk level
     or recommendation of your own.
@@ -109,6 +111,27 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
     """
     with _as_tool_error():
         return tools.detect_trend(variable, lat, lon, start, end, source)
+
+
+PROJECTION_DESCRIPTION = (
+    "What experts project for a place: IPCC AR6 sea-level projections at the nearest tide gauge, or IPCC AR6 Atlas "
+    "(CMIP6) climate-model projections for air temperature, the hottest day of the month and rain. Water storage has "
+    "none. Start your answer with the strings in `plain`, word for word and in order: what is projected, how sure the "
+    "experts are, and what it means day to day; they are written for the public and every number in them is in this "
+    "result. Use the other fields only if the user wants more: typical, likely_range (sea level only: about a 2 in 3 "
+    "chance, medium confidence), model_range (temperature and rain: how much climate models agree, never a chance or "
+    "'likely'), high_end, today_level, scenario. Give details (quantiles, the parts of sea-level rise, provenance) "
+    "only when asked. Name the source (details.source.name and record_url) and end with disclaimer. These are "
+    "projections that depend on the world's emissions, not predictions. State no number that is not in this result, "
+    "and give no advice: no 'you should', no buy, build, move or avoid, no risk level. To say whether the records "
+    "show a change, use detect_trend.")
+
+
+@mcp.tool(description=PROJECTION_DESCRIPTION)
+def get_projection(variable: str, lat: float, lon: float, scenario: str | None = None, year: int | None = None,
+                   source: str | None = None) -> dict:
+    with _as_tool_error():
+        return projection_answer.get_projection(variable, lat, lon, scenario, year, source)
 
 
 def main() -> None:
