@@ -1,6 +1,6 @@
 import gzip
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import httpx
@@ -1354,6 +1354,23 @@ def test_era5_recent_months_are_preliminary(monkeypatch):
     monkeypatch.setattr(era5, "fetch", lambda p, la, lo: {"daily": {"time": days, "temperature_2m_max": [30.0] * len(days)}})
     monkeypatch.setattr(upstream, "utc_today", lambda: "2026-12-05")
     assert data.get_series("air_temp_max", 28.61, 77.21, source="era5")["flags"] == [None, "preliminary"]
+
+
+@pytest.mark.parametrize("today, end", [("2026-11-23", "2026-10-31"), ("2027-01-03", "2026-12-31"), ("2028-03-01", "2028-02-29")])
+def test_era5_runs_through_the_latest_complete_month(monkeypatch, today, end):
+    class Day(date):
+        @classmethod
+        def today(cls):
+            return date.fromisoformat(today)
+    monkeypatch.setattr(era5, "date", Day)
+    assert era5.request_url("temperature_2m_max", 28.61, 77.21).endswith(f"&start_date=1981-01-01&end_date={end}")
+    # fetched on that day: the last 3 complete months may still hold ERA5T days, so they are flagged
+    days = [(date(2024, 1, 1) + timedelta(n)).isoformat() for n in range((date.fromisoformat(end) - date(2024, 1, 1)).days + 1)]
+    monkeypatch.setattr(era5, "fetch", lambda p, la, lo: {"daily": {"time": days, "temperature_2m_max": [30.0] * len(days)}})
+    monkeypatch.setattr(upstream, "utc_today", lambda: today)
+    s = data.get_series("air_temp_max", 28.61, 77.21, source="era5")
+    assert s["times"][-1] == end[:7] and s["flags"][-4:] == [None, "preliminary", "preliminary", "preliminary"]
+    assert f"end_date={end}" in s["source"]["record_url"]
 
 
 def test_retrieved_is_the_first_fetch_date(counted, monkeypatch):

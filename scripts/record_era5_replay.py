@@ -1,10 +1,11 @@
 """Record ERA5 series for offline replay (BHOOMI_ERA5_REPLAY, see earthtrends/data/era5.py). Run by hand:
 
-  uv run python scripts/record_era5_replay.py [folder]   (default tests/fixtures/era5_replay)
+  uv run python scripts/record_era5_replay.py [folder] [app]   (defaults tests/fixtures/era5_replay, https://bhoomi.earth)
 
-Nothing here calls Open-Meteo: every series comes from the production app's /api/series, which fetches ERA5 from
-Open-Meteo server-side. Production returns monthly values, not Open-Meteo's daily reply, so the monthly series is
-what is recorded, and era5.replay() feeds it back through the same parse and daily-to-monthly path.
+Nothing here calls Open-Meteo: every series comes from the app's /api/series, which fetches ERA5 from Open-Meteo
+server-side. The app returns monthly values, not Open-Meteo's daily reply, so the monthly series is what is recorded,
+and era5.replay() feeds it back through the same parse and daily-to-monthly path. The span is the app's: a deployment
+running this code gives 1981 to the latest complete month; one running older code may stop at last December.
 Requests are at least GAP_S apart; a 429 or 502 waits and tries again (see get()). Every file of one run carries the run's UTC date
 as `retrieved` (a replay folder has one recording date). Production may answer from its own cache (12 h in the app,
 1 h at the CDN), so its Open-Meteo fetch can be up to about a day before that date.
@@ -20,7 +21,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from earthtrends.data import era5, upstream  # noqa: E402
 
-API = "https://bhoomi.earth/api/series"
+APP = "https://bhoomi.earth"
 OUT = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "era5_replay"
 GAP_S = 5.0  # 2 s gave a 502 after 7 requests: each one is 45 years of daily data for production's Open-Meteo quota
 VARIABLES = ("air_temp", "air_temp_max", "precip")
@@ -36,10 +37,10 @@ PLACES = [
 ]
 
 
-def get(client: httpx.Client, params: dict) -> httpx.Response:
+def get(client: httpx.Client, api: str, params: dict) -> httpx.Response:
     """A 429 waits for its Retry-After; a 502 (production could not reach Open-Meteo, often its rate limit) waits longer each time."""
     for i in range(5):
-        r = client.get(API, params=params)
+        r = client.get(api, params=params)
         if r.status_code not in (429, 502):
             r.raise_for_status()
             return r
@@ -49,7 +50,9 @@ def get(client: httpx.Client, params: dict) -> httpx.Response:
     sys.exit(f"Still failing after 5 tries: {params}")
 
 
-def main(out: Path) -> None:
+def main(out: Path, app: str) -> None:
+    if "open-meteo" in httpx.URL(app).host:
+        sys.exit("Record through the app, never from Open-Meteo directly.")
     out.mkdir(parents=True, exist_ok=True)
     retrieved = upstream.utc_today()
     with httpx.Client(timeout=120, follow_redirects=True) as client:
@@ -57,9 +60,10 @@ def main(out: Path) -> None:
             lat, lon = round(lat, 2) + 0.0, round(lon, 2) + 0.0  # get_series' rounding: the replay key
             for variable in VARIABLES:
                 path = out / era5.replay_name(variable, lat, lon)
-                if path.is_file() and json.loads(gzip.decompress(path.read_bytes()))["retrieved"] == retrieved:
+                old = json.loads(gzip.decompress(path.read_bytes())) if path.is_file() else {}
+                if old.get("retrieved") == retrieved and old["via"].startswith(app + "/"):
                     continue  # a rerun the same day only fetches what is missing
-                r = get(client, {"variable": variable, "lat": lat, "lon": lon, "source": "era5"})
+                r = get(client, f"{app}/api/series", {"variable": variable, "lat": lat, "lon": lon, "source": "era5"})
                 s = r.json()
                 if s["source"]["id"] != "era5" or [s["place"]["lat"], s["place"]["lon"]] != [lat, lon] or len(s["times"]) != len(s["values"]):
                     sys.exit(f"Unexpected reply for {variable} at {lat}, {lon}: {str(s)[:200]}")
@@ -71,4 +75,4 @@ def main(out: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]) if len(sys.argv) > 1 else OUT)
+    main(Path(sys.argv[1]) if len(sys.argv) > 1 else OUT, sys.argv[2].rstrip("/") if len(sys.argv) > 2 else APP)

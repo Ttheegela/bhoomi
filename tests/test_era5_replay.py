@@ -39,6 +39,7 @@ def test_preliminary_months_survive_replay(tmp_path, monkeypatch, offline):
     s = data.get_series("air_temp_max", 28.61, 77.21, source="era5")
     assert era5.PRELIMINARY_MONTHS == 3 and s["flags"] == [None] * 21 + ["preliminary"] * 3
     assert s["values"] == values and s["source"]["retrieved"] == "2027-01-15"
+    assert "end_date=2026-12-31" in s["source"]["record_url"]  # the request made then: through its last recorded month
     monkeypatch.delenv(era5.REPLAY)
     assert set(era5.flags(times, "2027-06-01")) == {None}  # a live fetch that day would flag nothing
 

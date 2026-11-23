@@ -3,7 +3,7 @@ import calendar
 import gzip
 import json
 import os
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import httpx
@@ -40,20 +40,26 @@ def parse(resp: dict, param: str) -> tuple[list[str], list[float | None]]:
     return list(daily["time"]), list(daily[param])
 
 
-def request_url(param: str, lat: float, lon: float, year: int | None = None) -> str:
-    """The exact request fetch() makes in `year` (default this year), no key in it; it is also the series' record_url."""
+def month_end(t: str) -> str:
+    """"2026-02" -> "2026-02-28"."""
+    return f"{t}-{calendar.monthrange(int(t[:4]), int(t[5:7]))[1]:02d}"
+
+
+def request_url(param: str, lat: float, lon: float, end: str | None = None) -> str:
+    """The exact request fetch() makes (no key in it); it is also the series' record_url. It runs through `end`, by
+    default the last day of the latest complete month (ERA5T days near the end are flagged, see flags())."""
     # ponytail: from 1981 to match POWER; ERA5 goes back to 1940, move start_date there to use it
+    end = end or (date.today().replace(day=1) - timedelta(days=1)).isoformat()
     params = {"latitude": lat, "longitude": lon, "daily": param, "models": "era5", "timezone": "auto",
-              "start_date": "1981-01-01", "end_date": f"{(year or date.today().year) - 1}-12-31"}
+              "start_date": "1981-01-01", "end_date": end}
     return str(httpx.Request("GET", URL, params=params).url)
 
 
 def source(variable: str, lat: float, lon: float, retrieved: str) -> dict:
-    year = None
+    end = None
     if folder := os.environ.get(REPLAY):  # a replayed series keeps its recording date and the request made then
-        retrieved = recorded_on(folder)
-        year = int(retrieved[:4])
-    return source_block(SOURCE, DATASET_ID, None, request_url(PARAMS[variable], lat, lon, year), retrieved, METHOD[variable])
+        retrieved, end = recorded_on(folder), month_end(recording(folder, variable, lat, lon)["times"][-1])
+    return source_block(SOURCE, DATASET_ID, None, request_url(PARAMS[variable], lat, lon, end), retrieved, METHOD[variable])
 
 
 def flags(times: list[str], retrieved: str) -> list[str | None]:
@@ -82,15 +88,18 @@ def recorded_on(folder: str) -> str:
     return dates.pop()
 
 
-def replay(folder: str, param: str, lat: float, lon: float) -> dict:
-    """A recorded monthly series (production's /api/series output) as a daily reply: every day of a month carries that
-    month's value, so parse() and daily_to_monthly's mean or max give back exactly the recorded months."""
-    variable = next(v for v, p in PARAMS.items() if p == param)
+def recording(folder: str, variable: str, lat: float, lon: float) -> dict:
     path = Path(folder) / replay_name(variable, lat, lon)
     if not path.is_file():
         raise ValueError(f"No recorded ERA5 series for {variable} at {lat}, {lon} in {folder}; "
                          "add the place to scripts/record_era5_replay.py and record again.")
-    rec = _read(path)
+    return _read(path)
+
+
+def replay(folder: str, param: str, lat: float, lon: float) -> dict:
+    """A recorded monthly series (production's /api/series output) as a daily reply: every day of a month carries that
+    month's value, so parse() and daily_to_monthly's mean or max give back exactly the recorded months."""
+    rec = recording(folder, next(v for v, p in PARAMS.items() if p == param), lat, lon)
     days, values = [], []
     for t, v in zip(rec["times"], rec["values"], strict=True):
         n = calendar.monthrange(int(t[:4]), int(t[5:7]))[1]
