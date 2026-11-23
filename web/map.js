@@ -13,6 +13,9 @@
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   var INCH = { mm: 1 / 25.4, cm: 1 / 2.54 };
   var ANOTHER = 'the answer at this spot uses another gauge';
+  // your places: an ink teardrop, head of radius 7 at (7, 7), tip at (7, 22): the tip is the place (13-maps.md §2a)
+  var PIN_D = 'M7 22 L0.81 10.27 A7 7 0 1 1 13.19 10.27 Z';
+  var PIN_SVG = '<svg viewBox="0 0 14 22" aria-hidden="true"><path d="' + PIN_D + '"/></svg>';
 
   function fin(x) { return typeof x === 'number' && isFinite(x); }
   // MapLibre 'step': below the first break the first colour; a value equal to a break takes the class above it
@@ -43,35 +46,16 @@
     var up = WATER.filter(function (s) { return s.to >= 0 && s.to < Infinity; }).map(function (s) { return s.to; });
     return 'Colours: blue for less water, darker for faster: ' + ranges(dn, n) + ' ' + u + '; orange for more water, darker for faster: ' + ranges(up, n) + ' ' + u + '. A pale grey block means no clear change.';
   }
-  // Rates as the answer card prints them (the stats lane's headline_rate text): the rate to 2 significant figures, half away
-  // from zero; both range ends to the same decimals, enough that they differ and no non-zero end reads 0. In inches as the card
-  // converts them (explain.js rate): headline_rate's value, low and high (3 significant figures) times 1/25.4 or 1/2.54, then
-  // 2 decimals under 1, else 1 (3 if that reads 0).
-  function adj(x) { return +Math.abs(x).toExponential().split('e')[1]; } // the power of ten of the first digit
-  function units(x, e) { return Math.floor(Number((Math.abs(x) * Math.pow(10, -e)).toPrecision(12)) + 0.5); } // |x| in steps of 10^e
-  function atText(x, e) {
-    var r = units(x, e);
-    return r ? (x < 0 ? MINUS : '+') + (e < 0 ? (r / Math.pow(10, -e)).toFixed(-e) : String(r * Math.pow(10, e))) : '0';
-  }
-  function sig3(x) { if (!x) return 0; var e = adj(x) - 2, r = (x < 0 ? -1 : 1) * units(x, e); return e < 0 ? r / Math.pow(10, -e) : r * Math.pow(10, e); }
-  function inch(x) { // explain.js fmtNum(x, true): a positive value that reads 0 keeps its "+" ("+0.000"), a negative one loses its minus
-    var d = Math.abs(x) < 1 ? 2 : 1;
-    if (x !== 0 && Number(x.toFixed(d)) === 0) d = 3;
-    var s = x.toFixed(d);
-    if (Number(s) === 0) s = (0).toFixed(d);
-    return x > 0 ? '+' + s : s.replace('-', MINUS);
-  }
-  function num(x, imp, u) { return imp ? inch(sig3(x) * INCH[u]) : x ? atText(x, adj(x) - 1) : '0'; }
-  function rng(lo, hi, imp, u) {
-    if (imp) return num(lo, imp, u) + ' to ' + num(hi, imp, u);
-    var m = Math.max(Math.abs(lo), Math.abs(hi)), e = m ? adj(m) - 1 : 0;
-    var s = function (x) { return (x < 0 ? -1 : 1) * units(x, e); };
-    while (e > -6 && ((lo !== hi && s(lo) === s(hi)) || (lo && !units(lo, e)) || (hi && !units(hi, e)))) e--;
-    return atText(lo, e) + ' to ' + atText(hi, e);
-  }
+  // Rates as the answer card prints them, with the card's own rounding (explain.js sig2Text and spanText, the server's
+  // headline_rate rule) on the files' unrounded rates a year; in inches converted first, then rounded once, as the card does
+  function num(x, imp, u) { return TDX.sig2Text(imp ? x * INCH[u] : x); }
+  function rng(lo, hi, imp, u) { var k = imp ? INCH[u] : 1; return TDX.spanText(lo * k, hi * k); }
+  // a 95% range with an end at ±327.67 or beyond (a year, in the layer's own unit: the old int16 water file's clamp) says "very
+  // wide": only records with an earthquake step reach it (Japan 2011, Chile 2010), gauges and water blocks alike
+  function wide(lo, hi) { return lo <= -327.67 || hi >= 327.67; }
   // "which includes no change" only for no clear change, as the card (a clear verdict's end can round to 0)
-  function rateLine(v, x, lo, hi, wide, imp, u, per) {
-    return VERDICT[v] + ': ' + num(x, imp, u) + ' ' + (imp ? 'in' : u) + ' ' + per + ', 95% range ' + (wide ? 'very wide' : rng(lo, hi, imp, u)) +
+  function rateLine(v, x, lo, hi, imp, u, per) {
+    return VERDICT[v] + ': ' + num(x, imp, u) + ' ' + (imp ? 'in' : u) + ' ' + per + ', 95% range ' + (wide(lo, hi) ? 'very wide' : rng(lo, hi, imp, u)) +
       (v === 'no_clear_change' && lo <= 0 && hi >= 0 ? ', which includes no change' : '') + '.';
   }
   function month(t) { var p = String(t).split('-'); return MONTHS[+p[1] - 1] + ' ' + p[0]; }
@@ -79,12 +63,12 @@
   function deg(x, p, n) { return Math.abs(x).toFixed(1) + '° ' + (x >= 0 ? p : n); }
   // the hover label, one string per line (13-maps.md sections 2 and 4)
   function gaugeTip(g, imp) {
-    return [g.name, rateLine(g.verdict, g.slope, g.lo, g.hi, false, imp, 'mm', 'a year'),
+    return [g.name, rateLine(g.verdict, g.slope, g.lo, g.hi, imp, 'mm', 'a year'),
       g.start.slice(0, 4) + '–' + g.end.slice(0, 4) + ' · ' + g.years + ' years of records' + (g.years < 30 ? ' (short record)' : '') + ' · ' + (g.network === 'coops' ? 'NOAA CO-OPS' : 'PSMSL'),
       'Click for the full answer.'];
   }
   function blockTip(b, f, imp) {
-    return ['Near ' + deg(b.lat, 'N', 'S') + ', ' + deg(b.lon, 'E', 'W'), rateLine(b.v, b.slope, b.lo, b.hi, b.wide, imp, 'cm', 'of water a year'),
+    return ['Near ' + deg(b.lat, 'N', 'S') + ', ' + deg(b.lon, 'E', 'W'), rateLine(b.v, b.slope, b.lo, b.hi, imp, 'cm', 'of water a year'),
       month(f.start) + ' to ' + month(f.end) + ' · averaged over ' + about(f.footprint_km) + ' · GRACE', 'Click for the full answer.'];
   }
   function title(n) { // an all-capitals station name in Title Case
@@ -123,18 +107,17 @@
   // a stored integer to its value with the file's scale: a divide when the scale is 1/an integer (0.01, 0.00001), so 431
   // reads -4.31, not -4.3100000000000005
   function scaler(s) { var q = Math.round(1 / s); return Math.abs(q * s - 1) < 1e-9 ? function (x) { return x / q; } : function (x) { return x * s; }; }
-  // grace-trends.json to blocks with a value; null if the file does not read. "very wide" only where the file has a clamp.
+  // grace-trends.json to blocks with a value; null if the file does not read (each field's width comes from its length)
   function graceBlocks(f) {
-    if (!f || !/^i(16|32)le-b64$/.test(f.enc) || !(f.n > 0) || !fin(f.scale) || !fin(f.lat_lon_scale) || !/^\d{4}-\d\d$/.test(f.start) || !/^\d{4}-\d\d$/.test(f.end)) return null;
+    if (!f || !(f.n > 0) || !fin(f.scale) || !fin(f.lat_lon_scale) || !/^\d{4}-\d\d$/.test(f.start) || !/^\d{4}-\d\d$/.test(f.end)) return null;
     var a;
     try { a = ['lat', 'lon', 'area', 'slope', 'lo', 'hi', 'sig'].map(function (k) { return ints(f[k], f.n); }); } catch (e) { return null; }
     if (a.some(function (x) { return !x; }) || !(a[6] instanceof Uint8Array)) return null;
-    var sv = scaler(f.scale), sl = scaler(f.lat_lon_scale), cl = fin(f.clamp) ? f.clamp : Infinity, out = [];
+    var sv = scaler(f.scale), sl = scaler(f.lat_lon_scale), out = [];
     for (var i = 0; i < f.n; i++) {
       var v = SIG[a[6][i]];
       if (!v || a[3][i] === f.fill || !(a[2][i] > 0)) continue;
-      out.push({ lat: sl(a[0][i]), lon: sl(a[1][i]), area: a[2][i], slope: sv(a[3][i]), lo: sv(a[4][i]), hi: sv(a[5][i]),
-        wide: a[4][i] <= -cl || a[5][i] >= cl, v: v });
+      out.push({ lat: sl(a[0][i]), lon: sl(a[1][i]), area: a[2][i], slope: sv(a[3][i]), lo: sv(a[4][i]), hi: sv(a[5][i]), v: v });
     }
     return out.length ? out : null;
   }
@@ -148,6 +131,12 @@
     if (hit && hit.g) return { label: hit.g.name, lat: hit.g.lat, lon: hit.g.lon };
     if (hit && hit.b) return { label: 'Pinned spot', lat: hit.b.lat, lon: hit.b.lon };
     return { label: 'Pinned spot', lat: Math.max(-85, Math.min(85, ll.lat)), lon: (((ll.lng + 180) % 360) + 360) % 360 - 180 };
+  }
+  // where a hover reads (13-maps.md §2a): over a pin at its tip, the place, so a pin never hides the gauge or block under it;
+  // else at the pointer. tipOf(el): a pin element's place, or null; project: a place to its point on the map
+  function hoverAt(e, tipOf, project) {
+    var t = e.originalEvent && e.originalEvent.target, mk = t && t.closest ? t.closest('.map-mk') : null, ll = mk && tipOf(mk);
+    return ll ? { point: project(ll), lngLat: ll } : e;
   }
   // box: [west, south, east, north] from the map (west and east may pass 180 with world copies)
   function inBox(b, lat, lon) { var span = b[2] - b[0]; return lat >= b[1] && lat <= b[3] && (span >= 360 || ((lon - b[0]) % 360 + 360) % 360 <= span); }
@@ -206,6 +195,22 @@
     return greyOf(v, role, dark);
   }
   function roleOf(prop) { return /^(text|icon)-halo-color$/.test(prop) ? 'halo' : /^(text|icon)-color$/.test(prop) ? 'text' : 'fill'; }
+  // the detailed map's road shields: coloured sprite icons that no paint grey reaches (QA B5), so hidden while greyed
+  function isShield(l) { return /shield/.test(l.id); }
+  // a fresh style's paint colours as the style gives them, and the layers hidden while greyed: rasters (the relief) and shields
+  function recordStyle(st) {
+    var r = { orig: [], hide: [] };
+    ((st || {}).layers || []).forEach(function (l) {
+      if (l.type === 'raster' || isShield(l)) r.hide.push({ id: l.id, sym: l.type === 'symbol' });
+      Object.keys(l.paint || {}).forEach(function (p) { if (/-color$/.test(p)) r.orig.push([l.id, p, l.paint[p]]); });
+    });
+    return r;
+  }
+  // greys the style (on) or gives its colours back; a shield comes back only with labels on
+  function greyStyle(map, r, on, d, labels) {
+    r.orig.forEach(function (o) { if (map.getLayer(o[0])) map.setPaintProperty(o[0], o[1], on ? greyAll(o[2], roleOf(o[1]), d) : o[2]); });
+    r.hide.forEach(function (x) { if (map.getLayer(x.id)) map.setLayoutProperty(x.id, 'visibility', on || (x.sym && !labels) ? 'none' : 'visible'); });
+  }
 
   // ---- the view (13-maps.md section 8) ----
   function km(a, b) { // great-circle distance in km
@@ -250,7 +255,7 @@
   var files = { gauges: { url: '/data/gauge-trends.json', data: null, tries: 0, loading: false }, water: { url: '/data/grace-trends.json', data: null, tries: 0, loading: false } };
   var dots = [], blocks = [], gMode = null, dotsOn = false, waterOn = false, hideTimer = 0;
   var key = null, keyFor = '', keyKind = null, viewEl = null, tip = null, tipFor = null;
-  var orig = [], rasters = [], greyKey = 'off';
+  var rs = { orig: [], hide: [] }, greyKey = 'off';
   var hoverOK = matchMedia('(hover: hover)').matches, HIT = matchMedia('(pointer: coarse)').matches ? 24 : 14;
 
   function h(tag, cls, text) {
@@ -313,8 +318,8 @@
   // no WebGL or the library did not import: no retry (a failed module import is cached by the browser)
   function noMap() { fail("Your browser can't show the map. Your places are still listed on the left.", false); }
 
-  // one marker per pin, all alike: a button (click or Enter selects it); the selected pin is bigger and carries a tag with its
-  // name (facts, not advice: no risk level on the map)
+  // one marker per pin, all alike: a button holding the ink teardrop, its tip on the place (click or Enter selects it); the
+  // selected pin is bigger and carries a tag with its name (facts, not advice: no risk level on the map)
   function syncMarkers() {
     if (!map) return;
     var pins = (TD.pins && TD.pins()) || [], seen = Object.create(null);
@@ -325,8 +330,9 @@
       if (!m) {
         var el = h('button', 'map-mk');
         el.type = 'button';
+        el.innerHTML = PIN_SVG;
         el.addEventListener('click', function (e) { e.stopPropagation(); if (TD.select) TD.select(p.key); });
-        m = markers[p.key] = { el: el, tag: null, mk: new lib.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map) };
+        m = markers[p.key] = { el: el, tag: null, mk: new lib.Marker({ element: el, anchor: 'bottom' }).setLngLat([p.lon, p.lat]).addTo(map) };
       } else {
         m.mk.setLngLat([p.lon, p.lat]);
       }
@@ -393,10 +399,11 @@
     if (loaded) { applyLabels(); sync(); }
   }
 
+  // the road shields stay hidden while the base map is greyed (greyBase shows them again)
   function applyLabels() {
-    var on = prefs().labels, st = map.getStyle();
+    var on = prefs().labels, st = map.getStyle(), grey = greyKey !== 'off';
     ((st && st.layers) || []).forEach(function (l) {
-      if (l.type === 'symbol') map.setLayoutProperty(l.id, 'visibility', on ? 'visible' : 'none');
+      if (l.type === 'symbol') map.setLayoutProperty(l.id, 'visibility', on && !(grey && isShield(l)) ? 'visible' : 'none');
     });
   }
 
@@ -456,7 +463,7 @@
       map.on('error', function () { if (!loaded) fail("The map couldn't load. Your places are still listed on the left.", true); });
       map.on('mousemove', function (e) {
         if (!hoverOK) return;
-        var hit = hitAt(e, false), d = hit && (hit.g || hit.b);
+        var hit = hitAt(hoverAt(e, tipOf, function (ll) { return map.project(ll); }), false), d = hit && (hit.g || hit.b);
         if (d && d === tipFor) return;
         if (!d) { tipOff(); return; }
         tipFor = d;
@@ -486,20 +493,12 @@
   }
 
   // ---- the greyed base map ----
-  // every paint colour of a fresh style, as the style gives it; raster layers (the detailed map's relief) are hidden while greyed
-  function record() {
-    orig = []; rasters = []; greyKey = 'off';
-    ((map.getStyle() || {}).layers || []).forEach(function (l) {
-      if (l.type === 'raster') rasters.push(l.id);
-      Object.keys(l.paint || {}).forEach(function (p) { if (/-color$/.test(p)) orig.push([l.id, p, l.paint[p]]); });
-    });
-  }
+  function record() { rs = recordStyle(map.getStyle()); greyKey = 'off'; }
   function greyBase(on) {
     var d = dark(), k = on ? (d ? 'dark' : 'light') : 'off';
     if (k === greyKey) return;
     greyKey = k;
-    orig.forEach(function (o) { if (map.getLayer(o[0])) map.setPaintProperty(o[0], o[1], on ? greyAll(o[2], roleOf(o[1]), d) : o[2]); });
-    rasters.forEach(function (id) { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'none' : 'visible'); });
+    greyStyle(map, rs, on, d, prefs().labels);
   }
 
   // ---- the two data files: read once, the first time their window is wanted; one more try at the next switch ----
@@ -621,13 +620,15 @@
       var cp = { id: 'grace-water', type: 'fill', source: wl.source, 'source-layer': wl['source-layer'], layout: { visibility: 'none' }, paint: { 'fill-color': wl.paint['fill-color'] } };
       ['filter', 'minzoom', 'maxzoom'].forEach(function (k) { if (wl[k] !== undefined) cp[k] = wl[k]; });
       map.addLayer(cp, before);
-      var o = orig.filter(function (x) { return x[0] === wl.id && x[1] === 'fill-color'; })[0];
-      if (o) { orig.push(['grace-water', 'fill-color', o[2]]); greyKey = ''; } // grey the copy as its original
+      var o = rs.orig.filter(function (x) { return x[0] === wl.id && x[1] === 'fill-color'; })[0];
+      if (o) { rs.orig.push(['grace-water', 'fill-color', o[2]]); greyKey = ''; } // grey the copy as its original
     }
     paintLayers();
     waterOn = false;
   }
 
+  // a pin element's place (its marker's position), or null
+  function tipOf(el) { for (var k in markers) if (markers[k].el === el) return markers[k].mk.getLngLat(); return null; }
   function tipOff() {
     tipFor = null;
     if (tip) tip.remove();
@@ -658,9 +659,10 @@
 
   // ---- the key under the map (13-maps.md sections 3 and 4): real text; the swatches are aria-hidden ----
   function svg(kind) {
-    var ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg'), c;
-    s.setAttribute('width', '14'); s.setAttribute('height', '14'); s.setAttribute('viewBox', '0 0 14 14'); s.setAttribute('aria-hidden', 'true');
+    var ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg'), c, pin = kind === 'pin';
+    s.setAttribute('width', pin ? '11' : '14'); s.setAttribute('height', pin ? '17' : '14'); s.setAttribute('viewBox', pin ? '0 0 14 22' : '0 0 14 14'); s.setAttribute('aria-hidden', 'true');
     if (kind === 'pale') { c = document.createElementNS(ns, 'rect'); c.setAttribute('width', '14'); c.setAttribute('height', '14'); }
+    else if (pin) { c = document.createElementNS(ns, 'path'); c.setAttribute('d', PIN_D); }
     else { c = document.createElementNS(ns, 'circle'); c.setAttribute('cx', '7'); c.setAttribute('cy', '7'); c.setAttribute('r', kind === 'ring' ? '5' : '3'); }
     c.setAttribute('class', 'mk-' + kind);
     s.append(c);
@@ -696,7 +698,7 @@
       p('mk-t', 'How fast the sea is rising or falling at each tide gauge, relative to the land');
       key.append(scaleEl(SEA, im, 'mm', 'Falling', 'Rising'));
       p('sr-only', seaWords(im));
-      sym([['ring', 'No clear change'], ['dot', 'Smaller dot: short record, 20 to 29 years']]);
+      sym([['ring', 'No clear change'], ['dot', 'Smaller dot: short record, 20 to 29 years'], ['pin', 'Your places']]);
       p('', hoverOK ? 'Point at a dot to read its rate. Click it to open that gauge’s answer.' : 'Tap a dot to open that gauge’s answer.');
       viewEl = p('mk-view');
       var last = dots.reduce(function (a, g) { return g.end > a ? g.end : a; }, '0000-01'), s = p('');
@@ -708,10 +710,10 @@
       p('mk-t', 'Change in water stored on land, in ' + (im ? 'inches' : 'cm') + ' of water a year');
       key.append(scaleEl(WATER, im, 'cm', 'Less water', 'More water'));
       p('sr-only', waterWords(im));
-      sym([['pale', 'No clear change']]);
+      sym([['pale', 'No clear change'], ['pin', 'Your places']]);
       p('', hoverOK ? 'Point at a block to read it. Click it to open the answer for that spot.' : 'Tap a block to open the answer for that spot.');
       viewEl = p('mk-view');
-      p('', "Each block is the satellites' average over " + about(f.footprint_km) + ': read regions, not towns. A pale block is not proof of no change, and even with no real change anywhere, about 1 block in 20 would look clear by chance.');
+      p('', "Each block is the satellites' average over " + about(f.footprint_km) + ": read regions, not towns. A block's rate is for its centre; a town's own answer can differ a little. A pale block is not proof of no change, and even with no real change anywhere, about 1 block in 20 would look clear by chance.");
       var r = p('');
       r.append('Rates: our calculation from ', link({ url: f.source_url }, 'NASA GSFC GRACE and GRACE-FO mascons'), ', ' + month(f.start) + ' to ' + month(f.end) + '.' +
         (ref ? " Levels on this tab are compared with the provider's " + ref[0] + '–' + ref[1] + ' average.' : '') + ' Greenland, Antarctica and the Gulf of Alaska glaciers are left out.');

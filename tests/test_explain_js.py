@@ -892,10 +892,10 @@ def test_no_risk_level_or_advice_in_the_page_code():
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
     assert not re.search(r"\.(risk|advice)\b", css)
     assert not re.search(r"\.(risk|rk)\b", (ROOT / "web" / "compare.css").read_text(encoding="utf-8"))
-    # every pinned-place marker looks the same (§6): the --mk-mod fill, no risk classes, no --mk-low
+    # every pinned-place marker looks the same (§6; the ink teardrop, 13-maps.md §2a): no risk classes, no --mk-low
     mcss = (ROOT / "web" / "map.css").read_text(encoding="utf-8")
     assert "--mk-low" not in mcss and not re.search(r"\.map-mk\.(high|moderate|low)\b", mcss)
-    assert re.search(r"\n\.map-mk \{[^}]*background: var\(--mk-mod\);", mcss)
+    assert re.search(r"\n\.map-mk path \{[^}]*fill: var\(--ink\);", mcss)
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "Our recommendation" not in app
     # design 14 §6: the small words, exactly
