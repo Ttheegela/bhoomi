@@ -313,10 +313,10 @@ function renderSrcNote() {
 let loadTimer = 0;
 const secsSince = (p) => Math.max(0, Math.floor((Date.now() - p.started) / 1000));
 // the usual time for the window's source: weather stations send a long daily record
-function usualSecs() { const v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]); return sid === 'ghcn' ? 20 : 5; }
+function usualSecs() { const v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]); return sid === 'ghcn' ? 60 : 5; }
 function loadingLine(p) {
   const n = secsSince(p), v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]);
-  if (sid === 'ghcn') return `Reading daily weather-station records from NOAA since 1981. ${n > 20 ? 'This is taking longer than usual; still reading.' : 'This usually takes 5 to 20 seconds for each place.'} ${n} s so far.`;
+  if (sid === 'ghcn') return `Reading daily weather-station records from NOAA since 1981. ${n > 120 ? 'This is taking longer than usual; still reading.' : 'This can take a minute or more the first time.'} ${n} s so far.`;
   if (n > 15) return `This is taking longer than usual; still checking. ${n} s so far.`;
   return `Checking ${SOURCES[sid] ? SOURCES[sid].name : 'the records'}. This usually takes about ${usualSecs()} seconds.${n >= 3 ? ` ${n} s so far.` : ''}`;
 }

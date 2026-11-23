@@ -167,7 +167,7 @@ span.srclink { color: var(--ink-2); }
 /* with a projection the three cells share their rows (label, value, line), so the values sit on one line (design 11 section 3) */
 .reads.sub { grid-template-rows: auto auto 1fr; }
 .reads.sub > div { grid-row: span 3; display: grid; grid-template-rows: subgrid; align-content: start; }
-@container (max-width: 519px) {
+@container (max-width: 479px) {
   .reads.sub { grid-template-rows: none; }
   .reads.sub > div { grid-row: auto; grid-template-rows: none; }
   .reads { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); }
@@ -180,12 +180,12 @@ span.srclink { color: var(--ink-2); }
   .reads .rs, .reads .rt { grid-column: 1; margin-top: 2px; }
   .reads .rt + .rt { grid-column: 1 / -1; }
 }
-/* "Where to look next" (14-facts.md section 4): one quiet line that wraps; under 520 px the label, then a 44 px row per item */
+/* "Where to look next" (14-facts.md section 4): one quiet line that wraps; under 480 px the label, then a 44 px row per item */
 .next { margin: 0 0 18px; font-size: 15px; }
 .next .nl { font-size: 14px; color: var(--ink-2); }
 .next ul, .next li { display: inline; margin: 0; padding: 0; }
 .next li + li::before { content: "·"; content: "·" / ""; color: var(--ink-2); margin: 0 8px; } /* "/ ''": screen readers skip it */
-@container (max-width: 519px) {
+@container (max-width: 479px) {
   .next .nl, .next ul { display: block; }
   .next li { display: flex; align-items: center; min-height: 44px; }
   .next li + li::before { content: none; }
@@ -205,7 +205,7 @@ span.srclink { color: var(--ink-2); }
 .oth td.r, .oth .yr { white-space: nowrap; }
 .oth td.na { font-size: 14px; color: var(--ink-2); }
 /* a thin station: its own verdict in muted ink, and under the row why it isn't counted when the records are compared */
-.oth tr.thin > td { color: var(--ink-2); }
+.oth tr.thin > td, .oth tr.thin a { color: var(--ink-2); }
 .oth tr.with-note > * { border-bottom: 0; padding-bottom: 4px; }
 .oth tr.nt td { font-size: 14px; color: var(--ink-2); padding: 0 10px 10px 0; }
 .oth .pd { display: none; }
@@ -218,8 +218,8 @@ span.srclink { color: var(--ink-2); }
 .oth .dn, .oth .lim { font-size: 14px; color: var(--ink-2); margin: 8px 0 0; }
 .oth .st { font-size: 15px; color: var(--ink-2); margin: 10px 0 0; }
 .oth .btn { margin-top: 10px; white-space: normal; }
-/* under 520 px each row is a block: name and where left, the verdict right; then the rate left, the years right */
-@container (max-width: 519px) {
+/* under 480 px (a phone; 1440 with a scrollbar leaves the card 517 px) each row is a block: name and where left, the verdict right; then the rate left, the years right */
+@container (max-width: 479px) {
   .oth thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .oth table, .oth tbody { display: block; }
   .oth colgroup { display: none; }
@@ -389,6 +389,7 @@ thead th { position: sticky; top: 0; background: var(--surface); }
 
 /* "How we calculated this" (section 6) */
 #how { scroll-margin-top: calc(var(--top-h) + 16px); } /* its heading lands below the sticky bar */
+#rec-oth { scroll-margin-top: calc(var(--top-h) + 16px); } /* "Other records disagree ↓" lands below it too */
 .steps details { scroll-margin-top: calc(var(--top-h) + 16px); } /* "Step 7 explains" lands below it too */
 .how h2 { font-size: 20px; }
 .how .lead { color: var(--ink-2); margin: 4px 0 0; }
