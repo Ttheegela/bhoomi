@@ -684,12 +684,14 @@ function renderFoot() {
   // the answer's own record (it may have fallen back from the default), else the visitor's choice, else the catalog's first
   const main = t && SOURCES[(t.source || {}).id] ? t.source : { id: sourceFor(curWin) || (v && v.sources && v.sources[0]) };
   const src = footSrc(main), named = [src];
+  // each record by name, then its licence when its source gives one (the ERA5 pack's), as the projections' below
+  const credit = (s) => { srcLink(p, s, true); if (typeof s.licence === 'string' && s.licence) p.append(` (${s.licence})`); };
   p.append('Data: ');
-  if (src) srcLink(p, src, true); else p.append('public records');
+  if (src) credit(src); else p.append('public records');
   // the other records on the card (design 12 §3), each by its own source
   (t && Array.isArray(t.comparisons) ? t.comparisons : []).forEach((x) => {
     const s = x && !x.main && x.available === true && footSrc(x.source);
-    if (s) { p.append(' · '); srcLink(p, s, true); named.push(s); }
+    if (s) { p.append(' · '); credit(s); named.push(s); }
   });
   // with an expert projection on the page, the foot names it too
   const pj = t ? window.TDX.projOf(t) : null, ps = pj && pj.source;

@@ -673,7 +673,12 @@
         link: https(q.record_url) ? { text: 'Open this exact record ↗', href: q.record_url } : null });
     });
     if (wp && w.source) list.push({ text: 'World figure: ' + w.source.name + (str(w.source.dataset_id) ? ', ' + w.source.dataset_id : '') + '. Retrieved ' + D(w.source.retrieved) + '. ', link: https(w.source.record_url) ? { text: 'Open it ↗', href: w.source.record_url } : null });
-    var ps = fx && (fx.p.source || {}), s9 = [{ list: list }];
+    var ps = fx && (fx.p.source || {}), s9 = [{ list: list }], rc = [];
+    // how to cite the records listed above (the ERA5 pack's), in the projections' box; none when no record has a citation
+    [src].concat(oth.map(function (x) { return x.source || {}; })).forEach(function (q) {
+      (Array.isArray(q.citation) ? q.citation : []).filter(str).forEach(function (c) { if (rc.indexOf(c) < 0) rc.push(c); });
+    });
+    if (rc.length) s9.push({ cite: rc, head: 'How to cite the records' });
     if (ps) {
       var rf = ps.retrieved_from;
       list.push({ text: 'Future: ' + str(ps.name) + ', ' + str(ps.dataset_id) + ', ' + ver(ps.version, 'version ') + ', ' + str(ps.licence) + '. '
@@ -1643,8 +1648,8 @@
       item.list.forEach(function (x) { ul.append(typeof x === 'string' ? h('li', {}, x) : h('li', {}, x.text, x.link ? ext(x.link.text, x.link.href) : '')); });
       return ul;
     }
-    if (item.cite) { // step 9: how to cite the projections, closed
-      var cd = h('details', { class: 'cite' }, h('summary', {}, h('span', { class: 'mark', 'aria-hidden': 'true' }), 'How to cite the projections'));
+    if (item.cite) { // step 9: how to cite the records or the projections, closed
+      var cd = h('details', { class: 'cite' }, h('summary', {}, h('span', { class: 'mark', 'aria-hidden': 'true' }), item.head || 'How to cite the projections'));
       item.cite.forEach(function (x) { cd.append(h('p', {}, x)); });
       if (item.ack) cd.append(h('p', {}, item.ack));
       return cd;
