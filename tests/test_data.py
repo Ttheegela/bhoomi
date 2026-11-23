@@ -1278,7 +1278,7 @@ def test_coops_deadline_is_a_provider_failure(monkeypatch):
 
 
 # ---- Rework v2: the full source block, record_url, flags, retrieved ----
-SOURCE_KEYS = {"id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "method", "cadence", "deseasoned_upstream"}
+SOURCE_KEYS = {"id", "name", "url", "dataset_id", "version", "record_url", "retrieved", "method", "cadence", "deseasoned_upstream", "limit"}
 
 
 def _captured_get(module, monkeypatch, reply):
@@ -1303,6 +1303,19 @@ def test_power_record_url_is_the_request_made(monkeypatch):
     assert src["deseasoned_upstream"] is False and "50 km" in src["method"]
     assert data.get_series("air_temp_max", 40.35, -74.66)["source"]["record_url"].startswith(
         "https://power.larc.nasa.gov/api/temporal/monthly/point?parameters=T2M_MAX&")
+    assert src["limit"] is None
+
+
+@pytest.mark.parametrize("lat, extra", [(13.08, ""), (-42.4, ""), (42.5, " At this latitude the correction is only partial."),
+                                        (-62.5, " At this latitude the correction is only partial."),
+                                        (64.84, " This far north it gets no gauge correction."),
+                                        (-77.85, " This far north it gets no gauge correction.")])
+def test_power_rain_names_its_limit(lat, extra):
+    reply = load("power_monthly.json")
+    assert power.source(reply, "PRECTOTCORR", lat, 10.0, "2026-11-23")["limit"] == (
+        "NASA POWER's rain is corrected every day to rain-gauge maps. Where gauges are few (much of Africa, inland "
+        "Australia, South America and the far north), it can drift." + extra)
+    assert power.source(reply, "T2M", lat, 10.0, "2026-11-23")["limit"] is None
 
 
 def test_era5_record_url_is_the_request_made_and_has_no_key(monkeypatch):

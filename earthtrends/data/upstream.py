@@ -13,10 +13,12 @@ def utc_today() -> str:
     return datetime.now(timezone.utc).date().isoformat()
 
 
-def source_block(base: dict, dataset_id: str, version: str | None, record_url: str, retrieved: str, method: str) -> dict:
-    """The full source block of docs/CONTRACTS.md (Rework v2) for a monthly series that still has its seasons."""
+def source_block(base: dict, dataset_id: str, version: str | None, record_url: str, retrieved: str, method: str,
+                 limit: str | None = None) -> dict:
+    """The full source block of docs/CONTRACTS.md (Rework v2) for a monthly series that still has its seasons.
+    `limit`: one plain caveat about where this record is weaker (PR4a `source.limit`), else None."""
     return {**base, "dataset_id": dataset_id, "version": version, "record_url": record_url, "retrieved": retrieved,
-            "method": method, "cadence": "monthly", "deseasoned_upstream": False}
+            "method": method, "cadence": "monthly", "deseasoned_upstream": False, "limit": limit}
 
 
 def text(value, limit: int) -> str:
