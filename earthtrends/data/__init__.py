@@ -3,6 +3,7 @@ import calendar
 import copy
 import threading
 import time
+from concurrent.futures import Future
 
 from . import coops, era5, ghcn, grace, monthly, power, psmsl, upstream
 from .catalog import CATALOG
@@ -17,7 +18,8 @@ __all__ = ["list_variables", "get_series", "search_places"]
 TTL_S = 12 * 3600
 MAX_ENTRIES = 256
 _cache: dict[tuple, tuple[float, dict]] = {}  # key -> (time stored, full result); dict order = oldest first
-_lock = threading.Lock()  # ponytail: two threads may fetch the same key at once; the last write wins, which is harmless
+_lock = threading.Lock()
+_flying: dict[tuple, Future] = {}  # key -> the fetch in progress: a second asker waits for it (one upstream call)
 GAP_MONTHS = 24  # a station record this much shorter than the period asked for gets a note
 
 
@@ -60,7 +62,7 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
     elif source == "ghcn":
         st, km, types, days, vals = ghcn.load(lat, lon, variable)
         times, values = monthly.daily_to_monthly(days, vals, ghcn.HOW[variable])
-        place = {"name": st["name"], "lat": st["lat"], "lon": st["lon"]}
+        place = {"name": st["name"], "lat": st["lat"], "lon": st["lon"], "km": round(km, 1), "id": st["id"]}
         src = ghcn.source(st["id"], types, today)
         notes = [f"Weather station {st['name']} ({st['id']}), {km:.0f} km from the point you asked about.",
                  f"Station records have gaps: a month with fewer than {monthly.MIN_DAYS} valid days is left empty."]
@@ -77,21 +79,54 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
             "times": times, "values": values, "flags": flags or [None] * len(values), "source": src, "notes": notes}
 
 
+def _served(kept):
+    """A cached outcome for one caller: a copy of the series, or a fresh copy of the stored "no usable station" error
+    (re-raising one stored instance would grow its traceback on every hit)."""
+    if isinstance(kept, ghcn.NoStation):
+        raise ghcn.NoStation(str(kept), kept.status, copy.deepcopy(kept.station))
+    return copy.deepcopy(kept)
+
+
+def _keep(key: tuple, kept) -> None:
+    with _lock:
+        _cache.pop(key, None)  # re-insert as the newest
+        _cache[key] = (time.monotonic(), kept)
+        while len(_cache) > MAX_ENTRIES:
+            del _cache[next(iter(_cache))]  # oldest first
+        _flying.pop(key, None)
+
+
 def _cached_full(entry: dict, variable: str, source: str, lat: float, lon: float) -> dict:
+    """The whole record for one point, fetched once per TTL_S. A station lookup that finds no usable station
+    (ghcn.NoStation, "short" or "none") is an answer too and is kept the same way, so asking again makes no NOAA
+    request (QA: a too-short station's rows were downloaded on every compare). An outage or a bug is never kept."""
     if source == "coops":  # no rate-limit trouble there (one small call per question); tests/test_api.py expects fresh fetches
         return _fetch_full(entry, variable, source, lat, lon)
     key = (variable, source, lat, lon)
     with _lock:
         hit = _cache.get(key)
         if hit and time.monotonic() - hit[0] < TTL_S:
-            return copy.deepcopy(hit[1])
+            return _served(hit[1])
         _cache.pop(key, None)  # expired
-    full = _fetch_full(entry, variable, source, lat, lon)  # a failure raises here and is never stored
-    with _lock:
-        _cache.pop(key, None)  # re-insert as the newest
-        _cache[key] = (time.monotonic(), copy.deepcopy(full))
-        while len(_cache) > MAX_ENTRIES:
-            del _cache[next(iter(_cache))]  # oldest first
+        flying = _flying.get(key)
+        if flying is None:
+            mine = _flying[key] = Future()
+    if flying is not None:  # the same record is being fetched: share that one call (Open-Meteo's daily quota)
+        return copy.deepcopy(flying.result())  # its failure is raised here too
+    try:
+        full = _fetch_full(entry, variable, source, lat, lon)
+    except ghcn.NoStation as e:  # no usable station here: kept like a series
+        _keep(key, e)
+        mine.set_exception(e)
+        raise
+    except BaseException as e:  # an outage or a bug: never stored
+        with _lock:
+            _flying.pop(key, None)
+        mine.set_exception(e)
+        raise
+    kept = copy.deepcopy(full)  # the caller may change `full`; the cache and the waiters read this copy
+    _keep(key, kept)
+    mine.set_result(kept)
     return full
 
 

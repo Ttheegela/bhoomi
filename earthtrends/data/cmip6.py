@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from .coops import haversine_km
+from .upstream import COPERNICUS
 
 LAND_PCT = 50  # the Atlas's rule: a cell is land when at least half of it is land
 FILE = Path(__file__).resolve().parent / "cmip6_atlas.npz"  # relative to this module, not the working directory
@@ -91,5 +92,6 @@ def at(variable: str, lat: float, lon: float) -> dict | None:
         "source": {"name": m["dataset"], "dataset_id": f"doi:{m['doi']}", "version": m["version"],
                    "record_url": m["record_url"],
                    "retrieved_from": {"name": cds["name"], "dataset_id": f"doi:{cds['doi']}", "url": cds["url"]},
-                   "licence": m["licence"], "citation": list(m["citations"]), "acknowledgement": m["acknowledgement"]},
+                   "licence": m["licence"], "citation": list(m["citations"]), "acknowledgement": m["acknowledgement"],
+                   "attribution": COPERNICUS},
     }

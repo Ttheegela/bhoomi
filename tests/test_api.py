@@ -15,7 +15,8 @@ FX = Path(__file__).parent / "fixtures"
 SERIES_KEYS = {"variable", "units", "freq", "place", "times", "values", "source", "notes", "flags", "anomaly"}
 TREND_KEYS = {"variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
               "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "baseline", "record",
-              "range_kind", "headline_rate", "fit", "latest", "now", "world", "projection", "explain", "caveats", "meaning", "guidance"}
+              "range_kind", "headline_rate", "fit", "latest", "now", "world", "projection", "explain", "caveats", "meaning", "guidance",
+              "main_note", "comparisons", "comparisons_window", "disagree", "drift", "thin_note", "single_note"}  # PR4a: null for sea level
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 client = TestClient(app)
 
@@ -57,11 +58,26 @@ def test_series_and_trend_shapes(offline, variable, src):
     assert r.json()["baseline"] == s["anomaly"]["baseline"]  # one baseline for the chart and the card
     # the gauge's two sparse years from 1911 are left out of the fit; the grid cell is dense from the start
     assert (r.json()["record"]["trimmed_from"] or "")[:4] == ("1911" if src == "coops" else "")
-    assert r.headers["cache-control"] == CACHE
+    # offline, air temperature's other records can't be read: a partial answer is never cached (PR4a "Caching")
+    assert r.headers["cache-control"] == ("no-store" if variable == "air_temp" else CACHE)
+
+
+def test_single_note_on_the_trend_route(offline):
+    """PR4a "One record": offline only NASA POWER can be read (ERA5 and the station read "error"), so the answer rests
+    on one weather model; compare=false leaves the note null, and nothing else changes."""
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "source": "power"}
+    full = client.get("/api/trend", params=q).json()
+    bare = client.get("/api/trend", params={**q, "compare": "false"}).json()
+    assert full["single_note"] == "Only one record could be compared here, so this answer rests on a single weather model."
+    assert [c["counted"] for c in full["comparisons"]] == [True, False, False] and bare["single_note"] is None
+    assert full["thin_note"] is bare["thin_note"] is None  # the main record isn't thin
+    pr4a = {"comparisons", "comparisons_window", "disagree", "drift", "thin_note", "single_note"}
+    assert {k: v for k, v in full.items() if k not in pr4a} == {k: v for k, v in bare.items() if k not in pr4a}
+    assert list(full)[-2:] == ["meaning", "guidance"]
 
 
 def test_start_end_passed_through(offline):
-    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "start": "1990-03", "end": "2019"}
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "start": "1990-03", "end": "2019", "source": "power"}
     s = client.get("/api/series", params=q).json()
     assert (s["times"][0], s["times"][-1]) == ("1990-03", "2019-12")
     t = client.get("/api/trend", params=q).json()
@@ -89,7 +105,7 @@ def test_sea_level_projection_reads_the_whole_record_whatever_the_window(offline
     assert whole["readouts"]["now"]["end"] == f"{date.today().year - 1}-12" and whole["check"]["inside"] is not None
     for w in ({"start": "1999"}, {"end": "2010"}):  # "now" and the check stay the record's, not the window's
         assert client.get("/api/trend", params={**q, **w}).json()["projection"] == whole, w
-    q = {**q, "variable": "air_temp"}  # PR3: the CMIP6 projection, also the whole record's whatever the window
+    q = {**q, "variable": "air_temp", "source": "power"}  # PR3: the CMIP6 projection, also the whole record's whatever the window
     air = client.get("/api/trend", params=q).json()
     assert air["projection"]["available"] and air["projection"]["readouts"]["now"] == air["now"]
     for w in ({"start": "1999"}, {"end": "2010"}):
@@ -111,12 +127,12 @@ def test_rainfall_levels_in_percent_seasons_in_mm_a_month(offline):
     assert sea["units"] == "mm a month" and (sea["high"], sea["low"]) == (max(mm), min(mm))
     assert (sea["high_month"], sea["low_month"]) == (mm.index(max(mm)) + 1, mm.index(min(mm)) + 1)
     assert 0 < sea["swing"] < 100  # tens of mm a month, not thousands of mm a year
-    air = client.get("/api/trend", params={"variable": "air_temp", "lat": 39.36, "lon": -74.42}).json()
+    air = client.get("/api/trend", params={"variable": "air_temp", "lat": 39.36, "lon": -74.42, "source": "power"}).json()
     assert air["baseline"]["annual_total_mm"] is None and air["fit"]["units"] == "degC"
 
 
 def test_too_short_a_window_is_a_plain_400(offline):
-    r = client.get("/api/trend", params={"variable": "air_temp", "lat": 39.36, "lon": -74.42, "start": "2010"})
+    r = client.get("/api/trend", params={"variable": "air_temp", "lat": 39.36, "lon": -74.42, "start": "2010", "source": "power"})
     assert r.status_code == 400 and "too short for a trend" in r.json()["detail"]
     assert "cache-control" not in r.headers
 
@@ -148,7 +164,7 @@ def html_page(*a):  # upstream answers 200 with a maintenance page, so r.json() 
 @pytest.mark.parametrize("fetch", [connect_error, html_page])
 def test_source_down_is_502(monkeypatch, fetch):
     monkeypatch.setattr(power, "fetch", fetch)
-    r = client.get("/api/trend", params={"variable": "air_temp", "lat": 0, "lon": 0})
+    r = client.get("/api/trend", params={"variable": "air_temp", "lat": 0, "lon": 0, "source": "power"})
     assert r.status_code == 502 and r.json() == {"detail": "The data source did not answer. Please try again."}
     assert "cache-control" not in r.headers
 
@@ -242,7 +258,7 @@ def test_health_keys_works_outside_production(monkeypatch, vercel_env):
 
 
 def test_data_routes_limit_per_client(offline):
-    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42}
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "source": "power"}
     a, b = {"X-Forwarded-For": "1.1.1.1"}, {"X-Forwarded-For": "2.2.2.2"}
     for i in range(ratelimit.DATA_PER_CLIENT):  # series and trend share one budget
         assert client.get(("/api/series", "/api/trend")[i % 2], params=q, headers=a).status_code == 200
@@ -265,7 +281,7 @@ def test_ask_limit_unchanged_and_separate(offline, monkeypatch):
         assert client.post("/api/ask", json={"question": "hi"}, headers=a).status_code == 200
     r = client.post("/api/ask", json={"question": "hi"}, headers=a)
     assert r.status_code == 429 and "Too many questions" in r.json()["detail"] and r.headers["retry-after"]
-    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42}
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "source": "power"}
     assert client.get("/api/series", params=q, headers=a).status_code == 200  # separate budgets
 
 
@@ -318,7 +334,7 @@ def test_mcp_limit(mcp_client):
 
 
 def test_ipv6_keyed_by_64(offline):
-    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42}
+    q = {"variable": "air_temp", "lat": 39.36, "lon": -74.42, "source": "power"}
     same = ["2001:db8:1:2::1", "2001:db8:1:2:ffff::9"]  # one /64
     for i in range(ratelimit.DATA_PER_CLIENT):
         assert ratelimit.check_data(client_id_of(same[i % 2])) == 0
