@@ -511,3 +511,5 @@ Request:
 - Answers that looked something up end with the tool's own guidance for each result (*superseded 2026-11-22 by "Facts, not advice":* each result's `fact`, then "Where to look next" from `look_next`, then any official future-map link, then the disclaimer once; no risk level or recommendation). Code inserts these strings from `guidance` word for word; the model adds no advice and no future number of its own (added 2026-11-15).
 - Limits per network address: 30 questions a minute and 150 an hour (raised 2026-11-15 from 10 and 100, because the page's voice and text assistant asks on visitors' behalf from a few shared addresses); 200 an hour over all callers, unchanged.
 - Any other top-level field is refused (422).
+- **Voice (PR6):** a request header `X-Bhoomi-Voice: 1` (or `true`, `yes`) marks a spoken answer. The body shape is unchanged.
+- **Sources line (PR6):** "All our data sources, with licences: bhoomi.earth/sources" ends an answer only on the first answer of a chat (no earlier assistant turn) or when the question asks about sources, licences, citing or where the data comes from. Never in a voice answer.
