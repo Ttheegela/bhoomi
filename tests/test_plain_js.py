@@ -238,6 +238,13 @@ def test_plain_box_style():
                  ".plain .pl-h { font-family: inherit; font-size: 14px; font-weight: 600; line-height: 1.35; color: var(--ink-2); margin: 0 0 8px; }",
                  ".plain ul { list-style: none; margin: 0; padding: 0; }", ".plain li { font-size: 16px; line-height: 1.45; color: var(--ink); }",
                  ".plain li + li { margin-top: 8px; }", ".plain .pl-src { font-size: 14px; line-height: 1.35; color: var(--ink-2); margin: 10px 0 0; max-width: none; }",
-                 ".plain .nw { white-space: nowrap; }", "@container (max-width: 519px) { .plain { padding: 12px 14px 10px; } }"):
+                 ".plain .nw { white-space: nowrap; }"):
         assert rule in css, rule
+    # QA: "under 520 px" is the card's own width. .rec measures its content box, the card less 2 px of border and its
+    # padding, so the threshold is 520 minus both, at each card padding (at 1440 the card is 567 px: the wide padding)
+    assert ".card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px;" in css
+    assert "--s4: 16px;" in css and re.search(r"@media \(max-width: 899px\) \{.*?\.card \{ padding: var\(--s4\); \}", css, re.S)
+    for media, side in (("min-width: 900px", 24), ("max-width: 899px", 16)):
+        assert f"@media ({media}) {{ @container (width < {520 - 2 - 2 * side}px) {{ .plain {{ padding: 12px 14px 10px; }} }} }}" in css
+    assert "@container (max-width: 519px) { .plain" not in css
     assert not re.search(r"\bborder(-(top|bottom|left|right))?:", css.split(".plain {")[1].split("}")[0])

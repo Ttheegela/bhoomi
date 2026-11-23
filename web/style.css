@@ -164,7 +164,10 @@ span.srclink { color: var(--ink-2); }
 .plain .pl-src { font-size: 14px; line-height: 1.35; color: var(--ink-2); margin: 10px 0 0; max-width: none; }
 .plain .pl-src a { color: var(--ink-2); }
 .plain .nw { white-space: nowrap; }
-@container (max-width: 519px) { .plain { padding: 12px 14px 10px; } }
+/* smaller when the card itself is under 520 px: .rec's container is its content box, the card less 1 px borders and its
+   padding (24 px a side from 900 px, 16 px below) */
+@media (min-width: 900px) { @container (width < 470px) { .plain { padding: 12px 14px 10px; } } }
+@media (max-width: 899px) { @container (width < 486px) { .plain { padding: 12px 14px 10px; } } }
 .reads { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 0 18px; }
 .reads > div { padding: 14px 14px 14px 0; min-width: 0; }
 .reads > div + div { padding-left: 14px; border-left: 1px solid var(--line); }

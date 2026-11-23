@@ -235,3 +235,12 @@ def test_both_pages_are_served():
     assert c.get("/sources.css").status_code == 200
     r = c.get("/sources/no-such-page")
     assert r.status_code == 404 and r.headers["content-type"].startswith("text/html")
+
+
+def test_deep_links_clear_the_taller_bar():
+    """QA: the brand is a 44 px link here, so below 400 px, where the brand and Settings sit on two rows, the bar is 169 px
+    (the app's 149 plus 20), measured at 375 and 320; scroll-margin-top follows --top-h."""
+    css = (ROOT / "web" / "sources.css").read_text(encoding="utf-8")
+    assert "min-height: 44px; }" in css.split(".top .brand {")[1].split("\n")[0]
+    assert "@media (max-width: 399px) { :root { --top-h: 169px; } }" in css
+    assert ".st-sec, .src-card, .wf th[id] { scroll-margin-top: calc(var(--top-h) + 16px); }" in css
