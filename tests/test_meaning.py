@@ -206,7 +206,7 @@ def test_compute_trend_attaches_meaning_last():
     values = [0.4 * i / 12 for i in range(len(times))]  # 0.4 degC a year: 4 per decade
     r = compute_trend({"variable": "air_temp", "units": "degC", "freq": "monthly", "place": {"name": "X"},
                        "times": times, "values": values, "source": {"id": "power"}, "notes": []})
-    assert list(r)[-2] == "meaning" and list(r)[-3] == "caveats"
+    assert list(r)[-4:-1] == ["caveats", "meaning", "plain"]
     assert r["meaning"] == meaning_for({k: v for k, v in r.items() if k not in ("meaning", "guidance")})
     assert r["meaning"]["comparison"] == "About 4 °C warmer every 10 years."
 
