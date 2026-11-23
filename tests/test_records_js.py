@@ -134,7 +134,7 @@ assert.strictEqual(attribution(t0), COP);
 var tz = mergeOthers(copy(DT), null); tz.source = load("delhi_hottest_day").trend.source; // NASA POWER: no attribution
 assert.strictEqual(steps(tz, H.series, Object.assign({}, dc, { cmp: undefined })).length, 9);
 assert.strictEqual(howLead(tz, { label: 'Delhi' }), 'For Delhi. Every number below is the one the card and the chart use.');
-assert.strictEqual(attribution(tz), '');
+assert.strictEqual(attribution(Object.assign(tz, { projection: { available: false, why: 'x' } })), ''); // no ERA5, no CMIP6: no line
 
 // §10 CSV: after "# Retrieved:", the main record, each other record, agreement, drift, then Copernicus; ASCII minus
 var cl = csvPlace(t0, H.series, dc).text.split('\n'), ri = cl.indexOf('# Retrieved: 2026-11-22');
@@ -255,19 +255,77 @@ assert.strictEqual(recHelp('sea_level', 'coops'), ''); // sea level keeps "Measu
 
 // Copernicus: the CMIP6 projection CSV carries it when its source does; the compare CSV once for ERA5 places
 var PC = load('princeton_air_temp'), pcc = { label: 'Princeton, NJ', name: 'Air temperature', slug: 'air-temperature', imperial: false };
-assert.ok(csvFuture(PC.trend, pcc).text.split('\n').indexOf('# ' + COP) < 0);
-PC.trend.projection.source.attribution = COP;
+assert.strictEqual(PC.trend.projection.source.attribution, COP); // as the server sends it
 assert.ok(csvFuture(PC.trend, pcc).text.split('\n').indexOf('# ' + COP) > 0);
-assert.strictEqual(attribution(Object.assign(copy(PC.trend), { source: { id: 'power' } })), COP); // the projection's alone
+PC.trend.projection.source.attribution = null;
+assert.ok(csvFuture(PC.trend, pcc).text.split('\n').indexOf('# ' + COP) < 0);
+var pj = load('princeton_air_temp').trend;
+assert.strictEqual(attribution(Object.assign(pj, { source: { id: 'power' }, comparisons: null })), COP); // the projection's alone
 var cc = csvCompare([{ label: 'Delhi', t: t0, s: H.series }, { label: 'Princeton', t: PT, s: P.series }], { name: 'Hottest days', slug: 'hottest-days' }).text.split('\n');
 assert.strictEqual(cc.filter(function (l) { return l === '# ' + COP; }).length, 1);
+"""
+
+# The server's own output (tests/fixtures/rework, made by the stats lane's code): NASA POWER is still first in the
+# catalog there, so it is the main record; the page takes it from the rows' `main`, never from a name.
+REAL = r"""
+var NAME = { air_temp: 'Air temperature', air_temp_max: 'Hottest days', precip: 'Rain' }, SLUG = { air_temp: 'air-temperature', air_temp_max: 'hottest-days', precip: 'rain' };
+function real(n, label) { var d = load(n), t = d.trend; return { t: t, s: d.series, c: { label: label, name: NAME[t.variable], slug: SLUG[t.variable], imperial: false, cmp: 'ok' } }; }
+function rowsText(b) { return b.rows.map(function (r) { return r.why !== undefined ? [r.label, r.sub, r.why] : [r.label + (r.href ? ' ↗' : ''), r.sub, r.shape + ' ' + r.word, r.rate, r.years, r.miss, r.note]; }); }
+
+// Delhi, hottest day: the records disagree; the headline (main record's full window) and the main row (shared years) differ
+var RD = real('delhi_hottest_day', 'Delhi, India'), rb = recBlock(RD.t, RD.c), rs = steps(RD.t, RD.s, RD.c);
+assert.strictEqual(rb.window, 'Same years for all: 1981 to 2024');
+assert.deepStrictEqual(rowsText(rb), [
+  ['NASA POWER ↗', 'Main record · Weather model, grid cell about 50 km wide', '▲ Rising', '+0.22 °C', '1981–2024', '', ''],
+  ['ERA5 ↗', 'Weather model, grid cell about 25 km wide', '≈ No clear change', MN + '0.022 °C', '1981–2024', '', ''],
+  ['Weather station ↗', 'New Delhi Safdarjun, IN, 1 km away', '▲ Rising', '+0.39 °C', '1981–2024', '81 months missing', '']]);
+assert.strictEqual(card(RD.t, false).r2.value, '+0.23' + NB + '°C'); // the card's headline, as given
+assert.ok(rb.link && rb.dis.line === 'The records disagree here.' && rb.dis.reasons.length === 4);
+assert.deepStrictEqual(rb.dis.reasons, RD.t.disagree.reasons.map(function (x) { return x.text; }));
+assert.strictEqual(rs[7].short, 'They disagree: NASA POWER rising, ERA5 no clear change, weather station rising');
+assert.ok(rs[7].open === true);
+assert.strictEqual(rs[7].work[rs[7].work.length - 1], 'Drift, month by month, each record against its own 1995–2014 average: ERA5 minus NASA POWER ' + MN + '0.25' + NB + '°C per decade (95% range '
+  + MN + '0.27 to ' + MN + '0.23); ERA5 minus the weather station ' + MN + '0.44' + NB + '°C per decade (' + MN + '0.49 to ' + MN + '0.38). We flag a model when it drifts the same way against every other record.');
+var rl = csvPlace(RD.t, RD.s, RD.c).text.split('\n');
+assert.ok(rl.indexOf('# Main record: NASA POWER (MERRA-2) (chart, trend and projection baseline)') > 0);
+assert.ok(rl.indexOf('# Other record: ERA5 reanalysis via Open-Meteo archive; 1981–2024; -0.022 °C per decade (95% range -0.11 to +0.06 °C per decade); no clear change; ' + RD.t.comparisons[1].source.record_url) > 0);
+assert.ok(rl.some(function (l) { return l.indexOf('# Other record: NOAA NCEI GHCN-Daily, station New Delhi Safdarjun, IN (IN022021900), 1 km away; 1981–2024, 81 months missing; +0.39 °C per decade (95% range ') === 0; }));
+assert.ok(rl.indexOf('# Records agree: no') > 0 && rl.indexOf('# Drift: ' + RD.t.drift.text) > 0 && rl.indexOf('# ' + COP) > 0); // an ERA5 row: Copernicus
+nothingBanned([rb, rs, rl]);
+
+// Princeton, air temperature: all three agree
+var RP = real('princeton_air_temp', 'Princeton, NJ'), pb2 = recBlock(RP.t, RP.c), ps2 = steps(RP.t, RP.s, RP.c);
+assert.deepStrictEqual(pb2.agree, ['All three records agree: rising.']);
+assert.deepStrictEqual(rowsText(pb2).map(function (r) { return r[2] + ' ' + r[3]; }), ['▲ Rising +0.37 °C', '▲ Rising +0.35 °C', '▲ Rising +0.39 °C']);
+assert.ok(ps2[7].short === 'All three agree: rising' && ps2[7].open === false);
+nothingBanned([pb2, ps2]);
+
+// Chennai, rain: the station is too short (no name, km or link yet: its why), both models agree
+var RC = real('chennai_rain', 'Chennai, India'), cb2 = recBlock(RC.t, RC.c), cs2 = steps(RC.t, RC.s, RC.c);
+assert.deepStrictEqual(rowsText(cb2)[2], ['Weather station', '', RC.t.comparisons[2].why]);
+assert.deepStrictEqual(rowsText(cb2).slice(0, 2).map(function (r) { return r[3]; }), ['+6.1%', '+7.0%']);
+assert.deepStrictEqual(cb2.agree, ['Both records agree: rising.']);
+assert.ok(cs2[7].short === 'Both agree: rising' && /^We ran steps 1 to 6 on one more record /.test(cs2[7].words[0]));
+nothingBanned([cb2, cs2]);
+
+// Sydney, rain: all three show no clear change; the drift line follows the agree line
+var RS = real('sydney_rain_drift', 'Sydney, Australia'), sb2 = recBlock(RS.t, RS.c), ss2 = steps(RS.t, RS.s, RS.c);
+assert.deepStrictEqual(sb2.agree, ['All three records agree: no clear change.', 'Weather models can drift over decades at some places; at this spot NASA POWER has been getting drier relative to the other records.']);
+assert.deepStrictEqual(rowsText(sb2).map(function (r) { return r[3]; }), [MN + '6.6%', MN + '0.78%', '+1.3%']);
+assert.ok(ss2[7].short === 'All three agree: no clear change; NASA POWER has been drifting drier' && ss2[7].open === true, ss2[7].short);
+nothingBanned([sb2, ss2]);
+// both models flagged: drift.source null, the server's "drifted apart" text, no pair line and no "drifting" in the short
+var R2 = copy(RS.t); R2.drift = Object.assign({}, R2.drift, { source: null, label: null, text: 'Weather models can drift over decades at some places; at this spot ERA5 and NASA POWER have drifted apart.' });
+var r2s = steps(R2, RS.s, RS.c)[7];
+assert.ok(r2s.short === 'All three agree: no clear change' && r2s.work[r2s.work.length - 1] === R2.drift.text, r2s.short);
+assert.strictEqual(recBlock(R2, RS.c).agree[1], R2.drift.text);
 """
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_records_pure_logic():
     env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
-    r = subprocess.run(["node", "-"], input=PURE + DATA + PURE_TESTS, capture_output=True, text=True, env=env)
+    r = subprocess.run(["node", "-"], input=PURE + DATA + PURE_TESTS + REAL, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
 
 
