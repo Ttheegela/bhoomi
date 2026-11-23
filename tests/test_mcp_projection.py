@@ -68,7 +68,8 @@ def test_the_battery(mcp_client, monkeypatch):
         "plain": "Intermediate emissions (SSP2-4.5): emissions stay around today's level until about 2050, then fall "
                  "slowly. It is one of four paths the IPCC uses; experts give no odds for which one happens."}
     assert g["typical"] == {"value": 358, "units": "mm", "text": nb("about 36 cm higher than the 1995 to 2014 average"),
-                            "kind": "the experts' middle estimate (50th percentile)"}
+                            "kind": "the experts' middle estimate (50th percentile)",
+                            "rate_mm_per_year": 8.6}  # plain line 3's "still rising about 8.6 mm a year"
     assert g["likely_range"] == {"low": 266, "high": 464, "units": "mm",
                                  "text": nb("between 27 and 46 cm higher than the 1995 to 2014 average"),
                                  "kind": "likely range: about a 2 in 3 chance, medium confidence"}
@@ -251,9 +252,9 @@ def test_every_number_is_in_the_result(monkeypatch, name, kw):
     fields += [v / 10 for v in fields] if sea else []  # sea level: mm fields, cm text
     t, now = g["typical"], g["today_level"]
     fields.append((t["value"] - now["value"]) / (10 if sea else 1))  # vs_typical: the projection minus today
-    if sea:  # §5 carries no rate field: plain's "still rising about 8.6 mm a year" is the row's rate.p50 there
+    if sea:  # plain's "still rising about 8.6 mm a year" is typical.rate_mm_per_year, in the result itself
         row = next(s for s in r["projection"]["scenarios"] if s["id"] == g["scenario"]["id"])
-        fields.append(row["rate"]["p50"][r["projection"]["years"].index(g["when"]["year"])])
+        assert g["typical"]["rate_mm_per_year"] == row["rate"]["p50"][r["projection"]["years"].index(g["when"]["year"])]
     for line in g["plain"] + _texts(g, []):
         text = re.sub(r"\b(2 in 3|8 in 10|9 in 10)\b|\b\d+(th|rd) percentile", "", line)
         for n in re.findall(r"\d+(?:\.\d+)?", text):

@@ -39,8 +39,9 @@ def test_model_view_has_the_compact_sea_level_projection():
     view = loop.for_model([ok(BATTERY)])[0]["result"]
     assert view["projection"] == {
         "available": True, "kind": "sea_level_ar6", "source": "IPCC AR6 sea level projections (Garner et al. 2021)",
+        "url": "https://doi.org/10.5281/zenodo.6382554",  # named by code when the answer lacks it
         "scenario": "intermediate emissions (SSP2-4.5)", "when": "2050", "baseline": "the 1995–2014 average",
-        "text": "+36 cm (likely +27 to +46 cm)", "range_kind": AR6, "more_than_today": "about 29 cm more than today",
+        "range_kind": AR6,  # no projected number: the plain lines carry them (no readout, no "more than today")
         # design 16 §4: check.text (and location.note, null here) reach Ask; this synthetic record is below the range
         "check": "Measured levels here are already below the experts' range for recent years."}
     assert loop.model_results([ok(BATTERY)]) == [view]  # the number check pools what the model read
@@ -50,9 +51,9 @@ def test_model_view_has_the_compact_cmip6_projection():
     p = loop.model_view(PRINCETON)["projection"]
     assert p == {
         "available": True, "kind": "cmip6_atlas", "source": "IPCC AR6 Interactive Atlas, CMIP6 projections",
+        "url": "https://digital.csic.es/handle/10261/332744",
         "scenario": "intermediate emissions (SSP2-4.5)", "when": "2041–2060", "baseline": "the 1995–2014 average",
-        "text": "+1.9 °C (range across climate models +1.2 to +2.3 °C)", "range_kind": SPREAD,
-        "more_than_today": "about 1.7 °C more than today", "models_note": PRINCETON["projection"]["models_note"],
+        "range_kind": SPREAD, "models_note": PRINCETON["projection"]["models_note"],
         "baseline_record": "NASA POWER (MERRA-2)"}
     assert loop.model_view(CHENNAI)["projection"]["disagree"] == "Models disagree on wetter or drier."
     assert "more_than_today" not in loop.model_view(DELHI)["projection"]  # the tool gives none for the hottest day
@@ -99,15 +100,17 @@ def test_one_projection_per_place_and_measurement_when_sources_disagree():
 
 # ---- the checks accept the tool's projection numbers and years, and nothing made up ----
 
-def test_number_guard_accepts_projection_numbers_and_rejects_made_up_ones():
+def test_number_guard_accepts_the_plain_lines_numbers_and_rejects_the_rest():
+    """The model reads no projected number of its own (no readout, no "more than today"): only the plain lines'
+    numbers pass, as they are written there."""
     res = loop.model_results([ok(BATTERY)])
-    said = "The experts' projection for 2050 is +36 cm (likely +27 to +46 cm), about 29 cm more than today."
-    assert loop.invented_numbers(said, res) == []
-    assert loop.invented_numbers(said.replace("+46", "+52"), res) == ["52"]
+    assert loop.invented_numbers(" ".join(BATTERY["plain"]), res) == []
+    assert loop.invented_numbers("By 2050 it may be between 27 and 52 cm higher.", res) == ["52"]
     assert loop.invented_numbers("By 2100 it could be +80 cm.", res) == ["2100", "80"]
+    assert loop.invented_numbers("That is about 29 cm more than today.", res) == ["29"]
     rain = loop.model_results([ok(CHENNAI)])
-    assert loop.invented_numbers("+11% (range across climate models −3 to +24%), 10th–90th percentile.", rain) == []
-    assert loop.invented_numbers("+11% (range across climate models −3 to +30%).", rain) == ["30"]
+    assert loop.invented_numbers(" ".join(CHENNAI["plain"]), rain) == []
+    assert loop.invented_numbers("Between 3% less and 30% more rain.", rain) == ["30"]
 
 
 def test_projection_years_and_the_baseline_are_no_wrong_period():
@@ -120,9 +123,9 @@ def test_projection_years_and_the_baseline_are_no_wrong_period():
 def test_scorer_passes_an_answer_with_the_code_written_projection():
     answer = guidance.lead([ok(PRINCETON)]) + "\n\n" + guidance.fill(
         "About 0.4 °C warmer every 10 years. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/. [GUIDANCE]",
-        [ok(PRINCETON)], sources=True)
+        [ok(PRINCETON)])
     case = {"id": "p", "question": "q", "expect_tool": "detect_trend",
-            "must_say": ["8 in 10 climate models", "IPCC projections", "bhoomi.earth/sources"],
+            "must_say": ["8 in 10 climate models", "IPCC projections"],
             "must_not_say": ["likely range", "in 3 chance", "risk"]}
     out = run.check(case, {"answer": answer, "tool_calls": [ok(PRINCETON)]})
     assert out["numbers"] and out["wording"] and out["links"] and out["must_say"], (out, answer)
@@ -175,12 +178,16 @@ def test_loop_sends_the_projection_and_ends_with_it_then_the_disclaimer(monkeypa
                    step(body + " [GUIDANCE]")]
     r = loop.ask("Will the sea at The Battery be higher when I'm older?", model="fake:m")
     sent = Fake.results[0][0]["content"]["projection"]
-    assert sent["text"] == "+36 cm (likely +27 to +46 cm)" and "scenarios" not in sent
+    assert sent["url"] == BATTERY["projection"]["source"]["record_url"]
+    assert not {"text", "more_than_today", "scenarios"} & set(sent)  # no projected number: the plain lines say it
     a = r["answer"]
     # the plain lines first (code), then the model's text, then the guidance: no projection repeated, the IPCC
     # disclaimer, and the sources pages line last
     assert a.startswith(guidance.lead(r["tool_calls"]) + "\n\n" + body) and BATTERY["plain"][0] in a
     assert AR6 not in a and a.endswith(f"{DISCLAIMER_PROJECTION}\n{guidance.SOURCES_LINE}")
+    # the IPCC dataset is named with its address, before the guidance (the body didn't name it)
+    link = f"Source: {BATTERY['projection']['source']['name']}, {BATTERY['projection']['source']['record_url']}."
+    assert a.index(link) < a.index(BATTERY["guidance"]["fact"]) and a.count(link) == 1
 
 
 # ---- MCP passes the whole projection on ----

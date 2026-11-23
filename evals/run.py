@@ -239,6 +239,9 @@ def check(case: dict, run: dict) -> dict[str, bool]:
     # a failed call's sources: the addresses the model read with its error, this turn only
     known |= {_url(s["url"]) for c in run.get("tool_calls", []) if c.get("error") for s in tried_sources(c)}
     known |= {_url(u) for u in resources.URLS}
+    # the expert projection's dataset, which code names when the answer doesn't
+    known |= {_url(r["projection"]["url"]) for r in results if isinstance(r, dict)
+              and isinstance(r.get("projection"), dict) and r["projection"].get("url")}
     # the tool's own guidance links, which code inserts word for word
     known |= {_url(u) for r in results if isinstance(r, dict) and isinstance(r.get("guidance"), dict)
               for u in URL.findall(json.dumps(r["guidance"]))}

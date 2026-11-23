@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from evals import run
-from earthtrends.agent import guidance, loop, projection_answer, providers, tools
+from earthtrends.agent import guidance, loop, projection_answer, providers, resources, tools
 from earthtrends.app import app
 from earthtrends.stats import records
 
@@ -249,13 +249,15 @@ def test_simple_words_twice_wrong_gives_the_lines_and_the_sources(fake, monkeypa
 
 
 @pytest.mark.parametrize("q", ["Explain in simple words.", "Say it simply", "in plain words please", "Plain English?",
-                               "in everyday words", "explain like I’m 10", "for a child", "What does that mean for me?"])
+                               "in everyday words", "explain like I’m 10", "for a child", "What does that mean for me?",
+                               "Can you explain it simply?", "Put it in simple terms."])
 def test_simple_words_are_detected(q):
     assert loop.SIMPLE.search(q.replace("’", "'"))
 
 
 @pytest.mark.parametrize("q", ["Is sea level rising in New York?", "Is it getting hotter in Princeton?",
-                               "What does 95% range mean?"])
+                               "What does 95% range mean?", "Is it simply this year?",
+                               "Is there a simple way to tell if the sea is rising?"])
 def test_other_questions_are_not_simple_words(q):
     assert not loop.SIMPLE.search(q)
 
@@ -325,7 +327,7 @@ def test_a_later_turn_asking_where_the_data_come_from_has_it(fake, monkeypatch):
     said = "These numbers come from NOAA's tide gauges and the IPCC's sea level projections."
     fake.script = [step(said)]
     out = loop.ask("where does this data come from?", model="fake:m", history=HISTORY)
-    assert out["tool_calls"] == [] and out["answer"] == f"{said}\n\n{SOURCES}"
+    assert out["tool_calls"] == [] and out["answer"] == f"{said}\n{SOURCES}"
 
 
 def test_voice_never_has_it(fake, monkeypatch):
@@ -359,3 +361,48 @@ def test_the_voice_header_reaches_the_loop(monkeypatch):
     for headers in ({"X-Bhoomi-Voice": "1"}, {"x-bhoomi-voice": "true"}, {}, {"X-Bhoomi-Voice": "0"}):
         assert client.post("/api/ask", json={"question": "hi"}, headers=headers).status_code == 200
     assert seen == [{"voice": True}, {"voice": True}, {}, {}]
+
+
+# ---- PR6 review ----
+
+IPCC = BATTERY["projection"]["source"]
+IPCC_LINK = f"Source: {IPCC['name']}, {IPCC['record_url']}."
+
+
+def test_the_projection_dataset_is_named_with_its_address_in_both_modes(fake, monkeypatch):
+    """The opening's numbers are IPCC's: every result names its data source (dataset name and URL)."""
+    a, _ = ask(fake, monkeypatch, "Is sea level rising at The Battery?", [BATTERY], TEXT)
+    assert a.count(IPCC_LINK) == 1 and a.index(IPCC_LINK) < a.index(BATTERY["guidance"]["fact"])
+    simple, _ = ask(fake, monkeypatch, "Is the sea going up at the Battery? Explain in simple words.", [BATTERY],
+                    SIMPLE_TEXT + " [GUIDANCE]")
+    assert simple.count(IPCC_LINK) == 1
+    named = f"About 3 mm higher each year. {NOAA} IPCC AR6 sea level projections: {IPCC['record_url']}. [GUIDANCE]"
+    n, _ = ask(fake, monkeypatch, "Is sea level rising at The Battery?", [BATTERY], named)
+    assert IPCC_LINK not in n and n.count(IPCC["record_url"]) == 1  # named already: not twice
+    t, _ = ask(fake, monkeypatch, "Is it getting hotter in Princeton?", [PRINCETON],
+               f"About 0.4 °C warmer every 10 years. {POWER} [GUIDANCE]")
+    atlas = PRINCETON["projection"]["source"]
+    assert f"Source: {atlas['name']}, {atlas['record_url']}." in t
+
+
+def test_simple_words_take_a_year_in_a_dataset_name_for_no_figure(fake, monkeypatch):
+    said = (f"This comes from NOAA's tide gauges, https://tidesandcurrents.noaa.gov/, and {IPCC['name']}, "
+            f"{IPCC['record_url']}.")
+    a, _ = ask(fake, monkeypatch, "Is the sea going up at the Battery? Explain in simple words.", [BATTERY], said)
+    assert len(fake.starts) == 1 and said in a  # one reply: no figures retry for "2021" or the DOI's digits
+
+
+def test_the_sources_line_comes_after_the_official_resources(fake, monkeypatch):
+    a, _ = ask(fake, monkeypatch, BUILDER, [BATTERY], f"About 3 mm higher each year. {NOAA} [GUIDANCE] [OFFICIAL RESOURCES]")
+    assert a.endswith(f"{resources.US_COAST}\n{SOURCES}")
+
+
+def test_a_simple_words_follow_up_that_looks_nothing_up_restarts_once_with_tools(fake, monkeypatch):
+    monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: BATTERY)
+    lookup = {"id": "a", "name": "detect_trend", "arguments": args(BATTERY), "arguments_error": None}
+    fake.script = [step("It means the sea is going up."), step(calls=[lookup]), step(SIMPLE_TEXT + " [GUIDANCE]")]
+    out = loop.ask("Explain in simple words.", model="fake:m", history=HISTORY)
+    assert fake.script == [] and len(out["tool_calls"]) == 1 and fake.starts[1].endswith(loop.SIMPLE_LOOKUP)
+    assert out["answer"].startswith(f"{BATTERY['meaning']['headline']} {BATTERY['plain'][0]}")
+    fake.script = [step("Which place do you mean?")]  # no earlier answer to look up: no restart
+    assert loop.ask("Explain in simple words.", model="fake:m")["answer"] == "Which place do you mean?"

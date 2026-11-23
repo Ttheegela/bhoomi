@@ -20,14 +20,13 @@ def _end(s: str) -> str:
 
 
 DISAGREE = "Models disagree on wetter or drier."  # the page's words for by_2050.disagree (rain)
-SOURCES_LINE = "All our data sources, with licences: bhoomi.earth/sources"  # design 17 §8: last, no number
-_AFTER_SOURCES = re.compile(rf"(?<={re.escape(SOURCES_LINE)})[ \t]+(?=\S)")  # text after it starts a new line
+SOURCES_LINE = "All our data sources, with licences: bhoomi.earth/sources"  # design 17 §8: the loop adds it last
 
 
 def projection_view(p):
-    """A result's `projection` as the model reads it (the number check pools it): the default scenario's 2050 (sea
-    level) or 2041-2060 readout text with its range name, "more than today" where the tool gives it, and the notes the
-    model passes on with the caveats (models_note, location_note, check). Not available: only its why."""
+    """A result's `projection` as the model reads it (the number check pools it): the dataset's name and address, the
+    default scenario, its period and baseline, the range's name, and the notes the model passes on with the caveats
+    (models_note, location_note, check). No projected number: the plain lines carry those. Not available: its why."""
     if not isinstance(p, dict):
         return p
     if not p.get("available"):
@@ -37,10 +36,10 @@ def projection_view(p):
     sc = next((s for s in p.get("scenarios") or [] if s.get("id") == b.get("scenario")), {})
     w = b.get("window")
     out = {"available": True, "kind": p.get("kind"), "source": (p.get("source") or {}).get("name"),
+           "url": (p.get("source") or {}).get("record_url"),
            "scenario": f"{sc['name']} ({sc['code']})" if sc.get("name") and sc.get("code") else None,
            "when": f"{w[0]}–{w[1]}" if isinstance(w, list) and len(w) == 2 else "2050",  # sea level's by_2050 is 2050
-           "baseline": (p.get("baseline") or {}).get("text"), "text": b.get("text"), "range_kind": b.get("range_kind"),
-           "more_than_today": (ro.get("more_than_today") or {}).get("text"),
+           "baseline": (p.get("baseline") or {}).get("text"), "range_kind": b.get("range_kind"),
            "disagree": DISAGREE if b.get("disagree") else None, "models_note": p.get("models_note"),
            "location_note": (p.get("location") or {}).get("note"), "check": (p.get("check") or {}).get("text"),
            "baseline_record": (p.get("baseline_record") or {}).get("name")}
@@ -77,11 +76,10 @@ def picked(calls: list[dict]) -> list[tuple[tuple, dict]]:
     return out
 
 
-def block(calls: list[dict], simple: bool = False, sources: bool = False) -> str:
+def block(calls: list[dict], simple: bool = False) -> str:
     """The guidance text for this turn's results; "" when none has a fact. `simple` (a request for simple words,
     design 16 §4): without the facts (they carry the 95% range and the world ratio). No projection line: the plain
-    lines, first in the answer, carry the projection (design 16 §4.3). `sources`: SOURCES_LINE closes it, on its own
-    line (the loop decides when: the first answer or a question about sources, never in voice)."""
+    lines, first in the answer, carry the projection (design 16 §4.3)."""
     rs = picked(calls)
     if not rs:
         return ""
@@ -112,8 +110,7 @@ def block(calls: list[dict], simple: bool = False, sources: bool = False) -> str
     disclaimer = DISCLAIMER_PROJECTION if DISCLAIMER_PROJECTION in disclaimers else next(filter(None, disclaimers), "")
     tail = ([f"Where to look next: {'; '.join(lab + url for lab, url in look.items())}."] if look else [])
     tail += [f"{lab} ({url})." for url, lab in links.items()]
-    return "\n".join(filter(None, (" ".join(parts + tail + ([_end(disclaimer)] if disclaimer else [])),
-                                    SOURCES_LINE if sources else "")))
+    return " ".join(parts + tail + ([_end(disclaimer)] if disclaimer else []))
 
 
 RECORDS_DISAGREE = "Our records here disagree about the past."  # design 16 §4: the past clause when verdicts differ
@@ -155,20 +152,18 @@ def strip(text: str) -> str:
     return _MARK.sub("", text)
 
 
-def fill(text: str, calls: list[dict], simple: bool = False, sources: bool = False, alone: bool = False) -> str:
+def fill(text: str, calls: list[dict], simple: bool = False) -> str:
     """The first marker becomes the guidance (a space before it unless it starts a line); other markers go. No marker:
     the guidance goes in front of the official-resources marker if there is one, else at the end as its own
-    paragraph. No guidance: markers removed, text otherwise unchanged, or with `alone` the sources pages line by itself
-    in the guidance's place (a question about sources that looked nothing up). Text that follows the guidance on its
-    last line (the official resources) starts a new line, so the sources pages line stands alone."""
-    add = block(calls, simple, sources) or (SOURCES_LINE if alone else "")
+    paragraph. No guidance: markers removed, text otherwise unchanged."""
+    add = block(calls, simple)
     if not _MARK.search(text):
         if not add:
             return text
         m = resources._MARK.search(text)
         if m:
             head = text[:m.start()].rstrip()
-            return _AFTER_SOURCES.sub("\n", head + ("\n\n" if head else "") + add + " " + text[m.start():].lstrip())
+            return head + ("\n\n" if head else "") + add + " " + text[m.start():].lstrip()
         return text.rstrip() + "\n\n" + add
     out, last = [], 0
     for m in _MARK.finditer(text):
@@ -177,4 +172,4 @@ def fill(text: str, calls: list[dict], simple: bool = False, sources: bool = Fal
             out.append(add if m.start() == 0 or text[m.start() - 1] == "\n" else " " + add)
             add = ""
         last = m.end()
-    return _AFTER_SOURCES.sub("\n", ("".join(out) + text[last:]).rstrip())
+    return ("".join(out) + text[last:]).rstrip()
