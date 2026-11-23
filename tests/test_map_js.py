@@ -301,7 +301,7 @@ def test_map_pure_logic():
 
 
 SWEEP = r"""
-var E = JSON.parse(process.env.E), bad = { mm: 0, in: 0 };
+var E = JSON.parse(require('fs').readFileSync(process.env.E, 'utf8')), bad = { mm: 0, in: 0 };
 E.forEach(function (c) {
   var t = { headline_rate: c.h, slope_per_decade: c.pd[0], ci_low: c.pd[1], ci_high: c.pd[2] };
   [false, true].forEach(function (im) {
@@ -315,7 +315,7 @@ console.log(JSON.stringify({ n: E.length, bad: bad, blocks: bs && bs.length }));
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
-def test_every_gauge_hover_equals_its_card_and_the_real_files_read():
+def test_every_gauge_hover_equals_its_card_and_the_real_files_read(tmp_path):
     """QA B2: over every dot in web/data/gauge-trends.json (both "Measured by" lists), the hover's rate and 95% range equal
     the card's in mm (the server's headline_rate text) and in inches (the card's conversion of slope_per_decade, ci_low and
     ci_high), the earthquake-step gauges' wide ranges included. The real grace-trends.json reads (its enc is per field)."""
@@ -327,7 +327,9 @@ def test_every_gauge_hover_equals_its_card_and_the_real_files_read():
         pd = [round(g[k] * 10, 4) for k in ("slope", "lo", "hi")]  # the API's 4-decimal values a decade
         cases.append({"name": g["name"], "v": g["slope"], "lo": g["lo"], "hi": g["hi"], "pd": pd,
                       "h": trend._headline_rate("sea_level", UNITS["sea_level"], tuple(pd), None)})
-    env = {"E": json.dumps(cases), "W": str(ROOT / "web" / "data" / "grace-trends.json"), "PATH": ""}
+    ef = tmp_path / "cases.json"
+    ef.write_text(json.dumps(cases), encoding="utf-8")  # too big for an env var (E2BIG)
+    env = {"E": str(ef), "W": str(ROOT / "web" / "data" / "grace-trends.json"), "PATH": ""}
     r = subprocess.run([shutil.which("node"), "-"], input=CARD_JS + PURE + SWEEP, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
