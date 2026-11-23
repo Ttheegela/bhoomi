@@ -68,9 +68,18 @@ def cached_get(folder: Path):
     return get
 
 
-def tenth(per_decade: float) -> float:
-    """A rate per decade from the API -> per year, to 0.1, half away from zero (the map's precision)."""
-    return float((Decimal(repr(per_decade)) / 10).quantize(Decimal("0.1"), ROUND_HALF_UP)) + 0.0
+def per_year(per_decade: float) -> float:
+    """A rate per decade from the API -> per year with every digit the API gives (4 decimals a decade, 5 a year), so
+    the page rounds it as the card rounds headline_rate. Kept to 0.01 it would read differently from the card on 1 in
+    10 dots: 4.24662 -> 4.25 -> "+4.3" where the card says "+4.2", and -0.0933 -> -0.09 -> "-0.090" for "-0.093"."""
+    return float(Decimal(repr(per_decade)) / 10) + 0.0
+
+
+def rates(r: dict) -> dict:
+    """The point answer's numbers as the map keeps them."""
+    return {"slope": per_year(r["slope_per_decade"]), "lo": per_year(r["ci_low"]), "hi": per_year(r["ci_high"]),
+            "verdict": r["verdict"], "start": r["period"]["start"], "end": r["period"]["end"],
+            "years": math.floor(r["record"]["years"] + 0.5)}  # the page's Math.round
 
 
 def fixed3(x: float) -> str:
@@ -117,13 +126,16 @@ def summary(x, w, verdicts) -> dict:
 def build_gauges(retrieved: str) -> dict:
     gauges, skipped = [], []
     for mod, s, lat, lon in dots():
-        net, sid = mod.SOURCE["id"], str(s["id"])
+        net, sid, mode = mod.SOURCE["id"], str(s["id"]), None
         try:
             why = own_problem(mod, s)
             if why is None:
                 r = tools.detect_trend("sea_level", lat, lon)  # the page's own request when this dot is clicked
                 if r["source"]["record_url"] != mod.record_url(s["id"]):
                     why = f"the answer at this spot uses another gauge: {r['place']['name']} ({r['source']['name']})"
+                    if mod is psmsl:  # the page's request with "Measured by" on PSMSL
+                        p = tools.detect_trend("sea_level", lat, lon, source="psmsl")
+                        mode = rates(p) if p["source"]["record_url"] == mod.record_url(s["id"]) else None
         except httpx.HTTPStatusError as e:
             why = f"no usable data: the provider has no file for it (HTTP {e.response.status_code})"
         except httpx.DecodingError:
@@ -133,12 +145,10 @@ def build_gauges(retrieved: str) -> dict:
         except ValueError as e:  # the point answer's own 400 sentence
             why = str(e)
         if why:
-            skipped.append({"id": sid, "network": net, "name": s["name"], "lat": lat, "lon": lon, "why": why})
+            skipped.append({"id": sid, "network": net, "name": s["name"], "lat": lat, "lon": lon, "why": why,
+                            **({"psmsl_mode": mode} if mode else {})})
             continue
-        gauges.append({"id": sid, "network": net, "name": s["name"], "lat": lat, "lon": lon,
-                       "slope": tenth(r["slope_per_decade"]), "lo": tenth(r["ci_low"]), "hi": tenth(r["ci_high"]),
-                       "verdict": r["verdict"], "start": r["period"]["start"], "end": r["period"]["end"],
-                       "years": math.floor(r["record"]["years"] + 0.5)})  # the page's Math.round
+        gauges.append({"id": sid, "network": net, "name": s["name"], "lat": lat, "lon": lon, **rates(r)})
     st = summary([g["slope"] for g in gauges], [1] * len(gauges), [g["verdict"] for g in gauges])
     return {
         "v": 1, "kind": "gauge_trends", "units": "mm a year", "relative_to": "land",
@@ -148,9 +158,13 @@ def build_gauges(retrieved: str) -> dict:
                    "seasonal cycle where the record has no such average), then the Mann-Kendall test and Sen's "
                    "slope over the whole record from start to end (sparse early years left out, as the point answer "
                    "does), with the 95% range widened for months "
-                   "that are alike. Rates are relative to the land at the gauge, in mm a year, to 0.1. A dot whose "
+                   "that are alike. Rates are relative to the land at the gauge, in mm a year, unrounded (the "
+                   "point answer's slope_per_decade, ci_low and ci_high over 10): round them as the card rounds "
+                   "headline_rate (2 significant figures, half away from zero). A dot whose "
                    "record the point answer would not use, or whose spot is answered by another gauge, is in "
-                   "skipped. Stats are plain counts of gauges, not weighted by area or coastline; percentiles are "
+                   "skipped. A skipped PSMSL dot whose spot is answered by another gauge carries psmsl_mode when "
+                   "/api/trend with source=psmsl at the dot uses that PSMSL gauge: the answer with Measured by on "
+                   "PSMSL. Stats are over gauges only, plain counts, not weighted by area or coastline; percentiles are "
                    "the lowest rate with at least that share of gauges at or below it."),
         "retrieved": retrieved, "gauges": gauges, "skipped": skipped,
         "stats": {"n": st["n"], "median": st["p50"], "p10": st["p10"], "p90": st["p90"],

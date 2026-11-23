@@ -3,6 +3,7 @@ replies saved in tests/fixtures, plus small synthetic gauge files."""
 import importlib.util
 import json
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +12,7 @@ import pytest
 from earthtrends.agent import tools
 from earthtrends.data import coops, psmsl
 from earthtrends.stats import compute_trend
+from earthtrends.stats.trend import _headline_rate
 
 ROOT = Path(__file__).parent.parent
 FIX = Path(__file__).parent / "fixtures"
@@ -69,13 +71,31 @@ def test_gauges_match_the_point_code(gauges):
     ac = coops.parse(json.loads((FIX / "coops_8534720_msl.json").read_text()))
     mumbai = psmsl.parse((FIX / "psmsl_43.rlrdata").read_text())[:2]
     for key, record in ((("coops", "8534720"), ac), (("psmsl", "43"), mumbai)):
-        r, g = point(key[0], *record), got[key]
-        for mine, theirs in (("slope", "slope_per_decade"), ("lo", "ci_low"), ("hi", "ci_high")):
-            assert g[mine] == pytest.approx(r[theirs] / 10, abs=0.05)
-        assert (g["verdict"], g["start"], g["end"]) == (r["verdict"], r["period"]["start"], r["period"]["end"])
-        assert g["years"] == round(r["record"]["years"])
+        assert_rates(got[key], point(key[0], *record))
     assert got[("coops", "8534720")]["name"] == "Atlantic City"
     assert gauges["stats"]["n"] == 2 and gauges["stats"]["frac_rising"] == 1.0
+
+
+def assert_rates(g: dict, r: dict) -> None:
+    for mine, theirs in (("slope", "slope_per_decade"), ("lo", "ci_low"), ("hi", "ci_high")):
+        assert g[mine] == pytest.approx(r[theirs] / 10, rel=1e-12)  # mm a year, every digit the API gives
+    assert (g["verdict"], g["start"], g["end"]) == (r["verdict"], r["period"]["start"], r["period"]["end"])
+    assert g["years"] == round(r["record"]["years"])
+    # rounded as the card rounds headline_rate, the file's rates read as the card's own text
+    shown = _headline_rate("sea_level", "mm", tuple(float(Decimal(repr(g[k])) * 10) for k in ("slope", "lo", "hi")), None)
+    assert (shown["text"], shown["range_text"]) == (r["headline_rate"]["text"], r["headline_rate"]["range_text"])
+
+
+def test_rates_keep_the_apis_digits():
+    assert [b.per_year(x) for x in (9.4449, -0.9333, 55.5, -0.0)] == [0.94449, -0.09333, 5.55, 0.0]
+
+
+def test_psmsl_mode_is_the_answer_with_source_psmsl(gauges):
+    """PSMSL 180 sits on Atlantic City: the default answer is CO-OPS', so the dot is skipped, but with Measured by on
+    PSMSL the page asks source=psmsl and gets this gauge's own record. Only that skip carries psmsl_mode."""
+    skip = {(x["network"], x["id"]): x for x in gauges["skipped"]}
+    assert [k for k, x in skip.items() if "psmsl_mode" in x] == [("psmsl", "180")]
+    assert_rates(skip[("psmsl", "180")]["psmsl_mode"], point("psmsl", *psmsl.parse(DENSE)[:2]))
 
 
 def test_skipped_reasons_are_the_point_answers(gauges):
