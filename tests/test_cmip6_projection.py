@@ -133,6 +133,20 @@ def test_mostly_ocean_and_nearest_land_cells_say_so():
     assert p["location"]["note"] == "The place's own grid cell is mostly ocean, so this uses the nearest land cell."
 
 
+@pytest.mark.parametrize("name, note", [
+    ("chennai_rain", "The models' grid cell here is mostly ocean, so the change over land nearby can differ."),
+    ("princeton_air_temp", "The models' grid cell here is mostly ocean, which warms less than land."),
+    ("delhi_hottest_day", "The models' grid cell here is mostly ocean, which warms less than land."),
+])
+def test_male_ocean_cell_note_fits_the_measurement(name, note):
+    """Malé (4.17, 73.5) sits in a mostly-ocean cell with no land around it: "warms less than land" is about
+    temperature, so rain says instead that the change over land nearby can differ."""
+    p = compute_trend(series(name, lat=4.17, lon=73.5))["projection"]
+    assert (p["available"], p["location"]["kind"], p["location"]["land_pct"]) == (
+        True, "regional estimate (mostly ocean cell)", 0)
+    assert p["location"]["note"] == note
+
+
 @pytest.mark.parametrize("p50, low, high, units, text", [
     (-0.04, -0.39, 1.05, "degC", "−0.040 °C (range across climate models −0.4 to +1.1 °C)"),
     (0, -0.02, 0.03, "degC", "0 °C (range across climate models −0.020 to +0.030 °C)"),  # small: 2 figures

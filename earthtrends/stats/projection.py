@@ -59,6 +59,8 @@ CELL_NOTE = {"land cell": None,
              "nearest land cell": "The place's own grid cell is mostly ocean, so this uses the nearest land cell.",
              "regional estimate (mostly ocean cell)": "The models' grid cell here is mostly ocean, which warms less "
                                                       "than land."}
+# rain over a mostly-ocean cell: "warms less" is about temperature, so rain says the change can differ over land
+RAIN_OCEAN_NOTE = "The models' grid cell here is mostly ocean, so the change over land nearby can differ."
 GRID_CAVEAT = "A 1° grid cell is about 100 km wide, so hills or a coast nearby can make the change here differ."
 # temperature and hottest day (domain review of the PR3 design): the Atlas's raw CMIP6 ensemble runs warmer than AR6's
 # assessed warming
@@ -241,7 +243,7 @@ def cmip6(series: dict, base: dict, now: dict | None) -> dict:
     w = a["windows"].index(list(BY_2050)) if a else None
     if a is None or a["scenarios"][CMIP6_DEFAULT]["p50"][w] is None:
         return _cmip6_none(NO_VALUE)
-    rain = var == "precip"
+    rain, kind = var == "precip", a["cell"]["kind"]
     scenarios = [{"id": k, "code": CODES[k], "name": NAMES[k], "range_kind": SPREAD,
                   **{p: s[p] for p in ("p10", "p50", "p90", "models")}, **_agree(s)}
                  for k, s in a["scenarios"].items()]
@@ -256,7 +258,8 @@ def cmip6(series: dict, base: dict, now: dict | None) -> dict:
         "available": True,
         "kind": "cmip6_atlas",
         "source": {**a["source"], **CMIP6_SOURCE},
-        "location": {**a["cell"], "note": CELL_NOTE[a["cell"]["kind"]]},
+        "location": {**a["cell"], "note": RAIN_OCEAN_NOTE if rain and kind == "regional estimate (mostly ocean cell)"
+                     else CELL_NOTE[kind]},
         "baseline": {"text": TEXT, "years": list(YEARS)},
         "units": a["units"],
         "change_kind": "percent" if rain else "difference",
