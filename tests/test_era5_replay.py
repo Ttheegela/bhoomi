@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from earthtrends import data
-from earthtrends.data import era5
+from earthtrends.data import era5, upstream
 
 
 def write(folder: Path, variable: str, lat: float, lon: float, retrieved: str, times: list, values: list) -> None:
@@ -27,6 +27,20 @@ def test_replay_reads_the_recording_through_the_monthly_path(tmp_path, monkeypat
     monkeypatch.setenv(era5.REPLAY, str(tmp_path))
     s = data.get_series("precip", 28.61, 77.21, source="era5")
     assert (s["times"], s["values"]) == (times, values) and s["source"]["retrieved"] == "2026-11-23"
+
+
+def test_preliminary_months_survive_replay(tmp_path, monkeypatch, offline):
+    # recorded 2027-01-15 with data through December 2026: October to December may still hold ERA5T days
+    times = [f"{y}-{m:02d}" for y in (2025, 2026) for m in range(1, 13)]
+    values = [round(30 + i / 10, 2) for i in range(24)]
+    write(tmp_path, "air_temp_max", 28.61, 77.21, "2027-01-15", times, values)
+    monkeypatch.setenv(era5.REPLAY, str(tmp_path))
+    monkeypatch.setattr(upstream, "utc_today", lambda: "2027-06-01")  # replayed months later
+    s = data.get_series("air_temp_max", 28.61, 77.21, source="era5")
+    assert era5.PRELIMINARY_MONTHS == 3 and s["flags"] == [None] * 21 + ["preliminary"] * 3
+    assert s["values"] == values and s["source"]["retrieved"] == "2027-01-15"
+    monkeypatch.delenv(era5.REPLAY)
+    assert set(era5.flags(times, "2027-06-01")) == {None}  # a live fetch that day would flag nothing
 
 
 def test_a_missing_recording_fails_clearly(tmp_path, monkeypatch, offline):
