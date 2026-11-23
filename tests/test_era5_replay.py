@@ -101,3 +101,13 @@ def test_the_recorder_refuses_a_reply_from_open_meteo():
     with pytest.raises(SystemExit, match="Refusing archive-api.open-meteo.com"):
         rec.refuse_open_meteo(reply.url)
     rec.refuse_open_meteo(httpx.URL("https://bhoomi.earth/api/series"))  # the app passes
+    # a redirect to Open-Meteo is refused before it is sent: only the app is ever asked
+    asked = []
+
+    def app(request):
+        asked.append(request.url.host)
+        return httpx.Response(302, headers={"Location": "https://archive-api.open-meteo.com/v1/archive?x=1"})
+    with rec.make_client(transport=httpx.MockTransport(app)) as client:
+        with pytest.raises(SystemExit, match="Refusing archive-api.open-meteo.com"):
+            client.get("https://bhoomi.earth/api/series")
+    assert asked == ["bhoomi.earth"]

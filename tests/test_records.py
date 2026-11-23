@@ -235,6 +235,10 @@ def test_same_years_for_all_come_from_the_two_models():
      "Few readings in 3 of the last 10 years, so this row covers less and isn't counted when we compare."),
     (lambda y, m: y >= 2019 or m % 4,  # 9 months a year to 2018: 79% of the months
      "Misses 21% of these years, so it isn't counted when we compare."),
+    # still reporting, part years at both ends (Aug 1981, May 2025), 79% of the months: its years are the window's,
+    # so it misses, never "covers only 1981–2025" under "Same years for all: 1981 to 2025"
+    (lambda y, m: (y == 1981 and m >= 8) or (y == 2025 and m <= 5) or (1982 <= y <= 1996 and m <= 9)
+     or (1997 <= y <= 2024 and m <= 10), "Misses 21% of these years, so it isn't counted when we compare."),
 ])
 def test_thin_stations_keep_their_verdict_and_are_not_counted(keep, note):
     st, *_ = rows = run("air_temp", ("ghcn", record("ghcn", 0.3, seed=3, keep=keep)),

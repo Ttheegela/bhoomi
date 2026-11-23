@@ -139,7 +139,7 @@ def _thin(s: dict, a: int, b: int, years: str) -> str | None:
         return FEW_AFTER.format(full[-1], min(later), max(later))
     if going and len(short) > RECENT_SHORT:
         return FEW_IN.format(len(short))
-    if full and (full[0] > a or full[-1] < b):
+    if full and (full[0] > a or full[-1] < b) and years != f"{a}–{b}":  # never "covers only" the whole window
         return COVERS.format(years)
     return MISSES.format(round(100 * (1 - share)))
 

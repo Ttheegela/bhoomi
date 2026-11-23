@@ -44,6 +44,12 @@ def refuse_open_meteo(url: httpx.URL | str) -> None:
         sys.exit(f"Refusing {httpx.URL(url).host}: record through the app, never from Open-Meteo directly.")
 
 
+def make_client(**kw) -> httpx.Client:
+    """Follows redirects, and refuses an Open-Meteo hop before it is sent (the reply check in get() stays too)."""
+    return httpx.Client(timeout=120, follow_redirects=True,
+                        event_hooks={"request": [lambda request: refuse_open_meteo(request.url)]}, **kw)
+
+
 def get(client: httpx.Client, api: str, params: dict) -> httpx.Response:
     """A 429 waits for its Retry-After; a 502 (production could not reach Open-Meteo, often its rate limit) waits longer each time."""
     for i in range(5):
@@ -62,7 +68,7 @@ def main(out: Path, app: str) -> None:
     refuse_open_meteo(app)
     out.mkdir(parents=True, exist_ok=True)
     retrieved = upstream.utc_today()
-    with httpx.Client(timeout=120, follow_redirects=True) as client:
+    with make_client() as client:
         for place, lat, lon in PLACES:
             lat, lon = round(lat, 2) + 0.0, round(lon, 2) + 0.0  # get_series' rounding: the replay key
             for variable in VARIABLES:
