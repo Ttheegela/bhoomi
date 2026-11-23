@@ -593,6 +593,16 @@ def test_false_disagree_when_sources_agree_fails():
     assert run.check(case, fake_run(answer.replace("The sources disagree. ", ""), multi([POWER, era5, ghcn])))["wording"]
 
 
+def test_models_disagree_sentence_is_not_a_false_disagree():
+    era5, ghcn = {**ERA5, "verdict": "falling"}, {**GHCN, "verdict": "falling"}
+    answer = ("Delhi's hottest days are clearly falling, by 0.25 °C per decade (range -0.41 to -0.09). "
+              f"{agree_sentence(era5, POWER)} {agree_sentence(ghcn, POWER)} Models disagree on wetter or drier. "
+              "Sources: https://power.larc.nasa.gov/, https://open-meteo.com/, https://www.ncei.noaa.gov/")
+    case = {**DELHI_CASE, "must_say": []}
+    assert run.check(case, fake_run(answer, multi([POWER, era5, ghcn])))["wording"]
+    assert not run.check(case, fake_run("The sources disagree. " + answer, multi([POWER, era5, ghcn])))["wording"]
+
+
 def test_disagree_answer_must_keep_every_verdict():
     dropped = DISAGREE.replace("NOAA NCEI GHCN-Daily: clearly rising, by", "NOAA NCEI GHCN-Daily: up by")
     out = run.check(DELHI_CASE, fake_run(dropped, multi([POWER, ERA5, GHCN])))

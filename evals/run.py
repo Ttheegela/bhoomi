@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 import httpx
 
 from earthtrends.agent import providers, resources, tracing
+from earthtrends.agent.guidance import DISAGREE as MODELS_DISAGREE  # code writes it for rain; not the sources
 from earthtrends.agent.loop import (GAVE_UP, MAX_CALLS, NUM, agree_plan, agree_sentence, ask,
                                     history_error, tried_sources, wrong_periods)
 from earthtrends.agent.loop import _pool, invented_numbers, model_results  # one implementation, shared with the loop's check
@@ -182,7 +183,7 @@ def check(case: dict, run: dict) -> dict[str, bool]:
             out["source"] = case["expect_source"] in called
         if case.get("expect_verdict"):
             out["verdict"] = bool(main) and main.get("verdict") == case["expect_verdict"]
-        said_disagree = bool(DISAGREE.search(a.replace("’", "'")))
+        said_disagree = bool(DISAGREE.search(a.replace("’", "'").replace(MODELS_DISAGREE.lower(), "")))
         # Results for several places (a broad question): each city has its own verdict, and results keyed by source
         # can't tell them apart, so the verdict-word branches are skipped; the other wording checks still apply.
         # A multi_measure case is the same: each measurement has its own verdict.
