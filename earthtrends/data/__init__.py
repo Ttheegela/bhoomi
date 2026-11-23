@@ -51,7 +51,10 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
         times, values = power.parse(resp, param)
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
         src, notes = power.source(resp, param, lat, lon, today), ["Grid cell about 50 km wide, not a single station."] + ([power.NOTES[variable]] if variable in power.NOTES else [])
-    elif source == "era5":
+    elif source == "era5" and (pack := era5.pack_series(variable, lat, lon)):  # our pack: monthly already, no flags
+        times, values, src, notes = pack
+        place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
+    elif source == "era5":  # Open-Meteo: no pack base, a failed pack read (logged), or no land cell near
         param = era5.PARAMS[variable]
         times, values = monthly.daily_to_monthly(*era5.parse(era5.fetch(param, lat, lon), param), era5.HOW[variable])
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
