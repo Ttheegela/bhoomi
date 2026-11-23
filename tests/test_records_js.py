@@ -547,7 +547,7 @@ def test_sidebar_main_record_and_the_catalog_default():
     """§6: "Main record" on air temperature, hottest days and rain, "Measured by" on sea level; the default is the
     catalog's first source (sourceFor sends a source only when it is not the first)."""
     assert "$('src-lbl').textContent = window.TDX.compared(curWin) ? 'Main record' : 'Measured by';" in APP
-    assert "const cur = sourceFor(curWin) || v.sources[0];" in APP
+    assert "const cur = used && v.sources.includes(used) ? used : sourceFor(curWin) || v.sources[0];" in APP  # the answer's record, else the choice, else the catalog's first
     assert "s !== v.sources[0] ? s : undefined;" in APP
     assert "$('src-help').textContent = window.TDX.recHelp(curWin, cur) || SOURCE_HELP[cur] || '';" in APP
 
@@ -607,6 +607,8 @@ answer = function (u, others) {
   var meta = ids['rec'].querySelector('.meta');
   assert.ok(/^NASA POWER\s↗$/.test(meta.kids[0].kids[0]), JSON.stringify(meta.kids[0].kids));
   assert.strictEqual(ids['rec'].querySelector('.mnote').kids[0], NOTE);
+  // the sidebar's "Main record" highlights the record the card uses; the visitor's choice (the default, ERA5) is unchanged
+  assert.ok(ids['seg-source'].children.filter(function (b) { return b.attrs['aria-checked'] === 'true'; }).map(function (b) { return b.kids[0]; }).join() === 'NASA POWER' && sourceFor('air_temp') === undefined);
   var last = drawn[drawn.length - 1];
   assert.ok(last.series.source.id === 'power' && last.trend.source.id === 'power');
   // the other records are asked for NASA POWER, so their main row is the card's record

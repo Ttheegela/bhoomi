@@ -350,7 +350,7 @@ function keepTop(box, draw, scrollBy) {
 }
 function changed() {
   if (curWin !== 'settings') askOthers(); // a pin selected or shown: its other records, once
-  const draw = () => { renderSrcNote(); renderSidebar(); renderRec(); renderDetail(); renderFoot(); };
+  const draw = () => { renderSrcNote(); renderSourceSeg(); renderSidebar(); renderRec(); renderDetail(); renderFoot(); };
   if (fromMap) keepTop($('map-slot'), draw, (d) => window.scrollBy({ top: d, behavior: 'instant' }));
   else draw();
   syncTimer();
@@ -397,12 +397,22 @@ function renderControls() {
   buildSeg($('seg-units'), [{ value: 'metric', label: w.units[0] }, { value: 'imperial', label: w.units[1] }], prefs.units, (u) => window.TDPrefs.set({ units: u }));
   const v = varById(curWin), many = !!v && Array.isArray(v.sources) && v.sources.length > 1;
   $('src-field').hidden = !many;
-  if (many) { // the default is the catalog's first source (design 12 §6: ERA5 for temperature and hottest day, NASA POWER for rain)
-    const cur = sourceFor(curWin) || v.sources[0];
-    $('src-lbl').textContent = window.TDX.compared(curWin) ? 'Main record' : 'Measured by';
-    buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, pickSource);
-    $('src-help').textContent = window.TDX.recHelp(curWin, cur) || SOURCE_HELP[cur] || '';
-  }
+  if (many) renderSourceSeg(true);
+}
+// The highlighted record: the visitor's choice, else the catalog's first (design 12 §6: ERA5 for temperature and hottest
+// day, NASA POWER for rain), except when the selected place's answer used another one (the main record fell back because
+// ERA5 couldn't be read). That is per answer: the choice itself, and so every other place, is left as it is.
+let segShown = '';
+function renderSourceSeg(force) {
+  const v = varById(curWin);
+  if (!v || !Array.isArray(v.sources) || v.sources.length < 2) return;
+  const pin = selectedPin(curWin), used = pin && pin.status === 'ok' && pin.trend && pin.trend.source ? pin.trend.source.id : null;
+  const cur = used && v.sources.includes(used) ? used : sourceFor(curWin) || v.sources[0];
+  if (!force && segShown === `${curWin}|${cur}`) return; // unchanged: the buttons, and focus on them, stay
+  segShown = `${curWin}|${cur}`;
+  $('src-lbl').textContent = window.TDX.compared(curWin) ? 'Main record' : 'Measured by';
+  buildSeg($('seg-source'), v.sources.map((s) => ({ value: s, label: SOURCE_SEG[s] || sourceShort(s) })), cur, pickSource);
+  $('src-help').textContent = window.TDX.recHelp(curWin, cur) || SOURCE_HELP[cur] || '';
 }
 
 // Measure the current window with another source (the sidebar's "Main record" or "Measured by", or a button on the card).
