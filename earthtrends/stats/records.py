@@ -59,7 +59,8 @@ DRIFT = ("Weather models can drift over decades at some places; at this spot {} 
 DRIFT_APART = ("Weather models can drift over decades at some places; at this spot ERA5 and NASA POWER have drifted "
                "apart.")
 DIRECTION = {False: ("cooling", "warming"), True: ("getting drier", "getting wetter")}
-# single_note (contract "One record"): fewer than two counted rows; the word follows the main row's kind
+# single_note (contract "One record"): fewer than two counted rows; the word follows the counted row's kind (none
+# counted: the main row's)
 SINGLE = {"grid": "Only one record could be compared here, so this answer rests on a single weather model.",
           "station": "Only one record could be compared here, so this answer rests on a single weather station."}
 
@@ -104,7 +105,7 @@ def compare(variable: str, records: list, lat: float, lon: float) -> dict:
     drift = _drift(variable, counted)
     return {"comparisons": rows, "comparisons_window": {"start": a, "end": b, "label": WINDOW.format(a, b)},
             "disagree": _disagree(variable, counted, drift), "drift": drift,
-            "single_note": SINGLE[rows[0]["kind"]] if len(counted) < 2 else None}
+            "single_note": SINGLE[(counted[0]["row"] if counted else rows[0])["kind"]] if len(counted) < 2 else None}
 
 
 def _years(s: dict, need: int) -> tuple[int, int] | None:

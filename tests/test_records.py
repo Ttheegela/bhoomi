@@ -380,6 +380,9 @@ THIN = dict(seed=3, keep=lambda y, m: y < 2005)  # covers only 1981-2004: shown,
     # the station made main, both models down
     ([("ghcn", record("ghcn", 0.3, seed=3)), ("era5", httpx.ConnectError("x")), ("power", httpx.ConnectError("x"))],
      ONE_STATION),
+    # QA: Delhi's hottest day with the station made main, thin; ERA5 down: the one counted row is NASA POWER's
+    ([("ghcn", record("ghcn", 0.3, **THIN)), ("era5", httpx.ConnectError("x")), ("power", record("power", 0.3, seed=2))],
+     MODEL),
     # two counted rows or more: no note
     ([("era5", record("era5", 0.3)), ("power", record("power", 0.3, seed=2)), ("ghcn", record("ghcn", 0.3, **THIN))],
      None),
@@ -392,6 +395,16 @@ def test_single_note_when_fewer_than_two_records_are_counted(rows, note):
     r = run("air_temp", *rows)
     assert r["single_note"] == note
     assert (sum(c["counted"] for c in r["comparisons"]) < 2) == (note is not None)
+
+
+@pytest.mark.parametrize("station", [
+    # thin: few readings in 3 of the last 10 years
+    record("ghcn", 0.3, seed=3, keep=lambda y, m: (y != 2018) and (y != 2020 or m <= 5) and (y != 2022 or m <= 6)),
+    record("ghcn", 0.3, seed=3, y0=2010),  # too short for a trend
+])
+def test_single_note_with_nothing_counted_follows_the_main_row(station):
+    r = run("air_temp", ("ghcn", station), ("era5", httpx.ConnectError("x")), ("power", httpx.ConnectError("x")))
+    assert not any(c["counted"] for c in r["comparisons"]) and r["single_note"] == ONE_STATION
 
 
 # ---- drift ----
