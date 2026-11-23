@@ -103,18 +103,14 @@
   }
   // The table's caption with no world figure: why_none only, never world.text (web/design/14-facts.md section 8)
   function noWorld(label, w) { return w.why_none ? label + ': ' + w.why_none : ''; }
-  // a ratio as the API's fact prints it: "1.5", "1.0", "0.75", a true minus
-  function ratioText(x) { return (x < 0 ? '−' : '') + (Number.isInteger(x) ? Math.abs(x).toFixed(1) : String(Math.abs(x))); }
   // "Compared with the world" (section 8): line 1, then line 2 in grey. wp: TDX.worldParts (null without a world figure;
-  // its ratio is set only for a rising or falling verdict).
+  // its ratio and range, with the server's digits, are set only for a rising or falling verdict).
   function worldCell(t, wp) {
     if (!wp) return { l1: '—', l2: '' };
-    var w = t.world, l2 = 'world ' + wp.world;
+    var l2 = 'world ' + wp.world;
     if (!wp.ratio) return { l1: '', l2: l2 };
-    if (w.ratio < 0) return { l1: 'Falling here, world rising', l2: l2 };
-    var rng = typeof w.ratio_low === 'number' && typeof w.ratio_high === 'number'
-      ? ' (' + (t.range_kind || '95% range') + ' ' + ratioText(w.ratio_low) + ' to ' + ratioText(w.ratio_high) + ')' : '';
-    return { l1: ratioText(w.ratio) + '×' + rng, l2: l2 };
+    if (t.world.ratio < 0) return { l1: 'Falling here, world rising', l2: l2 };
+    return { l1: wp.ratio + (wp.range ? ' (' + (t.range_kind || '95% range') + ' ' + wp.range + ')' : ''), l2: l2 };
   }
 
   // Path "M..L.." per run of consecutive years; runs of one point are dropped (a gap breaks the line).

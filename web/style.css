@@ -349,24 +349,6 @@ thead th { position: sticky; top: 0; background: var(--surface); }
 .fig-strip path { fill: none; stroke: var(--ink); stroke-width: 1.2; }
 .rounded { font-size: 14px; color: var(--ink-2); margin: 12px 0 0; }
 
-/* the compare table (14-facts.md section 8). compare.css loads after this file, so these rules carry .tb to win over it */
-.tb .cmp-tbl th { font-size: 14px; font-weight: 400; text-transform: none; letter-spacing: 0; }
-.tb .cmp-tbl td.cw { min-width: 14em; }
-.tb .cmp-tbl td.cw .l1 { display: block; white-space: nowrap; }
-.tb .cmp-tbl td.cw .l2 { display: block; font-size: 14px; color: var(--ink-2); font-weight: 400; }
-@media (max-width: 599px) { /* one block per place, no sideways scroll */
-  .tb .cmp-scroll { overflow-x: visible; }
-  .tb .cmp-tbl, .tb .cmp-tbl tbody, .tb .cmp-tbl tr, .tb .cmp-tbl td { display: block; }
-  .tb .cmp-tbl thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .tb .cmp-tbl tr { padding: 10px 0 12px; border-bottom: 1px solid var(--line); }
-  .tb .cmp-tbl tr.on { background: var(--bg); padding-left: 8px; padding-right: 8px; }
-  .tb .cmp-tbl td { padding: 3px 0; border: 0; min-width: 0; white-space: normal; }
-  .tb .cmp-tbl td:first-child { font-size: 16px; font-weight: 600; padding-bottom: 6px; }
-  .tb .cmp-tbl td[data-label] { display: grid; grid-template-columns: 8.5em minmax(0, 1fr); column-gap: 12px; }
-  .tb .cmp-tbl td[data-label]::before { content: attr(data-label); font-size: 14px; color: var(--ink-2); font-weight: 400; }
-  .tb .cmp-tbl td.cw .l1 { white-space: normal; }
-}
-
 /* below: foot line, settings window */
 .foot { font-size: 14px; color: var(--ink-2); }
 .foot p { margin: 0 0 var(--s2); max-width: none; }

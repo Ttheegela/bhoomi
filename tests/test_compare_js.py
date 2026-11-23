@@ -22,18 +22,16 @@ assert.strictEqual(C.noWorld('Chennai', rain), "Chennai: Rainfall is compared wi
 assert.strictEqual(C.noWorld('Delhi', { available: false, why_none: 'No world figure.', text: null }), 'Delhi: No world figure.');
 assert.strictEqual(C.noWorld('X', { available: false, text: 'Only text.' }), '');
 assert.strictEqual(C.noWorld('X', { available: false }), '');
-// "Compared with the world": the ratio and its range as the API's fact prints them, over the world's rate
-var wp = { here: '+5.0 mm a year', world: '+3.3 mm a year', since: 'Since 1993', ratio: '1.5×' };
+// "Compared with the world": the ratio and its range (TDX.worldParts, the server's digits), over the world's rate
+var wp = { here: '+5.0 mm a year', world: '+3.3 mm a year', since: 'Since 1993', ratio: '1.5×', range: '1.0 to 2.0' };
 var battery = { range_kind: '95% range', world: { ratio: 1.5, ratio_low: 1.0, ratio_high: 2.0 } };
 assert.deepStrictEqual(C.worldCell(battery, wp), { l1: '1.5× (95% range 1.0 to 2.0)', l2: 'world +3.3 mm a year' });
-var two = { world: { ratio: 0.75, ratio_low: -0.2, ratio_high: 1.4 } }; // 2 significant figures as given; a true minus
-assert.strictEqual(C.worldCell(two, wp).l1, '0.75× (95% range −0.2 to 1.4)');
-assert.strictEqual(C.worldCell({ world: { ratio: 2.9, ratio_low: null, ratio_high: null } }, wp).l1, '2.9×'); // no range: the ratio alone
+assert.strictEqual(C.worldCell({ world: { ratio: 2.9 } }, Object.assign({}, wp, { ratio: '2.9×', range: '' })).l1, '2.9×'); // no range: the ratio alone
 // Juneau: falling here while the world rose (a ratio below 0)
 var juneau = { world: { ratio: -4.5, ratio_low: -5.2, ratio_high: -3.8 } };
-assert.deepStrictEqual(C.worldCell(juneau, Object.assign({}, wp, { ratio: '−4.5×' })), { l1: 'Falling here, world rising', l2: 'world +3.3 mm a year' });
+assert.deepStrictEqual(C.worldCell(juneau, Object.assign({}, wp, { ratio: '−4.5×', range: '−5.2 to −3.8' })), { l1: 'Falling here, world rising', l2: 'world +3.3 mm a year' });
 // world rates but no ratio (no clear change, or a world figure that did not rise): line 2 only
-assert.deepStrictEqual(C.worldCell({ world: { ratio: null } }, Object.assign({}, wp, { ratio: '' })), { l1: '', l2: 'world +3.3 mm a year' });
+assert.deepStrictEqual(C.worldCell({ world: { ratio: null } }, Object.assign({}, wp, { ratio: '', range: '' })), { l1: '', l2: 'world +3.3 mm a year' });
 // no world figure (Mumbai, rain, hottest day, water storage): a dash
 assert.deepStrictEqual(C.worldCell({ world: { available: false } }, null), { l1: '—', l2: '' });
 """

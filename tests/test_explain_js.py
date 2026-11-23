@@ -113,6 +113,11 @@ assert.strictEqual(pS[6].link, null); // no future link here
 // step 6 prints world.ratio as given, never one worked out from the rates
 var P9 = copy(P); P9.trend.world.ratio = 9.9;
 assert.ok(/ = 9\.9× · /.test(steps(P9.trend, P9.series, pc)[5].work[0]));
+// with the server's own digits, as the fact and the compare table print them: 0.75 stays 0.75, 1.0 stays 1.0
+var P75 = copy(P); P75.trend.world.ratio = 0.75; P75.trend.world.ratio_low = 0.5; P75.trend.world.ratio_high = 1.0;
+var p75 = steps(P75.trend, P75.series, pc)[5];
+assert.ok(p75.work[0].indexOf(' = 0.75× · 0.5 to 1.0 times (95% range) · ') > 0 && / \(0\.75×\)$/.test(p75.short), p75.work[0] + ' | ' + p75.short);
+assert.ok(worldParts(P75.trend, false).ratio === '0.75×' && worldParts(P75.trend, false).range === '0.5 to 1.0');
 // step 5: "below" follows p < 0.05; the range words follow the range
 assert.ok(/so below 0\.05 · .*all above zero → /.test(pS[4].work[0]), pS[4].work[0]);
 var P5 = copy(P); P5.trend.explain.real.p_value = 0.2;
@@ -831,12 +836,14 @@ def test_compare_table_fits_wide_screens():
     place = [sel for sel, body in rules if "nowrap" in body and re.search(r"td:first-child|td:nth-child\(1\)", sel)]
     assert not place, place
     assert re.search(r"\.cmp-scroll \{ overflow-x: auto; \}", css)
-    style = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
-    narrow = re.search(r"@media \(max-width: 599px\) \{ /\* one block per place.*?\n\}", style, re.S)
+    narrow = re.search(r"@media \(max-width: 599px\) \{ /\* one block per place.*?\n\}", css, re.S)
     assert narrow, "no block layout under 600 px"
-    for rule in (".tb .cmp-scroll { overflow-x: visible; }", ".tb .cmp-tbl, .tb .cmp-tbl tbody, .tb .cmp-tbl tr, .tb .cmp-tbl td { display: block; }",
-                 ".tb .cmp-tbl td[data-label]::before { content: attr(data-label);"):
+    for rule in (".cmp-scroll { overflow-x: visible; }", ".cmp-tbl, .cmp-tbl tbody, .cmp-tbl tr, .cmp-tbl td { display: block; }",
+                 ".cmp-tbl td[data-label]::before { content: attr(data-label);"):
         assert rule in narrow[0], rule
+    assert css.index(".cmp-tbl td.n {") < narrow.start()  # the block rules come last, so they win at equal specificity
+    assert ".cmp-tbl" not in (ROOT / "web" / "style.css").read_text(encoding="utf-8")  # the table's rules live in compare.css
+    assert re.search(r"\.cmp-tbl th \{ font-size: 14px;[^}]*font-weight: 400;", css) and "uppercase" not in css  # sentence case
     cmp = (ROOT / "web" / "compare.js").read_text(encoding="utf-8")
     for r in ("'table'", "'rowgroup'", "'row'", "'columnheader'", "'cell'"):
         assert r in cmp, r
@@ -865,6 +872,11 @@ def test_no_risk_level_or_advice_in_the_page_code():
         assert not m, (name, code[max(0, m.start() - 60):m.end() + 20])
     css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
     assert not re.search(r"\.(risk|advice)\b", css)
+    assert not re.search(r"\.(risk|rk)\b", (ROOT / "web" / "compare.css").read_text(encoding="utf-8"))
+    # every pinned-place marker looks the same (§6): the --mk-mod fill, no risk classes, no --mk-low
+    mcss = (ROOT / "web" / "map.css").read_text(encoding="utf-8")
+    assert "--mk-low" not in mcss and not re.search(r"\.map-mk\.(high|moderate|low)\b", mcss)
+    assert re.search(r"\n\.map-mk \{[^}]*background: var\(--mk-mod\);", mcss)
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "Our recommendation" not in app
     # design 14 §6: the small words, exactly

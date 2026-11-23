@@ -126,13 +126,17 @@
   // the API's world sentence carries metric numbers: say so when the page shows °F or inches
   function metric(text) { return str(text).replace(/\.?\s*$/, ' (in metric).'); }
   function hasWorld(w) { return !!w && w.available === true && isNum(w.local_rate) && isNum(w.world_rate) && !!w.window; }
-  // the local and world rates over the same window, next to their ratio; no ratio without a clear trend (only the two rates)
+  // a ratio with the server's own digits, as guidance.fact prints it: "1.5", "1.0", "0.75", a true minus
+  function ratioText(x) { return (x < 0 ? MINUS : '') + (Number.isInteger(x) ? Math.abs(x).toFixed(1) : String(Math.abs(x))); }
+  // the local and world rates over the same window, next to their ratio and its range ("1.0 to 2.0"); no ratio without a
+  // clear trend (only the two rates)
   function worldParts(t, imp) {
     var w = t.world;
     if (!hasWorld(w)) return null;
     var a = wconv(imp, w.local_rate, str(w.unit)), b = wconv(imp, w.world_rate, str(w.unit)), has = isNum(w.ratio) && clearV(t);
     return { since: 'Since ' + Y(w.window.start), here: withUnit(fmtNum(a.v, true), a.unit), world: withUnit(fmtNum(b.v, true), b.unit),
-      ratio: has ? fixed(w.ratio, 1) + '×' : '', a: a.v, b: b.v };
+      ratio: has ? ratioText(w.ratio) + '×' : '', range: has && isNum(w.ratio_low) && isNum(w.ratio_high) ? ratioText(w.ratio_low) + ' to ' + ratioText(w.ratio_high) : '',
+      a: a.v, b: b.v };
   }
   function worldLine(t, imp) {
     var p = worldParts(t, imp);
@@ -456,8 +460,7 @@
     var wp = worldParts(t, imp), s6 = { title: 'Compared with the world' };
     if (wp) {
       // the ratio's 95% range, unless the API's sentence already gives it
-      var rr = wp.ratio && isNum(w.ratio_low) && isNum(w.ratio_high) ? fixed(w.ratio_low, 1) + ' to ' + fixed(w.ratio_high, 1) : '';
-      if (rr && str(w.text).indexOf(rr) >= 0) rr = '';
+      var rr = str(w.text).indexOf(wp.range) >= 0 ? '' : wp.range;
       // the division in metric, like the API's sentence above it ("(in metric)" in °F or inches): one unit in the step (B5)
       var wm = worldParts(t, false);
       s6.short = worldLine(t, imp);
