@@ -199,6 +199,12 @@ function enqueue(win, p) {
 function pump() {
   while (flight < MAX_FLIGHT && queue.length) {
     const job = queue.shift();
+    if (job.others) { // the other records (compare), counted in MAX_FLIGHT like a pin
+      if (results[job.k] !== job.res) continue; // removed or asked again meanwhile
+      flight++;
+      api('/api/trend', job.res.params).then((r) => { flight--; othersLanded(job, r); pump(); });
+      continue;
+    }
     flight++;
     Promise.all([api('/api/series', job.params), api('/api/trend', noCompare(job.params))]).then(([sr, tr]) => {
       const res = results[job.k];
@@ -217,32 +223,43 @@ function pump() {
       if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); res.none = sr.status === 400; } // none: a real "no record here", not asked again on every click
       else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; res.none = true; }
       else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; res.none = tr.status === 400; }
-      else { res.status = 'ok'; res.series = s; res.trend = tr.body; if (window.TDX.compared(job.win)) compare(job.win, job.p, job.k); }
+      else { res.status = 'ok'; res.series = s; res.trend = tr.body; }
       flight--;
       landed(job.win, job.p, res);
       pump();
     });
   }
 }
-// The other records for this place (design 12 §2, §5): the same /api/trend with them, after the card is drawn (the main
-// record is cached by then). Only their fields go into the answer, in place, so the chart is never redrawn. Not counted
-// in MAX_FLIGHT: a cold station takes up to 20 s and must not hold up the next pin's card.
+// The other records for this place (design 12 §2, §5): the same /api/trend with them, once the card is drawn (the main
+// record is cached by then), and only for the pin on screen: every call reads ERA5, and Open-Meteo's free allowance is
+// small. Only their fields go into the answer, in place, so the chart is never redrawn; kept there, so they are asked once.
 function compare(win, p, k) {
   const res = results[k];
   if (!res || res.status !== 'ok') return;
   window.TDX.mergeOthers(res.trend, null); // asked again: back to "Reading the other records…"
   Object.assign(res, { cmp: 'loading', cmpErr: null, c0: Date.now() });
-  api('/api/trend', res.params).then((r) => {
-    if (results[k] !== res) return; // removed meanwhile
-    if (r.ok && r.body) { window.TDX.mergeOthers(res.trend, r.body); res.cmp = 'ok'; }
-    else { res.cmp = 'error'; res.cmpErr = r.status === 429 ? plainError(r) : "We couldn't read the other records just now."; }
-    othLanded(win, p, k);
-  });
+  queue.unshift({ others: true, win, p, k, res }); // the pin on screen goes before the other pins' cards
+  TD.announce('Loading the other records…');
+  pump();
 }
-// only the selected pin shows its other records; another pin's wait until it is selected
+// the selected pin's card is drawn and its other records were never asked for: ask now
+function askOthers() {
+  const e = store[curWin], p = e && e.pins.find((q) => pinKeyOf(q.lat, q.lon) === e.selected);
+  const k = p && resKey(curWin, p), res = k && results[k];
+  if (window.TDX.compared(curWin) && res && res.status === 'ok' && res.cmp === undefined) compare(curWin, p, k);
+}
+function othersLanded(job, r) {
+  const res = job.res;
+  if (results[job.k] !== res) return;
+  if (r.ok && r.body) { window.TDX.mergeOthers(res.trend, r.body); res.cmp = 'ok'; }
+  else { res.cmp = 'error'; res.cmpErr = r.status === 429 ? plainError(r) : "We couldn't read the other records just now."; }
+  if (othLanded(job.win, job.p, job.k)) TD.announce(res.cmp === 'ok' ? (res.trend.disagree && res.trend.disagree.line) || 'The other records have loaded.' : res.cmpErr);
+}
+// only the selected pin shows its other records; true when it was redrawn
 function othLanded(win, p, k) {
-  if (win !== curWin || pinKeyOf(p.lat, p.lon) !== store[win].selected || resKey(win, p) !== k) return;
+  if (win !== curWin || pinKeyOf(p.lat, p.lon) !== store[win].selected || resKey(win, p) !== k) return false;
   refreshOth(); renderDetail(); renderFoot(); syncTimer();
+  return true;
 }
 function ensureLoaded(win) {
   const e = store[win];
@@ -257,7 +274,7 @@ function landed(win, p, res) {
   const e = store[win];
   if (pinKeyOf(p.lat, p.lon) === e.selected && res.status === 'ok') {
     const c = window.TDX.card(res.trend, imperial());
-    TD.announce(`${p.label}: ${c.fact || c.word}`);
+    TD.announce(`${p.label}: ${c.fact || c.word}${res.cmp === 'loading' ? ' Loading the other records…' : ''}`);
   }
 }
 
@@ -301,9 +318,9 @@ function tickLoading() {
     const p = pins.find((x) => x.key === s.getAttribute('data-key'));
     if (p && p.status === 'loading') s.textContent = pinLine(p);
   });
-  const sel = pins.find((p) => p.selected), prog = $('rec-prog'), st = $('rec-oth-st');
+  const sel = pins.find((p) => p.selected), prog = $('rec-prog'), st = $('rec-oth-n');
   if (sel && sel.status === 'loading' && prog) { prog.value = Math.min(secsSince(sel), usualSecs() - 0.5); $('rec-load-text').textContent = loadingLine(sel); }
-  if (sel && sel.cmp === 'loading' && st) st.textContent = othWait(sel);
+  if (sel && sel.cmp === 'loading' && st) st.textContent = othSecs(sel);
   syncTimer();
 }
 function syncTimer() {
@@ -324,6 +341,7 @@ function keepTop(box, draw, scrollBy) {
   if (d) scrollBy(d);
 }
 function changed() {
+  if (curWin !== 'settings') askOthers(); // a pin selected or shown: its other records, once
   const draw = () => { renderSrcNote(); renderSidebar(); renderRec(); renderDetail(); renderFoot(); };
   if (fromMap) keepTop($('map-slot'), draw, (d) => window.scrollBy({ top: d, behavior: 'instant' }));
   else draw();
@@ -418,10 +436,8 @@ function nextLine(items) {
 /* ---------- "Records for this place" on the card (web/design/12-two-sources.md sections 3 to 5, 12) ---------- */
 
 // the pending line: the other records in catalog order, and the seconds since their call went out
-function othWait(pin) {
-  const v = varById(curWin);
-  return window.TDX.recWait(v && v.sources, (pin.trend.source || {}).id, Math.max(0, Math.floor((Date.now() - pin.cstarted) / 1000)));
-}
+function othWait(pin) { const v = varById(curWin); return window.TDX.recWait(v && v.sources, (pin.trend.source || {}).id); }
+const othSecs = (pin) => ` ${Math.max(0, Math.floor((Date.now() - pin.cstarted) / 1000))} s so far.`;
 function othModel(pin) {
   return pin.status === 'ok' ? window.TDX.recBlock(pin.trend, { label: pin.label, imperial: imperial(), cmp: pin.cmp, err: pin.cmpErr, wait: pin.cmp === 'loading' ? othWait(pin) : '' }) : null;
 }
@@ -472,7 +488,8 @@ function othBlock(B, pin) {
   box.append(el('table', { role: 'table' }, el('caption', { class: 'sr-only' }, B.caption),
     el('colgroup', {}, el('col', { class: 'c1' }), el('col', { class: 'c2' }), el('col', { class: 'c3' }), el('col', { class: 'c4' })),
     el('thead', { role: 'rowgroup' }, hr), tb));
-  if (B.wait) box.append(el('p', { class: 'st', role: 'status', id: 'rec-oth-st' }, B.wait));
+  // the sentence is announced once through #td-live (compare, then landed or failed); the ticking seconds are hidden from screen readers
+  if (B.wait) box.append(el('p', { class: 'st', id: 'rec-oth-st' }, B.wait, el('span', { 'aria-hidden': 'true', id: 'rec-oth-n' }, othSecs(pin))));
   if (B.fail) box.append(el('p', { class: 'st' }, B.fail), othRetry('Try again', pin));
   if (B.retry) box.append(othRetry('Try the other records again', pin));
   if (B.dis) {

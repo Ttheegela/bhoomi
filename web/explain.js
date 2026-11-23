@@ -284,11 +284,11 @@
     rows.forEach(function (x) { var l = str((x.source || {}).limit); if (l && b.limits.indexOf(l) < 0) b.limits.push(l); });
     return b;
   }
-  // §5 pending line: the other records named from the catalog order, n: seconds so far
-  function recWait(sources, main, n) {
+  // §5 pending line: the other records named from the catalog order (the page adds "{n} s so far." where screen readers skip it)
+  function recWait(sources, main) {
     var o = (sources || []).filter(function (x) { return x !== main; });
     return 'Reading the other records for this place: ' + andList(o.map(function (x) { return x === 'ghcn' ? 'the nearest weather station within 25 km' : PLAIN[x] || x; })) + '.'
-      + (o.indexOf('ghcn') >= 0 ? ' A weather station takes 5 to 20 seconds the first time.' : '') + ' ' + n + ' s so far.';
+      + (o.indexOf('ghcn') >= 0 ? ' A weather station takes 5 to 20 seconds the first time.' : '');
   }
   // the sidebar's help under "Main record" (§6); '' for a measurement without records side by side
   var REC_HELP = { era5: 'ERA5: a European weather model of past weather, on a grid about 25 km wide.', power: 'NASA POWER: a NASA weather model on a grid about 50 km wide.',

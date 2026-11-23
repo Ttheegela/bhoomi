@@ -244,10 +244,10 @@ assert.ok(b1.agree === undefined && b1.dis === undefined && b1.link === false);
 assert.strictEqual(steps(t1, P.series, pc)[7].short, 'Only ERA5 has a trend here');
 
 // §5 the compare call pending, then failed: the main row from the card's own numbers, then the line or the retry
-var tp = mergeOthers(copy(PT), null), WAIT = recWait(['era5', 'power', 'ghcn'], 'era5', 6);
-assert.strictEqual(WAIT, 'Reading the other records for this place: NASA POWER and the nearest weather station within 25 km. A weather station takes 5 to 20 seconds the first time. 6 s so far.');
-assert.strictEqual(recWait(['power', 'era5', 'ghcn'], 'power', 0), 'Reading the other records for this place: ERA5 and the nearest weather station within 25 km. A weather station takes 5 to 20 seconds the first time. 0 s so far.');
-assert.strictEqual(recWait(['era5', 'power', 'ghcn'], 'ghcn', 3), 'Reading the other records for this place: ERA5 and NASA POWER. 3 s so far.');
+var tp = mergeOthers(copy(PT), null), WAIT = recWait(['era5', 'power', 'ghcn'], 'era5');
+assert.strictEqual(WAIT, 'Reading the other records for this place: NASA POWER and the nearest weather station within 25 km. A weather station takes 5 to 20 seconds the first time.'); // the seconds: the page's aria-hidden span
+assert.strictEqual(recWait(['power', 'era5', 'ghcn'], 'power'), 'Reading the other records for this place: ERA5 and the nearest weather station within 25 km. A weather station takes 5 to 20 seconds the first time.');
+assert.strictEqual(recWait(['era5', 'power', 'ghcn'], 'ghcn'), 'Reading the other records for this place: ERA5 and NASA POWER.');
 var wb = recBlock(tp, Object.assign({}, pc, { cmp: 'loading', wait: WAIT }));
 assert.deepStrictEqual(wb.rows, [{ main: true, label: 'ERA5', href: SRC.era5.record_url, sub: 'Main record', shape: '▲', word: 'Rising', rate: card(tp, false).r2.value, years: '1981–2025', miss: '', note: '', thin: false }]);
 assert.ok(wb.wait === WAIT && !wb.link && !wb.fail);
@@ -397,13 +397,113 @@ def test_two_calls_and_the_merge():
     steps (TDX.others). A failed second call keeps the card and offers "Try again"; a 429 shows the API's sentence."""
     assert "Promise.all([api('/api/series', job.params), api('/api/trend', noCompare(job.params))])" in APP
     assert "Object.assign({}, params, { compare: 'false' })" in APP
-    assert "if (window.TDX.compared(job.win)) compare(job.win, job.p, job.k);" in APP
-    comp = re.search(r"\nfunction compare\(win, p, k\) \{(.*?)\n\}", APP, re.S)[1]
-    assert "api('/api/trend', res.params)" in comp and "window.TDX.mergeOthers(res.trend, r.body)" in comp
+    assert "api('/api/trend', job.res.params).then((r) => { flight--; othersLanded(job, r); pump(); });" in APP  # counted in MAX_FLIGHT
+    comp = re.search(r"\nfunction othersLanded\(job, r\) \{(.*?)\n\}", APP, re.S)[1]
+    assert "window.TDX.mergeOthers(res.trend, r.body)" in comp
     assert "r.status === 429 ? plainError(r) : \"We couldn't read the other records just now.\"" in comp
     det = re.search(r"\nfunction renderDetail\(\) \{(.*?)\n\}", APP, re.S)[1]
     assert "if (pin.cmp !== shown.cmp) { shown.cmp = pin.cmp; window.TDX.others(pin, ctx); }\n      return;" in det
     assert "fetchTrend(params) { return api('/api/trend', noCompare(params))" in APP  # "Real or noise?" needs no records
+
+
+# The real explain.js and app.js on a small fake DOM, with a fetch that records every call (no network, no browser).
+APP_DOM = r"""
+var assert = require('assert'), fs = require('fs'), path = require('path');
+function load(n) { return JSON.parse(fs.readFileSync(path.join(process.env.FIX, n + '.json'), 'utf8')); }
+function copy(d) { return JSON.parse(JSON.stringify(d)); }
+var ids = {};
+function El(tag) { this.tagName = String(tag).toUpperCase(); this.kids = []; this.attrs = {}; this.style = {}; this.dataset = {}; this.parentNode = null;
+  this.hidden = false; this.value = ''; this.textContent = ''; this.offsetHeight = 0;
+  this.classList = { toggle: function () {}, add: function () {}, remove: function () {}, contains: function () { return false; } }; }
+El.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); if (k === 'id') ids[v] = this; };
+El.prototype.getAttribute = function (k) { return k in this.attrs ? this.attrs[k] : null; };
+El.prototype.removeAttribute = function (k) { delete this.attrs[k]; };
+El.prototype.addEventListener = function () {};
+El.prototype.append = function () { for (var i = 0; i < arguments.length; i++) { var n = arguments[i]; if (n && typeof n === 'object') { if (n.parentNode) n.parentNode.removeChild(n); n.parentNode = this; } this.kids.push(n); } };
+El.prototype.prepend = function (n) { this.append(n); this.kids.unshift(this.kids.pop()); };
+El.prototype.removeChild = function (n) { var i = this.kids.indexOf(n); if (i >= 0) this.kids.splice(i, 1); if (n && typeof n === 'object') n.parentNode = null; };
+El.prototype.remove = function () { if (this.parentNode) this.parentNode.removeChild(this); };
+El.prototype.replaceWith = function (n) { var p = this.parentNode; if (!p) return; if (n.parentNode) n.parentNode.removeChild(n); p.kids[p.kids.indexOf(this)] = n; n.parentNode = p; this.parentNode = null; };
+El.prototype.contains = function (n) { for (; n; n = n.parentNode) if (n === this) return true; return false; };
+El.prototype.all = function () { var out = []; this.kids.forEach(function (k) { if (k && typeof k === 'object') out = out.concat([k], k.all()); }); return out; };
+function is(n, s) { return s.charAt(0) === '.' ? (' ' + (n.attrs['class'] || '') + ' ').indexOf(' ' + s.slice(1) + ' ') >= 0 : n.tagName === s.toUpperCase(); }
+El.prototype.querySelectorAll = function (sel) { var p = sel.split(' > '); return this.all().filter(function (n) { return is(n, p[p.length - 1]) && (p.length < 2 || (n.parentNode && is(n.parentNode, p[0]))); }); };
+El.prototype.querySelector = function (sel) { return this.querySelectorAll(sel)[0] || null; };
+El.prototype.focus = function () { document.activeElement = this; };
+El.prototype.scrollIntoView = function () {};
+El.prototype.getBoundingClientRect = function () { return { top: 0, left: 0, width: 0, height: 0 }; };
+Object.defineProperty(El.prototype, 'firstChild', { get: function () { return this.kids[0] || null; } });
+Object.defineProperty(El.prototype, 'children', { get: function () { return this.kids.filter(function (k) { return k && typeof k === 'object'; }); } });
+var docOn = {};
+var document = { activeElement: null, createElement: function (t) { return new El(t); }, createElementNS: function (ns, t) { return new El(t); },
+  getElementById: function (id) { return ids[id] || null; }, querySelectorAll: function () { return []; },
+  addEventListener: function (t, f) { (docOn[t] = docOn[t] || []).push(f); }, dispatchEvent: function () {} };
+('td-live skip nav settings-link win-measure place place-list place-status place-credit pins pin-hint src-field src-lbl seg-source src-help src-note seg-units '
+  + 'main win-h1 win-q status-line rec map-slot place-chart how how-h how-lead how-steps noise-slot compare-chart-slot compare-table-slot foot-data footer-sources '
+  + 'win-settings settings-slot chat-slot').split(' ').forEach(function (id) { new El('div').setAttribute('id', id); });
+var window = globalThis;
+window.addEventListener = function () {}; window.matchMedia = function () { return { matches: true }; }; window.scrollBy = function () {};
+window.TDPrefs = { get: function () { return { units: 'metric', theme: 'light' }; }, set: function () {} };
+globalThis.CustomEvent = function (t, o) { this.type = t; this.detail = o && o.detail; };
+var localStorage = { getItem: function () { return null; }, setItem: function () {} };
+var location = { hash: '#air-temperature' }, history = { replaceState: function (a, b, h) { location.hash = h; } };
+// the catalog as the data lane ships it, and every answer from the Princeton fixture (its records agree)
+var VARS = [{ id: 'sea_level', sources: ['coops', 'psmsl'] }, { id: 'air_temp', sources: ['era5', 'power', 'ghcn'] }, { id: 'air_temp_max', sources: ['era5', 'power', 'ghcn'] },
+  { id: 'precip', sources: ['power', 'era5', 'ghcn'] }, { id: 'water_storage', sources: ['grace'] }];
+var FX = load('princeton_air_temp'), calls = [], live = 0, most = 0;
+globalThis.fetch = function (url) {
+  var u = new URL(url, 'http://page'), trend = u.pathname === '/api/trend', others = trend && u.searchParams.get('compare') !== 'false';
+  var body = u.pathname === '/api/variables' ? VARS : u.pathname === '/api/series' ? copy(FX.series) : others ? copy(FX.trend)
+    : Object.assign(copy(FX.trend), { comparisons: null, comparisons_window: null, disagree: null, drift: null });
+  calls.push(url);
+  if (trend) { live++; most = Math.max(most, live); } // one /api/trend per job: a pin's card, or a pin's other records
+  return new Promise(function (r) { setTimeout(function () { if (trend) live--;
+    r({ ok: true, status: 200, json: function () { return Promise.resolve(body); }, headers: { get: function () { return null; } } }); }, others ? 60 : 5); });
+};
+"""
+
+APP_TEST = r"""
+window.TDX.show = function () {}; window.TDX.others = function () {}; window.TDX.redraw = function () {}; // the chart and the steps: not under test here
+function settle() { return new Promise(function (r) { (function w() { setTimeout(function () { if (!flight && !queue.length) r(); else w(); }, 10); })(); }); }
+function othersCalls() { return calls.filter(function (u) { return /^\/api\/trend\?/.test(u) && !/compare=false/.test(u); }); }
+(async function () {
+  docOn.DOMContentLoaded[0]();
+  await settle();
+  // six pinned places: six cards, one call for the other records, for the pin on screen (New York, the first)
+  assert.strictEqual(calls.filter(function (u) { return /^\/api\/series\?/.test(u); }).length, 6);
+  assert.strictEqual(calls.filter(function (u) { return /compare=false/.test(u); }).length, 6);
+  assert.deepStrictEqual(othersCalls(), ['/api/trend?variable=air_temp&lat=40.71&lon=-74.01']);
+  assert.ok(most <= MAX_FLIGHT, 'in flight: ' + most);
+  await new Promise(function (r) { setTimeout(r, 40); });
+  assert.strictEqual(ids['td-live'].textContent, FX.trend.disagree.line); // announced once more when they land
+  // another pin opened: its other records now, and the pending line hides its ticking seconds from screen readers
+  TD.select('40.35,-74.66');
+  var st = ids['rec-oth-st'];
+  assert.ok(st && st.attrs.role === undefined && typeof st.kids[0] === 'string' && !/ s so far/.test(st.kids[0]), JSON.stringify(st && st.kids[0]));
+  assert.ok(st.kids[1].attrs['aria-hidden'] === 'true' && /^ \d+ s so far\.$/.test(st.kids[1].kids[0]), JSON.stringify(st.kids[1].kids));
+  await new Promise(function (r) { setTimeout(r, 40); });
+  assert.strictEqual(ids['td-live'].textContent, 'Loading the other records…'); // announced once while they load
+  await settle();
+  assert.deepStrictEqual(othersCalls().slice(1), ['/api/trend?variable=air_temp&lat=40.35&lon=-74.66']);
+  // back to New York, and to Princeton again: kept on the stored answer, never asked twice
+  TD.select('40.71,-74.01'); await settle(); TD.select('40.35,-74.66'); await settle();
+  assert.strictEqual(othersCalls().length, 2);
+  assert.ok(most <= MAX_FLIGHT, 'in flight: ' + most);
+  process.exit(0);
+})().catch(function (e) { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_other_records_only_for_the_pin_on_screen():
+    """The coordinator's fix: every records call reads ERA5 (Open-Meteo's free allowance is the bottleneck), so only the
+    pin on screen asks for them, once, counted in MAX_FLIGHT. Six pins give one call; opening a second pin gives one more;
+    coming back asks nothing. The pending line is announced once, then again when the records land; its seconds are
+    aria-hidden."""
+    js = APP_DOM + SRC + "\n" + APP + APP_TEST
+    env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env, timeout=60)
+    assert r.returncode == 0, r.stderr + r.stdout
 
 
 def test_the_block_markup_and_focus():
@@ -413,7 +513,7 @@ def test_the_block_markup_and_focus():
     for s in ("el('table', { role: 'table' }", "el('caption', { class: 'sr-only' }, B.caption)", "el('thead', { role: 'rowgroup' }, hr)",
               "el('tbody', { role: 'rowgroup' })", "el('th', { scope: 'col', role: 'columnheader' }, c)", "el('th', { scope: 'row', role: 'rowheader' }",
               "r.main ? 'is-main' : ''", "r.thin ? 'thin' : ''", "el('tr', { role: 'row', class: 'nt' }, el('td', { role: 'cell', colspan: '4' }, r.note))", "tb.append(...othRow(r))", "el('td', { role: 'cell', class: 'na', colspan: '3' }, r.why)",
-              "el('h3', { id: 'rec-oth', tabindex: '-1' }, 'Records for this place')", "el('p', { class: 'st', role: 'status', id: 'rec-oth-st' }, B.wait)",
+              "el('h3', { id: 'rec-oth', tabindex: '-1' }, 'Records for this place')", "el('p', { class: 'st', id: 'rec-oth-st' }, B.wait, el('span', { 'aria-hidden': 'true', id: 'rec-oth-n' }, othSecs(pin)))",
               "othRetry('Try again', pin)", "othRetry('Try the other records again', pin)", "'Other records disagree\u00a0↓'",
               "el('span', { class: 'pd' }, ' per decade')"):
         assert s in APP, s
