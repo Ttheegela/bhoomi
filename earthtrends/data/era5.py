@@ -33,7 +33,7 @@ Pack format v1, the contract between scripts/build_era5_pack.py (writes) and pac
 - manifest.json at the root: version "v1", dataset, doi, citation, licence, attribution, page; retrieved and
   product_version; the sha256 of each source file and of the mask (with the mask's name and md5); grid; vars with units;
   scale, fill, start, end; the build's checks; every tile with its cell count, bytes and sha256. The reader takes
-  `retrieved`, `product_version`, `citation` and the tile list from it.
+  `retrieved`, `product_version`, the tile list and, when present, `citation` from it.
 - record_url: always the dataset's DOI page, never a tile (a tile is a binary file a visitor can't open, and a local
   folder's path never reaches a page); the method text names the cell, so the record can be reproduced.
 - A place's cell (candidates(); the build's --points mini pack uses the same function): its own cell, the one whose
@@ -292,7 +292,8 @@ def pack_series(variable: str, lat: float,
     name = "manifest.json"
     try:
         m = _manifest(base)
-        retrieved, version, citation, listed = m["retrieved"], m["product_version"], m["citation"], m["tiles"]
+        retrieved, version, listed = m["retrieved"], m["product_version"], m["tiles"]
+        citation = m.get("citation")  # display only: a manifest without it still serves the pack
         for ql, qn in candidates(lat, lon):
             name = tile_name(ql, qn)
             if name not in listed:
@@ -316,7 +317,8 @@ def pack_series(variable: str, lat: float,
             f"{_deg(qn / 4, 'E', 'W')}, about 25 km across")
     src = source_block(PACK_SOURCE, PACK_DATASET_ID, version, PACK_DOI_URL, retrieved,
                        PACK_METHOD[variable].format(cell=cell))
-    src["citation"] = [citation]  # a list, as the projections' source.citation
+    if citation:
+        src["citation"] = [citation]  # a list, as the projections' source.citation
     notes = ["Grid cell about 25 km wide, not a single station.",
              f"ERA5 data through {calendar.month_name[int(times[-1][5:])]} {times[-1][:4]}."]
     return times, values, src, notes + ([NOTES[variable]] if variable in NOTES else [])

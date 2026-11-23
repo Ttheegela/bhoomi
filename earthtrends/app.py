@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, ConfigDict
@@ -105,8 +105,19 @@ def bad_input(_: Request, e: ValueError) -> JSONResponse:
 # JSONDecodeError is a ValueError, but a non-JSON 200 (an upstream maintenance page) is an outage, not bad input.
 @app.exception_handler(json.JSONDecodeError)
 @app.exception_handler(httpx.HTTPError)
-def source_down(_: Request, e: Exception) -> JSONResponse:
-    return JSONResponse({"detail": SOURCE_DOWN}, status_code=502)
+def source_down(request: Request, e: Exception) -> JSONResponse:
+    return JSONResponse({"detail": SOURCE_DOWN}, status_code=502, headers=_no_store(request))
+
+
+# Any other error is a 500 (Starlette still logs it).
+@app.exception_handler(Exception)
+def server_error(request: Request, e: Exception) -> PlainTextResponse:
+    return PlainTextResponse("Internal Server Error", status_code=500, headers=_no_store(request))
+
+
+def _no_store(request: Request) -> dict:
+    """A 5xx from the data answers is never cached, so "Try again" reaches the server (contract "Caching")."""
+    return {"Cache-Control": "no-store"} if request.url.path in ("/api/series", "/api/trend") else {}
 
 
 def limit_data(request: Request) -> None:

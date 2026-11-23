@@ -452,3 +452,70 @@ def test_only_answers_after_a_failed_pack_read_are_never_cached(monkeypatch, ope
     assert headers(power, failed) == ("no-store", CACHE)  # an ERA5 row did
     monkeypatch.delenv(era5.PACK)
     assert headers(plain, power) == (CACHE, CACHE)  # no pack: Open-Meteo is cached as today
+
+
+def test_a_sustained_pack_outage_asks_open_meteo_once(monkeypatch, open_meteo, tmp_path):
+    """Review: an expired fallback retries only the pack. Still down: the same Open-Meteo series is kept another
+    FALLBACK_TTL_S, with no new Open-Meteo call (a 45-year request weighs about 1,000 of its 10,000 daily calls). Back:
+    the pack series, kept TTL_S. No pack and no land: as before, Open-Meteo again after TTL_S."""
+    clock, reads = [5000.0], []
+    monkeypatch.setattr(data.time, "monotonic", lambda: clock[0])
+    pack_series = era5.pack_series
+    monkeypatch.setattr(era5, "pack_series", lambda *a: reads.append(a) or pack_series(*a))
+
+    def later(seconds, lat=40.35, lon=-74.66):
+        clock[0] += seconds
+        return data.get_series("air_temp", lat, lon, source="era5")
+
+    monkeypatch.setenv(era5.PACK, str(tmp_path))  # no manifest.json: the pack is down
+    first = later(0)
+    assert len(open_meteo) == 1 and era5.is_fallback(first["source"])
+    for _ in range(3):  # expired three times, the pack still down each time
+        assert later(data.FALLBACK_TTL_S + 1) == first
+    assert len(open_meteo) == 1 and len(reads) == 4  # the pack asked each time, Open-Meteo never again
+    later(data.FALLBACK_TTL_S - 1)
+    assert len(reads) == 4  # re-stamped: kept another FALLBACK_TTL_S
+    monkeypatch.setenv(era5.PACK, str(MINI))  # the pack is back
+    s = later(2)
+    assert s["source"]["url"] == era5.PACK_PAGE and len(reads) == 5 and len(open_meteo) == 1
+    later(data.TTL_S - 1)
+    assert len(reads) == 5  # a pack series keeps TTL_S
+    later(0, 0.0, -30.0)  # no land near: Open-Meteo, and again after TTL_S
+    later(data.TTL_S, 0.0, -30.0)
+    monkeypatch.delenv(era5.PACK)  # no pack: the same
+    later(0, 10.0, -40.0)
+    later(data.TTL_S, 10.0, -40.0)
+    assert len(open_meteo) == 5
+
+
+def test_a_manifest_without_a_citation_still_serves_the_pack(monkeypatch, tmp_path):
+    for f in MINI.iterdir():
+        (tmp_path / f.name).write_bytes(f.read_bytes())
+    m = json.loads((MINI / "manifest.json").read_text())
+    del m["citation"]
+    (tmp_path / "manifest.json").write_text(json.dumps(m))
+    monkeypatch.setenv(era5.PACK, str(tmp_path))
+    times, values, src, _ = era5.pack_series("air_temp", 40.35, -74.66)
+    assert len(values) == 540 and src["url"] == era5.PACK_PAGE and "citation" not in src  # a display field never gates
+
+
+@pytest.mark.parametrize("path", ["/api/series", "/api/trend"])
+def test_server_errors_are_never_cached(monkeypatch, tmp_path, path):
+    from fastapi.testclient import TestClient
+
+    from earthtrends.agent import tools
+    from earthtrends.app import app
+    q = {"variable": "air_temp", "lat": 40.35, "lon": -74.66, "source": "era5"}
+    monkeypatch.setenv(era5.PACK, str(tmp_path))  # the pack fails, then Open-Meteo (conftest: no network)
+    r = TestClient(app).get(path, params=q)
+    assert (r.status_code, r.headers["cache-control"]) == (502, "no-store")
+    monkeypatch.setenv(era5.PACK, str(MINI))
+    r = TestClient(app).get(path, params={**q, "lat": 0.0, "lon": -30.0})  # no land near, and Open-Meteo is down
+    assert (r.status_code, r.headers["cache-control"]) == (502, "no-store")
+
+    def bug(*_, **__):
+        raise RuntimeError("a bug")
+    monkeypatch.setattr(tools, "get_series", bug)
+    monkeypatch.setattr(tools, "detect_trend", bug)
+    r = TestClient(app, raise_server_exceptions=False).get(path, params=q)
+    assert (r.status_code, r.headers["cache-control"]) == (500, "no-store")
