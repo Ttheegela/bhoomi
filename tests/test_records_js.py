@@ -322,9 +322,10 @@ assert.deepStrictEqual(rowsText(pb2).map(function (r) { return r[2] + ' ' + r[3]
 assert.ok(ps2[7].short === 'All three agree: rising' && ps2[7].open === false);
 nothingBanned([pb2, ps2]);
 
-// Chennai, rain: the station is too short (no name, km or link yet: its why), both models agree
+// Chennai, rain: the station is too short (named and placed from ghcn.NoStation, plus its why), both models agree
 var RC = real('chennai_rain', 'Chennai, India'), cb2 = recBlock(RC.t, RC.c), cs2 = steps(RC.t, RC.s, RC.c);
-assert.deepStrictEqual(rowsText(cb2)[2], ['Weather station', '', RC.t.comparisons[2].why]);
+assert.ok(/km away$/.test(RC.t.comparisons[2].where));
+assert.deepStrictEqual(rowsText(cb2)[2], ['Weather station', RC.t.comparisons[2].where, RC.t.comparisons[2].why]);
 assert.deepStrictEqual(rowsText(cb2).slice(0, 2).map(function (r) { return r[3]; }), ['+6.1%', '+7.0%']);
 assert.deepStrictEqual(cb2.agree, ['Both records agree: rising.']);
 assert.ok(cs2[7].short === 'Both agree: rising' && /^We ran steps 1 to 6 on one more record /.test(cs2[7].words[0]));
