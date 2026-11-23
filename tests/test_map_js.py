@@ -332,7 +332,7 @@ def test_every_gauge_hover_equals_its_card_and_the_real_files_read():
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
     assert out["n"] == len(ents) > 600 and out["bad"] == {"mm": 0, "in": 0}, out["bad"]
-    assert out["blocks"] > 11000
+    assert out["blocks"] == json.loads((ROOT / "web/data/grace-trends.json").read_text())["stats"]["n"]  # every block decodes
 
 
 def test_pins_are_ink_teardrops_with_a_key_line():
