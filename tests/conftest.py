@@ -2,12 +2,23 @@ import json
 from datetime import date
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from earthtrends import data
 from earthtrends.data import coops
 from earthtrends.app import app
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """detect_trend reads the other records too (PR4a). A test that doesn't patch a fetcher gets a connection error
+    from httpx.get (that record's row reads "error"), never a live call to Open-Meteo, NASA POWER, NOAA or any other
+    provider. Tests that patch httpx.get or a fetcher themselves override this."""
+    def down(*_, **__):
+        raise httpx.ConnectError("tests do not call providers")
+    monkeypatch.setattr(httpx, "get", down)
 
 
 @pytest.fixture(autouse=True)
