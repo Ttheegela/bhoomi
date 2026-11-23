@@ -134,7 +134,7 @@ def series(request: Request, response: Response, variable: str, lat: float, lon:
 def trend(request: Request, response: Response, variable: str, lat: float, lon: float,
           start: str | None = None, end: str | None = None, source: str | None = None, compare: bool = True) -> dict:
     limit_data(request)
-    out = tools.detect_trend(variable, lat, lon, start, end, source, compare)
+    out = tools.detect_trend(variable, lat, lon, start, end, source, compare, wait=True)  # the page waits for every row
     response.headers["Cache-Control"] = CACHE
     return out
 

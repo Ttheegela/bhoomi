@@ -1,9 +1,15 @@
 """The features behind both doors: MCP tools (mcp_server.py) and /api/ routes (app.py)."""
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import ThreadPoolExecutor, wait as wait_for
 
 from earthtrends import data
 from earthtrends.stats import compute_trend, records
 from earthtrends.stats.baseline import anomaly, baseline
+
+
+# Ask and MCP: how long detect_trend gives the other records (contract "Ask and MCP"); a row not back by then is
+# "pending", and its read finishes in the background, which warms the cache. The page's /api/trend waits for all.
+BUDGET_S = 8.0
 
 
 def list_variables() -> list[dict]:
@@ -27,7 +33,9 @@ def get_series(variable: str, lat: float, lon: float, start: str | None = None,
     return {**s, "anomaly": anomaly(s, base)}
 
 
-def _outcome(f):
+def _outcome(f, done: bool):
+    if not done:
+        return records.Pending()
     try:
         return f.result()
     except Exception as e:  # noqa: BLE001 - the row says what went wrong; the answer goes on
@@ -35,10 +43,13 @@ def _outcome(f):
 
 
 def detect_trend(variable: str, lat: float, lon: float, start: str | None = None,
-                 end: str | None = None, source: str | None = None, compare: bool = True) -> dict:
+                 end: str | None = None, source: str | None = None, compare: bool = True,
+                 wait: bool = False) -> dict:
     """The TrendResult. For air temperature, hottest day and rain it also sets the other records beside the main one
     (contract "Records for this place (PR4a)"): they are read in parallel threads while the main one is, from the
-    same caches, and `compare=False` leaves the four fields null (the page draws the card first)."""
+    same caches, for at most BUDGET_S from the call (Ask and MCP), or for as long as they take with `wait` (the
+    page). `compare=False` leaves the four fields null (the page draws the card first)."""
+    deadline = time.monotonic() + BUDGET_S
     entry = next((v for v in data.list_variables() if v["id"] == variable), None)
     order = entry["sources"] if compare and entry and variable in records.VARIABLES else []
     main = source or (order[0] if order else None)
@@ -54,13 +65,15 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
             r["now"], r["projection"] = whole["now"], whole["projection"]
         extra = dict.fromkeys(("comparisons", "comparisons_window", "disagree", "drift"))
         if order:
+            if not wait:
+                wait_for(others.values(), timeout=max(0.0, deadline - time.monotonic()))
             try:
                 extra = records.compare(variable, [(main, (s, full, base))] +
-                                        [(sid, _outcome(f)) for sid, f in others.items()], lat, lon)
+                                        [(sid, _outcome(f, wait or f.done())) for sid, f in others.items()], lat, lon)
             except Exception:  # noqa: BLE001 - the records block must never sink the main answer
                 pass
     finally:
         if pool:
-            pool.shutdown(wait=False, cancel_futures=True)  # a failed main read doesn't wait for the others
+            pool.shutdown(wait=False)  # a late or failed read finishes in the background and fills the cache
     tail = {k: r.pop(k) for k in ("meaning", "guidance")}  # the contract keeps these two last
     return {**r, **extra, **tail}
