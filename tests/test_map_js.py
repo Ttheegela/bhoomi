@@ -301,7 +301,7 @@ def test_map_pure_logic():
 
 
 SWEEP = r"""
-var E = JSON.parse(process.env.E), bad = { mm: 0, in: 0 };
+var E = JSON.parse(require('fs').readFileSync(process.env.E, 'utf8')), bad = { mm: 0, in: 0 };
 E.forEach(function (c) {
   var t = { headline_rate: c.h, slope_per_decade: c.pd[0], ci_low: c.pd[1], ci_high: c.pd[2] };
   [false, true].forEach(function (im) {
@@ -315,7 +315,7 @@ console.log(JSON.stringify({ n: E.length, bad: bad, blocks: bs && bs.length }));
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
-def test_every_gauge_hover_equals_its_card_and_the_real_files_read():
+def test_every_gauge_hover_equals_its_card_and_the_real_files_read(tmp_path):
     """QA B2: over every dot in web/data/gauge-trends.json (both "Measured by" lists), the hover's rate and 95% range equal
     the card's in mm (the server's headline_rate text) and in inches (the card's conversion of slope_per_decade, ci_low and
     ci_high), the earthquake-step gauges' wide ranges included. The real grace-trends.json reads (its enc is per field)."""
@@ -327,12 +327,14 @@ def test_every_gauge_hover_equals_its_card_and_the_real_files_read():
         pd = [round(g[k] * 10, 4) for k in ("slope", "lo", "hi")]  # the API's 4-decimal values a decade
         cases.append({"name": g["name"], "v": g["slope"], "lo": g["lo"], "hi": g["hi"], "pd": pd,
                       "h": trend._headline_rate("sea_level", UNITS["sea_level"], tuple(pd), None)})
-    env = {"E": json.dumps(cases), "W": str(ROOT / "web" / "data" / "grace-trends.json"), "PATH": ""}
+    ef = tmp_path / "cases.json"
+    ef.write_text(json.dumps(cases), encoding="utf-8")  # too big for an env var (E2BIG)
+    env = {"E": str(ef), "W": str(ROOT / "web" / "data" / "grace-trends.json"), "PATH": ""}
     r = subprocess.run([shutil.which("node"), "-"], input=CARD_JS + PURE + SWEEP, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
     assert out["n"] == len(ents) > 600 and out["bad"] == {"mm": 0, "in": 0}, out["bad"]
-    assert out["blocks"] > 11000
+    assert out["blocks"] == json.loads((ROOT / "web/data/grace-trends.json").read_text())["stats"]["n"]  # every block decodes
 
 
 def test_pins_are_ink_teardrops_with_a_key_line():
@@ -350,6 +352,36 @@ def test_pins_are_ink_teardrops_with_a_key_line():
     for f in (ROOT / "web").rglob("*"):
         if f.is_file() and f.suffix in (".js", ".css", ".html") and "vendor" not in f.parts:
             assert "--mk-mod" not in f.read_text(encoding="utf-8"), f
+
+
+def test_the_hover_sits_above_the_selected_pin_and_its_tag():
+    """QA B6: the selected pin's black tag covered the hover's last line ("Click for the full answer."): the popup's z-index
+    must be above .map-mk.sel's."""
+    css = (ROOT / "web" / "map.css").read_text(encoding="utf-8")
+    z = lambda sel: int(re.search(r"(?:^|\n)%s \{[^}]*z-index: (\d+);" % re.escape(sel), css)[1])
+    assert z(".map-tip") > z(".map-mk.sel") >= 1
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_a_redraw_after_a_map_tap_keeps_the_map_in_place():
+    """QA B4 residual: at 375 the card and sidebar sit above the map. After a tap on the map, a redraw that makes them taller
+    (or shorter) scrolls the page by the same amount, so the map stays put; a redraw that leaves the map alone scrolls none.
+    Only a tap or key press inside #map-slot turns it on."""
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    fn = re.search(r"^function keepTop\(.*?^}$", app, re.M | re.S)[0]
+    changed = app.split("function changed() {")[1].split("\n}\n")[0]
+    assert "if (fromMap) keepTop($('map-slot'), draw," in changed and "behavior: 'instant'" in changed
+    assert "e.target.closest('#map-slot')" in app
+    js = fn + r"""
+var box = { top: 157, getBoundingClientRect: function () { return { top: this.top }; } }, moved = [];
+keepTop(box, function () { box.top += 98; }, function (d) { moved.push(d); });   // a taller answer above the map
+keepTop(box, function () { box.top -= 60; }, function (d) { moved.push(d); });   // a shorter one
+keepTop(box, function () {}, function (d) { moved.push(d); });                   // the map did not move: no scroll
+console.log(JSON.stringify(moved));
+"""
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == [98, -60]
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")

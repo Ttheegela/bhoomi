@@ -114,8 +114,9 @@
   function perDecade(per) { return /\ba year$/.test(per) ? 10 : 1; }
 
   // The rate every view prints (headline_rate): its own text. In °F or inches the API's 4-decimal slope_per_decade, ci_low
-  // and ci_high, converted, then rounded once as above: never an already-rounded value converted (QA B2), so the card, the
-  // map's hover and the world line round the same numbers.
+  // and ci_high, converted, then rounded once as above (QA B2), so the card, the map's hover and the world line round the
+  // same numbers. Only if those fields are absent (the contract always sends them) does it convert headline_rate's own
+  // value, low and high, which can differ by one in the last digit.
   function rate(t, imp) {
     var h = t.headline_rate;
     if (!h || typeof h.text !== 'string') { // null only for rain where the 1995-2014 average is zero: the rate in mm a day

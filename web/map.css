@@ -29,6 +29,7 @@
   .mk-pin { fill: CanvasText; }
 }
 /* the hover label over a gauge dot or a water block (web/design/13-maps.md sections 2 and 4); the key under the map is in style.css */
+.map-tip { z-index: 3; } /* above every pin and the selected pin's tag (.map-mk.sel is 2), QA B6 */
 .map-tip .maplibregl-popup-tip { display: none; }
 .map-tip .maplibregl-popup-content { max-width: 34ch; padding: 8px 10px; font: 14px/1.4 Inter, system-ui, sans-serif; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: none; pointer-events: none; }
 .map-tip b, .map-tip span { display: block; }
