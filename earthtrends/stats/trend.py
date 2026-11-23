@@ -10,8 +10,8 @@ import numpy as np
 
 from earthtrends.data.world import reference as _reference  # the world snapshots (D5); tests replace it
 from earthtrends.stats.baseline import MONTH_DAYS, YEAR_MONTHS, baseline, columns, fit, normals_at, num
-from earthtrends.stats.guidance import (DISPLAY, OWN_RULE, RAIN_MIN_MM, RAIN_THRESHOLDS, SCARCE, THRESHOLDS,
-                                        guidance_for, q, sig2, signed)
+from earthtrends.stats.guidance import (DISPLAY, RAIN_MIN_MM, RAIN_THRESHOLDS, SCARCE, guidance_for, q, sig2,
+                                        signed)
 from earthtrends.stats.meaning import UNITS, meaning_for
 from earthtrends.stats.projection import sea_level as _sea_level_projection
 
@@ -67,6 +67,7 @@ NOW_MONTHS, NOW_NEED = 12, 10  # `now`: the latest 12 months, at least 10 of the
 GHCN_CAVEAT = "Station records are not adjusted for changes in instruments, observing times or station moves."
 POWER_T_CAVEAT = ("NASA POWER comes from a weather model, MERRA-2, which does not use land thermometer readings; a "
                   "nearby weather station can differ.")
+RAIN_CAVEAT = "It covers total rain, not heavy downpours or floods."  # every rainfall record
 
 
 def compute_trend(series: dict, base: dict | None = None) -> dict:
@@ -109,6 +110,8 @@ def compute_trend(series: dict, base: dict | None = None) -> dict:
         caveats.append(GHCN_CAVEAT)
     if sid == "power" and var in ("air_temp", "air_temp_max"):
         caveats.append(POWER_T_CAVEAT)
+    if var == "precip":
+        caveats.append(RAIN_CAVEAT)
 
     base = baseline(s) if base is None else base
     xa = _anomalies(cols, base, monthly)
@@ -411,8 +414,8 @@ def _world(var: str, monthly: bool, used: list, t, xa, source_id=None, verdict: 
     range (the local rate's 95% range ends over the same months, domain review F2) only for a rising or falling
     verdict: an unclear trend gets the two rates and no ratio."""
     out = {"available": False, "measure": None, "local_rate": None, "world_rate": None, "unit": None, "window": None,
-           "method": None, "ratio": None, "ratio_low": None, "ratio_high": None, "thresholds": None, "source": None,
-           "text": OWN_RULE.get(var), "why_none": NO_MATCH.get(var, NO_MATCH_OTHER)}
+           "method": None, "ratio": None, "ratio_low": None, "ratio_high": None, "source": None,
+           "text": None, "why_none": NO_MATCH.get(var, NO_MATCH_OTHER)}
     cfg = WORLD.get(var)
     if cfg is None or not monthly:
         return out
@@ -444,7 +447,6 @@ def _world(var: str, monthly: bool, used: list, t, xa, source_id=None, verdict: 
             "method": "; ".join(m for m in (WORLD_METHOD, SEA_KIND if var == "sea_level" else KIND.get((var, source_id)))
                                 if m),
             "ratio": ratios[0], "ratio_low": ratios[1], "ratio_high": ratios[2],
-            "thresholds": dict(THRESHOLDS),
             "source": {k: src.get(k) for k in ("name", "dataset_id", "record_url", "retrieved", "method")},  # GIA note
             "text": cfg["text"].format(verb=cfg["verb"] if glob > 0 else "changed by", w=_plain(glob),
                                        l=_plain(local), start=start[:4], end=end[:4]),

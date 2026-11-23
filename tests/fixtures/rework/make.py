@@ -142,5 +142,5 @@ if __name__ == "__main__":
         d = {"series": {**s, "anomaly": anomaly(s, base)}, "trend": compute_trend(s, base=base)}
         (HERE / f"{c['file']}.json").write_text(json.dumps(d, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
         t = d["trend"]
-        print(c["file"], t["verdict"], t["baseline"]["method"], t["headline_rate"]["text"] if t["headline_rate"] else None, t["guidance"]["risk_label"])
+        print(c["file"], t["verdict"], t["baseline"]["method"], t["headline_rate"]["text"] if t["headline_rate"] else None, t["guidance"]["fact"])
     (HERE / "variables.json").write_text(json.dumps(CATALOG, ensure_ascii=False) + "\n", encoding="utf-8")

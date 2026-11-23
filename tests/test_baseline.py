@@ -12,7 +12,7 @@ from earthtrends import data
 from earthtrends.agent import tools
 from earthtrends.stats import compute_trend, trend
 from earthtrends.stats.baseline import FITTED, MONTH_DAYS, PROVIDER, anomaly, baseline
-from earthtrends.stats.guidance import OWN_RULE, q, sig2
+from earthtrends.stats.guidance import q, sig2
 
 UNITS = {"air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "sea_level": "mm", "water_storage": "cm"}
 POWER = {"id": "power", "name": "NASA POWER (MERRA-2)", "url": "https://power.larc.nasa.gov/"}
@@ -447,15 +447,14 @@ def test_temperature_compares_the_same_months_with_the_land_average(refs):
     here, world = rate(s, months, 10), rate(land, months, 10)
     assert (w["local_rate"], w["world_rate"]) == (float(here), float(world))
     assert w["ratio"] == float(q(here / world, "0.1"))  # judged as shown
-    assert (w["unit"], w["measure"], w["thresholds"]) == ("°C per decade", "average for all land areas",
-                                                          {"moderate": 0.75, "high": 1.5})
+    assert (w["unit"], w["measure"]) == ("°C per decade", "average for all land areas") and "thresholds" not in w
     assert w["source"] == {k: LAND_SRC.get(k) for k in ("name", "dataset_id", "record_url", "retrieved", "method")}
     assert w["text"] == (f"Over the same years, the average for all land areas warmed {world:f} °C per decade. "
                          f"Here: {here:f} °C per decade.") and w["why_none"] is None
     g = r["guidance"]
     assert g["ratio"] == w["ratio"] and g["reference"] == {
         "text": w["text"], "source": {"name": LAND_SRC["name"], "url": LAND_SRC["record_url"]}}
-    assert g["risk"] == ("high" if w["ratio"] >= 1.5 else "moderate" if w["ratio"] >= 0.75 else "low")
+    assert g["fact"].startswith(f"Rising about {w['ratio']} times as fast as the average for all land areas (1981 to ")
 
 
 def test_sea_level_compares_1993_on_in_mm_a_year(refs):
@@ -556,9 +555,10 @@ def test_sea_level_needs_20_years_since_1993(refs, last, available):
     if not available:
         assert w["why_none"] == "This gauge has fewer than 20 years of readings since 1993, so it is not compared " \
                                 "with the world average."
-        assert all(w[k] is None for k in ("local_rate", "world_rate", "ratio", "window", "source", "thresholds"))
+        assert all(w[k] is None for k in ("local_rate", "world_rate", "ratio", "window", "source"))
         assert r["verdict"] == "rising" and r["guidance"]["ratio"] is None and r["guidance"]["reference"] is None
-        assert r["guidance"]["risk"] is None and r["guidance"]["risk_label"] == "No world comparison" and r["guidance"]["why"] == w["why_none"]
+        h = r["headline_rate"]
+        assert r["guidance"]["fact"] == f"Rising about {h['text'][1:]} (1950 to {last}; 95% range {h['range_text']})."
 
 
 @pytest.mark.parametrize("world", [np.zeros(76 * 12), 0.2 - 0.025 * np.arange(76 * 12) / 12])  # flat, falling
@@ -569,7 +569,8 @@ def test_a_world_figure_that_did_not_rise_gives_no_ratio_and_says_why(monkeypatc
     why = "The world figure did not rise over these years, so there is no ratio."
     assert r["verdict"] == "rising" and w["available"] and w["world_rate"] <= 0
     assert (w["ratio"], w["ratio_low"], w["ratio_high"], w["why_none"]) == (None, None, None, why)
-    assert (g["risk"], g["risk_label"], g["why"], g["ratio"]) == (None, "No world comparison", why, None)
+    h = r["headline_rate"]
+    assert (g["fact"], g["ratio"]) == (f"Rising about {h['text'][1:]} (1981 to 2025; 95% range {h['range_text']}).", None)
     assert g["reference"]["text"] == w["text"]  # the world sentence is still shown
 
 
@@ -610,17 +611,18 @@ def test_no_world_figure_for_hottest_day_rain_and_water(refs, var, why):
     src = GRACE if var == "water_storage" else POWER
     w = compute_trend(ts(synth(40, level=3.0 if var == "precip" else 15.0, season=SEASON / 10), variable=var,
                          source=src))["world"]
-    assert (w["available"], w["why_none"], w["text"]) == (False, why, OWN_RULE.get(var))
+    assert (w["available"], w["why_none"], w["text"]) == (False, why, None)  # facts only: no level rule
     assert all(w[k] is None for k in ("measure", "local_rate", "world_rate", "unit", "window", "method", "ratio",
-                                      "thresholds", "source"))
+                                      "source")) and "thresholds" not in w
 
 
-def test_hottest_day_has_no_risk_level(refs):
+def test_hottest_day_states_the_verdict_with_no_world_clause(refs):
     r = compute_trend(ts(synth(40, per_decade=0.5), variable="air_temp_max"))
     g = r["guidance"]
     assert r["verdict"] == "rising" and g["rate"]["text"].startswith("+")
-    assert (g["risk"], g["risk_label"], g["why"], g["recommendation"], g["ratio"], g["reference"]) == (None,) * 6
-    assert g["disclaimer"] and g["future_link"] is None
+    h = r["headline_rate"]
+    assert g["fact"] == f"Rising about {h['text'][1:]} (1981 to 2020; 95% range {h['range_text']})."
+    assert (g["ratio"], g["reference"], g["future_link"]) == (None,) * 3 and g["disclaimer"]
 
 
 @pytest.mark.parametrize("var", list(UNITS))
