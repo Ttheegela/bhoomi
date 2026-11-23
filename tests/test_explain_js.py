@@ -810,6 +810,9 @@ assert.ok(/^\+14 in$/.test(sp(bik.value)) && sp(bik.line).endsWith(' About 11 in
 var CMF = ['princeton_air_temp', 'delhi_hottest_day', 'chennai_rain', 'seattle_air_temp_no_change'];
 var NOTE = "These are the climate models' raw results. The IPCC's assessed warming, which also uses past observations, is a little lower for the world as a whole.";
 var CP = load('princeton_air_temp'), CD = load('delhi_hottest_day'), CC = load('chennai_rain'), CR3 = load('riverside_no_baseline');
+// the contract (QA of PR3): no "more than today" for hottest day, as for rain; set here so the tests hold before and after
+// the server's regenerated fixture lands
+CD.trend.projection.readouts.more_than_today = null;
 var cpc = pc2(CP, 'Princeton, NJ'), cdc = pc2(CD, 'Delhi'), ccc = pc2(CC, 'Chennai');
 var cpx = futOf(CP.trend, null, false, TODAY), cdx = futOf(CD.trend, null, false, TODAY), ccx = futOf(CC.trend, null, false, TODAY);
 assert.ok(cpx.cm && ccx.cm && cpx.rain === false && ccx.rain === true && modeOf(CP.trend, CP.series, cpx) === 'both');
@@ -817,7 +820,19 @@ assert.ok(cpx.cm && ccx.cm && cpx.rain === false && ccx.rain === true && modeOf(
 assert.deepStrictEqual(card(CP.trend, false, null, TODAY).r3f, { label: 'Around 2050, intermediate emissions', value: '+1.9' + NB + '°C', per: '',
   line: 'SSP2-4.5, IPCC AR6 Atlas. Range across models +1.2 to +2.3' + NB + '°C. About 1.7' + NB + '°C more than today.' });
 assert.deepStrictEqual(card(CD.trend, false, null, TODAY).r3f, { label: 'Around 2050, intermediate emissions', value: '+1.3' + NB + '°C', per: '',
-  line: 'SSP2-4.5, IPCC AR6 Atlas. Range across models +0.5 to +1.8' + NB + '°C. About 0.75' + NB + '°C more than today.' });
+  line: 'SSP2-4.5, IPCC AR6 Atlas. Range across models +0.5 to +1.8' + NB + '°C.' });
+// hottest day: no "more than today" anywhere, in any scenario or unit (the readout line, step 7; step 4 keeps PR1's "Now" line)
+[[null, false], [null, true], [{ ssp: 'ssp585' }, false], [{ ssp: 'ssp126' }, true]].forEach(function (a) {
+  var hx = futOf(CD.trend, a[0], a[1], TODAY), hR = futRead(CD.trend, hx, a[1]), hS = steps(CD.trend, CD.series, pc2(CD, 'Delhi', a[1], a[0]));
+  assert.ok(hx.more === '' && !/than today|That is/.test(card(CD.trend, a[1], a[0], TODAY).r3f.line + hR.rest), hR.rest);
+  assert.ok(hS[6].work.every(function (x) { return !/^(Now|Latest): | − /.test(x); }), JSON.stringify(hS[6].work));
+  assert.strictEqual(hS[6].work[hS[6].work.length - 1], "No “more than today” for the hottest day of the month: one year's hottest days swing more than this change.");
+  assert.ok(/, not a point on the line\.$/.test(hS[3].work.slice(-1)[0]) && !/\(step 7\)/.test(hS[3].work.join(' ')), JSON.stringify(hS[3].work));
+  clean(CD, pc2(CD, 'Delhi', a[1], a[0]));
+});
+assert.ok(/ Now: \+0\.51 °C \(the 12 months to December 2025\)\. /.test(sp(chartText(CD.trend, CD.series, cdc).summary))); // the Now dot stays
+var CDN = copy(CD); CDN.trend.now = null; // no "Now" either: no line about it
+assert.ok(steps(CDN.trend, CDN.series, cdc)[6].work.every(function (x) { return !/more than today/.test(x); }));
 assert.deepStrictEqual(card(CC.trend, false, null, TODAY).r3f, { label: 'Around 2050, intermediate emissions', value: '+11%', per: 'of the usual yearly rain',
   line: 'SSP2-4.5, IPCC AR6 Atlas. Range across models −3 to +24%. Models disagree on wetter or drier.' });
 // QA: the default scenario in metric equals by_2050.text and more_than_today.text, for every CMIP6 fixture
@@ -967,17 +982,30 @@ function subtracts(d, sel, imp) {
   assert.strictEqual(Number((a - b).toFixed(dc)) * (m[4] === 'less' ? -1 : 1), c, w);
   return sp(w);
 }
-assert.strictEqual(subtracts(CD, null, false), 'Now: +0.51 °C (the 12 months to December 2025). +1.26 °C − +0.51 °C = about 0.75 °C more than today. Approximate: a 12-month average against a 20-year one.');
+// Delhi's numbers (1.26 − 0.5071 = 0.75), as air temperature: the only measurement with "more than today" now
+var CDA = copy(CD); CDA.trend.variable = 'air_temp'; CDA.trend.projection.readouts.more_than_today = { value: 0.75, text: 'about 0.75 °C more than today', approximate: true };
+assert.strictEqual(subtracts(CDA, null, false), 'Now: +0.51 °C (the 12 months to December 2025). +1.26 °C − +0.51 °C = about 0.75 °C more than today. Approximate: a 12-month average against a 20-year one.');
 assert.ok(subtracts(CP, null, false).indexOf(' +1.9 °C − +0.2 °C = about 1.7 °C more than today.') > 0);
 assert.ok(subtracts(CP, null, true).indexOf(' +3.4 °F − +0.4 °F = about 3.0 °F more than today.') > 0); // °F: × 1.8 first, then rounded
 assert.ok(subtracts(load('seattle_air_temp_no_change'), null, false).indexOf(' +1.6 °C − (−0.5 °C) = about 2.1 °C more than today.') > 0); // a negative "Now" in brackets
-CMF.filter(function (n) { return n !== 'chennai_rain'; }).map(load).forEach(function (d) {
+CMF.map(load).filter(function (d) { return d.trend.projection.readouts.more_than_today; }).forEach(function (d) { // where the server gives one
   [[null, false], [null, true], [{ ssp: 'ssp126' }, false], [{ ssp: 'ssp585' }, true]].forEach(function (a) { subtracts(d, a[0], a[1]); }); });
 // rounding at the result's decimals can miss by one digit (1.25 → 1.3, 0.04 → 0.0, but 1.25 − 0.04 = 1.2): one decimal more
 var CM1 = copy(CP); CM1.trend.projection.scenarios[1].p50[1] = 1.25; CM1.trend.now.value = 0.04; CM1.trend.now.text = '+0.040 °C';
 CM1.trend.projection.readouts.more_than_today = { value: 1.2, text: 'about 1.2 °C more than today', approximate: true };
 assert.ok(subtracts(CM1, null, false).indexOf(' +1.25 °C − +0.04 °C = about 1.2 °C more than today.') > 0);
-assert.strictEqual(card(CD.trend, false, null, TODAY).r3f.line, 'SSP2-4.5, IPCC AR6 Atlas. Range across models +0.5 to +1.8' + NB + '°C. About 0.75' + NB + '°C more than today.'); // the card: unchanged
+assert.strictEqual(card(CDA.trend, false, null, TODAY).r3f.line, 'SSP2-4.5, IPCC AR6 Atlas. Range across models +0.5 to +1.8' + NB + '°C. About 0.75' + NB + '°C more than today.'); // the card: its own rounding
+// QA B1: the label over S's 2041-2060 box moves up past another scenario's median that would run under it. Princeton,
+// intermediate: very high's +2.56 sits just over the box's +2.31 top (32.6 px a degree, as at 1440 px)
+var px = function (v) { return 200 - v * 32.6; }, pm = cmModel(cpx, id1), ptop = px(pm.sel[1].hi), pmeds = pm.others.map(function (o) { return px(o.mids[1]); });
+var under = function (y, meds, extra) { return meds.filter(function (m) { return m >= y - 14 - (extra || 0) && m <= y + 4; }); };
+assert.ok(under(ptop - 10, pmeds).length === 1, 'the old place had very high under it'); // the bug, at the old 10 px
+var ply = cmLabelY(ptop, pmeds, 10, 0);
+assert.ok(under(ply, pmeds).length === 0 && ply < ptop - 10, ply);
+assert.strictEqual(cmLabelY(ptop, [], 10, 0), ptop - 10); // nothing in the way: 10 px over the box, as designed
+assert.strictEqual(cmLabelY(100, [140, 95, 300], 10, 0), 100 - 10); // medians inside or below the box never move it
+var two = cmLabelY(100, [88, 70], 8, 16); // two lines ("Models disagree" and the value 16 px over it): both clear
+assert.ok(under(two, [88, 70], 16).length === 0, two);
 assert.deepStrictEqual(cp7.link, { text: 'IPCC AR6 Atlas, CMIP6 projections ↗', href: 'https://digital.csic.es/handle/10261/332744' });
 assert.strictEqual(cc7.words[1], "We change this place's own 1995–2014 average by the share the models give (the delta method), so raw model values never sit next to the records.");
 assert.deepStrictEqual(cc7.work, ["This place's 1995–2014 average from NASA POWER: 3.7" + NB + 'mm a day, about 1,363' + NB + 'mm a year (step 3). On the chart that is 0.',
@@ -1298,6 +1326,12 @@ assert.ok(els.filter(function (e) { return e.tag === 'path' && /^c-case/.test(cl
 var texts = P.els.filter(function (e) { return e.tag === 'text'; }).map(function (e) { return e.textContent; });
 assert.ok(texts.indexOf('+1.9' + NB + '°C, 2041–2060') >= 0 && texts.indexOf('2081–2100:') >= 0 && texts.indexOf('Intermediate +2.9' + NB + '°C') >= 0 && texts.indexOf('0 = the 1995–2014') >= 0, JSON.stringify(texts));
 assert.ok(texts.indexOf('Today') >= 0 && texts.some(function (x) { return /^Now \+0\.24/.test(x); }));
+// QA B1: no other scenario's 2041-2060 median runs under that label (very high's sat just over the box's top)
+var lab = els.filter(function (e) { return e.textContent === '+1.9' + NB + '°C, 2041–2060'; })[0], labY = +lab.a.y;
+var w1 = function (r) { var out = []; r.els.filter(function (e) { return /^f-med/.test(cls(e)); }).forEach(function (e) {
+  var re = /M([\d.]+) ([\d.]+)H([\d.]+)/g, m; while ((m = re.exec(e.a.d))) if (+m[1] >= X(2041) - 0.1 && +m[3] <= X(2061) + 0.1) out.push(+m[2]); }); return out; };
+assert.ok(w1(P).length === 3 && w1(P).every(function (m) { return m < labY - 14 || m > labY + 4; }), labY + ' ' + w1(P));
+assert.ok(labY < +boxes[1].a.y - 10); // moved up past it
 assert.ok(!els.some(function (e) { return cls(e) === 'c-brk'; }) && !els.some(function (e) { return cls(e) === 's-avg'; }));
 // keys: Right from the last year goes to 2021-2040, End to 2081-2100, Home to the first year
 assert.ok(/^2025: \+0\.\d+\s°C, the year's average, compared with the 1995–2014 average\.$/.test(key(P, 'ArrowRight')), P.c.ro.textContent);

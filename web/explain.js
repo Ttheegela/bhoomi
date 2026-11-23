@@ -481,8 +481,9 @@
       s4.work.push('Over the record: ' + withUnit(mul, cu) + ' ' + r.per + ' × ' + (dec ? fixed(span / 10, 2) + ' decades' : Number(span.toFixed(3)) + ' years') + ' = ' + ch(fit.change)
         + (f.unit(fit.units) !== cu ? ', which is ' + f.val(fit.change, fit.units) : '') + ' (' + rk + ' ' + f.rng(fit.change_low, fit.change_high, fit.units) + ').');
     }
-    var nw = nowOf(t, imp), fx = futOf(t, ctx.sel, imp, ctx.today), n7 = fx && !(fx.cm && fx.rain);
-    // with a projection the card's "Now" is explained in step 7 (design 11 §6); rain's step 7 has no "Now" (design 15 §4)
+    var nw = nowOf(t, imp), fx = futOf(t, ctx.sel, imp, ctx.today), n7 = fx && (!fx.cm || !!fx.more);
+    // with a projection the card's "Now" is explained in step 7 (design 11 §6); without "more than today" (rain, hottest
+    // day) step 7 has no "Now" line, so step 4 keeps PR1's
     if (isNum(fit.level_end)) s4.work.push('The trend line ends at ' + f.val(fit.level_end, fit.units) + ' compared with ' + b.text + ', in ' + M(fit.end) + '.'
       + (n7 && nw ? ' The card’s “' + fx.nowWord + '” is the measured average of the last 12 months instead (step 7).' : ''));
     if (nw && !n7) s4.work.push('The card’s “Now”, ' + nw.value + ', is ' + (nw.rain ? 'the rain measured in ' : 'the measured average of ') + nw.label + ', not a point on the line.');
@@ -787,7 +788,9 @@
     var rng = function (a, b) { return isNum(a) && isNum(b) ? withUnit(spanText(a * k, b * k), uu) : 'no value'; };
     var n = t.now, nw = nowOf(t, imp), mt = (p.readouts || {}).more_than_today, p50 = (S.p50 || [])[1];
     var old = !!nw && /-/.test(str(n.end)) && (isNum(today) ? today : estMonth()) - mi(n.end) > 24, tw = old ? 'in ' + Y(n.end) : 'today', more = '', mn = '';
-    if (!rain && nw && isNum(n.value) && isNum(p50)) { // the default scenario in metric prints the server's text as given
+    // "more than today" only where the server gives one (air temperature: rain and hottest day swing more in one year than
+    // the change); the default scenario in metric prints its text as given, another scenario or °F works it out the same way
+    if (mt && nw && isNum(n.value) && isNum(p50)) {
       var d = (p50 - n.value) * k, a = sig2Text(Math.abs(d)).replace(/^\+/, ''), srv = S === S0 && !imp && mt && str(mt.text);
       more = srv ? mt.text.replace(' °C', NB + '°C')
         : a === '0' ? 'about the same as ' + tw : 'about ' + withUnit(a, uu) + ' ' + (d > 0 ? 'more' : 'less') + ' than ' + tw;
@@ -841,6 +844,14 @@
       sel: wins.map(function (w, i) { return { m0: w.m0, m1: w.m1, lo: n(fx.S.p10, i), mid: n(fx.S.p50, i), hi: n(fx.S.p90, i), dis: fx.dis(i) }; }),
       others: fx.oth.map(function (x) { return { S: x, k: SCOL[x.id] || 1, mids: wins.map(function (w, i) { return n(x.p50, i); }) }; }) };
   }
+  // the baseline of the label over S's 2041-2060 box (QA B1): `gap` px over the box's top, moved up past any other
+  // scenario's median there that would run under its text (14 px above the baseline to 4 below; `extra`: a second line
+  // above), so no median reads as an underline. top and meds are px from the top of the chart.
+  function cmLabelY(top, meds, gap, extra) {
+    var y = top - gap;
+    meds.slice().sort(function (a, b) { return b - a; }).forEach(function (m) { if (m >= y - 14 - extra && m <= y + 4) y = m - 7; });
+    return y;
+  }
   // temperature and hottest day: one point a year (the yearly dots), from the first January; a missing year breaks the line
   function yearLine(md) {
     var by = {}, out = { ms: [], ys: [], pre: [], x0: Math.floor(md.x0 / 12) * 12 };
@@ -875,7 +886,7 @@
       var at = function (x, q) { return Number(x.toFixed(q)); }, num = function (x) { var r = at(x, e); return withUnit((r > 0 ? '+' : '') + fixed(r, e), fx.u); };
       while (e < dec + 3 && Math.abs(at(at(A, e) - at(B, e), dec)) !== c) e++;
       work.push(fx.nowWord + ': ' + fx.now.value + ' (' + fx.now.label + '). ' + num(A) + ' − ' + sub(num(B)) + ' = ' + fx.more + '. Approximate: a 12-month average against a 20-year one.');
-    }
+    } else if (fx.now && t.variable === 'air_temp_max') work.push("No “more than today” for the hottest day of the month: one year's hottest days swing more than this change.");
     var ll = latlon(loc);
     return { title: 'What comes next',
       short: fx.v(p50) + ' around 2050 under ' + fx.name + ' (' + fx.code + '), from ' + fx.N + ' climate models' + (fx.dis(1) ? '; models disagree on wetter or drier' : ''),
@@ -1319,8 +1330,9 @@
       var b50 = cw && cw.sel[1];
       if (b50 && b50.mid != null && b50.hi != null) { // the card's 2050 number over its box; rain adds "Models disagree" from 600 px
         var bc = (X(b50.m0) + X(b50.m1)) / 2, dl = b50.dis && !narrow;
-        if (dl) root.append(sv('text', { x: bc, y: Yp(b50.hi) - 8, 'text-anchor': 'middle', class: 'pc-dis' }, 'Models disagree'));
-        root.append(sv('text', { x: bc, y: Yp(b50.hi) - (dl ? 24 : 10), 'text-anchor': 'middle', class: 'pc-lab' }, fx.v(fx.S.p50[1]) + (narrow ? '' : ', 2041–2060')));
+        var ly = cmLabelY(Yp(b50.hi), cw.others.map(function (o) { return o.mids[1]; }).filter(function (v) { return v != null; }).map(Yp), dl ? 8 : 10, dl ? 16 : 0);
+        if (dl) root.append(sv('text', { x: bc, y: ly, 'text-anchor': 'middle', class: 'pc-dis' }, 'Models disagree'));
+        root.append(sv('text', { x: bc, y: dl ? ly - 16 : ly, 'text-anchor': 'middle', class: 'pc-lab' }, fx.v(fx.S.p50[1]) + (narrow ? '' : ', 2041–2060')));
       }
       var i50 = fm ? fm.years.indexOf(2050) : -1, v50 = i50 < 0 ? null : fm.sel.p50[i50];
       if (v50 != null) { // the card's 2050 number, on its line
