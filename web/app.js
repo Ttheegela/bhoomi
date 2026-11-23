@@ -44,6 +44,8 @@ function el(tag, attrs, ...kids) {
 function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
 
 const isHttps = (src) => !!src && typeof src.url === 'string' && src.url.startsWith('https://');
+// One record from one place: ERA5 has one id whether it came from our pack or from Open-Meteo's fallback, so the address too
+const sameSrc = (a, b) => !!a && !!b && a.id === b.id && a.url === b.url;
 // Display only: a trailing ", RLR monthly means" is jargon; the link is unchanged.
 const shownName = (src) => (src && typeof src.name === 'string' ? src.name.replace(/, RLR monthly means$/, '') : 'unknown');
 // Link with the name only (footer list).
@@ -221,10 +223,11 @@ function pump() {
         return;
       }
       // The record the card's answer used: when ERA5 can't be read the trend falls back to the next record (main_note) and
-      // the series doesn't, so the series is asked again for that record before anything fails; the records call follows it
-      const tid = tr.ok && tr.body && tr.body.source ? tr.body.source.id : null, sid = sr.ok && sr.body && sr.body.source ? sr.body.source.id : null;
+      // the series doesn't, and the two calls can read ERA5 from different places (our pack, Open-Meteo's fallback), so the
+      // series is asked again for that record before anything fails; the records call follows it
+      const ts = tr.ok && tr.body && tr.body.source ? tr.body.source : null, tid = ts && ts.id;
       if (tid) res.params = Object.assign({}, job.params, { source: tid }); // pinned on the stored answer
-      (tid && (tr.body.main_note || sid !== tid) ? api('/api/series', res.params) : Promise.resolve(sr)).then((sr2) => cardLanded(job, res, sr2, tr));
+      (tid && (tr.body.main_note || !sameSrc(ts, sr.ok && sr.body && sr.body.source)) ? api('/api/series', res.params) : Promise.resolve(sr)).then((sr2) => cardLanded(job, res, sr2, tr));
     });
   }
 }
@@ -235,6 +238,7 @@ function cardLanded(job, res, sr, tr) {
   if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); res.none = sr.status === 400; } // none: a real "no record here", not asked again on every click
   else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; res.none = true; }
   else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; res.none = tr.status === 400; }
+  else if (!sameSrc(tr.body.source, s.source)) { res.status = 'error'; res.error = plainError({ status: 502 }); } // still another source: never one chart under another's card
   else { res.status = 'ok'; res.series = s; res.trend = tr.body; }
   flight--;
   landed(job.win, job.p, res);
@@ -261,6 +265,13 @@ function askOthers() {
 function othersLanded(job, r) {
   const res = job.res;
   if (results[job.k] !== res) return;
+  // its main row read the record from another place than the card and chart did (ERA5: our pack or Open-Meteo's
+  // fallback): asked once more, then "Try again"; never merged under them
+  const m = r.ok && r.body && Array.isArray(r.body.comparisons) ? r.body.comparisons.find((x) => x && x.main) : null;
+  if (m && !sameSrc(m.source, res.series && res.series.source)) {
+    if (!job.again) { job.again = true; queue.unshift(job); return; }
+    r = { ok: false, status: 502 };
+  }
   if (r.ok && r.body) { window.TDX.mergeOthers(res.trend, r.body); res.cmp = 'ok'; }
   else { res.cmp = 'error'; res.cmpErr = r.status === 429 ? plainError(r) : "We couldn't read the other records just now."; }
   const t = res.trend, said = res.cmp === 'ok' && [t.thin_note, (t.disagree && t.disagree.line) || t.single_note].filter(Boolean).join(' ');

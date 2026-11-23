@@ -663,12 +663,13 @@
     out.push({ title: 'Things to keep in mind', short: notes.length ? notes[0] + (notes.length > 1 ? ' And ' + (notes.length - 1) + ' more' : '') : last,
       words: [{ list: notes.concat([last]) }] });
 
-    var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', ' + ver(src.version, 'version ') : '') + '. Retrieved ' + D(src.retrieved) + '. ',
+    var lic = function (q) { return str(q.licence) ? ', ' + q.licence : ''; }; // the ERA5 pack's, as the projection's (Open-Meteo's credit is in the footer)
+    var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', ' + ver(src.version, 'version ') : '') + lic(src) + '. Retrieved ' + D(src.retrieved) + '. ',
       link: url ? { text: 'Open this exact record ↗', href: url } : null }];
     var oth = (rowsOf(t) || []).filter(function (x) { return !x.main && x.available === true; }); // §8: each other record with a trend
     oth.forEach(function (x) {
       var q = x.source || {};
-      list.push({ text: 'Other record: ' + str(q.name) + (str(q.dataset_id) ? ', ' + q.dataset_id : '') + '.' + (str(q.retrieved) ? ' Retrieved ' + D(q.retrieved) + '.' : '') + ' ',
+      list.push({ text: 'Other record: ' + str(q.name) + (str(q.dataset_id) ? ', ' + q.dataset_id : '') + lic(q) + '.' + (str(q.retrieved) ? ' Retrieved ' + D(q.retrieved) + '.' : '') + ' ',
         link: https(q.record_url) ? { text: 'Open this exact record ↗', href: q.record_url } : null });
     });
     if (wp && w.source) list.push({ text: 'World figure: ' + w.source.name + (str(w.source.dataset_id) ? ', ' + w.source.dataset_id : '') + '. Retrieved ' + D(w.source.retrieved) + '. ', link: https(w.source.record_url) ? { text: 'Open it ↗', href: w.source.record_url } : null });
