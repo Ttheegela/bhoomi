@@ -63,20 +63,15 @@
   // no WebGL or the library did not import: no retry (a failed module import is cached by the browser)
   function noMap() { fail("Your browser can't show the map. Your places are still listed on the left.", false); }
 
-  function riskOf(p) {
-    var g = p.trend && p.trend.guidance;
-    if (!g || typeof g !== 'object') return { cls: 'low', label: '' };
-    return { cls: g.risk === 'high' ? 'high' : g.risk === 'moderate' ? 'moderate' : 'low', label: typeof g.risk_label === 'string' ? g.risk_label : '' };
-  }
-
-  // one marker per pin: a button (click or Enter selects it); the selected pin is bigger and carries a tag. Risk is in words, never colour alone.
+  // one marker per pin, all alike: a button (click or Enter selects it); the selected pin is bigger and carries a tag with its
+  // name (facts, not advice: no risk level on the map)
   function syncMarkers() {
     if (!map) return;
     var pins = (TD.pins && TD.pins()) || [], seen = Object.create(null);
     pins.forEach(function (p) {
       if (!p || typeof p.lat !== 'number' || typeof p.lon !== 'number') return;
       seen[p.key] = true;
-      var r = riskOf(p), label = String(p.label || 'Place'), m = markers[p.key];
+      var label = String(p.label || 'Place'), m = markers[p.key];
       if (!m) {
         var el = h('button', 'map-mk');
         el.type = 'button';
@@ -87,12 +82,11 @@
       }
       // classList only: MapLibre put its own classes (maplibregl-marker, the anchor) on this element
       m.el.classList.add('map-mk');
-      ['high', 'moderate', 'low'].forEach(function (c) { m.el.classList.toggle(c, c === r.cls); });
       m.el.classList.toggle('sel', !!p.selected);
-      m.el.setAttribute('aria-label', r.label ? label + ', ' + r.label : label);
+      m.el.setAttribute('aria-label', label);
       if (p.selected) {
         if (!m.tag) { m.tag = h('span', 'map-tag'); m.tag.setAttribute('aria-hidden', 'true'); m.el.append(m.tag); }
-        m.tag.textContent = r.label ? label + ' · ' + r.label : label;
+        m.tag.textContent = label;
       } else if (m.tag) {
         m.tag.remove();
         m.tag = null;

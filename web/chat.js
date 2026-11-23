@@ -37,15 +37,14 @@ const CHAT_EMBED_SRI = 'sha384-BpmvKCW/TFrpO8oObmUgZzUCIMHI00QbpGA4/jfXcfTosbgtu
     const parts = [];
     try {
       const rate = fmt.rate ? fmt.rate(t) : '';
-      if (g) {
+      if (g) { // "{window} {rate}. {fact}" (web/design/14-facts.md section 6)
         let a = windowName();
         if (rate) a += ` ${rate}`; // the rate carries its own "a year" or "per decade"
-        if (g.risk_label) a += `, ${g.risk_label}`;
         parts.push(a + '.');
+        if (g.fact) parts.push(oneLine(g.fact));
       } else if (t.meaning && t.meaning.comparison) parts.push(oneLine(t.meaning.comparison));
     } catch (e) { /* show what we have */ }
-    const others = all.filter((p) => p !== sel && p.status === 'ok' && p.trend && p.trend.guidance)
-      .map((p) => `${p.label} (${p.trend.guidance.risk_label})`);
+    const others = fmt.line ? all.filter((p) => p !== sel && p.status === 'ok' && p.trend).map((p) => `${p.label} (${fmt.line(p.trend)})`) : [];
     if (others.length) parts.push(`Also pinned: ${others.join(', ')}.`);
     return parts.join(' ') || 'Nothing is selected.';
   }

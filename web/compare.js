@@ -101,10 +101,20 @@
     if (left.some(function (x) { return x.why === 'still loading'; })) return 'Waiting for the records to arrive.';
     return 'Nothing to draw: ' + left.map(function (x) { return x.label + ' (' + x.why + ')'; }).join('; ') + '.';
   }
-  // The table's caption with no world figure: why_none, then world.text (rain and water storage give their own rule there)
-  function noWorld(label, w) {
-    var x = [w.why_none, w.text].filter(Boolean).join(' ');
-    return x ? label + ': ' + x : '';
+  // The table's caption with no world figure: why_none only, never world.text (web/design/14-facts.md section 8)
+  function noWorld(label, w) { return w.why_none ? label + ': ' + w.why_none : ''; }
+  // a ratio as the API's fact prints it: "1.5", "1.0", "0.75", a true minus
+  function ratioText(x) { return (x < 0 ? '−' : '') + (Number.isInteger(x) ? Math.abs(x).toFixed(1) : String(Math.abs(x))); }
+  // "Compared with the world" (section 8): line 1, then line 2 in grey. wp: TDX.worldParts (null without a world figure;
+  // its ratio is set only for a rising or falling verdict).
+  function worldCell(t, wp) {
+    if (!wp) return { l1: '—', l2: '' };
+    var w = t.world, l2 = 'world ' + wp.world;
+    if (!wp.ratio) return { l1: '', l2: l2 };
+    if (w.ratio < 0) return { l1: 'Falling here, world rising', l2: l2 };
+    var rng = typeof w.ratio_low === 'number' && typeof w.ratio_high === 'number'
+      ? ' (' + (t.range_kind || '95% range') + ' ' + ratioText(w.ratio_low) + ' to ' + ratioText(w.ratio_high) + ')' : '';
+    return { l1: ratioText(w.ratio) + '×' + rng, l2: l2 };
   }
 
   // Path "M..L.." per run of consecutive years; runs of one point are dropped (a gap breaks the line).
@@ -228,52 +238,55 @@
     }
     // each row's own window and world rate (windows differ from gauge to gauge)
     var cells = (pins || []).map(function (p) {
-      var t = p.status === 'ok' && p.trend, g = t && t.guidance, wp = t && X.worldParts(t, o.imperial), clear = t && (t.verdict === 'rising' || t.verdict === 'falling');
+      var t = p.status === 'ok' && p.trend, wp = t && X.worldParts(t, o.imperial);
       if (!t) return null;
       var name = t.place && t.place.name ? String(t.place.name).trim() : '';
       return {
         at: /[^\d\s.,;°+\-−NSEWnsew]/.test(name) ? name : (t.source && t.source.name) || '—',
         record: t.period && t.latest ? X.Y(t.period.start) + '–' + X.Mo(t.latest.month) : '—',
-        rate: (f.rate && f.rate(t) && (clear || (g && g.risk_label))) ? f.rate(t) : clear ? X.card(t, o.imperial).word : 'No clear change',
+        rate: f.line(t),
         here: wp ? wp.here + ' ' + wp.since.toLowerCase() : '—',
-        ratio: wp ? (wp.ratio ? wp.ratio + ' (world ' + wp.world + ')' : 'world ' + wp.world) : '—', // no ratio without a clear trend
-        risk: g && g.risk_label ? g : null
+        cw: worldCell(t, wp)
       };
     });
-    var hasW = cells.some(function (c) { return c && c.ratio !== '—'; }), hasRisk = cells.some(function (c) { return c && c.risk; });
-    var cols = ['Place', 'Measured at', 'Record', 'Rate'].concat(hasW ? ['Here, same years', '× world, same years'] : [], hasRisk ? ['Risk'] : []);
-    var wrap = h('div', 'cmp-scroll'), tbl = h('table', 'cmp-tbl'), thead = h('thead'), hr = h('tr');
-    cols.forEach(function (c) { var th = h('th', null, c); th.scope = 'col'; hr.appendChild(th); });
+    var hasW = cells.some(function (c) { return c && c.cw.l1 !== '—'; }); // a column of dashes only is not shown
+    var cols = ['Place', 'Measured at', 'Record', 'Rate'].concat(hasW ? ['Here, same years', 'Compared with the world'] : []);
+    // explicit roles: Safari drops table semantics when the table is laid out as blocks under 600 px
+    var role = function (n, r) { n.setAttribute('role', r); return n; };
+    // a cell; under 600 px its column header (data-label) is drawn next to the value
+    var td = function (cls, text, k) { var c = role(h('td', cls, text), 'cell'); if (k) c.setAttribute('data-label', cols[k]); return c; };
+    var wrap = h('div', 'cmp-scroll'), tbl = role(h('table', 'cmp-tbl'), 'table'), thead = role(h('thead'), 'rowgroup'), hr = role(h('tr'), 'row');
+    cols.forEach(function (c) { var th = role(h('th', null, c), 'columnheader'); th.scope = 'col'; hr.appendChild(th); });
     thead.appendChild(hr); tbl.appendChild(thead);
-    var tb = h('tbody');
+    var tb = role(h('tbody'), 'rowgroup');
     (pins || []).forEach(function (p, i) {
-      var tr = h('tr', p.selected ? 'on' : ''), c = cells[i];
+      var tr = role(h('tr', p.selected ? 'on' : ''), 'row'), c = cells[i];
       tr.tabIndex = 0; if (p.selected) tr.setAttribute('aria-current', 'true');
       tr.addEventListener('click', function () { P.select(p.key); });
       tr.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); P.select(p.key); }
       });
-      var c0 = h('td'), dot = h('i', 'cmp-dot ' + (p.selected ? 'dsel' : 'd' + ((p.slot || 0) % 6)));
+      var c0 = td(null, null, 0), dot = h('i', 'cmp-dot ' + (p.selected ? 'dsel' : 'd' + ((p.slot || 0) % 6)));
       dot.setAttribute('aria-hidden', 'true');
       c0.appendChild(dot); c0.appendChild(document.createTextNode(p.label)); tr.appendChild(c0);
       if (!c) {
-        var cs = h('td', 'cmp-msg', p.status === 'error' ? (p.error || 'Could not load this place.') : 'Checking…');
+        var cs = td('cmp-msg', p.status === 'error' ? (p.error || 'Could not load this place.') : 'Checking…');
         cs.colSpan = cols.length - 1; tr.appendChild(cs); tb.appendChild(tr); return;
       }
-      tr.appendChild(h('td', null, c.at));
-      tr.appendChild(h('td', 'n', c.record));
-      tr.appendChild(h('td', 'n', c.rate));
-      if (hasW) { tr.appendChild(h('td', 'w', c.here)); tr.appendChild(h('td', 'w', c.ratio)); }
-      if (hasRisk) {
-        var cr = h('td', 'rk');
-        if (c.risk) cr.appendChild(h('span', 'risk ' + (/^(high|moderate|low)$/.test(c.risk.risk) ? c.risk.risk : 'unknown'), c.risk.risk_label));
-        else cr.textContent = '—';
-        tr.appendChild(cr);
+      tr.appendChild(td(null, c.at, 1));
+      tr.appendChild(td('n', c.record, 2));
+      tr.appendChild(td('n', c.rate, 3));
+      if (hasW) {
+        tr.appendChild(td('w', c.here, 4));
+        var cw = td('w cw', null, 5), v = h('span', 'v'); // the value as one element (two lines)
+        if (c.cw.l1) v.appendChild(h('span', 'l1', c.cw.l1));
+        if (c.cw.l2) v.appendChild(h('span', 'l2', c.cw.l2));
+        cw.appendChild(v); tr.appendChild(cw);
       }
       tb.appendChild(tr);
     });
     if (!(pins || []).length) {
-      var er = h('tr'), ec = h('td', 'cmp-msg', 'No places yet. Search for a place or click the map.');
+      var er = role(h('tr'), 'row'), ec = td('cmp-msg', 'No places yet. Search for a place or click the map.');
       ec.colSpan = cols.length; er.appendChild(ec); tb.appendChild(er);
     }
     tbl.appendChild(tb); wrap.appendChild(tbl); box.appendChild(wrap);
@@ -297,5 +310,5 @@
   if (window.TD && window.TD.ready) window.TD.ready.then(start);
   else document.addEventListener('td:ready', start, { once: true });
 
-  window.TDCompare = { yearly: yearly, smooth: smooth, niceTicks: niceTicks, buildModel: buildModel, emptyCaption: emptyCaption, noWorld: noWorld };
+  window.TDCompare = { yearly: yearly, smooth: smooth, niceTicks: niceTicks, buildModel: buildModel, emptyCaption: emptyCaption, noWorld: noWorld, worldCell: worldCell };
 })();
