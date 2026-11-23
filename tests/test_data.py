@@ -24,7 +24,7 @@ def offline(monkeypatch, coops_long):
 
 
 def test_power_parse(offline):
-    s = data.get_series("air_temp", 39.36, -74.42)
+    s = data.get_series("air_temp", 39.36, -74.42, source="power")
     assert s["units"] == "degC" and s["freq"] == "monthly" and s["source"]["id"] == "power"
     assert len(s["times"]) == len(s["values"])
     assert all(len(t) == 7 and t[4] == "-" and not t.endswith("-13") for t in s["times"])
@@ -68,7 +68,7 @@ def test_sea_level_series(offline):
 
 
 def test_start_end_filter(offline):
-    s = data.get_series("air_temp", 39.36, -74.42, start="1990-03", end="1991")
+    s = data.get_series("air_temp", 39.36, -74.42, start="1990-03", end="1991", source="power")
     assert s["times"][0] == "1990-03" and s["times"][-1] == "1991-12"
 
 
@@ -78,11 +78,11 @@ def test_errors(offline):
     with pytest.raises(ValueError, match="not available"):
         data.get_series("sea_level", 39.36, -74.42, source="power")
     with pytest.raises(ValueError, match="Latitude"):
-        data.get_series("air_temp", 95, 0)
+        data.get_series("air_temp", 95, 0, source="power")
     with pytest.raises(ValueError, match="Longitude"):
-        data.get_series("air_temp", 0, 200)
+        data.get_series("air_temp", 0, 200, source="power")
     with pytest.raises(ValueError, match="No air temperature data"):
-        data.get_series("air_temp", 39.36, -74.42, start="2090")
+        data.get_series("air_temp", 39.36, -74.42, start="2090", source="power")
 
 
 def test_coops_error_body(offline, monkeypatch):
@@ -106,14 +106,14 @@ def test_power_missing_param():
 
 
 def test_string_latlon_and_strict_dates(offline):
-    assert data.get_series("air_temp", "39.36", "-74.42")["place"]["lat"] == 39.36
+    assert data.get_series("air_temp", "39.36", "-74.42", source="power")["place"]["lat"] == 39.36
     with pytest.raises(ValueError, match="numbers"):
-        data.get_series("air_temp", "abc", 0)
+        data.get_series("air_temp", "abc", 0, source="power")
     with pytest.raises(ValueError, match="Latitude"):
-        data.get_series("air_temp", float("nan"), 0)
+        data.get_series("air_temp", float("nan"), 0, source="power")
     for bad in ("2015-", "2015-6"):
         with pytest.raises(ValueError, match="start must look like"):
-            data.get_series("air_temp", 39.36, -74.42, start=bad)
+            data.get_series("air_temp", 39.36, -74.42, start=bad, source="power")
 
 
 def test_sea_level_mid_ocean_via_get_series(offline, psmsl_offline):
@@ -122,26 +122,28 @@ def test_sea_level_mid_ocean_via_get_series(offline, psmsl_offline):
 
 
 def test_int_dates_and_order(offline):
-    a = data.get_series("air_temp", 39.36, -74.42, start=2000, end=2010)
-    assert a == data.get_series("air_temp", 39.36, -74.42, start="2000", end="2010")
+    a = data.get_series("air_temp", 39.36, -74.42, start=2000, end=2010, source="power")
+    assert a == data.get_series("air_temp", 39.36, -74.42, start="2000", end="2010", source="power")
     for bad in (2000.5, [2000], True):
         with pytest.raises(ValueError, match="start must look like"):
-            data.get_series("air_temp", 39.36, -74.42, start=bad)
+            data.get_series("air_temp", 39.36, -74.42, start=bad, source="power")
     with pytest.raises(ValueError, match="start must not be after end"):
-        data.get_series("air_temp", 39.36, -74.42, start="2020", end="2010")
+        data.get_series("air_temp", 39.36, -74.42, start="2020", end="2010", source="power")
 
 
 def test_tmax_label_and_note(offline):
     name = {v["id"]: v["name"] for v in data.list_variables()}["air_temp_max"]
     assert name == "Hottest day of the month (2 m air temperature)"
     note = power.NOTES["air_temp_max"]
-    assert note in data.get_series("air_temp_max", 39.36, -74.42)["notes"]
-    assert note not in data.get_series("air_temp", 39.36, -74.42)["notes"]
+    assert note in data.get_series("air_temp_max", 39.36, -74.42, source="power")["notes"]
+    assert note not in data.get_series("air_temp", 39.36, -74.42, source="power")["notes"]
 
 
 def test_catalog():
     assert {v["id"]: v["sources"][0] for v in data.list_variables()} == {
-        "air_temp": "power", "air_temp_max": "power", "precip": "power", "sea_level": "coops", "water_storage": "grace"}
+        "air_temp": "era5", "air_temp_max": "era5", "precip": "power", "sea_level": "coops", "water_storage": "grace"}
+    assert {v["id"]: v["sources"] for v in data.list_variables() if v["id"] in ("air_temp", "air_temp_max", "precip")} == {
+        "air_temp": ["era5", "power", "ghcn"], "air_temp_max": ["era5", "power", "ghcn"], "precip": ["power", "era5", "ghcn"]}
 
 
 # ---- era5 and ghcn ----
@@ -738,24 +740,24 @@ def counted(monkeypatch):
 
 
 def test_cache_second_call_and_periods_share_one_fetch(counted):
-    a = data.get_series("air_temp", 39.36, -74.42)
-    b = data.get_series("air_temp", 39.36, -74.42)
-    c = data.get_series("air_temp", 39.36, -74.42, start="1990", end="1991")
-    d = data.get_series("air_temp", 39.36, -74.42, start="2000")
+    a = data.get_series("air_temp", 39.36, -74.42, source="power")
+    b = data.get_series("air_temp", 39.36, -74.42, source="power")
+    c = data.get_series("air_temp", 39.36, -74.42, start="1990", end="1991", source="power")
+    d = data.get_series("air_temp", 39.36, -74.42, start="2000", source="power")
     assert len(counted) == 1 and a == b and c["times"][0] == "1990-01" and c["times"][-1] == "1991-12" and d["times"][0] == "2000-01"
-    data.get_series("air_temp_max", 39.36, -74.42)  # another variable is another entry
+    data.get_series("air_temp_max", 39.36, -74.42, source="power")  # another variable is another entry
     assert len(counted) == 2
 
 
 def test_cache_is_cleared_between_tests_part_1(counted):
-    data.get_series("air_temp", 39.36, -74.42)
+    data.get_series("air_temp", 39.36, -74.42, source="power")
     assert len(data._cache) == 1
 
 
 def test_cache_is_cleared_between_tests_part_2(counted):
     # runs right after part 1: fails if the suite-wide fixture in conftest.py stops clearing the cache
     assert data._cache == {}
-    data.get_series("air_temp", 39.36, -74.42)
+    data.get_series("air_temp", 39.36, -74.42, source="power")
     assert len(counted) == 1  # a leaked entry would have served this call without any upstream request
 
 
@@ -774,39 +776,39 @@ def test_no_data_message_uses_a_new_measurements_own_name(offline, monkeypatch):
 
 def test_no_data_message_uses_plain_names(offline):
     with pytest.raises(ValueError, match=r"^No air temperature data for that place and period\.$"):
-        data.get_series("air_temp", 39.36, -74.42, start="1950", end="1951")
+        data.get_series("air_temp", 39.36, -74.42, start="1950", end="1951", source="power")
 
 
 def test_cache_place_key_is_rounded_to_two_decimals(counted):
-    data.get_series("air_temp", 39.360, -74.420)
-    s = data.get_series("air_temp", 39.364, -74.416)  # 0.004 degrees away: same entry
+    data.get_series("air_temp", 39.360, -74.420, source="power")
+    s = data.get_series("air_temp", 39.364, -74.416, source="power")  # 0.004 degrees away: same entry
     assert len(counted) == 1 and counted[0][1:] == (39.36, -74.42)
     assert s["place"] == {"name": "39.36, -74.42", "lat": 39.36, "lon": -74.42}  # the point that was fetched
-    data.get_series("air_temp", 39.38, -74.42)  # 0.02 degrees away: a new fetch
+    data.get_series("air_temp", 39.38, -74.42, source="power")  # 0.02 degrees away: a new fetch
     assert len(counted) == 2 and counted[1][1] == 39.38
-    assert data.get_series("air_temp", -0.004, 0.004)["place"]["name"] == "0.0, 0.0"  # no "-0.0"
+    assert data.get_series("air_temp", -0.004, 0.004, source="power")["place"]["name"] == "0.0, 0.0"  # no "-0.0"
 
 
 def test_cache_expires_after_12_hours(counted, monkeypatch):
     clock = [5000.0]
     monkeypatch.setattr(data.time, "monotonic", lambda: clock[0])
-    data.get_series("air_temp", 39.36, -74.42)
+    data.get_series("air_temp", 39.36, -74.42, source="power")
     clock[0] += data.TTL_S - 1
-    data.get_series("air_temp", 39.36, -74.42)
+    data.get_series("air_temp", 39.36, -74.42, source="power")
     assert len(counted) == 1
     clock[0] += 2
-    data.get_series("air_temp", 39.36, -74.42)
+    data.get_series("air_temp", 39.36, -74.42, source="power")
     assert len(counted) == 2
 
 
 def test_cache_size_cap_drops_oldest(counted, monkeypatch):
     monkeypatch.setattr(data, "MAX_ENTRIES", 3)
     for i in range(5):
-        data.get_series("air_temp", 10 + i, 20)
+        data.get_series("air_temp", 10 + i, 20, source="power")
     assert len(data._cache) == 3 and len(counted) == 5
-    data.get_series("air_temp", 14, 20)  # newest is still there
+    data.get_series("air_temp", 14, 20, source="power")  # newest is still there
     assert len(counted) == 5
-    data.get_series("air_temp", 10, 20)  # oldest was dropped
+    data.get_series("air_temp", 10, 20, source="power")  # oldest was dropped
     assert len(counted) == 6
 
 
@@ -820,19 +822,19 @@ def test_cache_does_not_keep_failures(monkeypatch):
         return load("power_monthly.json")
     monkeypatch.setattr(power, "fetch", fetch)
     with pytest.raises(httpx.ConnectError):
-        data.get_series("air_temp", 39.36, -74.42)
-    assert data.get_series("air_temp", 39.36, -74.42)["times"]  # the next call tries again
+        data.get_series("air_temp", 39.36, -74.42, source="power")
+    assert data.get_series("air_temp", 39.36, -74.42, source="power")["times"]  # the next call tries again
     assert len(calls) == 2
 
 
 def test_cache_returns_copies(counted):
-    a = data.get_series("air_temp", 39.36, -74.42)
+    a = data.get_series("air_temp", 39.36, -74.42, source="power")
     a["values"][0] = 12345.0
     a["times"].clear()
     a["notes"].append("junk")
     a["place"]["lat"] = 0.0
     a["source"]["id"] = "nope"
-    b = data.get_series("air_temp", 39.36, -74.42)
+    b = data.get_series("air_temp", 39.36, -74.42, source="power")
     assert b["values"][0] != 12345.0 and b["times"] and "junk" not in b["notes"]
     assert b["place"]["lat"] == 39.36 and b["source"]["id"] == "power"
 
@@ -841,7 +843,7 @@ def test_cache_threads(counted):
     from concurrent.futures import ThreadPoolExecutor
     places = [(39.36, -74.42), (10.0, 20.0), (-33.9, 151.2)]
     with ThreadPoolExecutor(8) as ex:
-        out = list(ex.map(lambda i: (places[i % 3], data.get_series("air_temp", *places[i % 3], start="1990", end="1991")), range(60)))
+        out = list(ex.map(lambda i: (places[i % 3], data.get_series("air_temp", *places[i % 3], start="1990", end="1991", source="power")), range(60)))
     for (lat, lon), s in out:
         assert s["place"]["lat"] == lat and s["times"][0] == "1990-01" and len(s["values"]) == 24
     assert 3 <= len(counted) <= 24  # a race may fetch twice, never more than the number of threads per place
@@ -1294,14 +1296,14 @@ def _captured_get(module, monkeypatch, reply):
 
 def test_power_record_url_is_the_request_made(monkeypatch):
     asked = _captured_get(power, monkeypatch, load("power_monthly.json"))
-    src = data.get_series("air_temp", 40.35, -74.66)["source"]  # Princeton
+    src = data.get_series("air_temp", 40.35, -74.66, source="power")["source"]  # Princeton
     assert asked == [src["record_url"]] == [
         "https://power.larc.nasa.gov/api/temporal/monthly/point?parameters=T2M&community=RE&latitude=40.35&longitude=-74.66"
         f"&start=1981&end={date.today().year - 1}&format=JSON"]
     assert set(src) == SOURCE_KEYS and src["version"] == "POWER Monthly and Annual API v2.10.0"  # from the reply's header
     assert src["dataset_id"] == "NASA POWER monthly point data, parameter T2M (MERRA-2)" and src["cadence"] == "monthly"
     assert src["deseasoned_upstream"] is False and "50 km" in src["method"]
-    assert data.get_series("air_temp_max", 40.35, -74.66)["source"]["record_url"].startswith(
+    assert data.get_series("air_temp_max", 40.35, -74.66, source="power")["source"]["record_url"].startswith(
         "https://power.larc.nasa.gov/api/temporal/monthly/point?parameters=T2M_MAX&")
     assert src["limit"] is None
 
@@ -1388,11 +1390,11 @@ def test_era5_runs_through_the_latest_complete_month(monkeypatch, today, end):
 
 def test_retrieved_is_the_first_fetch_date(counted, monkeypatch):
     monkeypatch.setattr(upstream, "utc_today", lambda: "2026-01-01")
-    assert data.get_series("air_temp", 39.36, -74.42)["source"]["retrieved"] == "2026-01-01"
+    assert data.get_series("air_temp", 39.36, -74.42, source="power")["source"]["retrieved"] == "2026-01-01"
     monkeypatch.setattr(upstream, "utc_today", lambda: "2026-01-02")
-    assert data.get_series("air_temp", 39.36, -74.42)["source"]["retrieved"] == "2026-01-01"  # served from the cache
+    assert data.get_series("air_temp", 39.36, -74.42, source="power")["source"]["retrieved"] == "2026-01-01"  # served from the cache
     data._cache.clear()
-    assert data.get_series("air_temp", 39.36, -74.42)["source"]["retrieved"] == "2026-01-02" and len(counted) == 2
+    assert data.get_series("air_temp", 39.36, -74.42, source="power")["source"]["retrieved"] == "2026-01-02" and len(counted) == 2
 
 
 def test_coops_retrieved_is_the_gauge_records_first_fetch_date(monkeypatch):

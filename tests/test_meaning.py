@@ -259,6 +259,7 @@ def tool_contents(body):
     return {m["tool_call_id"]: json.loads(m["content"]) for m in body["messages"] if m["role"] == "tool"}
 
 
+@pytest.mark.usefixtures("power_first_for_heat")
 def test_model_sees_meaning_of_full_results_only(openrouter):
     sent, replies = openrouter
     replies += [
