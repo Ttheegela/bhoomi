@@ -52,7 +52,8 @@ TOOLS = [
     {"name": "detect_trend",
      "description": ("Significance test for a long-term trend in past monthly data at a point: removes the seasonal "
                      "cycle, then Mann-Kendall (autocorrelation-adjusted) and Sen's slope with a 95% range. "
-                     "Returns verdict, slope_per_decade, ci_low, ci_high, p_value, period, source, caveats."),
+                     "Returns verdict, slope_per_decade, ci_low, ci_high, p_value, period, source, caveats, guidance "
+                     "and projection (the experts' projection for this place, when there is one)."),
      "parameters": {"type": "object", "required": ["variable", "lat", "lon"], "properties": {
          "variable": {"type": "string", "description": "A catalog id, e.g. air_temp, air_temp_max, precip, sea_level."},
          "lat": {"type": "number", "description": "Latitude, -90 to 90."},
@@ -317,19 +318,20 @@ def hidden_calls(calls: list[dict]) -> set[int]:
 
 
 # The TrendResult fields the model reads (the prompt's), and so the only numbers the invented-number check accepts:
-# what results carried before Rework v2, plus headline_rate and the baseline's and world's text. The rest (baseline
-# normals, fit, explain, record, world numbers, the source block's record details) is for the page.
+# what results carried before Rework v2, plus headline_rate, the baseline's and world's text and the compact expert
+# projection (guidance.projection_view). The rest (baseline normals, fit, explain, record, world numbers, the
+# projection's arrays, the source block's record details) is for the page.
 MODEL_FIELDS = ("variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade", "ci_low",
                 "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "headline_rate", "baseline",
-                "world", "caveats", "meaning", "guidance")
+                "world", "projection", "caveats", "meaning", "guidance")
 SOURCE_FIELDS = ("id", "name", "url")
 TEXT_ONLY = ("baseline", "world")
 
 
 def model_view(r):
     """A tool result as the model reads it and the number check pools it: a detect_trend result cut to MODEL_FIELDS
-    (the source to id, name and url; baseline and world to their text), in its own key order. Anything else is
-    returned as it is."""
+    (the source to id, name and url; baseline and world to their text, world with its why_none when set; the
+    projection to guidance.projection_view), in its own key order. Anything else is returned as it is."""
     if not isinstance(r, dict):
         return r
     out = {}
@@ -339,7 +341,9 @@ def model_view(r):
         if k == "source" and isinstance(v, dict):
             v = {f: x for f, x in v.items() if f in SOURCE_FIELDS}
         elif k in TEXT_ONLY and isinstance(v, dict):
-            v = {"text": v.get("text")}
+            v = {"text": v.get("text"), **({"why_none": v["why_none"]} if k == "world" and v.get("why_none") else {})}
+        elif k == "projection":
+            v = guidance.projection_view(v)
         out[k] = v
     return out
 
@@ -562,16 +566,18 @@ def without_periods(text: str) -> str:
 
 def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
     """(range, certain) for each wrong period range in `text`. A range passes if it is the window the user asked for
-    (a call's start and end, by year) or written in a result's own caveat or guidance fact ("its 2004 to 2009
-    average", "(1993 to April 2025; ...)": the tool's words). CERTAIN, code may rewrite it: it fits no result's period
+    (a call's start and end, by year) or written in a result's own caveat, guidance fact, baseline or projection years
+    ("its 2004 to 2009 average", "(1993 to April 2025; ...)", "the 1995–2014 average", "2041–2060": the tool's words;
+    the projection's are in the answer through guidance.fill). CERTAIN, code may rewrite it: it fits no result's period
     at all. DOUBTFUL, retry only, never rewritten: the only range of its sentence fits some result's period but none
     of its candidates', or is said for several sources at once ("both cover ...") whose candidates have different
     periods. In a sentence with two or more ranges, each range is fine when it fits any result's period."""
     ok = [c for c in ok_calls(calls) if _period(c["result"])]
     if not ok:
         return []
-    caveats = [c.lower() for x in ok
-               for c in [*(x["result"].get("caveats") or []), (x["result"].get("guidance") or {}).get("fact")]
+    caveats = [c.lower() for x in ok for p in [guidance.projection_view(x["result"].get("projection")) or {}]
+               for c in [*(x["result"].get("caveats") or []), (x["result"].get("guidance") or {}).get("fact"),
+                         (x["result"].get("baseline") or {}).get("text"), p.get("baseline"), p.get("when")]
                if isinstance(c, str)]
     asked = [(str(a["start"])[:4], str(a["end"])[:4]) for a in (c.get("arguments") or {} for c in calls)
              if isinstance(a, dict) and a.get("start") and a.get("end")]

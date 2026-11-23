@@ -1411,7 +1411,7 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "this shape replaces the plain first sentence, the comparison and the how-sure sentence",
     "if no source returned a result, give the no-data answer, say that past data alone cannot settle it, and still end with the marker",
     "you add none of your own",
-    "Never give a number about the future",
+    "Give no number about the future yourself: the experts' projection reaches the answer only through [GUIDANCE].",
     "look up only the measurements it names",
     "Describe each source's gauge or station in its own clause with that source's name",
     "never write \"the same gauge\" or \"the same station\", and never that \"both\" or \"the two\" sources use, share or come from a gauge or station",
@@ -1429,10 +1429,20 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "write as if for a ten-year-old",
     "write [GUIDANCE] on its own",
     # facts, not advice (owner, 2026-11-22)
-    "each result's fact, where to look next, the future link and the disclaimer once",
+    "each result's fact, where to look next, the experts' projection (from its \"projection\", when available), the "
+    "future link and the disclaimer once",
     "Bhoomi states facts, not advice: never give a risk level, a recommendation, or advice on whether to buy, build, "
-    "move, avoid or invest.",
+    "move, avoid or invest, and never call a place risky, safe or dangerous.",
     "from these verdicts only; never a difference, a ratio or a risk level of your own",
+    # expert projections and D5 (PR6)
+    'So are its "guidance" strings and its "projection", but code writes those into the answer for you (rule F).',
+    "not a prediction, not a forecast, and not the past trend carried on",
+    "write one short sentence with no number right before [GUIDANCE]",
+    'Never call a projection\'s range a "95% range": it has its own name, which code writes.',
+    "point opposite ways (the record clearly falling while the projection rises, or clearly rising while it falls",
+    "keep both as they are: never pick one, never explain the difference, never average them",
+    "Each place's comparison with the world (a ratio with its 95% range) is in its fact, which code puts in "
+    "[GUIDANCE]: never repeat it, and never turn it into a risk or a ranking.",
     "at most six calls",
     "past data at single places",
     "A question is broad only when it asks which places or where across a large area and names no single place or "
@@ -1515,7 +1525,10 @@ def test_prompt_rules(phrase):
                                     'Broad questions (a region or "which places"', "you cannot advise", "judge investments", "past data cannot tell what will happen",
                                     # facts, not advice: the prompt never asks for a risk level or a recommendation
                                     "risk_label", "risk level, why, recommendation", "You may name a result's risk level",
-                                    "The recommendation is the tool's alone", "each result's risk level only"])
+                                    "The recommendation is the tool's alone", "each result's risk level only",
+                                    # PR6: the experts' projection is said; past records alone are not the future rule
+                                    "Never give a number about the future.",
+                                    "Only when the question asks about the future, say plainly"])
 def test_prompt_rules_removed(phrase):
     assert phrase not in prompts.SYSTEM
 
