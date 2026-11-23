@@ -6,7 +6,12 @@ import httpx
 from .upstream import fit, source_block, text
 
 URL = "https://power.larc.nasa.gov/api/temporal/monthly/point"
-SOURCE = {"id": "power", "name": "NASA POWER (MERRA-2)", "url": "https://power.larc.nasa.gov/"}
+# licence and credit: https://power.larc.nasa.gov/docs/referencing/ ("POWER's Reference"; no licence named), read 2026-11-23
+SOURCE = {"id": "power", "name": "NASA POWER (MERRA-2)", "url": "https://power.larc.nasa.gov/",
+          "licence": "No licence stated; POWER asks for the credit line, plus the service version and date accessed",
+          "credit": "The data was obtained from National Aeronautics and Space Administration (NASA) Langley Research "
+                    "Center's Prediction Of Worldwide Energy Resources (POWER) project funded through the NASA Earth "
+                    "Science Division."}
 PARAMS = {"air_temp": "T2M", "air_temp_max": "T2M_MAX", "precip": "PRECTOTCORR"}
 NOTES = {"air_temp_max": "Each monthly value is the hottest single day of that month, not the average of the daily highs."}
 METHOD = {
