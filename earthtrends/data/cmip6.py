@@ -1,9 +1,24 @@
-"""CMIP6 projections from the IPCC AR6 Atlas, built offline by scripts/build_cmip6.py. For now only the grid lookup."""
+"""CMIP6 projections from the IPCC AR6 Interactive Atlas, no network at run time.
+
+The data is a derived file shipped with the package: earthtrends/data/cmip6_atlas.npz, built offline by
+scripts/build_cmip6.py from the Copernicus copy of the Atlas files (checked bit for bit against the CSIC originals); its
+manifest, with the scaling, method and required citations, is cmip6_atlas.json. Per 1-degree cell, scenario and
+20-year window: the 10th, 50th and 90th percentile across models of each model's change against its own 1995-2014 mean.
+"""
+import json
+from functools import lru_cache
 from math import floor, isfinite
+from pathlib import Path
+
+import numpy as np
 
 from .coops import haversine_km
 
 LAND_PCT = 50  # the Atlas's rule: a cell is land when at least half of it is land
+FILE = Path(__file__).resolve().parent / "cmip6_atlas.npz"  # relative to this module, not the working directory
+MANIFEST = FILE.with_suffix(".json")
+FILL = -32768
+VARIABLES = {"air_temp": "t", "air_temp_max": "txx", "precip": "pr"}  # app id -> Atlas variable
 
 
 def nearest_land_cell(lat: float, lon: float, land) -> tuple[int, int, str]:
@@ -30,3 +45,51 @@ def nearest_land_cell(lat: float, lon: float, land) -> tuple[int, int, str]:
         _, r, c = min(near)
         return r, c, "nearest land cell"
     return i, j, "regional estimate (mostly ocean cell)"
+
+
+@lru_cache(maxsize=1)
+def load() -> dict:
+    with np.load(FILE) as z:
+        d = {k: z[k] for k in z.files}  # about 22 MB decoded, 0.05 s
+    d["manifest"] = json.loads(MANIFEST.read_text())
+    return d
+
+
+def _values(a: np.ndarray, scale: float) -> list:
+    """Stored int16 -> stored x scale (counts stay int); None for FILL."""
+    return [None if v == FILL else (v if scale == 1 else round(v * scale, 2)) for v in a.tolist()]
+
+
+def at(variable: str, lat: float, lon: float) -> dict | None:
+    """The Atlas's projected change at a place, for the stats lane's `projection` (docs/CONTRACTS.md, "CMIP6 expert
+    projection (PR3)"). variable: the app's id (air_temp, air_temp_max, precip); anything else, or a cell with no value
+    at all for it (rain over the driest deserts and inner Antarctica, where under 10 models have a usable 1995-2014
+    mean), gives None. Raises ValueError for a place not on Earth (nearest_land_cell)."""
+    v = VARIABLES.get(variable)
+    if v is None:
+        return None
+    d = load()
+    m, scale = d["manifest"], d["manifest"]["scaling"]
+    i, j, kind = nearest_land_cell(lat, lon, d["land"])
+    change = d[f"{v}_change"][:, :, :, i, j]  # [scenario, window, percentile]
+    if (change == FILL).all():
+        return None
+    scenarios = {}
+    for s, key in enumerate(d["scenarios"].tolist()):
+        scenarios[key] = {f"p{p}": _values(change[s, :, k], scale[f"{v}_change"])
+                          for k, p in enumerate(d["percentiles"].tolist())}
+        scenarios[key]["models"] = _values(d[f"{v}_models"][s, :, i, j], scale[f"{v}_models"])
+        scenarios[key]["wetter"] = _values(d["pr_wetter"][s, :, i, j], scale["pr_wetter"]) if v == "pr" else None
+    clat, clon = float(d["lat"][i]), float(d["lon"][j])
+    cds = m["source"]  # where the files were retrieved: the Copernicus Climate Data Store
+    return {
+        "cell": {"kind": kind, "lat": clat, "lon": clon, "km": round(haversine_km(lat, lon, clat, clon)),
+                 "land_pct": int(d["land"][i, j])},
+        "scenarios": scenarios,
+        "windows": d["windows"].tolist(),
+        "units": "%" if v == "pr" else "degC",
+        "source": {"name": m["dataset"], "dataset_id": f"doi:{m['doi']}", "version": m["version"],
+                   "record_url": m["record_url"],
+                   "retrieved_from": {"name": cds["name"], "dataset_id": f"doi:{cds['doi']}", "url": cds["url"]},
+                   "licence": m["licence"], "citation": list(m["citations"]), "acknowledgement": m["acknowledgement"]},
+    }
