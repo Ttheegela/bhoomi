@@ -543,7 +543,8 @@ function drawRec(box) {
   if (t.latest && t.latest.text) meta.append(' · ', el('span', { class: 'nw' }, t.latest.text)); // never split (QA N4)
   const pre = X.preMonths(pin.series);
   if (pre) meta.append(' ', el('span', { class: 'nw' }, `(${pre.meta})`)); // ERA5T (design 12 §7)
-  box.append(el('div', { class: 'where' }, h2(pin.label), meta));
+  // the main record fell back (ERA5 couldn't be read): the server's sentence, under the source line
+  box.append(el('div', { class: 'where' }, h2(pin.label), meta, typeof t.main_note === 'string' && t.main_note ? el('p', { class: 'mnote' }, t.main_note) : ''));
   box.append(el('div', { class: 'verdict' }, el('b', {}, el('span', { class: 'shape', 'aria-hidden': 'true' }, C.shape), C.word), confLine(C.conf, B)));
   if (C.fact) box.append(el('p', { class: 'say' }, C.fact));
   if (C.old) return; // a cached answer from before the rework: the verdict only, until it is asked again

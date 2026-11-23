@@ -418,6 +418,8 @@ def test_the_block_markup_and_focus():
               "el('span', { class: 'pd' }, ' per decade')"):
         assert s in APP, s
     assert "class: 'main'" not in APP  # .main is the page column's class
+    # the main record fell back (ERA5 couldn't be read): the server's main_note under the source line, as given
+    assert "h2(pin.label), meta, typeof t.main_note === 'string' && t.main_note ? el('p', { class: 'mnote' }, t.main_note) : ''" in APP
     link = re.search(r"\nfunction confLine\(conf, B\) \{(.*?)\n\}", APP, re.S)[1]
     assert "e.preventDefault();" in link and "h.focus({ preventScroll: true });" in link
     ref = re.search(r"\nfunction refreshOth\(\) \{(.*?)\n\}", APP, re.S)[1]
