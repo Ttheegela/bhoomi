@@ -95,8 +95,27 @@
   // A rate or a change in a rate's own unit (°C, mm, cm, %), with the Units setting.
   var RATE_K = { '°C': [1.8, '°F'], mm: [1 / 25.4, 'in'], cm: [1 / 2.54, 'in'] };
   function rconv(imp, x, u) { u = normU(u); var k = imp && RATE_K[u]; return k ? { v: x * k[0], unit: k[1] } : { v: x, unit: u }; }
+  // As the server rounds headline_rate (stats lane, sig2): a rate to 2 significant figures, half away from zero; a range's ends
+  // to the same decimals, enough that they differ and no non-zero end reads 0. The map's hover uses these too (map.js).
+  function pow10(x) { return +Math.abs(x).toExponential().split('e')[1]; } // the power of ten of the first digit
+  function inSteps(x, e) { return Math.floor(Number((Math.abs(x) * Math.pow(10, -e)).toPrecision(12)) + 0.5); } // |x| in steps of 10^e
+  function atE(x, e) {
+    var r = inSteps(x, e);
+    return r ? (x < 0 ? MINUS : '+') + (e < 0 ? (r / Math.pow(10, -e)).toFixed(-e) : String(r * Math.pow(10, e))) : '0';
+  }
+  function sig2Text(x) { return x ? atE(x, pow10(x) - 1) : '0'; }
+  function spanText(lo, hi) {
+    var m = Math.max(Math.abs(lo), Math.abs(hi)), e = m ? pow10(m) - 1 : 0;
+    var s = function (x) { return (x < 0 ? -1 : 1) * inSteps(x, e); };
+    while (e > -6 && ((lo !== hi && s(lo) === s(hi)) || (lo && !inSteps(lo, e)) || (hi && !inSteps(hi, e)))) e--;
+    return atE(lo, e) + ' to ' + atE(hi, e);
+  }
+  // a rate shown "a year" is a tenth of the API's rate per decade
+  function perDecade(per) { return /\ba year$/.test(per) ? 10 : 1; }
 
-  // The rate every view prints (headline_rate): its own text, or converted for the Units setting.
+  // The rate every view prints (headline_rate): its own text. In °F or inches the API's 4-decimal slope_per_decade, ci_low
+  // and ci_high, converted, then rounded once as above: never an already-rounded value converted (QA B2), so the card, the
+  // map's hover and the world line round the same numbers.
   function rate(t, imp) {
     var h = t.headline_rate;
     if (!h || typeof h.text !== 'string') { // null only for rain where the 1995-2014 average is zero: the rate in mm a day
@@ -106,10 +125,13 @@
         value: c(t.slope_per_decade), low: c(t.ci_low), high: c(t.ci_high), unit: cu, per: 'per decade' };
     }
     var u = normU(h.unit), per = str(h.per), k = imp && RATE_K[u];
-    if (k && isNum(h.value) && isNum(h.low) && isNum(h.high)) {
-      var f = function (x) { return fmtNum(x * k[0], true); };
-      return { text: withUnit(f(h.value), k[1]) + ' ' + per, range: f(h.low) + ' to ' + withUnit(f(h.high), k[1]) + ' ' + per,
-        value: h.value * k[0], low: h.low * k[0], high: h.high * k[0], unit: k[1], per: per };
+    if (k) { // without the 4-decimal fields, headline_rate's own value, low and high; never the metric text in °F or inches
+      var d = perDecade(per), x = isNum(t.slope_per_decade) && isNum(t.ci_low) && isNum(t.ci_high)
+        ? [t.slope_per_decade / d, t.ci_low / d, t.ci_high / d] : [h.value, h.low, h.high];
+      if (!x.every(isNum)) return null;
+      var v = x[0] * k[0], lo = x[1] * k[0], hi = x[2] * k[0];
+      return { text: withUnit(sig2Text(v), k[1]) + ' ' + per, range: withUnit(spanText(lo, hi), k[1]) + ' ' + per,
+        value: v, low: lo, high: hi, unit: k[1], per: per };
     }
     return { text: h.text, range: str(h.range_text), value: h.value, low: h.low, high: h.high, unit: u, per: per };
   }
@@ -126,18 +148,37 @@
   // the API's world sentence carries metric numbers: say so when the page shows °F or inches
   function metric(text) { return str(text).replace(/\.?\s*$/, ' (in metric).'); }
   function hasWorld(w) { return !!w && w.available === true && isNum(w.local_rate) && isNum(w.world_rate) && !!w.window; }
-  // the local and world rates over the same window, next to their ratio; no ratio without a clear trend (only the two rates)
+  // a ratio with the server's own digits, as guidance.fact prints it: "1.5", "1.0", "0.75", a true minus
+  function ratioText(x) { return (x < 0 ? MINUS : '') + (Number.isInteger(x) ? Math.abs(x).toFixed(1) : String(Math.abs(x))); }
+  // the local and world rates over the same window, next to their ratio and its range ("1.0 to 2.0"); no ratio without a
+  // clear trend (only the two rates)
   function worldParts(t, imp) {
     var w = t.world;
     if (!hasWorld(w)) return null;
-    var a = wconv(imp, w.local_rate, str(w.unit)), b = wconv(imp, w.world_rate, str(w.unit)), has = isNum(w.ratio) && clearV(t);
-    return { since: 'Since ' + Y(w.window.start), here: withUnit(fmtNum(a.v, true), a.unit), world: withUnit(fmtNum(b.v, true), b.unit),
-      ratio: has ? fixed(w.ratio, 1) + '×' : '', a: a.v, b: b.v };
+    // both rates to 2 significant figures, the API's own digits (sig2): -0.014, never fmtNum's -0.01. In °F or inches, over the
+    // trend's own months the local rate is the trend's slope: slope_per_decade converted and rounded once, as rate() does, so
+    // the world line and the readout agree; else local_rate, its only source
+    var u = str(w.unit), fit = t.fit || {}, own = imp && isNum(t.slope_per_decade) && w.window.start === fit.start && w.window.end === fit.end;
+    var a = wconv(imp, own ? t.slope_per_decade / perDecade(u) : w.local_rate, u), b = wconv(imp, w.world_rate, u), has = isNum(w.ratio) && clearV(t);
+    return { since: 'Since ' + Y(w.window.start), here: withUnit(sig2Text(a.v), a.unit), world: withUnit(sig2Text(b.v), b.unit),
+      ratio: has ? ratioText(w.ratio) + '×' : '', range: has && isNum(w.ratio_low) && isNum(w.ratio_high) ? ratioText(w.ratio_low) + ' to ' + ratioText(w.ratio_high) : '',
+      a: a.v, b: b.v };
   }
-  // noSince: the sentence above already starts "Since 1993, …", so the line doesn't say it again
-  function worldLine(t, imp, noSince) {
+  function worldLine(t, imp) {
     var p = worldParts(t, imp);
-    return p ? (noSince ? 'Here ' : p.since + ': here ') + p.here + ', world ' + p.world + (p.ratio ? ' (' + p.ratio + ')' : '') : '';
+    return p ? p.since + ': here ' + p.here + ', world ' + p.world + (p.ratio ? ' (' + p.ratio + ')' : '') : '';
+  }
+  // The card's world line (design 14 §3): the two rates, never the ratio or the years the fact gives, then the world
+  // figure's source (src, linked when href). Only sea level and air temperature have one (WSRC).
+  var WSRC = { sea_level: 'NASA satellite record', air_temp: 'NOAA global land record' };
+  function cardWorld(t, imp) {
+    var w = t.world || {}, p = worldParts(t, imp), s = w.source || {};
+    // "Over those years" only when the fact is the world comparison: the server writes it when the ratio's sign agrees
+    // with the verdict (guidance.py); otherwise the fact is the full record's rate and years, so the line says its own years
+    var same = !!p && !!p.ratio && (w.ratio > 0 ? t.verdict === 'rising' : w.ratio < 0 && t.verdict === 'falling');
+    if (p) return { text: (same ? 'Over those years: here ' + p.here + (w.ratio < 0 ? '' : ', world ' + p.world) : p.since + ': here ' + p.here + ', world ' + p.world) + '.',
+      src: WSRC[t.variable] || str(s.name), href: https(s.record_url) };
+    return WSRC[t.variable] && w.available === false && str(w.why_none) ? { text: w.why_none, src: '', href: '' } : null;
   }
 
   function srcText(t) {
@@ -149,26 +190,27 @@
   function placeName(t, label) { var pl = t.place && t.place.name; return label + (pl && STATION[(t.source || {}).id] ? ' (' + pl + ')' : ''); }
   function verdictWord(t) { return t.verdict === 'rising' ? 'Rising' : t.verdict === 'falling' ? 'Falling' : 'No clear change'; }
 
-  // The "why" sentence; a rain note ("about 60 mm more a year") goes in brackets before its full stop.
-  function why(t, imp) {
-    var g = t.guidance || {}, n = g.rate && g.rate.note, note = '';
-    if (!str(g.why)) return str(t.meaning && t.meaning.headline);
-    if (n && typeof n.text === 'string') note = imp && isNum(n.value) ? 'about ' + fmtNum(Math.abs(n.value) / 25.4, false) + ' in ' + (n.value < 0 ? 'less' : 'more') + ' a year' : n.text;
-    return note ? g.why.replace(/\.\s*$/, '') + ' (' + note + ').' : g.why;
+  // guidance.fact as given (design 14 §1); in °F or inches a fact with metric units says so. An answer from before
+  // PR2b has no fact: meaning.headline.
+  function factOf(t, imp) {
+    var f = str((t.guidance || {}).fact);
+    if (!f) return str(t.meaning && t.meaning.headline);
+    return imp && /\b(mm|cm)\b|°C/.test(f) ? metric(f) : f;
   }
 
   // The answer card's words and readouts (section 3).
   function oldAnswer(t) { return !t.fit || !t.baseline; }
-  // The measured level today (trend.now), never the end of the trend line: its own text, converted only for the Units setting.
+  // The measured level today (trend.now), never the end of the trend line: its own text, converted only for the Units setting
+  // (a share in % has no unit to convert: its own text in inches too).
   function nowOf(t, imp) {
     var nw = t.now;
     if (!nw || typeof nw.text !== 'string' || !str(nw.label)) return null;
-    return { value: imp && isNum(nw.value) ? F(t, imp).val(nw.value, nw.units) : nw.text, label: nw.label, rain: nw.kind === '12-month total' };
+    return { value: imp && isNum(nw.value) && nw.units !== '%' ? F(t, imp).val(nw.value, nw.units) : nw.text, label: nw.label, rain: nw.kind === '12-month total' };
   }
   // sel: the emissions scenario on screen ({ssp, low}; ssp null is the default); today: the current month (tests set it)
   function card(t, imp, sel, today) {
     if (oldAnswer(t)) return { old: true, word: verdictWord(t), shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈',
-      conf: str(t.meaning && t.meaning.confidence), why: str(t.meaning && t.meaning.headline), chip: '' };
+      conf: str(t.meaning && t.meaning.confidence), fact: str(t.meaning && t.meaning.headline) };
     var b = t.baseline || {}, fit = t.fit || {}, rec = t.record || {}, m = t.meaning || {}, r = rate(t, imp);
     var clear = clearV(t), short = rec.status === 'short', rk = t.range_kind || '95% range', fx = futOf(t, sel, imp, today);
     var conf = (clear && m.confidence ? m.confidence + ' · ' : '') + (isNum(rec.years) ? Math.round(rec.years) + ' years of records' : '') + (short ? ' (short record)' : '');
@@ -183,9 +225,11 @@
     var r3f = fx ? { label: 'By 2050, ' + fx.name, value: fx.t50, line: fx.code + fx.lc + ', IPCC AR6. ' + fx.rkShort + ' ' + fx.trng + '.'
       + (fx.more ? ' ' + cap(fx.more) + '.' : '') + (fx.regional ? ' Regional estimate: local sinking may differ.' : '')
       + (fx.outside ? ' Measured levels here are ' + (fx.side === 'above' ? 'already above' : fx.side) + " the experts' range for recent years (step 7)." : '') } : null;
-    return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, why: why(t, imp),
-      world: worldLine(t, imp, /^Since \d{4}\b/.test(str(g.why))), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f,
-      chip: str(g.risk_label) === word ? '' : str(g.risk_label) }; // the headline already says "No clear change"
+    // "Where to look next" (design 14 §4): an https url is a link "{label} ↗", anything else plain text
+    var next = (Array.isArray(g.look_next) ? g.look_next : []).filter(function (x) { return x && str(x.label); })
+      .map(function (x) { var u = https(x.url); return { text: u ? x.label + NB + '↗' : x.label, href: u }; });
+    return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, fact: factOf(t, imp),
+      world: cardWorld(t, imp), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f, next: next, disc: str(g.disclaimer) };
   }
   // The NASA POWER grid against the nearest weather station (QA B10). other: this place's POWER answer the page
   // already has (or null); nothing is fetched for it.
@@ -445,10 +489,8 @@
 
     var wp = worldParts(t, imp), s6 = { title: 'Compared with the world' };
     if (wp) {
-      var th = w.thresholds || {}, lbl = str(g.risk_label), two = / to /.test(lbl), unclear = /^Risk between low and high\b/.test(lbl);
       // the ratio's 95% range, unless the API's sentence already gives it
-      var rr = wp.ratio && isNum(w.ratio_low) && isNum(w.ratio_high) ? fixed(w.ratio_low, 1) + ' to ' + fixed(w.ratio_high, 1) : '';
-      if (rr && str(w.text).indexOf(rr) >= 0) rr = '';
+      var rr = str(w.text).indexOf(wp.range) >= 0 ? '' : wp.range;
       // the division in metric, like the API's sentence above it ("(in metric)" in °F or inches): one unit in the step (B5)
       var wm = worldParts(t, false);
       s6.short = worldLine(t, imp);
@@ -458,17 +500,18 @@
       if (isSea) s6.words.push('Satellites measure the height of the sea surface itself. The tide gauge measures the sea against the land, so if the land here is sinking, that adds to the local number.');
       if (t.variable === 'air_temp') s6.words.push('The world figure is built from weather stations on land.'
         + (src.id === 'power' || src.id === 'era5' ? ' The number here comes from a weather model, so the two are measured in different ways.' : ''));
-      s6.work = [(wp.ratio ? fmtNum(wm.a, false) + ' ÷ ' + fmtNum(wm.b, false) + ' = ' + wp.ratio + ' · ' + (rr ? rr + ' times (' + rk + ') · ' : '') : '')
-        + M(w.window.start) + ' to ' + M(w.window.end) + ' · ' + stop(str(w.method)),
-        '1× is the same as the world. ' + th.high + '× or more: high risk. ' + th.moderate + '× to ' + th.high + '×: moderate risk. Under ' + th.moderate + '×: low risk. '
-        + (unclear ? 'Here the ' + rk + ' spans every level, so the risk could be anywhere from low to high.'
-          : 'Here: ' + (lbl ? lbl.toLowerCase() : 'no risk level') + (two && rr ? ', because the ' + rk + ' spans more than one level.' : '.'))];
+      // the two rates with the world line's digits (sig2Text), without a "+"
+      var u2 = function (x) { return sig2Text(x).replace(/^\+/, ''); };
+      s6.work = [(wp.ratio ? u2(wm.a) + ' ÷ ' + u2(wm.b) + ' = ' + wp.ratio + ' · ' + (rr ? rr + ' times (' + rk + ') · ' : '') : '')
+        + M(w.window.start) + ' to ' + M(w.window.end) + ' · ' + stop(str(w.method))];
+      // how to read the ratio, never a level (design 14 §7)
+      if (wp.ratio) s6.work.push('1× is the same pace as the world' + (w.ratio < 0 ? '. Below 0, the change here went the other way.' : '; 2× is twice as fast.'));
       if (isSea) s6.work.push('The full record, ' + Y(fit.start) + ' to ' + Y(fit.end) + ': ' + r.text + '. It gets no world ratio, because satellites only start in 1993.');
       if (isSea && w.source && str(w.source.method)) s6.work.push('The world figure: ' + lc1(stop(w.source.method))); // it names what the satellites don't correct for
       s6.link = w.source && https(w.source.record_url) ? { text: w.source.name + ' ↗', href: w.source.record_url } : null;
-    } else { // why there is no world figure, then the place's own rule (rain, water storage) in world.text
-      s6.short = str(w.why_none) || str(w.text);
-      s6.words = [str(w.why_none), str(w.text)].filter(Boolean);
+    } else { // why there is no world figure; world.text is not printed then (design 14 §7)
+      s6.short = str(w.why_none);
+      s6.words = s6.short ? [s6.short] : [];
     }
     out.push(s6);
 
@@ -1308,6 +1351,6 @@
   // redraw a chart when its box changes width
   function redraw() { charts.forEach(function (c) { if (Math.round(c.box.clientWidth) !== c.W) draw(c); }); }
 
-  window.TDX = { show: show, redraw: redraw, card: function (t, imp) { return card(t, imp, SEL); }, rate: rate, worldParts: worldParts, srcText: srcText, recordUrl: recordUrl,
+  window.TDX = { show: show, redraw: redraw, card: function (t, imp) { return card(t, imp, SEL); }, rate: rate, sig2Text: sig2Text, spanText: spanText, worldParts: worldParts, srcText: srcText, recordUrl: recordUrl,
     csvCompare: csvCompare, download: download, Mo: Mo, Y: Y, conv: conv, metric: metric, modelNote: modelNote, projOf: projOf };
 })();

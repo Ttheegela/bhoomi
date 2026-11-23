@@ -1,6 +1,6 @@
 """The tool's own guidance: the model writes MARKER, the code puts each result's guidance strings there word for word
-(risk level, why, recommendation, then the disclaimer once and the future links). The model never composes them.
-A result without "guidance", or without a risk level (hottest day of the month), adds nothing."""
+(the fact, then where to look next, the future links and the disclaimer once). The model never composes them.
+A result without a guidance fact adds nothing."""
 import re
 
 from earthtrends.agent import resources, tools
@@ -26,13 +26,13 @@ def _key(c: dict):
 
 
 def picked(calls: list[dict]) -> list[tuple[tuple, dict]]:
-    """The results whose guidance is shown: per place (the call's point) and measurement, the first source in catalog
-    order that has one, plus any other source there whose risk level differs (never pick one of two that disagree)."""
+    """The results whose fact is shown: per place (the call's point) and measurement, the first source in catalog
+    order that has one, plus any other source there whose verdict differs (never pick one of two that disagree)."""
     cat = {v["id"]: v for v in tools.list_variables()}
     groups: dict = {}
     for c in calls:
         r = c.get("result")
-        if isinstance(r, dict) and isinstance(r.get("guidance"), dict) and _s(r["guidance"].get("risk_label")):
+        if isinstance(r, dict) and isinstance(r.get("guidance"), dict) and _s(r["guidance"].get("fact")):
             groups.setdefault(_key(c), []).append(r)
     out = []
     for key, rs in groups.items():
@@ -41,14 +41,14 @@ def picked(calls: list[dict]) -> list[tuple[tuple, dict]]:
         rs.sort(key=lambda r: order.index(r["source"]["id"]) if (r.get("source") or {}).get("id") in order else 99)
         seen = set()
         for r in rs:
-            if (label := r["guidance"]["risk_label"]) not in seen:
-                seen.add(label)
+            if (verdict := r.get("verdict")) not in seen:
+                seen.add(verdict)
                 out.append((key, r))
     return out
 
 
 def block(calls: list[dict]) -> str:
-    """The guidance text for this turn's results; "" when none has guidance."""
+    """The guidance text for this turn's results; "" when none has a fact."""
     rs = picked(calls)
     if not rs:
         return ""
@@ -57,7 +57,7 @@ def block(calls: list[dict]) -> str:
     per = {}  # place and measurement -> how many entries: the source is named only when two there differ
     for k, _ in rs:
         per[k] = per.get(k, 0) + 1
-    parts, disclaimer, links = [], "", {}
+    parts, disclaimer, look, links = [], "", {}, {}
     for k, r in rs:
         g = r["guidance"]
         what = names.get(r.get("variable"), str(r.get("variable") or ""))
@@ -65,14 +65,17 @@ def block(calls: list[dict]) -> str:
         label = f"{place}, {what[:1].lower()}{what[1:]}" if places and place else what
         if per[k] > 1:
             label += f" ({_s((r.get('source') or {}).get('name')).split(',')[0]})"
-        bits = [f"{label}: {_end(g['risk_label'].strip())}"]
-        bits += [_end(s) for s in (_s(g.get("why")), _s(g.get("recommendation"))) if s]
-        parts.append(" ".join(bits))
+        parts.append(f"{label}: {_end(_s(g['fact']))}")
+        for x in g.get("look_next") or []:
+            if isinstance(x, dict) and _s(x.get("label")):
+                url = _s(x.get("url"))
+                look.setdefault(_s(x["label"]), f" ({url})" if url.startswith("https://") else "")
         disclaimer = disclaimer or _s(g.get("disclaimer"))
         f = g.get("future_link") or {}
         if isinstance(f, dict) and _s(f.get("url")).startswith("https://"):
             links.setdefault(f["url"].strip(), _s(f.get("label")) or "Future map")
-    tail = ([_end(disclaimer)] if disclaimer else []) + [f"{lab} ({url})." for url, lab in links.items()]
+    tail = ([f"Where to look next: {'; '.join(lab + url for lab, url in look.items())}."] if look else [])
+    tail += [f"{lab} ({url})." for url, lab in links.items()] + ([_end(disclaimer)] if disclaimer else [])
     return " ".join(parts + tail)
 
 

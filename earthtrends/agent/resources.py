@@ -8,16 +8,16 @@ _MARK = re.compile(r"[ \t]*\**\[\s*official[\s_-]+resources?\s*\]\**", re.I)
 # ponytail: rough boxes (contiguous states, Alaska, Hawaii), not borders; parts of Canada and Mexico near the edges
 # count as US. Use real borders if a near-border place ever gets the wrong link.
 US_BOXES = ((24.4, 49.5, -125.0, -66.9), (51.0, 71.5, -170.0, -129.9), (18.9, 22.3, -160.3, -154.8))
-US_COAST = ("For future flood risk at a US address, see NOAA's Sea Level Rise Viewer (https://coast.noaa.gov/slr/) "
-            "and FEMA's flood maps (https://msc.fema.gov/portal/home).")
+# FEMA's flood maps are not here: a CO-OPS result's guidance names them in "Where to look next", once.
+US_COAST = "Future flood maps for a US address: NOAA's Sea Level Rise Viewer (https://coast.noaa.gov/slr/)."
 SEA = ("For how sea level may change in future near you, see NASA's Sea Level Projection Tool, which shows the IPCC's "
        "projections (https://sealevel.nasa.gov/data_tools/17).")
 OTHER = ("For what the climate may do next in the United States, see the U.S. Climate Resilience Toolkit "
          "(https://toolkit.climate.gov/).")
-WATER = "For water risk where you are, see the World Resources Institute's Aqueduct tools (https://www.wri.org/aqueduct)."
+WATER = "Water maps for where you are: the World Resources Institute's Aqueduct tools (https://www.wri.org/aqueduct)."
 WORLD = ("For what the climate may do next in your region, see the IPCC's Interactive Atlas "
          "(https://interactive-atlas.ipcc.ch/).")
-URLS = ("https://coast.noaa.gov/slr/", "https://msc.fema.gov/portal/home", "https://sealevel.nasa.gov/data_tools/17",
+URLS = ("https://coast.noaa.gov/slr/", "https://sealevel.nasa.gov/data_tools/17",
         "https://toolkit.climate.gov/", "https://www.wri.org/aqueduct",
         "https://interactive-atlas.ipcc.ch/")  # every address above; the eval scorer imports it
 

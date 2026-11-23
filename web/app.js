@@ -88,7 +88,7 @@ const VARIABLE_ALIASES = { precipitation: 'precip', rain: 'precip', temperature:
 
 const WINDOWS = [
   { id: 'sea_level', slug: 'sea-level', name: 'Sea level', search: 'Search a coastal town or city',
-    question: 'Is the sea rising where you live, build or invest? Some tide gauges have measured it for more than a century.', units: ['cm', 'inches'] },
+    question: 'Is the sea rising where you live? Some tide gauges have measured it for more than a century.', units: ['cm', 'inches'] },
   { id: 'air_temp', slug: 'air-temperature', name: 'Air temperature', search: 'Search a town or city',
     question: 'Is the air getting warmer where you live? Our records start in 1981 and come from weather models and weather stations.', units: ['°C', '°F'] },
   { id: 'air_temp_max', slug: 'hottest-days', name: 'Hottest days', search: 'Search a town or city',
@@ -237,7 +237,7 @@ function landed(win, p, res) {
   const e = store[win];
   if (pinKeyOf(p.lat, p.lon) === e.selected && res.status === 'ok') {
     const c = window.TDX.card(res.trend, imperial());
-    TD.announce(`${p.label}: ${[c.chip, c.why].filter(Boolean).join('. ') || c.word}`);
+    TD.announce(`${p.label}: ${c.fact || c.word}`);
   }
 }
 
@@ -308,19 +308,16 @@ const imperial = () => window.TDPrefs.get().units === 'imperial';
 const fmt = {
   // the rate every view prints: headline_rate ("+3.1 mm a year", "+0.31 °C per decade"), in the Units setting
   rate(t) { const r = t && window.TDX.rate(t, imperial()); return r ? r.text : ''; },
+  // the pin line, the compare table's Rate and the Ask context (web/design/14-facts.md section 6): the rate when the
+  // verdict is rising or falling, otherwise "No clear change" (an answer from before the rework has no rate: the verdict)
+  line(t) { return t.verdict === 'rising' || t.verdict === 'falling' ? fmt.rate(t) || window.TDX.card(t, imperial()).word : 'No clear change'; },
 };
-// the sidebar chip's short form: "Moderate to high", "Low–high" (for "Risk between low and high (wide range)")
-const riskShort = (g) => (g && g.risk_label ? (/^Risk between low and high\b/.test(g.risk_label) ? 'Low–high' : g.risk_label.replace(/ risk$/, '')) : '');
-// High, Moderate, Low; anything else ("Not enough data", "No clear change") is drawn like Low
-const riskClass = (g) => (g && ['high', 'moderate', 'low'].includes(g.risk) ? g.risk : 'unknown');
 
-// The line under a pinned place's name: the rate, or "No clear change" when no chip says so already.
+// The line under a pinned place's name.
 function pinLine(p) {
   if (p.status === 'loading') { const n = secsSince(p); return n < 2 ? 'Checking…' : `Checking… ${n} s`; }
   if (p.status === 'error') return 'No record here';
-  const t = p.trend, rate = fmt.rate(t), clear = t.verdict === 'rising' || t.verdict === 'falling';
-  if (rate && (clear || (t.guidance && t.guidance.risk_label))) return rate;
-  return clear ? window.TDX.card(t, imperial()).word : 'No clear change'; // an answer from before the rework has no rate
+  return fmt.line(p.trend);
 }
 
 /* ---------- the sidebar ---------- */
@@ -366,11 +363,9 @@ function renderSidebar() {
   if (all.length < MAX_PINS) lockRm = false;
   ul.className = lockRm ? 'pins show-rm' : 'pins';
   all.forEach((p) => {
-    const g = p.trend && p.trend.guidance;
     const btn = el('button', { type: 'button', class: 'pin' + (p.selected ? ' on' : ''), 'aria-pressed': String(p.selected) },
       el('i', { class: p.selected ? 'dot sel' : `dot s${p.slot}`, 'aria-hidden': 'true' }),
-      el('span', { class: 'pn' }, el('b', {}, p.label), el('small', { class: 'pn-line', 'data-key': p.key }, pinLine(p))),
-      g && g.risk_label ? el('span', { class: `risk ${riskClass(g)}` }, riskShort(g)) : '');
+      el('span', { class: 'pn' }, el('b', {}, p.label), el('small', { class: 'pn-line', 'data-key': p.key }, pinLine(p))));
     btn.addEventListener('click', () => TD.select(p.key));
     const rm = el('button', { type: 'button', class: 'rm', 'aria-label': `Remove ${p.label}` }, '×');
     rm.addEventListener('click', () => TD.removePlace(p.key));
@@ -379,7 +374,14 @@ function renderSidebar() {
   $('pin-hint').hidden = false;
 }
 
-/* ---------- the answer card (web/design/10-foundation.md section 3) ---------- */
+/* ---------- the answer card (web/design/10-foundation.md section 3, 14-facts.md section 1) ---------- */
+
+// "Where to look next:" then each item, a link or plain text (14-facts.md section 4)
+function nextLine(items) {
+  const ul = el('ul', {});
+  items.forEach((x) => ul.append(el('li', {}, x.href ? el('a', { href: x.href, target: '_blank', rel: 'noopener' }, x.text) : x.text)));
+  return el('div', { class: 'next' }, el('span', { class: 'nl' }, 'Where to look next:'), ' ', ul);
+}
 
 // A re-render removes whatever had focus in the card (a button that switched the source, a link): focus then goes to the
 // new card's heading, not to <body> (QA N5).
@@ -394,7 +396,7 @@ function drawRec(box) {
   box.setAttribute('aria-busy', String(!!pin && pin.status === 'loading'));
   if (!w) return;
   if (!pin) {
-    box.append(el('h2', { tabindex: '-1' }, 'Pin a place to see its recommendation'), el('p', { class: 'say' }, 'Search above, or click the map, to pin a place.'));
+    box.append(el('h2', { tabindex: '-1' }, 'Pin a place to see what its records show'), el('p', { class: 'say' }, 'Search above, or click the map, to pin a place.'));
     return;
   }
   const h2 = (txt) => el('h2', { tabindex: '-1', id: 'rec-h' }, txt);
@@ -415,20 +417,23 @@ function drawRec(box) {
       b.addEventListener('click', () => pickSource(def));
       box.append(el('div', { class: 'acts' }, b));
     }
-    box.append(el('p', { class: 'say' }, pin.none && curWin === 'sea_level' && !offer
-      ? "Without a usable tide gauge nearby, our records can't tell you about this coast. For property here, check local flood maps and whether the land is sinking."
-      : 'Try another place.'));
+    if (pin.none && curWin === 'sea_level' && !offer) box.append(el('p', { class: 'say' }, "Without a usable tide gauge nearby, our records can't tell you about this coast."), nextLine([{ text: 'Your local planning office', href: '' }]));
+    else box.append(el('p', { class: 'say' }, 'Try another place.'));
     return;
   }
 
   const t = pin.trend, g = t.guidance || {}, X = window.TDX, C = X.card(t, imperial()), url = X.recordUrl(t.source);
   const meta = el('p', { class: 'meta' }, url ? el('a', { href: url, target: '_blank', rel: 'noopener' }, `${X.srcText(t)} ↗`) : X.srcText(t));
   if (t.latest && t.latest.text) meta.append(' · ', el('span', { class: 'nw' }, t.latest.text)); // never split (QA N4)
-  box.append(el('div', { class: 'where' }, el('div', {}, h2(pin.label), meta), C.chip ? el('span', { class: `risk ${riskClass(g)}` }, C.chip) : ''));
+  box.append(el('div', { class: 'where' }, h2(pin.label), meta));
   box.append(el('div', { class: 'verdict' }, el('b', {}, el('span', { class: 'shape', 'aria-hidden': 'true' }, C.shape), C.word), el('span', {}, C.conf)));
-  if (C.why) box.append(el('p', { class: 'say' }, C.why));
+  if (C.fact) box.append(el('p', { class: 'say' }, C.fact));
   if (C.old) return; // a cached answer from before the rework: the verdict only, until it is asked again
-  if (C.world) box.append(el('p', { class: 'world' }, `${C.world}.`));
+  if (C.world) { // the two rates, then the world figure's source
+    const wl = el('p', { class: 'world' }, C.world.text);
+    if (C.world.src) wl.append(' World figure: ', C.world.href ? el('a', { href: C.world.href, target: '_blank', rel: 'noopener' }, `${C.world.src}\u00a0↗`) : C.world.src);
+    box.append(wl);
+  }
   // NASA POWER's grid against the nearest weather station (QA B10): the line, the switch, and after it whether they
   // disagree, from the POWER answer this page already has (the default source's result)
   const v = varById(curWin), prev = results[`${curWin}||${pin.key}`];
@@ -452,11 +457,11 @@ function drawRec(box) {
     C.r1 ? el('div', {}, el('p', { class: 'rl' }, C.r1.label), el('p', { class: 'rv' }, C.r1.value), el('p', { class: 'rs' }, C.r1.line)) : '',
     el('div', {}, el('p', { class: 'rl' }, C.r2.label), el('p', { class: 'rv' }, C.r2.value, C.r2.per ? ' ' : '', C.r2.per ? el('small', {}, C.r2.per) : ''), el('p', { class: 'rs' }, C.r2.line)),
     r3));
-  if (g.recommendation) box.append(el('div', { class: 'advice' }, el('p', { class: 'al' }, 'Our recommendation'), el('p', {}, g.recommendation)));
+  if (C.next.length) box.append(nextLine(C.next));
   const how = el('button', { type: 'button', class: 'btn', id: 'how-open' }, 'How we calculated this ↓');
   how.addEventListener('click', goHow);
   box.append(el('div', { class: 'acts' }, how));
-  if (g.recommendation && g.disclaimer) box.append(el('p', { class: 'disc' }, g.disclaimer));
+  if (C.disc) box.append(el('p', { class: 'disc' }, C.disc));
 }
 // The button holds no route: it scrolls to the section and puts focus on its heading; it never opens a step.
 function goHow() {

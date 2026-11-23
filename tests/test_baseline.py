@@ -12,7 +12,7 @@ from earthtrends import data
 from earthtrends.agent import tools
 from earthtrends.stats import compute_trend, trend
 from earthtrends.stats.baseline import FITTED, MONTH_DAYS, PROVIDER, anomaly, baseline
-from earthtrends.stats.guidance import OWN_RULE, q, sig2
+from earthtrends.stats.guidance import q, sig2
 
 UNITS = {"air_temp": "degC", "air_temp_max": "degC", "precip": "mm/day", "sea_level": "mm", "water_storage": "cm"}
 POWER = {"id": "power", "name": "NASA POWER (MERRA-2)", "url": "https://power.larc.nasa.gov/"}
@@ -447,15 +447,14 @@ def test_temperature_compares_the_same_months_with_the_land_average(refs):
     here, world = rate(s, months, 10), rate(land, months, 10)
     assert (w["local_rate"], w["world_rate"]) == (float(here), float(world))
     assert w["ratio"] == float(q(here / world, "0.1"))  # judged as shown
-    assert (w["unit"], w["measure"], w["thresholds"]) == ("°C per decade", "average for all land areas",
-                                                          {"moderate": 0.75, "high": 1.5})
+    assert (w["unit"], w["measure"]) == ("°C per decade", "average for all land areas") and "thresholds" not in w
     assert w["source"] == {k: LAND_SRC.get(k) for k in ("name", "dataset_id", "record_url", "retrieved", "method")}
     assert w["text"] == (f"Over the same years, the average for all land areas warmed {world:f} °C per decade. "
                          f"Here: {here:f} °C per decade.") and w["why_none"] is None
     g = r["guidance"]
     assert g["ratio"] == w["ratio"] and g["reference"] == {
         "text": w["text"], "source": {"name": LAND_SRC["name"], "url": LAND_SRC["record_url"]}}
-    assert g["risk"] == ("high" if w["ratio"] >= 1.5 else "moderate" if w["ratio"] >= 0.75 else "low")
+    assert g["fact"].startswith(f"Rising about {w['ratio']} times as fast as the average for all land areas (1981 to ")
 
 
 def test_sea_level_compares_1993_on_in_mm_a_year(refs):
@@ -495,13 +494,14 @@ def test_temperature_world_method_names_the_method_then_the_kinds_of_record(refs
 
 # ---- headline_rate: the rate in the reader's unit ----
 
-def test_headline_rate_and_fit_use_the_unrounded_slope_and_span():
+def test_headline_rate_uses_the_shown_slope_and_fit_the_unrounded_slope_and_span():
     # an annual straight line: Sen's slope is exactly 4.436e-5 a year, shown as 0.0004 per decade (4 decimals)
     years = np.arange(1981, 2021)
     s = {"variable": "air_temp_max", "units": "degC", "freq": "annual", "place": {"name": "X"}, "source": POWER,
          "times": [str(y) for y in years], "values": list(4.436e-5 * (years - 1981)), "notes": []}
     r = compute_trend(s)
-    assert r["slope_per_decade"] == 0.0004 and r["headline_rate"]["value"] == 0.000444  # not 0.0004 rounded again
+    # the headline rounds the slope_per_decade it sits beside (coordinator, 2026-11-22), so the two never disagree
+    assert r["slope_per_decade"] == 0.0004 and r["headline_rate"]["value"] == 0.0004
     assert r["fit"]["change"] == round(4.436e-5 * 40, 4)  # slope x 40 years, rounded once to 4 decimals
     # 291 months (2002-04 to 2026-06, like GRACE): the span is 24.25 years, shown as 24.2
     g = compute_trend(ts(synth(25, start=2002, per_decade=-44, sd=1, level=0.0)[3:294], start=2002,
@@ -510,6 +510,61 @@ def test_headline_rate_and_fit_use_the_unrounded_slope_and_span():
     f = g["fit"]
     assert f["years"] == 24.2 and f["change"] == pytest.approx(g["slope_per_decade"] / 10 * 24.25, abs=1e-3)
     assert abs(f["change"] - g["slope_per_decade"] / 10 * 24.2) > 0.1  # the rounded span would be off by about 0.2
+
+
+PSMSL_SRC = {"id": "psmsl", "name": "PSMSL", "url": "https://psmsl.org/"}
+
+
+@pytest.mark.parametrize("var,per_year,lo,hi,level,source,want,want_range", [
+    # at (33.0, -103.46): slope -10.5, not "-1.0"; unrounded, the range read "-1.1 to -0.9"
+    ("water_storage", -1.0499996, -1.1499996, -0.9499996, 0.0, GRACE, "−1.1 cm of water a year",
+     "−1.2 to −1.0 cm of water a year"),
+    # Tolchester Beach: 55.5 a decade, not "+5.5"; unrounded, the range read "+5.2 to +5.8"
+    ("sea_level", 5.549996, 5.249996, 5.849996, 7000.0, PSMSL_SRC, "+5.6 mm a year", "+5.3 to +5.9 mm a year"),
+])
+def test_headline_rate_rounds_the_shown_slope(monkeypatch, var, per_year, lo, hi, level, source, want, want_range):
+    """A slope and range whose unrounded and 4-decimal values round differently at the shown precision: the headline,
+    its range, guidance.rate and the fact all take slope_per_decade, ci_low and ci_high as shown."""
+    monkeypatch.setattr(trend, "_mk_sen", lambda t, x, k: (per_year, lo, hi, 0.001, False, False, 0.0))
+    r = compute_trend(ts(synth(25, start=2002, level=level, sd=1), start=2002, variable=var, source=source))
+    h, g = r["headline_rate"], r["guidance"]
+    assert r["slope_per_decade"] == round(per_year * 10, 4) and (h["text"], h["range_text"]) == (want, want_range)
+    assert f"{g['rate']['text']} {g['rate']['per']}" == want  # the card's rate and the headline agree
+    if not r["world"]["available"]:  # water storage: the fact states the same numbers, the rate without its sign
+        assert g["fact"] == f"Falling about {want.lstrip('−')} (2002 to 2026; 95% range {want_range})."
+
+
+@pytest.mark.parametrize("per_year,lo,hi,want", [(0.0364999, 0.02, 0.05, 0.37), (-0.0014499, -0.003, -0.0005, -0.015)])
+def test_world_local_rate_is_the_headline_number_over_the_same_months(refs, monkeypatch, per_year, lo, hi, want):
+    """Air temperature whose world window is the whole record (the land reference ends 2025-06, so does the record):
+    world.local_rate rounds the same 4-decimal slope as headline_rate (unrounded, 0.0364999 read 0.36 beside "+0.37",
+    -0.0014499 read -0.014 beside "-0.015"), and the ratio is worked out from it."""
+    monkeypatch.setattr(trend, "_mk_sen", lambda t, x, k: (per_year, lo, hi, 0.001, False, False, 0.0))
+    r = compute_trend(ts(synth(45)[:-6]))
+    w, h = r["world"], r["headline_rate"]
+    assert w["window"] == r["period"] == {"start": "1981-01", "end": "2025-06"}
+    assert w["local_rate"] == want == float(h["text"].split()[0].replace("−", "-"))
+    if w["ratio"] is not None:
+        assert w["ratio"] == float(q(Decimal(repr(want)) / Decimal(repr(w["world_rate"])), "0.1"))
+
+
+def test_headline_text_is_the_shown_slope_rounded():
+    """headline_rate.text is slope_per_decade (over 10 for the rates read a year) to 2 significant figures; rainfall,
+    its share of the 1995-2014 average as guidance.rate shows it."""
+    fix = Path(__file__).parent / "fixtures" / "rework"
+    for f in sorted(fix.glob("*.json")):
+        if f.stem == "variables":
+            continue
+        s = {k: v for k, v in json.loads(f.read_text())["series"].items() if k != "anomaly"}
+        r = compute_trend(s)
+        slope, var = Decimal(repr(r["slope_per_decade"])), r["variable"]
+        if var == "precip":
+            shown = trend._rain_share(r["slope_per_decade"], r["baseline"]["value"]).copy_sign(slope)
+        else:
+            shown = sig2(slope / 10 if var in ("sea_level", "water_storage") else slope)
+        assert r["headline_rate"]["text"].split()[0].removesuffix("%") == trend._signed0(shown + 0), f.stem
+        if r["guidance"]["rate"]:  # a clear change: the card's rate is the same number
+            assert r["guidance"]["rate"]["text"].split()[0].removesuffix("%") == trend._signed0(shown + 0), f.stem
 
 
 def test_headline_rate_matches_the_contract_example():
@@ -556,9 +611,10 @@ def test_sea_level_needs_20_years_since_1993(refs, last, available):
     if not available:
         assert w["why_none"] == "This gauge has fewer than 20 years of readings since 1993, so it is not compared " \
                                 "with the world average."
-        assert all(w[k] is None for k in ("local_rate", "world_rate", "ratio", "window", "source", "thresholds"))
+        assert all(w[k] is None for k in ("local_rate", "world_rate", "ratio", "window", "source"))
         assert r["verdict"] == "rising" and r["guidance"]["ratio"] is None and r["guidance"]["reference"] is None
-        assert r["guidance"]["risk"] is None and r["guidance"]["risk_label"] == "No world comparison" and r["guidance"]["why"] == w["why_none"]
+        h = r["headline_rate"]
+        assert r["guidance"]["fact"] == f"Rising about {h['text'][1:]} (1950 to {last}; 95% range {h['range_text']})."
 
 
 @pytest.mark.parametrize("world", [np.zeros(76 * 12), 0.2 - 0.025 * np.arange(76 * 12) / 12])  # flat, falling
@@ -569,7 +625,8 @@ def test_a_world_figure_that_did_not_rise_gives_no_ratio_and_says_why(monkeypatc
     why = "The world figure did not rise over these years, so there is no ratio."
     assert r["verdict"] == "rising" and w["available"] and w["world_rate"] <= 0
     assert (w["ratio"], w["ratio_low"], w["ratio_high"], w["why_none"]) == (None, None, None, why)
-    assert (g["risk"], g["risk_label"], g["why"], g["ratio"]) == (None, "No world comparison", why, None)
+    h = r["headline_rate"]
+    assert (g["fact"], g["ratio"]) == (f"Rising about {h['text'][1:]} (1981 to 2025; 95% range {h['range_text']}).", None)
     assert g["reference"]["text"] == w["text"]  # the world sentence is still shown
 
 
@@ -610,17 +667,18 @@ def test_no_world_figure_for_hottest_day_rain_and_water(refs, var, why):
     src = GRACE if var == "water_storage" else POWER
     w = compute_trend(ts(synth(40, level=3.0 if var == "precip" else 15.0, season=SEASON / 10), variable=var,
                          source=src))["world"]
-    assert (w["available"], w["why_none"], w["text"]) == (False, why, OWN_RULE.get(var))
+    assert (w["available"], w["why_none"], w["text"]) == (False, why, None)  # facts only: no level rule
     assert all(w[k] is None for k in ("measure", "local_rate", "world_rate", "unit", "window", "method", "ratio",
-                                      "thresholds", "source"))
+                                      "source")) and "thresholds" not in w
 
 
-def test_hottest_day_has_no_risk_level(refs):
+def test_hottest_day_states_the_verdict_with_no_world_clause(refs):
     r = compute_trend(ts(synth(40, per_decade=0.5), variable="air_temp_max"))
     g = r["guidance"]
     assert r["verdict"] == "rising" and g["rate"]["text"].startswith("+")
-    assert (g["risk"], g["risk_label"], g["why"], g["recommendation"], g["ratio"], g["reference"]) == (None,) * 6
-    assert g["disclaimer"] and g["future_link"] is None
+    h = r["headline_rate"]
+    assert g["fact"] == f"Rising about {h['text'][1:]} (1981 to 2020; 95% range {h['range_text']})."
+    assert (g["ratio"], g["reference"], g["future_link"]) == (None,) * 3 and g["disclaimer"]
 
 
 @pytest.mark.parametrize("var", list(UNITS))

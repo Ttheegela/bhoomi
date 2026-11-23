@@ -1,95 +1,35 @@
-"""The "guidance" object for a TrendResult: a risk level and plain-words advice, by the fixed rules in docs/RISK.md.
-Computed in code so the page and the agent show the same words; no one redoes it. No future value comes from a past
+"""The "guidance" object for a TrendResult: facts, not advice (docs/CONTRACTS.md "Facts, not advice", rules in
+docs/RISK.md). One sentence on what the records show, where to look next and a disclaimer, computed in code so the page,
+the agent and outside clients show the same words. No risk level, no recommendation, and no future value from a past
 trend (spec D1); the world comparison it reads is the result's own `world` (D5)."""
 
+import calendar
 import math
 from decimal import ROUND_HALF_UP, Decimal
 
 from earthtrends.stats.meaning import UNITS, about
 
-DISCLAIMER = ("This guidance isn't perfect. It is based only on past records, and the future is not certain. "
-              "Not professional financial or legal advice.")
-# when the result shows an expert projection (projection.available): the future values are not from past records
-DISCLAIMER_PROJECTION = ("This guidance isn't perfect. The past comes from measurements here; the future values are "
-                         "IPCC projections, which depend on how much the world emits and are not predictions. "
-                         "Not professional financial or legal advice.")
-LABEL = {"high": "High risk", "moderate": "Moderate risk", "low": "Low risk", "unknown": "Not enough data"}
-NO_CLEAR = "No clear change"  # the label for a no_clear_change verdict: no risk level, it is not evidence of low risk
-NO_COMPARE = "No world comparison"  # a clear trend whose level needs a world figure that isn't there (QA B3: Mumbai)
+DISCLAIMER = "This shows past measurements only. It is not a prediction and not professional advice."
+# when the result shows an expert projection (projection.available): the future values are IPCC's, not ours
+DISCLAIMER_PROJECTION = ("This shows past measurements and IPCC projections, which depend on how much the world "
+                         "emits. It is not a prediction and not professional advice.")
 DISPLAY = {"sea_level": ("cm", "0.1"), "air_temp": ("°C", "1"), "air_temp_max": ("°C", "1"),
            "precip": ("mm a year", "365.25"), "water_storage": ("cm", "1")}  # levels; rates may differ (RATE)
 # Rates in headline_rate's units: sea level mm a year (the world's unit), water storage cm of water a year.
 RATE = {"sea_level": ("mm", "0.1", "a year"), "water_storage": ("cm", "0.1", "of water a year")}
-MIN_YEARS = {"water_storage": 10}  # years of record to guide a decision, as D6's trend minimum (GRACE 10)
+MIN_YEARS = {"water_storage": 10}  # years of record to state a fact, as D6's trend minimum (GRACE 10)
 MIN_YEARS_OTHER = 20
-THRESHOLDS = {"moderate": 0.75, "high": 1.5}  # local rate / world rate, judged on the ratio as shown (1 decimal)
-RAIN_THRESHOLDS = (5, 10)  # % of the 1995-2014 annual normal per decade: moderate, high
-LEVELS = ("low", "moderate", "high")
-RAIN_MIN_MM = 100  # a 1995-2014 annual normal under this many mm a year gets no % rule and no risk level
-SCARCE = "Rain here is too scarce for a percentage rule."
 
-# Rainfall and water storage have no world figure: their own-place rules, printed in world.text.
-OWN_RULE = {
-    "precip": "Our rule: a change of 10% or more of this place's 1995–2014 average rainfall every 10 years is high; "
-              "5 to 10% is moderate. It covers total rain, not heavy downpours or floods.",
-    "water_storage": "Our rule: a fall of 1 cm of water a year or more is high; 0.5 to 1 cm is moderate.",
-}
-
-FASTER = {"sea_level": "The sea here is rising", "air_temp": "It is getting warmer here"}
-# after "Since 1993, ": the world comparison starts later than the record (sea level: satellites from 1993)
-SINCE = {"sea_level": "the sea here has risen", "air_temp": "it has warmed here"}
 THAN = {"sea_level": "the world average", "air_temp": "the average for all land areas"}
-HARMLESS = {"sea_level": "The sea here has been falling.", "air_temp": "It has been getting cooler here.",
-            "water_storage": "Water stored in this region has been rising."}
-NO_WORLD = "There is no matching world figure to compare with."
-NO_RULE = "We can't give guidance for this record."
-RECOMMEND = {
-    "sea_level": {  # the production wording, kept by the owner on 2026-11-22 ("Keep 'advise against'")
-        "high": "For a long-term home or investment near the shore here, we'd advise against it unless the site sits "
-                "well above flood level.",
-        # a range from moderate to high gets this, the lower level's, text (ratio 1.1 to 2.0, say)
-        "moderate": "For a long-term home or investment near the shore here, check how high the site sits above "
-                    "flood level before you commit.",
-        "low": "Past records give no special reason to avoid the shore here. Check the site's flood level as you would "
-               "on any coast.",
-        # rising with no world figure (NO_COMPARE): no level, so advice that needs none
-        "no_world": "The sea here has been rising. Before you buy or build near the shore, check the site's height "
-                    "above flood level and the official flood maps."},
-    "air_temp": {  # as sea level: what the records show, then what to check now; no future from the past (D1)
-        "high": "It has been getting warmer here faster than the average for all land areas. Before you plan a home, "
-                "a farm or outdoor work, check how hot the summers get and how you would keep cool, with shade and "
-                "water.",
-        "moderate": "It has been getting warmer here at least about as fast as the average for all land areas. Before "
-                    "you plan a home, a farm or outdoor work, check how hot the summers get and how you would keep "
-                    "cool.",
-        "low": "Past records give no special reason to change plans here because of heat.",
-        "no_world": "It has been getting warmer here. Before you plan a home, a farm or outdoor work, check how hot "
-                    "the summers get and how you would keep cool."},
-    # what was found, then what to check now; never a future amount (D1: decades of rain in one place can swing back)
-    "precip": {
-        "high_wetter": "Rain here has been increasing strongly. Before you build or plant, check drainage and the "
-                       "flood history of the site.",
-        "high_drier": "Rain here has been decreasing strongly. If you farm or run a business that needs water, check "
-                      "how secure your water supply would be in dry years.",
-        "moderate_wetter": "Rain here has been increasing. Before you build or plant, check drainage and the flood "
-                           "history of the site.",
-        "moderate_drier": "Rain here has been decreasing. If you farm or depend on rainfall, check how secure your "
-                          "water supply would be in dry years.",
-        # no clear change only (a clear change gets low_wetter or low_drier): not evidence that rain is steady
-        "low": "The rain record here shows no clear change, but that is not proof that rain is steady. Before you "
-               "build or plant, check drainage and how secure your water supply would be in dry years, as you would "
-               "anywhere."},
-    "water_storage": {
-        "high": "Water stored in this region is falling fast. Before you rely on groundwater for a farm or a new well, "
-                "check local water levels and make sure of a secure supply.",
-        "moderate": "Water stored in this region is falling. Before investing in a farm or a well, check local water "
-                    "levels and supply.",
-        "low": "Past records give no special reason to worry about water supply in this region."},
-}
-# a clear rain change whose lower level is low (the whole range under 5%, or reaching 10% or more: Chennai, Mumbai
-# +11%) gets the moderate text, one per direction. No size claim (QA B11: "a small share" understated Mumbai).
-RECOMMEND["precip"].update({f"low_{w}": RECOMMEND["precip"][f"moderate_{w}"] for w in ("wetter", "drier")})
-SHORT = "The record here is too short to guide a decision. Try a nearby place with a longer record."
+RAIN = "of the usual yearly rain every 10 years"  # rainfall's fact words for headline_rate's per
+NOT_ENOUGH = "Not enough data"
+
+# look_next: neutral pointers, never what to do with a property. Every url must answer 200 when checked.
+FEMA = ("Official flood maps (FEMA Flood Map Service Center)", "https://msc.fema.gov/portal/home")
+PLANNING = ("Your local planning office", None)
+WEATHER = ("Your national weather service", None)
+LOOK_NEXT = {"sea_level": (PLANNING,), "air_temp": (WEATHER,), "air_temp_max": (WEATHER,), "precip": (WEATHER,),
+             "water_storage": (("Your local water authority", None),)}
 
 # Copied from earthtrends/agent/resources.py (US_BOXES): (lat min, lat max, lon min, lon max) for the US coasts,
 # Alaska and Hawaii. Copied, not imported, so the stats lane does not depend on the agent lane.
@@ -121,6 +61,11 @@ def signed(d: Decimal) -> str:
     return ("−" if d < 0 else "+") + format(abs(d), "f")
 
 
+def _num(d: Decimal) -> str:
+    """"1.5", "−0.2" (a real minus sign, no plus)."""
+    return ("−" if d < 0 else "") + format(abs(d), "f")
+
+
 def _years(period) -> float | None:
     """Span in years from period start/end like "1981-01" or "1981"; None if unreadable."""
     try:
@@ -131,6 +76,26 @@ def _years(period) -> float | None:
     except (KeyError, TypeError, ValueError):
         return None
     return (ey * 12 + em - (sy * 12 + sm) + 1) / 12
+
+
+def _between(result: dict) -> str | None:
+    """"1981 to 2025": the first and last years of the fit (else of the period); None if unreadable."""
+    p = result.get("fit") if isinstance(result.get("fit"), dict) else result.get("period")
+    try:
+        return f"{int(str(p['start'])[:4])} to {int(str(p['end'])[:4])}"
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _window(w) -> str | None:
+    """world.window as the fact prints it, "1993 to April 2025": a start in January or an end in December is the year
+    alone; None if unreadable."""
+    try:
+        (sy, sm), (ey, em) = ((str(x)[:4], int(str(x)[5:7])) for x in (w["start"], w["end"]))
+        names = calendar.month_name[sm], calendar.month_name[em]
+    except (KeyError, TypeError, ValueError, IndexError):
+        return None
+    return f"{sy if sm == 1 else f'{names[0]} {sy}'} to {ey if em == 12 else f'{names[1]} {ey}'}"
 
 
 def _future_link(place) -> dict | None:
@@ -145,70 +110,17 @@ def _future_link(place) -> dict | None:
     return None
 
 
-def _span(values, cuts) -> tuple[str, str]:
-    """(lowest, highest) level over the values, each judged as shown against (moderate, high) cuts."""
-    got = [LEVELS[sum(v >= Decimal(repr(c)) for c in cuts)] for v in values]
-    return min(got, key=LEVELS.index), max(got, key=LEVELS.index)
-
-
-def _label(low: str, high: str) -> str:
-    """"Moderate risk", or for a 95% range across a threshold both levels: "Moderate to high risk". A range over
-    every level reads as one idea (owner's choice, contract v2): "Risk between low and high (wide range)"."""
-    if (low, high) == ("low", "high"):
-        return "Risk between low and high (wide range)"
-    return LABEL[low] if low == high else f"{low.capitalize()} to {high} risk"
-
-
-def _since(period, window) -> str | None:
-    """The world window's first year when it starts in a later year than the record (sea level: 1993), else None.
-    ponytail: end years not compared; a world snapshot ending a year before the record still reads "Since 1993"."""
-    try:
-        ws, ps = int(str(window["start"])[:4]), int(str(period["start"])[:4])
-    except (KeyError, TypeError, ValueError):
-        return None
-    return str(ws) if ws > ps else None
-
-
-def _risk(var: str, verdict: str, slopes: tuple, mean: Decimal, ratios: tuple,
-          why_none, since: str | None = None) -> tuple[str | None, str | None, str, str]:
-    """(lowest risk, highest risk, why, recommendation key) for a clear rising or falling verdict; both risks None
-    when the level needs a world figure that isn't there (NO_COMPARE). slopes is
-    (slope, low, high) per decade; ratios is (ratio, ratio_low, ratio_high), the ends None when not given. A 95% range
-    across a threshold gives both levels; the recommendation is the lower level's. since: the world window's first
-    year when it is later than the record's (climate review L6), so `why` names the years its ratio is from."""
-    up = verdict == "rising"
-    slope = slopes[0]
-    if var in FASTER:
-        ratio = ratios[0]
-        if not up:
-            return "low", "low", HARMLESS[var], "low"
-        if ratio is None:  # no like-for-like world figure: no level, and advice that needs none (QA B3)
-            return None, None, why_none if isinstance(why_none, str) and why_none else NO_WORLD, "no_world"
-        low, high = _span([r for r in ratios if r is not None], (THRESHOLDS["moderate"], THRESHOLDS["high"]))
-        how = (f"about {ratio:f} times as fast as" if ratio > Decimal("1.1")
-               else "about as fast as" if ratio >= Decimal("0.9") else "more slowly than")
-        why = (f"Since {since}, {SINCE[var]} {how} {THAN[var]}." if since
-               else f"{FASTER[var]} {how} {THAN[var]} over the same years.")
-        return low, high, why, low
-    if var == "water_storage":
-        if up:
-            return "low", "low", HARMLESS[var], "low"
-        fall = sig2(abs(slope) / 10)  # cm a year
-        risk = "high" if fall >= 1 else "moderate" if fall >= Decimal("0.5") else "low"
-        return risk, risk, f"Water stored in this region is falling by about {fall:f} cm a year.", risk
-    # precip: both directions count, as a share of this place's 1995-2014 average rainfall (mean > 0, checked by
-    # caller), the level from the share and from both ends of its 95% range
-    share, *ends = (sig2(abs(v) / mean * 100) for v in slopes)
-    low, high = _span([share, *ends], RAIN_THRESHOLDS)
-    way = "increasing" if up else "decreasing"
-    why = f"Rain here has been {way} by about {share:f}% of its usual amount every 10 years."
-    return low, high, why, f"{low}_{'wetter' if up else 'drier'}"
+def _look_next(var, source) -> list[dict]:
+    """Where to look next, in order. A CO-OPS gauge is a US gauge, so sea level there gets the FEMA flood maps first.
+    The result's place carries no country (name, lat and lon only), and the rough US boxes above also take in
+    Vancouver, Toronto and Montreal, so they don't decide it."""
+    us = var == "sea_level" and isinstance(source, dict) and source.get("id") == "coops"
+    return [{"label": a, "url": b} for a, b in ((FEMA,) if us else ()) + LOOK_NEXT.get(var, ())]
 
 
 def guidance_for(result: dict, mean: float | None = None) -> dict:
     """TrendResult dict (+ its 1995-2014 baseline value, used for precip) -> guidance dict. Pure: no network, no clock.
-    ratio and reference come from result["world"] (null unless world.available). Hottest day of the month has no risk
-    level: risk, risk_label, why and recommendation are null, and the verdict alone answers."""
+    ratio and reference come from result["world"] (null unless world.available)."""
     if not isinstance(result, dict):
         result = {}
     var = result.get("variable")
@@ -217,47 +129,53 @@ def guidance_for(result: dict, mean: float | None = None) -> dict:
     world = result.get("world") if isinstance(result.get("world"), dict) else {}
     shown = world.get("available") is True
     ratios = tuple(_dec(world.get(k)) if shown else None for k in ("ratio", "ratio_low", "ratio_high"))
-    ratio = ratios[0]
     src = world.get("source") if isinstance(world.get("source"), dict) else {}
     projected = isinstance(result.get("projection"), dict) and result["projection"].get("available") is True
-    g = {"risk": "unknown", "risk_label": LABEL["unknown"], "why": "",
-         "ratio": float(ratio) if ratio is not None else None,
+    g = {"fact": "",
+         "ratio": float(ratios[0]) if ratios[0] is not None else None,
          "reference": {"text": world.get("text"), "source": {"name": src.get("name"), "url": src.get("record_url")}}
          if shown else None,
-         "rate": None, "display": {"unit": unit, "factor": float(Decimal(factor))}, "recommendation": "",
+         "rate": None, "display": {"unit": unit, "factor": float(Decimal(factor))},
+         "look_next": _look_next(var, result.get("source")),
          "future_link": _future_link(result.get("place")) if var == "sea_level" else None,
          "disclaimer": DISCLAIMER_PROJECTION if projected else DISCLAIMER}
-    _rules(g, result, var, Decimal(factor), _dec(mean), ratios, world.get("why_none"),
-           _since(result.get("period"), world.get("window")))
-    if var == "air_temp_max":
-        g.update(risk=None, risk_label=None, why=None, recommendation=None)
+    g["fact"] = _rules(g, result, var, Decimal(factor), _dec(mean), world, ratios)
     return g
 
 
-def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratios, why_none, since=None) -> None:
+def _headline(result: dict, var) -> tuple[str | None, str | None]:
+    """(rate, range) from headline_rate for the fact: the rate without its sign (the verb gives the direction), the
+    range as range_text. Rainfall's rate reads "5.5% of the usual yearly rain every 10 years" and its range drops the
+    per ("+0.4 to +10.7%"), which the rate's words already say. None where headline_rate has no such text."""
+    hr = result.get("headline_rate") if isinstance(result.get("headline_rate"), dict) else {}
+    text, rng, per = (hr.get(k) if isinstance(hr.get(k), str) else None for k in ("text", "range_text", "per"))
+    if var == "precip" and per:
+        text = f"{text.removesuffix(per).strip()} {RAIN}" if text and text.endswith(per) else text
+        rng = rng.removesuffix(per).strip() if rng and rng.endswith(per) else rng
+    return (text.lstrip("+−") if text else None), rng
+
+
+def _rules(g: dict, result: dict, var, factor: Decimal, mean, world: dict, ratios: tuple) -> str:
+    """Fills g["rate"] and returns the fact: one sentence from the numbers already in headline_rate, world, fit and
+    record, ending with the years and the 95% range in brackets."""
     verdict = result.get("verdict")
     slope, lo, hi = (_dec(result.get(k)) for k in ("slope_per_decade", "ci_low", "ci_high"))
     years = _years(result.get("period"))
+    span = _between(result)
+    when = f" ({span})" if span else ""
     if (var is None or result.get("units") != UNITS[var] or None in (slope, lo, hi) or years is None
             or verdict not in ("rising", "falling", "no_clear_change")
-            or (var == "precip" and verdict != "no_clear_change" and not (mean and mean > 0))):
-        g["why"] = "There is no guidance rule for this kind of record."
-        g["recommendation"] = NO_RULE
-        return
-    if years < (least := MIN_YEARS.get(var, MIN_YEARS_OTHER)):
-        g["why"] = f"The record here covers fewer than {least} years."
-        g["recommendation"] = SHORT
-        return
-    if verdict == "no_clear_change":  # not evidence of low risk: no level, only the label
-        if var in RECOMMEND:
-            g.update(risk=None, risk_label=NO_CLEAR, why="The record here shows no clear change.",
-                     recommendation=RECOMMEND[var]["low"])
-        return
+            or (var == "precip" and verdict != "no_clear_change" and not (mean and mean > 0))
+            or years < MIN_YEARS.get(var, MIN_YEARS_OTHER)):
+        return f"{NOT_ENOUGH}{when}."
+    if verdict == "no_clear_change":  # the whole range_text (var None: no rain words before it say what it is in)
+        full = _headline(result, None)[1]
+        return f"No clear change ({span}; 95% range {full})." if span and full else f"No clear change{when}."
 
     unit, per_unit, per = RATE.get(var, (g["display"]["unit"], factor, "every 10 years"))
     rate = sig2(slope * Decimal(per_unit)) + 0
     g["rate"] = {"value": float(rate), "unit": unit, "text": f"{signed(rate)} {unit}", "per": per, "note": None}
-    if var == "precip":  # the big number is the share (as in `why`); the mm a year (as in meaning) goes in the note
+    if var == "precip":  # the big number is the share; the mm a year (as in meaning) goes in the note
         down = verdict == "falling"
         share = sig2(abs(slope) / mean * 100) * (-1 if down else 1)
         mm = Decimal(about(abs(slope * factor)))
@@ -265,10 +183,21 @@ def _rules(g: dict, result: dict, var, factor: Decimal, mean, ratios, why_none, 
         g["rate"] = {"value": float(share), "unit": "%", "text": f"{signed(share)}%",
                      "per": f"{more} rain every 10 years",
                      "note": {"value": float(-mm if down else mm), "unit": "mm", "text": f"about {mm:f} mm {more} a year"}}
-    if var not in RECOMMEND:  # hottest day of the month: no risk level (D5)
-        return
-    if var == "precip" and why_none == SCARCE:  # a % of a tiny normal is no guide: no level (trend.py decides)
-        g.update(risk=None, risk_label=None, why=SCARCE, recommendation=None)
-        return
-    low, high, why, key = _risk(var, verdict, (slope, lo, hi), mean, ratios, why_none, since)
-    g.update(risk=low, risk_label=_label(low, high) if low else NO_COMPARE, why=why, recommendation=RECOMMEND[var][key])
+
+    up = verdict == "rising"
+    ratio, r_lo, r_hi = ratios
+    window = _window(world.get("window")) or span
+    # With a world ratio whose sign agrees with the verdict (the ratio is over the world's months, the verdict over
+    # the whole record; they can differ): the comparison. A zero ratio says nothing: the rate.
+    if var in THAN and ratio and (ratio > 0) == up:
+        if up:
+            rng = f"; 95% range {_num(r_lo)} to {_num(r_hi)} times" if None not in (r_lo, r_hi) else ""
+            return f"Rising about {_num(ratio)} times as fast as {THAN[var]} ({window}{rng})."
+        wr, wu = _dec(world.get("world_rate")), world.get("unit")
+        if wr is not None and isinstance(wu, str):  # a negative ratio: falling here while the world rose (Juneau)
+            return f"Falling here, while {THAN[var]} rose {_num(sig2(wr))} {wu} over the same years ({window})."
+    text, rng = _headline(result, var)
+    word = "Rising" if up else "Falling"
+    if not text:
+        return f"{word}{when}."
+    return f"{word} about {text} ({span}; 95% range {rng})." if span and rng else f"{word} about {text}{when}."
