@@ -193,7 +193,7 @@ From the IPCC AR6 Interactive Atlas's CMIP6 monthly data (`earthtrends/data/cmip
     "more_than_today": {"value": 1.1, "text": "about 1.1 °C more than today", "approximate": true}},
   "caveat": "A 1° grid cell is about 100 km wide, so hills or a coast nearby can make the change here differ.",
   "models_note": "These are the climate models' raw results. The IPCC's assessed warming, which also uses past observations, is a little lower for the world as a whole.",
-  "baseline_record": {"id": "power", "name": "NASA POWER"},
+  "baseline_record": {"id": "power", "name": "NASA POWER (MERRA-2)"},
   "why": null
 }
 ```
