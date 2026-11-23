@@ -442,8 +442,7 @@ def test_no_branch_gives_a_risk_level_or_advice(monkeypatch):
               "error": None} for i, r in enumerate(full)]
     text = agent_guidance.block(calls)
     assert all(r["guidance"]["fact"] in text for r in full) and "Where to look next: " in text
-    assert text.endswith((f"{DISCLAIMER_PROJECTION}\n{agent_guidance.SOURCES_LINE}",  # PR6: the sources pages line
-                          f"{DISCLAIMER}\n{agent_guidance.SOURCES_LINE}"))
+    assert text.endswith(DISCLAIMER_PROJECTION) or text.endswith(DISCLAIMER)
     assert not ADVICE.search(text), text
     # the official-resources sentence the agent adds after it: every string in resources.py, and each row chosen
     rows = {resources.sentence([r]) for r in full}

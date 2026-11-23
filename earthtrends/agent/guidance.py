@@ -77,10 +77,11 @@ def picked(calls: list[dict]) -> list[tuple[tuple, dict]]:
     return out
 
 
-def block(calls: list[dict], simple: bool = False) -> str:
+def block(calls: list[dict], simple: bool = False, sources: bool = False) -> str:
     """The guidance text for this turn's results; "" when none has a fact. `simple` (a request for simple words,
     design 16 §4): without the facts (they carry the 95% range and the world ratio). No projection line: the plain
-    lines, first in the answer, carry the projection (design 16 §4.3). SOURCES_LINE closes it, on its own line."""
+    lines, first in the answer, carry the projection (design 16 §4.3). `sources`: SOURCES_LINE closes it, on its own
+    line (the loop decides when: the first answer or a question about sources, never in voice)."""
     rs = picked(calls)
     if not rs:
         return ""
@@ -112,7 +113,7 @@ def block(calls: list[dict], simple: bool = False) -> str:
     tail = ([f"Where to look next: {'; '.join(lab + url for lab, url in look.items())}."] if look else [])
     tail += [f"{lab} ({url})." for url, lab in links.items()]
     return "\n".join(filter(None, (" ".join(parts + tail + ([_end(disclaimer)] if disclaimer else [])),
-                                    SOURCES_LINE)))
+                                    SOURCES_LINE if sources else "")))
 
 
 RECORDS_DISAGREE = "Our records here disagree about the past."  # design 16 §4: the past clause when verdicts differ
@@ -154,12 +155,13 @@ def strip(text: str) -> str:
     return _MARK.sub("", text)
 
 
-def fill(text: str, calls: list[dict], simple: bool = False) -> str:
+def fill(text: str, calls: list[dict], simple: bool = False, sources: bool = False, alone: bool = False) -> str:
     """The first marker becomes the guidance (a space before it unless it starts a line); other markers go. No marker:
     the guidance goes in front of the official-resources marker if there is one, else at the end as its own
-    paragraph. No guidance: markers removed, text otherwise unchanged. Text that follows the guidance on its last
-    line (the official resources) starts a new line, so the sources pages line stands alone."""
-    add = block(calls, simple)
+    paragraph. No guidance: markers removed, text otherwise unchanged, or with `alone` the sources pages line by itself
+    in the guidance's place (a question about sources that looked nothing up). Text that follows the guidance on its
+    last line (the official resources) starts a new line, so the sources pages line stands alone."""
+    add = block(calls, simple, sources) or (SOURCES_LINE if alone else "")
     if not _MARK.search(text):
         if not add:
             return text
