@@ -938,7 +938,9 @@ assert.deepStrictEqual(cmTable(cpx), { caption: 'Intermediate emissions (SSP2-4.
 assert.deepStrictEqual(cmTable(ccx).rows.map(function (r) { return r.cells[4]; }), ['66%, disagree', '75%, disagree', '91%']);
 assert.strictEqual(cmTable(ccx).cols[4], 'Models agreeing on wetter or drier');
 // agreement at 80% or more everywhere: no "disagree" sentence anywhere (the caveat and step 7's rule are not about this place)
-var CA = copy(CC); CA.trend.projection.scenarios.forEach(function (x) { x.agree = [0.9, 0.85, 0.95]; x.disagree = [false, false, false]; }); CA.trend.projection.readouts.by_2050.disagree = false;
+var CA = copy(CC); CA.trend.projection.scenarios.forEach(function (x) { x.agree = [0.9, 0.85, 0.95]; x.disagree = [false, false, false];
+  x.plain[1] = x.plain[1].replace('The models disagree on wetter or drier: 8 in 10 of them put it', '8 in 10 climate models put it') + ' That shows how much the models agree, not how likely it is.'; }); // the server's agree form (design 16 §1)
+CA.trend.projection.readouts.by_2050.disagree = false;
 all(CA, pc2(CA, 'Chennai')).forEach(function (x) { assert.ok(!/disagree/i.test(x) || /Climate models disagree more about rain/.test(x) || /Under 80%, we say they disagree\.$/.test(x) || /^# Bhoomi: /.test(x), x); }); // the CSV: its column name
 assert.ok(!/disagree/.test(steps(CA.trend, CA.series, pc2(CA, 'Chennai'))[6].short) && cmTable(futOf(CA.trend, null, false, TODAY)).rows.every(function (r) { return !/disagree/.test(r.cells[4]); }));
 // §4 step 7 "What comes next": the delta method, the cell, the models, the range's name, the caveat, the working

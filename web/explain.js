@@ -230,7 +230,18 @@
     var next = (Array.isArray(g.look_next) ? g.look_next : []).filter(function (x) { return x && str(x.label); })
       .map(function (x) { var u = https(x.url); return { text: u ? x.label + NB + '↗' : x.label, href: u }; });
     return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, fact: factOf(t, imp),
-      world: cardWorld(t, imp), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f, next: next, disc: str(g.disclaimer) };
+      world: cardWorld(t, imp), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f, plain: plainOf(fx, imp), next: next, disc: str(g.disclaimer) };
+  }
+  // "In plain words" (design 16 §3): the chosen scenario's lines as the server wrote them, its source, code and tail. Only
+  // projection fields, so the box reads the same whichever record is main; null without S.plain (no box: R3 stays).
+  function plainOf(fx, imp) {
+    var S = fx && fx.S, lines = S && Array.isArray(S.plain) ? S.plain.filter(function (x) { return str(x); }) : [];
+    if (!lines.length) return null;
+    var n = (S.models || [])[1], ct = str((fx.p.check || {}).text);
+    return { label: imp ? 'In plain words (in metric)' : 'In plain words', lines: lines, href: https((fx.p.source || {}).record_url),
+      src: fx.cm ? 'IPCC AR6 Atlas, CMIP6' : 'IPCC AR6 sea level projections', code: fx.code,
+      tail: fx.cm ? (isNum(n) ? ', ' + n + ' climate models' : '')
+        : ', ' + (fx.low ? 'low' : 'medium') + ' confidence' + (fx.regional ? ' · Regional estimate: local sinking may differ.' : '') + (ct ? ' · ' + ct : '') };
   }
   /* Records for this place (web/design/12-two-sources.md): the main record and the others side by side. Agreement,
      reasons and drift are the server's words (comparisons, disagree, drift); the page lays them out, never works them out. */
