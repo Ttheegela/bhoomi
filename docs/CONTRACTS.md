@@ -186,16 +186,19 @@ Tarun's decision: "Remove both, state facts". Bhoomi is not a house-buying or in
 ```
 
 - **Removed:** `risk`, `risk_label`, `why`, `recommendation`, and `world.thresholds`. No other key replaces them.
-- `fact`: one plain sentence saying what the records show. It uses only numbers already in `headline_rate`, `world`, `fit` and `record`, so the invented-numbers guard passes. It ends with the years in brackets.
+- `fact`: one plain sentence saying what the records show, with its uncertainty in the same sentence. It uses only numbers already in `headline_rate`, `world`, `fit` and `record`, so the invented-numbers guard passes. It ends with the years and the 95% range in brackets.
+  - The verb gives the direction, so the number after "Rising about" or "Falling about" has no sign. Range ends keep their signs.
   - Rising or falling, with a world ratio:
     - "Rising about {ratio} times as fast as {world.measure} ({window}; 95% range {ratio_low} to {ratio_high} times)."
     - Sea level reads "the world average"; air temperature reads "the average for all land areas".
     - Ratios are shown to 2 significant figures, as `world.ratio` is.
-  - Falling while the world rose (a ratio below 0, e.g. Juneau): "Falling here, while {world.measure} rose {world_rate} {unit} over the same years ({window})."
-  - `world.why_none` set, or `world.available` false: "{Rising|Falling} about {headline_rate.text} ({fit.start year} to {fit.end year})."
-    - Rainfall reads, e.g., "Rising about +5.6% of the usual yearly rain every 10 years (1981 to 2025)."
-  - No clear change: "No clear change ({fit.start year} to {fit.end year})."
-  - Hottest day of the month: the verdict sentence, with no world clause.
+  - Falling while the world rose (a ratio below 0, e.g. Juneau): "Falling here, while {world.measure} rose {world_rate} {unit} over the same years ({window})." There is no range: no field holds the local range since 1993.
+  - `world.why_none` set, or `world.available` false, and every measurement with no world figure (rainfall, water storage, hottest day of the month): "{Rising|Falling} about {headline_rate value, unsigned} {unit and per} ({fit.start year} to {fit.end year}; 95% range {headline_rate.range_text})." Examples:
+    - "Rising about 0.94 mm a year (1878 to 2024; 95% range +0.7 to +1.2 mm a year)."
+    - "Rising about 5.5% of the usual yearly rain every 10 years (1981 to 2025; 95% range +0.4 to +10.7%)."
+    - "Falling about 0.25 °C per decade (1981 to 2025; 95% range −0.48 to −0.02 °C per decade)."
+  - No clear change: "No clear change ({fit.start year} to {fit.end year}; 95% range {headline_rate.range_text})."
+- `world.text` states facts only. Rainfall's and water storage's own-place rule sentences ("…is high; 5 to 10% is moderate") are removed, and "It covers total rain, not heavy downpours or floods." moves to `caveats`. The page, the agent and MCP never show a level rule.
 - `look_next`: neutral pointers, in order. A label never says what to do with a property. Every non-null `url` must answer 200 when checked.
   - Sea level, US place or CO-OPS gauge: "Official flood maps (FEMA Flood Map Service Center)" (https://msc.fema.gov/portal/home), then "Your local planning office" (`url` null).
   - Sea level elsewhere: "Your local planning office" only. Add a national agency link only once it is on a reviewed list.
