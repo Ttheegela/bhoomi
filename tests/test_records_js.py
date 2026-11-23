@@ -431,7 +431,8 @@ El.prototype.append = function () { for (var i = 0; i < arguments.length; i++) {
 El.prototype.prepend = function (n) { this.append(n); this.kids.unshift(this.kids.pop()); };
 El.prototype.removeChild = function (n) { var i = this.kids.indexOf(n); if (i >= 0) this.kids.splice(i, 1); if (n && typeof n === 'object') n.parentNode = null; };
 El.prototype.remove = function () { if (this.parentNode) this.parentNode.removeChild(this); };
-El.prototype.after = function (n) { var p = this.parentNode; if (n.parentNode) n.parentNode.removeChild(n); p.kids.splice(p.kids.indexOf(this) + 1, 0, n); n.parentNode = p; };
+El.prototype.after = function () { var p = this.parentNode, ns = Array.prototype.slice.call(arguments);
+  ns.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); n.parentNode = p; }); p.kids.splice.apply(p.kids, [p.kids.indexOf(this) + 1, 0].concat(ns)); };
 El.prototype.replaceWith = function (n) { var p = this.parentNode; if (!p) return; if (n.parentNode) n.parentNode.removeChild(n); p.kids[p.kids.indexOf(this)] = n; n.parentNode = p; this.parentNode = null; };
 El.prototype.contains = function (n) { for (; n; n = n.parentNode) if (n === this) return true; return false; };
 El.prototype.all = function () { var out = []; this.kids.forEach(function (k) { if (k && typeof k === 'object') out = out.concat([k], k.all()); }); return out; };
@@ -648,47 +649,59 @@ ONE_JS = r"""
 window.TDX.show = function () {}; window.TDX.others = function () {}; window.TDX.redraw = function () {};
 function settle() { return new Promise(function (r) { (function w() { setTimeout(function () { if (!flight && !queue.length) r(); else w(); }, 10); })(); }); }
 var MODEL = 'Only one record could be compared here, so this answer rests on a single weather model.';
-var STATION = 'Only one record could be compared here, so this answer rests on a single weather station.';
+var THIN = "This record has few readings in recent years, so it isn't counted when we compare; the other records are compared below.";
+var AGREE = 'Both records agree: rising.';
 function ones() { return ids['rec'].querySelectorAll('.one'); }
-// the one note, right after .verdict, with the server's text as given
-function noteIs(text) {
-  var k = ids['rec'].children, n = ones();
-  assert.strictEqual(n.length, 1, 'notes: ' + n.length);
-  assert.ok(n[0].tagName === 'P' && k[k.indexOf(ids['rec'].querySelector('.verdict')) + 1] === n[0]);
-  assert.deepStrictEqual(n[0].kids, [text]);
+// the notes, in this order, right after .verdict, each with the server's text as given
+function notesAre(texts) {
+  var k = ids['rec'].children, n = ones(), v = k.indexOf(ids['rec'].querySelector('.verdict'));
+  assert.strictEqual(n.length, texts.length, 'notes: ' + n.length);
+  texts.forEach(function (x, i) { assert.ok(n[i].tagName === 'P' && k[v + 1 + i] === n[i]); assert.deepStrictEqual(n[i].kids, [x]); });
 }
 function sel() { return TD.pins().filter(function (p) { return p.selected; })[0]; }
+function heard() { return new Promise(function (r) { setTimeout(function () { r(ids['td-live'].textContent); }, 40); }); } // after announce's 30 ms
 """
 
 SINGLE_TEST = ONE_JS + r"""
-var note = MODEL; // New York's compare answer counts one record; Princeton's counts two
+// New York's compare answer (changed between tries); Princeton's has neither note and no agree line
+var ny = { thin_note: null, single_note: MODEL, disagree: null };
 answer = function (u, others) {
   if (u.pathname === '/api/variables') return { status: 200, body: VARS };
   if (u.pathname === '/api/series') return { status: 200, body: copy(FX.series) };
   var t = copy(FX.trend);
-  return { status: 200, body: others ? Object.assign(t, { single_note: u.searchParams.get('lat') === '40.71' ? note : null })
-    : Object.assign(t, { comparisons: null, comparisons_window: null, disagree: null, drift: null, single_note: null }) };
+  return { status: 200, body: others ? Object.assign(t, u.searchParams.get('lat') === '40.71' ? copy(ny) : { thin_note: null, single_note: null, disagree: null })
+    : Object.assign(t, { comparisons: null, comparisons_window: null, disagree: null, drift: null, thin_note: null, single_note: null }) };
 };
+// "Try the other records again" with a changed answer: the notes go while they load, then come back replaced, never twice
+async function again(next) {
+  ny = next;
+  var p = sel(), k = resKey(curWin, p);
+  compare(curWin, p, k); othLanded(curWin, p, k);
+  assert.strictEqual(ones().length, 0);
+  await settle();
+}
 (async function () {
   docOn.DOMContentLoaded[0]();
-  // the card is drawn first (compare=false: single_note null): no note until the records land
+  // the card is drawn first (compare=false: both notes null): no note until the records land
   await new Promise(function (r) { (function w() { setTimeout(function () { var p = sel(); if (p && p.status === 'ok') r(); else w(); }, 2); })(); });
   assert.ok(sel().cmp === 'loading' && ones().length === 0);
   await settle();
-  noteIs(MODEL);
-  renderRec(); noteIs(MODEL); // a re-render never stacks it
-  // "Try the other records again" with a changed answer: gone while they load, then replaced, never a second one
-  note = STATION;
-  var ny = sel(), k = resKey(curWin, ny);
-  compare(curWin, ny, k); othLanded(curWin, ny, k);
-  assert.strictEqual(ones().length, 0);
-  await settle();
-  noteIs(STATION);
-  // a new place whose records count two: no note; back again: the stored one, once
+  notesAre([MODEL]); // single only
+  assert.strictEqual(await heard(), MODEL); // announced in place of "The other records have loaded."
+  renderRec(); notesAre([MODEL]); // a re-render never stacks it
+  await again({ thin_note: THIN, single_note: MODEL, disagree: null }); // thin and single: thin first
+  notesAre([THIN, MODEL]);
+  assert.strictEqual(await heard(), THIN + ' ' + MODEL);
+  renderRec(); notesAre([THIN, MODEL]);
+  await again({ thin_note: THIN, single_note: null, disagree: { any: false, line: AGREE, say: '', reasons: [] } }); // thin only, two others agree
+  notesAre([THIN]);
+  assert.strictEqual(await heard(), THIN + ' ' + AGREE);
+  // a new place with neither: no note; back again: the stored one, once
   TD.select('40.35,-74.66'); assert.strictEqual(ones().length, 0);
   await settle();
-  assert.ok(sel().cmp === 'ok' && sel().trend.single_note === null && ones().length === 0);
-  TD.select('40.71,-74.01'); noteIs(STATION);
+  assert.ok(sel().cmp === 'ok' && sel().trend.thin_note === null && sel().trend.single_note === null && ones().length === 0);
+  assert.strictEqual(await heard(), 'The other records have loaded.');
+  TD.select('40.71,-74.01'); notesAre([THIN]);
   process.exit(0);
 })().catch(function (e) { console.error(e); process.exit(1); });
 """
@@ -696,9 +709,10 @@ answer = function (u, others) {
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_single_note_under_the_verdict():
-    """Domain review (design 12 §3, §5): the compare answer's single_note is printed verbatim in p.one right after
-    .verdict, when the records land; null gives none; a re-render or "Try again" replaces it, never a second one."""
-    assert ".rec .one { color: var(--ink-2); font-size: 15px; margin: 4px 0 0;" in CSS
+    """Domain review (design 12 §3, §5): the compare answer's thin_note, then single_note, each printed verbatim in a p.one
+    right after .verdict, when the records land; null gives none; a re-render or "Try again" replaces them, never a
+    second copy. The status message reads thin_note, then disagree.line or single_note."""
+    assert ".rec .one { color: var(--ink-2); font-size: 15px; margin: 4px 0 10px;" in CSS  # a note on the verdict, not the start of p.say
     js = APP_DOM + SRC + "\n" + APP + SINGLE_TEST
     env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
     r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env, timeout=60)
@@ -725,7 +739,8 @@ answer = function (u, others) {
   var where = ids['rec'].querySelector('.where');
   assert.strictEqual(where.querySelector('.mnote').kids[0], NOTE);
   assert.ok(where.children.indexOf(where.querySelector('.meta')) < where.children.indexOf(where.querySelector('.mnote')));
-  noteIs(MODEL);
+  notesAre([MODEL]);
+  assert.strictEqual(await heard(), MODEL);
   process.exit(0);
 })().catch(function (e) { console.error(e); process.exit(1); });
 """

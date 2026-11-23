@@ -151,7 +151,7 @@ span.srclink { color: var(--ink-2); }
 .verdict b { font-family: var(--font-head); font-size: 40px; font-weight: 700; line-height: 1.1; }
 .verdict .shape { font-size: 30px; margin-right: 8px; position: relative; top: -3px; }
 .verdict > span { color: var(--ink-2); font-size: 15px; }
-.rec .one { color: var(--ink-2); font-size: 15px; margin: 4px 0 0; max-width: none; } /* single_note (design 12 §5) */
+.rec .one { color: var(--ink-2); font-size: 15px; margin: 4px 0 10px; max-width: none; } /* thin_note, single_note (design 12 §5) */
 .rec .say { font-size: 18px; line-height: 1.45; margin: 0 0 14px; max-width: none; }
 .rec .world { font-size: 15px; color: var(--ink-2); margin: -6px 0 16px; max-width: none; }
 .rec .world a { font-size: 14px; color: var(--ink-2); }
