@@ -112,7 +112,7 @@ def sea_level(series: dict, base: dict, now: dict | None) -> dict:
             "by_2050": {"scenario": DEFAULT, "p50": p50, "low": low, "high": high,
                         "range_kind": scenarios[sd]["range_kind"],
                         "text": f"{_cm(p50)} (likely {_cm(low)[:-3]} to {_cm(high)})"},
-            "more_than_today": None if now is None else _more(_mm(p50 - now["value"]), now["end"])},
+            "more_than_today": more_than_today("sea_level", p50, now)},
         "check": _check(series, base, now, years, scenarios[sd]),
         "caveat": CAVEAT,
         "why": None,
@@ -219,6 +219,22 @@ def _cm(mm: int) -> str:
     return f"{signed(d) if d else '0'} cm"
 
 
+def more_than_today(variable: str, p50, now: dict | None) -> dict | None:
+    """`readouts.more_than_today` for a projected middle value `p50` (in the projection's units) against `now`: sea
+    level in whole mm, air temperature to 2 significant figures. None without `now`, and for rain and the hottest day:
+    one year's rain or hottest days swing more than the change (PR3 QA: Delhi's hottest day read "about 2.9 °C more
+    than today" after a cool year). MCP get_projection words its other years and scenarios with it too."""
+    if now is None or p50 is None:
+        return None
+    if variable == "sea_level":
+        return _more(_mm(p50 - now["value"]), now["end"])
+    if variable != "air_temp":
+        return None
+    diff = _dec(p50) - _dec(now["value"])
+    diff = sig2(diff) if q(diff, "0.01") else Decimal(0)  # p50 has 2 decimals: closer than that is the same
+    return _more(float(diff), now["end"], f"{abs(diff):f} °C")
+
+
 def _more(diff, end: str, size: str | None = None) -> dict:
     """`diff`: the projection minus `now` (sea level: whole mm); `size`: its size as text, no sign (default: sea level's
     cm). `end`: now's last month, "YYYY-MM". The page's old test (web/explain.js): a record that ended more than
@@ -250,13 +266,7 @@ def cmip6(series: dict, base: dict, now: dict | None) -> dict:
                  for k, s in a["scenarios"].items()]
     d = next(s for s in scenarios if s["id"] == CMIP6_DEFAULT)
     p50, low, high = d["p50"][w], d["p10"][w], d["p90"][w]
-    more = None
-    # air temperature only: one year's rain or hottest days swing more than the change (PR3 QA: Delhi's hottest day
-    # read "about 2.9 °C more than today" after a cool year)
-    if var == "air_temp" and now is not None:
-        diff = _dec(p50) - _dec(now["value"])
-        diff = sig2(diff) if q(diff, "0.01") else Decimal(0)  # p50 has 2 decimals: closer than that is the same
-        more = _more(float(diff), now["end"], f"{abs(diff):f} °C")
+    more = more_than_today(var, p50, now)
     return {
         "available": True,
         "kind": "cmip6_atlas",

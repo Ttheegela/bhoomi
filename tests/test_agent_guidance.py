@@ -47,8 +47,6 @@ def test_block_is_the_tools_strings_word_for_word():
     for s in (GUIDE["fact"], GUIDE["disclaimer"], FEMA["label"], FEMA["url"], PLANNING["label"]):
         assert s in EXPECT
     assert guidance.SOURCES_LINE == SOURCES and loop.stated_numbers(SOURCES) == []  # no number: outside every check
-    # the sources pages line, when the loop asks for it, closes the block on its own line
-    assert guidance.block([ok(GI, GI_ARGS)], sources=True) == f"{EXPECT}\n{SOURCES}"
     # simple words: the same block without the fact
     assert guidance.block([ok(GI, GI_ARGS)], simple=True) == EXPECT.replace(f"Sea level: {FACT} ", "")
     # an old result that still carries a past-trend outlook adds nothing about the future (spec D1)
@@ -78,23 +76,6 @@ def test_fill(text, want):
     assert guidance.fill(text, [ok(GI, GI_ARGS)]) == want
 
 
-@pytest.mark.parametrize("text,want", [
-    # the sources pages line closes the guidance on its own line: what follows it starts a new one
-    ("Rising. [GUIDANCE] [OFFICIAL RESOURCES]", f"Rising. {EXPECT}\n{SOURCES}\n[OFFICIAL RESOURCES]"),
-    ("Rising. [OFFICIAL RESOURCES]", f"Rising.\n\n{EXPECT}\n{SOURCES}\n[OFFICIAL RESOURCES]"),
-    ("A. [GUIDANCE] B.", f"A. {EXPECT}\n{SOURCES}\nB."),
-])
-def test_fill_with_the_sources_line(text, want):
-    assert guidance.fill(text, [ok(GI, GI_ARGS)], sources=True) == want
-
-
-def test_sources_line_alone_when_nothing_was_looked_up():
-    """A question about sources with no lookup has no guidance: `alone` puts the line where the guidance would go."""
-    said = "Our numbers come from NASA and NOAA records."
-    assert guidance.fill(said, [], alone=True) == f"{said}\n\n{SOURCES}"
-    assert guidance.fill(f"{said} [GUIDANCE]", [], alone=True) == f"{said} {SOURCES}"
-    assert guidance.fill(said, [], sources=True) == said  # the first-answer rule alone adds nothing without guidance
-    assert guidance.fill(f"Rising. [GUIDANCE]", [ok(GI, GI_ARGS)], alone=True) == f"Rising. {EXPECT}"  # guidance wins
 
 
 def test_result_without_guidance_is_unchanged():
@@ -182,10 +163,9 @@ def test_loop_inserts_guidance_outside_the_word_limit(fake, monkeypatch):
     body = " ".join(["word"] * 100) + "."
     fake.script = [step(calls=[call("a", **GI_ARGS)]), step(body + " [GUIDANCE] [OFFICIAL RESOURCES]")]
     r = loop.ask("Should I invest in a house in Grand Isle?", model="fake:m")
-    # the missing source link goes in front of the markers: the guidance, ending with the sources pages line (a first
-    # answer), and the official resources come after the model's text and its sources
-    assert r["answer"] == (f"{body} Source: NOAA CO-OPS tide gauges, {SRC['url']}. {EXPECT}\n{SOURCES}\n"
-                           f"{resources.US_COAST}")
+    # the missing source link goes in front of the markers; the guidance and the official resources follow, and
+    # the sources pages line (a first answer) is the very last line
+    assert r["answer"] == f"{body} Source: NOAA CO-OPS tide gauges, {SRC['url']}. {EXPECT} {resources.US_COAST}\n{SOURCES}"
     assert fake.script == []  # 100 words + code's text: no length retry
     # FEMA's flood maps once, in "Where to look next"; the official-resources sentence doesn't repeat them
     assert r["answer"].count("msc.fema.gov") == 1 and r["answer"].index("msc.fema.gov") < r["answer"].index(resources.US_COAST)

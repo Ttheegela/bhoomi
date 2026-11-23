@@ -106,7 +106,7 @@ def test_era5_card_open_meteo_part():
     text, hrefs = card("era5")
     src = era5.SOURCE
     assert f"From Open-Meteo, named in answers: {src['name']} · ID: {era5.DATASET_ID} ·" in text
-    assert f"If the answer names Open-Meteo: {src['licence']} (Open-Meteo's API data)." in text
+    assert f"If the answer names Open-Meteo: {src['licence']}." in text  # the code's words only
     assert "Open-Meteo's free service is for non-commercial use only." in text  # Open-Meteo's terms, its own line
     assert f"If the answer names Open-Meteo, also: {src['credit']}" in text and src["url"] in hrefs
     assert f"Credit to give {upstream.COPERNICUS}" in text

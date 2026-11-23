@@ -48,8 +48,10 @@ FIGURES_ASK = ("Your first answer stated figures: {numbers}. This is a simple-wo
 # first answer of a conversation does. "resources" is no source; "this data comes from" is one.
 SOURCES_Q = re.compile(r"\bsources?\b|\blicen[cs]|\bwhere do(?:es)? (?:the|this|that|your|these|you get) data\b"
                        r"|\bdata comes? from\b|\bwhere do you get\b|\bcite\b|\bcitations?\b|\bcredits?\b", re.I)
-SIMPLE = re.compile(r"\b(?:simple|simply|plain words|plain english|everyday words|like i'm 10|for a child"
-                    r"|what does that mean for me)\b", re.I)
+SIMPLE = re.compile(r"\b(?:in simple words|explain (?:it |that |this )?simply|say it simply|simple terms|plain words"
+                    r"|plain english|everyday words|like i'm 10|for a child|what does that mean for me)\b", re.I)
+SIMPLE_LOOKUP = ("\n\nThis asks for simple words about the earlier answer: call detect_trend again for its place and "
+                 "measurement, so every number comes from this turn.")
 NO_NUMBERS = ("I can only give numbers that come from a data lookup, and I did not look anything up for that. "
               "Ask about a place and a measurement and I will check.")
 NO_TOOL = " Do not call a tool: these are the tool results you already got:\n"
@@ -311,22 +313,54 @@ def compose(text: str, calls: list[dict], agree: bool = True) -> str:
             ins += " " if right and not right[0].isspace() else ""
         left += ins
     out = left + right
-    # Every source with a result names its link: any still missing goes at the end, or in front of the first
-    # [GUIDANCE] or [OFFICIAL RESOURCES] marker, so what code puts there (ending with the sources pages line) stays last.
-    srcs = {}
+    out = add_links(out, record_links(calls))
+    out = DEG_C.sub("\u00b0C", out)  # the tool spells the unit "degC"; the reader sees "°C", as on the page
+    return NEG_ZERO.sub(r"\1", out)  # "-0.00" is a zero: no sign
+
+
+def record_links(calls: list[dict]) -> list[tuple[str, str]]:
+    """(name, url) of each record behind this turn's results, once each (its name before any ",")."""
+    seen: dict = {}
     for c in ok_calls(calls):
         src = c["result"].get("source") or {}
-        srcs.setdefault(src.get("id"), src)
-    missing = [f"Source: {s['name'].split(',')[0].strip()}, {s['url']}." for s in srcs.values()
-               if _host(s.get("url")) not in out.lower() and s.get("name")]  # no URL: "" is always "in"
+        if src.get("name") and src.get("url"):
+            seen.setdefault(src.get("id"), (src["name"].split(",")[0].strip(), src["url"]))
+    return list(seen.values())
+
+
+def projection_links(calls: list[dict]) -> list[tuple[str, str]]:
+    """(name, url) of each expert projection's dataset behind this turn's results, once each: its full name and its
+    record_url. The plain lines that open the answer give its numbers, so it is named like a record."""
+    seen: dict = {}
+    for c in ok_calls(calls):
+        p = c["result"].get("projection") or {}
+        ps = (p.get("source") or {}) if p.get("available") else {}
+        if ps.get("name") and ps.get("record_url"):
+            seen.setdefault(ps["name"], (ps["name"], ps["record_url"]))
+    return list(seen.values())
+
+
+def add_links(out: str, links: list[tuple[str, str]]) -> str:
+    """Every source with a result names its link ("every result names its data source"): each one the text lacks goes
+    at the end, or in front of the first [GUIDANCE] or [OFFICIAL RESOURCES] marker, so code's text there stays last."""
+    missing = [f"Source: {name}, {url}." for name, url in links if _host(url) not in out.lower()]
     if missing:
         mark = min(filter(None, (guidance._MARK.search(out), resources._MARK.search(out))), key=re.Match.start,
                    default=None)
         body = out[:mark.start()].rstrip() if mark else out.rstrip()
         rest = " " + out[mark.start():].lstrip() if mark else out[len(body):]
         out = body + (" " if body else "") + " ".join(missing) + rest
-    out = DEG_C.sub("\u00b0C", out)  # the tool spells the unit "degC"; the reader sees "°C", as on the page
-    return NEG_ZERO.sub(r"\1", out)  # "-0.00" is a zero: no sign
+    return out
+
+
+def without_sources(text: str, calls: list[dict]) -> str:
+    """The text with every web address and each source's name (and the short forms _forms gives) blanked, so a
+    simple-words answer's figures are only the model's own: "(Garner et al. 2021)" names a dataset."""
+    text = re.sub(r"https?://\S+", " ", text)
+    names = {f for name, _ in record_links(calls) + projection_links(calls) for f in _forms(name)}
+    for f in sorted(names, key=len, reverse=True):
+        text = re.sub(re.escape(f), " ", text, flags=re.I)
+    return text
 
 
 def hidden_calls(calls: list[dict]) -> set[int]:
@@ -852,6 +886,10 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                         checked = True  # nothing fetched yet: the failed-check restart, once, tools offered
                         provider.start(system, question, TOOLS, history=history)
                         continue
+                    if simple and history and not calls and not checked and i < MAX_CALLS - 1:
+                        checked = True  # simple words about an earlier answer: look it up again, once (§4)
+                        provider.start(system, question + SIMPLE_LOOKUP, TOOLS, history=history)
+                        continue
                     text = compose(text, calls, agree=not simple)  # before the checks: they hold for what users see
                     long, wrong = words(text) > limit, bool(wrong_periods(text, calls))
                     # No result to take a number from: any number but the fixed phrases is made up.
@@ -859,7 +897,7 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                     # With results: every number must be one of theirs. Period ranges are left to the period check
                     # above, which can retry or fix them. Simple words: the model's own text states no figure at all.
                     invented = ([] if not ok_calls(calls)
-                                else [g + n for g, n in stated_numbers(text)] if simple
+                                else [g + n for g, n in stated_numbers(without_sources(text, calls))] if simple
                                 else invented_numbers(without_periods(text), model_results(calls)))
                     if not (long or wrong or nums or invented):
                         answer = text
@@ -951,15 +989,19 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
             ((compose("", calls, agree=False) or FOUND_HEAD) if simple else found_answer(calls)) if ok_calls(calls)
             else NO_NUMBERS if numbered else GAVE_UP)
         if answer not in (GAVE_UP, NO_NUMBERS):
-            asked = not voice and bool(SOURCES_Q.search(question))
-            first = not voice and not any(m.get("role") == "assistant" for m in history)
-            # the tool's own guidance, word for word; the sources pages line on the first answer or when asked
-            answer = guidance.fill(answer, ok_calls(calls), simple, sources=first or asked, alone=asked)
+            # the projection's dataset and address, when the answer lacks them: code's text, after the checks
+            answer = add_links(answer, projection_links(calls))
+            answer = guidance.fill(answer, ok_calls(calls), simple)  # the tool's own guidance, word for word
             answer = add_examples(answer, calls)
             head = guidance.lead(ok_calls(calls))  # the plain lines first, outside the word count
             answer = f"{head}\n\n{answer}" if head else answer
         # After every check, so it is outside the word limit; on every path, so the marker never reaches the user.
         answer = resources.fill(answer, [c["result"] for c in ok_calls(calls)])
+        # The sources pages line, last of all (design 17 §8): on the first answer that gives guidance, or any answer
+        # to a question about sources; never spoken.
+        first = guidance.picked(ok_calls(calls)) and not any(m.get("role") == "assistant" for m in history)
+        if answer not in (GAVE_UP, NO_NUMBERS) and not voice and (first or SOURCES_Q.search(question)):
+            answer = f"{answer.rstrip()}\n{guidance.SOURCES_LINE}"
     finally:
         trace_id = trace.end(answer)
 

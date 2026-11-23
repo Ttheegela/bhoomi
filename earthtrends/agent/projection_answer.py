@@ -5,9 +5,9 @@ it. Bad input is a ValueError with a plain message (mcp_server turns it into a T
 from decimal import Decimal
 
 from earthtrends.agent import tools
-from earthtrends.stats.guidance import DISCLAIMER_PROJECTION, q, sig2
+from earthtrends.stats.guidance import DISCLAIMER_PROJECTION, sig2
 from earthtrends.stats.plain import BASE, NB, range_text, scenario_lines, spoken
-from earthtrends.stats.projection import _dec, _mm, _more  # the readouts' own "more than today"
+from earthtrends.stats.projection import more_than_today  # the readouts' own "more than today"
 from earthtrends.stats.trend import PROJECTION
 
 YEAR = 2050
@@ -36,9 +36,13 @@ KEYS = ("available", "plain", "variable", "measure", "place", "when", "scenario"
         "model_range", "high_end", "today_level", "details", "disclaimer", "why")
 
 
+def _d(v) -> Decimal:
+    return Decimal(repr(float(v)))
+
+
 def _about(variable: str, x, k: Decimal) -> str:
     """"about 36 cm higher than the 1995 to 2014 average" (x in the projection's units, k to display units)."""
-    s = sig2(_dec(x) * k)
+    s = sig2(_d(x) * k)
     if not s:
         return f"about the same as the {BASE} average"
     return f"about {abs(s):f}{UNIT.get(variable, NB + '°C')} {WORDS[variable][s < 0]} {SINCE}"
@@ -46,7 +50,7 @@ def _about(variable: str, x, k: Decimal) -> str:
 
 def _span(variable: str, lo, hi, k: Decimal) -> str:
     """"between 27 and 46 cm higher than the 1995 to 2014 average", rounded as the plain lines round it."""
-    return f"{range_text(variable, _dec(lo) * k, _dec(hi) * k, UNIT.get(variable, NB + '°C'))} {SINCE}"
+    return f"{range_text(variable, _d(lo) * k, _d(hi) * k, UNIT.get(variable, NB + '°C'))} {SINCE}"
 
 
 def _none(variable: str, measure: str, place: dict, why: str) -> dict:
@@ -62,20 +66,6 @@ def _row(p: dict, scenario: str | None, sea: bool) -> dict:
         raise ValueError(f"Unknown scenario {scenario!r}. Use low, intermediate, high or very high, or one of: "
                          f"{', '.join(x['id'] for x in p['scenarios'])}.")
     return row
-
-
-def _vs_typical(variable: str, p50, now: dict | None) -> str | None:
-    """The projection against today's level, as readouts.more_than_today words it: sea level and air temperature
-    only (one year's rain or hottest days swing more than the change)."""
-    if now is None or p50 is None:
-        return None
-    if variable == "sea_level":
-        return _more(_mm(p50 - now["value"]), now["end"])["text"]
-    if variable != "air_temp":
-        return None
-    diff = _dec(p50) - _dec(now["value"])
-    diff = sig2(diff) if q(diff, "0.01") else Decimal(0)
-    return _more(float(diff), now["end"], f"{abs(diff):f} °C")["text"]
 
 
 def get_projection(variable: str, lat: float, lon: float, scenario: str | None = None, year: int | None = None,
@@ -112,7 +102,9 @@ def get_projection(variable: str, lat: float, lon: float, scenario: str | None =
     if None not in at.values():  # a row with no value at this year has only its one plain line
         if sea:
             typical = {"value": at["p50"], "units": p["units"], "text": _about(variable, at["p50"], k),
-                       "kind": "the experts' middle estimate (50th percentile)"}
+                       "kind": "the experts' middle estimate (50th percentile)",
+                       # plain line 3's "still rising about 8.6 mm a year": the row's own rate at this year
+                       "rate_mm_per_year": row["rate"]["p50"][i]}
             if row["confidence"] == "medium":
                 likely = {"low": at["p17"], "high": at["p83"], "units": p["units"],
                           "text": _span(variable, at["p17"], at["p83"], k),
@@ -151,7 +143,7 @@ def get_projection(variable: str, lat: float, lon: float, scenario: str | None =
         "high_end": high,
         "today_level": None if now is None else {
             "value": now["value"], "units": now["units"], "text": now["text"], "label": now["label"],
-            "compared_with": p["baseline"]["text"], "vs_typical": _vs_typical(variable, at["p50"], now),
+            "compared_with": p["baseline"]["text"], "vs_typical": (more_than_today(variable, at["p50"], now) or {}).get("text"),
             "approximate": True},
         "details": {
             "baseline": {"text": p["baseline"]["text"], "years": p["baseline"]["years"],
