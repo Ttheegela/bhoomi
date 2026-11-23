@@ -62,10 +62,6 @@ NO_MATCH_OTHER = "There is no matching world figure for this measurement."
 RAIN_YEAR_MONTHS = 11  # a calendar year's rainfall total counts with at least this many valid months
 RAIN_MIN_MM = 100  # a 1995-2014 annual normal under this many mm a year: world.why_none is SCARCE (domain review F4)
 SCARCE = "Rain here averages under 100 mm a year, so a small change in millimetres is a large percentage."
-# headline_rate.range_text: a rain end that would read on or across 5% or 10% shows the share to 2 significant figures
-# ("+4.5 to +17%", not "+5 to +17%"). Kept from the old rain levels so the published ranges don't shift.
-# ponytail: a rounding rule with no level behind it now; plain rounding if the owner prefers.
-RAIN_ROUND_AT = (5, 10)
 WIDENED = 1.2  # explain.real.widened: _widen's factor on Var(S) (a variance factor) is at least this, ~10% wider
 NOW_MONTHS, NOW_NEED = 12, 10  # `now`: the latest 12 months, at least 10 of them with a value
 # Caveats by kind of record (domain review F5, F7), so the page, the CSV and the agent carry them.
@@ -376,8 +372,7 @@ def _signed0(d: Decimal) -> str:
 def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict | None:
     """The trend rate in the unit people read, with its 95% range (contract `headline_rate`): value, low and high to
     3 significant figures; text to 2 (rainfall: the share as guidance.rate shows it); both ends of range_text to the
-    same decimals, enough that they differ, except that a rainfall end on or across one of RAIN_ROUND_AT is the share
-    to 2 significant figures (4.51 reads +4.5, not +5). None for rainfall without a 1995-2014 average above zero."""
+    same decimals, enough that they differ. None for rainfall without a 1995-2014 average above zero."""
     rain = var == "precip" and units == UNITS["precip"]
     if rain:
         if not base_value or base_value <= 0:
@@ -393,13 +388,8 @@ def _headline_rate(var: str, units: str, per_decade: tuple, base_value) -> dict 
     while exp > -6 and (lo != hi and _at(lo, exp) == _at(hi, exp) or any(v and not _at(v, exp) for v in (lo, hi))):
         exp -= 1
     ends, mid = [_at(lo, exp), _at(hi, exp)], sig2(v) + 0
-    if rain:  # text is the share guidance.rate shows, off the 4-decimal slope, not the raw one: 0.049496 on 1.0
-        # mm/day is +5.0%, not +4.9%. Each range end too when it would read on or across one of RAIN_ROUND_AT
+    if rain:  # text is the share exactly as guidance.rate works it out, so the two never disagree
         mid = _rain_share(per_decade[0], base_value).copy_sign(v) + 0
-        for i, (shown, raw) in enumerate(zip(ends, per_decade[1:])):
-            share = _rain_share(raw, base_value)
-            if any(abs(shown) == c or (abs(shown) >= c) != (share >= c) for c in RAIN_ROUND_AT):
-                ends[i] = share.copy_sign(shown)
     gap = "" if unit == "%" else " "
     return {"value": float(_sig(v, 3)), "low": float(_sig(lo, 3)), "high": float(_sig(hi, 3)), "unit": unit,
             "per": per, "text": f"{_signed0(mid)}{gap}{unit} {per}",
@@ -440,8 +430,10 @@ def _world(var: str, monthly: bool, used: list, t, xa, source_id=None, verdict: 
     if sum(c >= YEAR_MONTHS for c in per_year.values()) < WORLD_YEARS:
         return {**out, "why_none": cfg["short"]}
     tp = t[pick]
-    # here: Sen's slope and its 95% range from the same _mk_sen call as the trend; the world: Sen's slope
-    local, local_lo, local_hi = (sig2(Decimal(repr(float(v) * cfg["per"]))) for v in _mk_sen(tp, xa[pick], 12)[:3])
+    # here: Sen's slope and its 95% range from the same _mk_sen call as the trend, first rounded as slope_per_decade
+    # is (4 decimals per decade), so with the same months it is headline_rate's number; the world: Sen's slope
+    local, local_lo, local_hi = (sig2(Decimal(repr(round(float(v) * 10, 4) + 0.0)) * cfg["per"] / 10)
+                                 for v in _mk_sen(tp, xa[pick], 12)[:3])
     wv = np.array([world[used[k]] for k in pick])
     glob = sig2(Decimal(repr(float(np.median(_pair_slopes(tp, wv))) * cfg["per"])))
     start, end = used[pick[0]], used[pick[-1]]
