@@ -51,10 +51,12 @@ SOURCES_Q = re.compile(r"\bsources?\b|\blicen[cs]|\bwhere do(?:es)? (?:the|this|
 SIMPLE = re.compile(r"\b(?:" + "|".join(re.escape(p) for p in prompts.SIMPLE_PHRASES) + r")\b", re.I)
 SIMPLE_LOOKUP = ("\n\nThis asks for simple words: call detect_trend again for the place this question is about (the "
                  "earlier answer's unless it names another) and its measurement, so every number comes from this turn.")
-# A question about what a word means ("What does 95% range mean?") needs no lookup, even in simple words; "what does
-# that mean for me" asks about the place, so it still looks up.
-WORD_MEANING = re.compile(r"\bwhat (?:does|do) .{1,60}? mean\b(?! for me)|\bwhat is meant by\b|\bmeaning of\b"
-                          r"|\bdefine\b|\bdefinition\b", re.I)
+# A question about what a word means ("What does 95% range mean?", "What is a tide gauge?") needs no lookup, even in
+# simple words. One that asks about a place still looks up: "... mean for me/my family/Mumbai?" (no "for" after
+# "mean") and "What does the trend in Delhi mean?" (no "in/at/near <word>" in what is asked about).
+WORD_MEANING = re.compile(r"\bwhat (?:does|do) (?:(?!\b(?:in|at|near)\s+\w)[^?.!]){1,60}? mean\b(?!\s+for\b)"
+                          r"|\bwhat(?:'s| is| are) an?\b|\bwhat is meant by\b|\bmeaning of\b|\bdefine\b"
+                          r"|\bdefinition\b", re.I)
 NO_NUMBERS = ("I can only give numbers that come from a data lookup, and I did not look anything up for that. "
               "Ask about a place and a measurement and I will check.")
 NO_TOOL = " Do not call a tool: these are the tool results you already got:\n"
@@ -865,6 +867,7 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
     no_tools = False  # the current attempt was started without tools
     sent_hidden: set[int] = set()  # calls whose result the model got without its numbers
     numbered = False  # an answer stated a number with no data result this turn: never returned
+    restarted = False  # the simple-words restart ran (once); it leaves the check retries as they are
     try:
         for i in range(MAX_CALLS):
             if time.monotonic() - t0 >= BUDGET_S:
@@ -892,12 +895,12 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                         checked = True  # nothing fetched yet: the failed-check restart, once, tools offered
                         provider.start(system, question, TOOLS, history=history)
                         continue
-                    if (simple and history and not calls and not checked and i < MAX_CALLS - 1
-                            and not WORD_MEANING.search(question)):
-                        checked = True  # simple words about an earlier answer: look it up again, once (§4)
-                        first = compose(text, calls, agree=False)
-                        if not stated_numbers(UNDER_001.sub(" ", first)):  # no number, so it may stand as a fallback
-                            kept.append(first)
+                    if (simple and history and not calls and not checked and not restarted and i < MAX_CALLS - 1
+                            and not WORD_MEANING.search(question.replace("\u2019", "'"))):
+                        # Simple words about an earlier answer: look it up again, once (§4). The reply without a
+                        # lookup is dropped, never kept; if the restart brings nothing usable, code answers from
+                        # what it has. The figures, length and cut-off retries still apply after it.
+                        restarted = True
                         provider.start(system, question + SIMPLE_LOOKUP, TOOLS, history=history)
                         continue
                     text = compose(text, calls, agree=not simple)  # before the checks: they hold for what users see

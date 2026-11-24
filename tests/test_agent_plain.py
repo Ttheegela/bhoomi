@@ -432,11 +432,73 @@ def test_what_does_that_mean_for_me_still_looks_up_again(fake, monkeypatch):
     assert fake.starts[1].endswith(loop.SIMPLE_LOOKUP) and len(out["tool_calls"]) == 1
 
 
-def test_the_first_reply_stays_as_a_fallback_after_the_restart(fake, monkeypatch):
+def _restart_then_lookup(fake, monkeypatch, *replies):
+    """A simple-words follow-up: a first reply with no lookup (dropped), the restart's lookup, then `replies`."""
+    monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, **kw: BATTERY)
+    lookup = {"id": "a", "name": "detect_trend", "arguments": args(BATTERY), "arguments_error": None}
     first = "It means the sea near you is going up."
-    fake.script = [step(first), step("")]  # the restart comes back empty
+    fake.script = [step(first), step(calls=[lookup]), *replies]
     out = loop.ask("What does that mean for me?", model="fake:m", history=HISTORY)
-    assert out["answer"] == first and fake.script == []
+    assert fake.starts[1].endswith(loop.SIMPLE_LOOKUP) and first not in out["answer"]
+    return out
+
+
+def test_a_restart_that_brings_nothing_usable_gives_the_code_answer(fake, monkeypatch):
+    """The first reply is never kept: with nothing usable after the restart, code answers from what it has, the plain
+    lines and the source line."""
+    out = _restart_then_lookup(fake, monkeypatch, step(""))
+    assert out["answer"].startswith(f"{BATTERY['meaning']['headline']} {BATTERY['plain'][0]}")
+    assert NOAA in out["answer"] and fake.script == []
+    fake.script = [step("It means the sea near you is going up."), step("")]  # no lookup at all: no answer to give
+    assert loop.ask("What does that mean for me?", model="fake:m", history=HISTORY)["answer"] == loop.GAVE_UP
+
+
+def test_after_the_restart_a_figure_still_gets_its_retry(fake, monkeypatch):
+    out = _restart_then_lookup(fake, monkeypatch, step(f"It rose 99 mm. {SIMPLE_TEXT}"), step(SIMPLE_TEXT))
+    assert loop.FIGURES_ASK.format(numbers="99") in fake.starts[-1] and "99 mm" not in out["answer"]
+
+
+def test_after_the_restart_a_long_reply_still_gets_its_retry(fake, monkeypatch):
+    long = SIMPLE_TEXT + " " + " ".join(["more"] * 40) + "."
+    out = _restart_then_lookup(fake, monkeypatch, step(long), step(SIMPLE_TEXT))
+    assert loop.LONG_ASK.format(limit=loop.SIMPLE_WORDS, target=30) in fake.starts[-1] and "more more" not in out["answer"]
+
+
+def test_after_the_restart_a_cut_off_reply_still_gets_its_retry(fake, monkeypatch):
+    out = _restart_then_lookup(fake, monkeypatch, {**step("This comes from NOAA's"), "stop": "length"}, step(SIMPLE_TEXT))
+    assert loop.RETRY.format(target=30) in fake.starts[-1] and SIMPLE_TEXT in out["answer"]
+
+
+def test_a_p_value_phrase_in_simple_words_is_not_returned(fake, monkeypatch):
+    """The dropped first reply can't come back (the fixed phrase "below 0.001" used to pass its number check)."""
+    said = "The rise is very clear, with a p-value below 0.001."
+    fake.script = [step(said), step("")]
+    out = loop.ask("What does that mean for me?", model="fake:m", history=HISTORY)
+    assert "below 0.001" not in out["answer"] and out["answer"] == loop.GAVE_UP
+
+
+@pytest.mark.parametrize("question,restarts", [
+    # about a place: looked up again
+    ("What does that mean for my family?", True), ("What does this mean for Mumbai?", True),
+    ("What does the trend in Delhi mean?", True), ("What does that mean for me?", True),
+    ("What does this mean for me?", True), ("And Mumbai?", True),
+    # what a word means: no lookup
+    ("What is a tide gauge?", False), ("What is a 95% range?", False), ("What’s a p-value?", False),
+    ("What does 95% range mean?", False), ("What does likely range mean there?", False),
+])
+def test_which_simple_words_follow_ups_look_up_again(fake, monkeypatch, question, restarts):
+    fake.script = [step("Here is what that means."), step("Here is what that means.")]
+    loop.ask(f"{question} Explain in simple words.", model="fake:m", history=HISTORY)
+    assert len(fake.starts) == (2 if restarts else 1)
+    assert bool(loop.WORD_MEANING.search(question.replace("\u2019", "'"))) is not restarts
+
+
+def test_what_does_this_mean_for_me_turns_on_simple_words_and_looks_up_again(fake, monkeypatch):
+    assert loop.SIMPLE.search("What does this mean for me?") and loop.SIMPLE.search("What does it mean for me?")
+    assert loop.SIMPLE.search("Can you explain that simply?") and loop.SIMPLE.search("Explain this simply.")
+    fake.script = [step("Here is what that means."), step("Here is what that means.")]
+    loop.ask("What does this mean for me?", model="fake:m", history=HISTORY)
+    assert len(fake.starts) == 2 and fake.starts[1].endswith(loop.SIMPLE_LOOKUP)
 
 
 def test_the_restart_asks_for_the_place_the_question_names(fake, monkeypatch):

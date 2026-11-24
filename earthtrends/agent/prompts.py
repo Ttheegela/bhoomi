@@ -3,8 +3,10 @@ import json
 
 # A request for simple words (design 16 §4): the one list. The loop detects these phrases (loop.SIMPLE) and the prompt
 # names the same ones. Voice forwards every question with "Explain in simple words."
-SIMPLE_PHRASES = ("simple words", "simple terms", "explain simply", "explain it simply", "say it simply", "plain words",
-                  "plain English", "everyday words", "like I'm 10", "for a child", "what does that mean for me")
+SIMPLE_PHRASES = ("simple words", "simple terms", "explain simply", "explain it simply", "explain that simply",
+                  "explain this simply", "say it simply", "plain words", "plain English", "everyday words",
+                  "like I'm 10", "for a child", "what does that mean for me", "what does it mean for me",
+                  "what does this mean for me")
 
 SYSTEM = """You are Bhoomi. You check public NASA and NOAA records to tell people whether something is really \
 changing at a place. You help school students and the public answer "is this really changing here?" \
