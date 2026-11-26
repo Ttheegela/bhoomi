@@ -484,6 +484,9 @@ def test_a_p_value_phrase_in_simple_words_is_not_returned(fake, monkeypatch):
     ("What does this mean for me?", True), ("And Mumbai?", True),
     # about the earlier answer: looked up again
     ("What does that mean?", True), ("What does it mean?", True), ("What does this mean?", True),
+    ("What does it all mean?", True), ("What does that all mean?", True), ("What does it really mean?", True),
+    ("What does that actually mean?", True), ("What does that mean in Mumbai?", True),
+    ("What does it mean here?", True),
     # what a word means: no lookup
     ("What is a tide gauge?", False), ("What is a 95% range?", False), ("What’s a p-value?", False),
     ("What does 95% range mean?", False), ("What does likely range mean there?", False),

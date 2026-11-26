@@ -55,7 +55,7 @@ SIMPLE_LOOKUP = ("\n\nThis asks for simple words: call detect_trend again for th
 # simple words. One that asks about the earlier answer or a place still looks up: "What does that/this/it mean?",
 # "... mean for me/my family/Mumbai?" (no "for" after "mean") and "What does the trend in Delhi mean?" (no
 # "in/at/near <word>" in what is asked about).
-WORD_MEANING = re.compile(r"\bwhat (?:does|do) (?!(?:that|this|it)\s+mean\b)"
+WORD_MEANING = re.compile(r"\bwhat (?:does|do) (?!(?:that|this|it)\s+(?:all\s+|really\s+|actually\s+)?mean\b)"
                           r"(?:(?!\b(?:in|at|near)\s+\w)[^?.!]){1,60}? mean\b(?!\s+for\b)"
                           r"|\bwhat(?:'s| is| are) an?\b|\bwhat is meant by\b|\bmeaning of\b|\bdefine\b"
                           r"|\bdefinition\b", re.I)
