@@ -362,6 +362,18 @@ def test_the_hover_sits_above_the_selected_pin_and_its_tag():
     assert z(".map-tip") > z(".map-mk.sel") >= 1
 
 
+def test_beside_a_tall_card_the_map_stays_in_the_window():
+    """PR6 QA: at 1440 x 900 "In plain words" made the card 1545 px, the map stretched with it and Delhi sat below the fold.
+    Side by side (from 1180 px, where .row stops stacking) the slot sticks under the top bar, no taller than the window
+    less 24 px above and below, unless the map and its key need more; its min-heights stay, and below 1180 px nothing changes."""
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    assert "@media (max-width: 1179px) { .row { grid-template-columns: minmax(0, 1fr); } }" in css
+    rule = re.search(r"@media \(min-width: 1180px\) \{ \.map-slot \{([^}]*)\} \}", css)[1]
+    assert "position: sticky; top: calc(var(--top-h) + 24px);" in rule and "max-height: calc(100vh - var(--top-h) - 48px);" in rule
+    assert "min-height: min-content;" in rule  # a short window: map (440 px) and key keep their height, nothing spills
+    assert ".map-slot { min-width: 0; min-height: 440px; position: relative; }" in css and ".map-slot { min-height: 320px; }" in css
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_a_redraw_after_a_map_tap_keeps_the_map_in_place():
     """QA B4 residual: at 375 the card and sidebar sit above the map. After a tap on the map, a redraw that makes them taller

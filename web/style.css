@@ -118,6 +118,10 @@ span.srclink { color: var(--ink-2); }
 .status-line { margin: 0; font-weight: 600; }
 .row { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; }
 .map-slot { min-width: 0; min-height: 440px; position: relative; }
+/* beside the card (1180 px up) the map is never taller than the window and stays under the top bar while a tall card scrolls,
+   so the chosen place, centred in the map, is on screen on first load (PR6 QA). In a short window the cap gives way to the
+   map's own 440 px (map.css) plus the key under it, so the key never spills onto the next card. */
+@media (min-width: 1180px) { .map-slot { position: sticky; top: calc(var(--top-h) + 24px); max-height: calc(100vh - var(--top-h) - 48px); min-height: min-content; } }
 /* the key under the map (13-maps.md sections 3, 4, 7): real text in page flow; the dots and blocks are map paint */
 .map-key { margin: 8px 0 0; font-size: 14px; line-height: 20px; color: var(--ink-2); }
 .map-key p { margin: 0 0 6px; max-width: none; }
