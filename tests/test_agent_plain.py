@@ -482,9 +482,12 @@ def test_a_p_value_phrase_in_simple_words_is_not_returned(fake, monkeypatch):
     ("What does that mean for my family?", True), ("What does this mean for Mumbai?", True),
     ("What does the trend in Delhi mean?", True), ("What does that mean for me?", True),
     ("What does this mean for me?", True), ("And Mumbai?", True),
+    # about the earlier answer: looked up again
+    ("What does that mean?", True), ("What does it mean?", True), ("What does this mean?", True),
     # what a word means: no lookup
     ("What is a tide gauge?", False), ("What is a 95% range?", False), ("What’s a p-value?", False),
     ("What does 95% range mean?", False), ("What does likely range mean there?", False),
+    ("What does that word mean?", False),
 ])
 def test_which_simple_words_follow_ups_look_up_again(fake, monkeypatch, question, restarts):
     fake.script = [step("Here is what that means."), step("Here is what that means.")]
