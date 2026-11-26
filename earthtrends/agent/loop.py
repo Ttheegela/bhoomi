@@ -52,9 +52,11 @@ SIMPLE = re.compile(r"\b(?:" + "|".join(re.escape(p) for p in prompts.SIMPLE_PHR
 SIMPLE_LOOKUP = ("\n\nThis asks for simple words: call detect_trend again for the place this question is about (the "
                  "earlier answer's unless it names another) and its measurement, so every number comes from this turn.")
 # A question about what a word means ("What does 95% range mean?", "What is a tide gauge?") needs no lookup, even in
-# simple words. One that asks about a place still looks up: "... mean for me/my family/Mumbai?" (no "for" after
-# "mean") and "What does the trend in Delhi mean?" (no "in/at/near <word>" in what is asked about).
-WORD_MEANING = re.compile(r"\bwhat (?:does|do) (?:(?!\b(?:in|at|near)\s+\w)[^?.!]){1,60}? mean\b(?!\s+for\b)"
+# simple words. One that asks about the earlier answer or a place still looks up: "What does that/this/it mean?",
+# "... mean for me/my family/Mumbai?" (no "for" after "mean") and "What does the trend in Delhi mean?" (no
+# "in/at/near <word>" in what is asked about).
+WORD_MEANING = re.compile(r"\bwhat (?:does|do) (?!(?:that|this|it)\s+(?:all\s+|really\s+|actually\s+)?mean\b)"
+                          r"(?:(?!\b(?:in|at|near)\s+\w)[^?.!]){1,60}? mean\b(?!\s+for\b)"
                           r"|\bwhat(?:'s| is| are) an?\b|\bwhat is meant by\b|\bmeaning of\b|\bdefine\b"
                           r"|\bdefinition\b", re.I)
 NO_NUMBERS = ("I can only give numbers that come from a data lookup, and I did not look anything up for that. "
