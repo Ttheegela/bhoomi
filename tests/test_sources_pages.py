@@ -116,6 +116,7 @@ def test_era5_card_pack_part(monkeypatch):
     pack = getattr(era5, "PACK_SOURCE", None)
     if pack is None:
         pytest.skip("ERA5's Copernicus pack (era5.PACK_SOURCE) is not on this branch yet; it arrives with PR #134")
+    monkeypatch.setattr(era5, "PACK_URL", "https://example.test/era5/v2025-12")  # conftest clears the real one
     monkeypatch.delenv(era5.PACK, raising=False)
     monkeypatch.delenv(era5.REPLAY, raising=False)
     assert era5.default_source() is pack, "the page shows the pack: era5 must serve it by default (design 17 §4)"

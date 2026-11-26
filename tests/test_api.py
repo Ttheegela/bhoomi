@@ -166,7 +166,7 @@ def test_source_down_is_502(monkeypatch, fetch):
     monkeypatch.setattr(power, "fetch", fetch)
     r = client.get("/api/trend", params={"variable": "air_temp", "lat": 0, "lon": 0, "source": "power"})
     assert r.status_code == 502 and r.json() == {"detail": "The data source did not answer. Please try again."}
-    assert "cache-control" not in r.headers
+    assert r.headers["cache-control"] == "no-store"  # never cached: "Try again" reaches the server
 
 
 def test_health_keys_unreachable_is_not_ok(monkeypatch):

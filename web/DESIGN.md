@@ -209,12 +209,12 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
 - The settings-file picker on "Use in your AI" uses the same tab style as the app picker (same kind of control; his 1B addition named only the app picker).
 - One source label, "Raw data:", on every link that names where numbers came from (answer card, chart, table, Ask answers), in grey before the name. This reconciles 2C ("Raw data:") with 5C (whose patch said "Data:"). Error cards keep "Source:". The facts list keeps its row label "Source" (a table row label, not a link label). The plain-text line "Raw values: {source}." in the chart caption and table caption is unchanged.
 - One merged help line (`#pick-help`) follows both fields (markup order: field, field, help). Under 360 px the selects stack and the help line comes last; from 360 px the two fields share a row and the help line runs full width below. (Earlier versions had one help line per select.)
-- The footer lists a source only when the catalog (`/api/variables`) lists it. The ERA5 entry carries Open-Meteo's attribution: "Weather data by Open-Meteo.com" (link), "ERA5 reanalysis", "CC BY 4.0" (link to creativecommons.org).
+- The footer lists a source only when the catalog (`/api/variables`) lists it. The ERA5 entry names the record the answer on screen used: our Copernicus pack ("ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)", with the Copernicus line), or, only when that record came from Open-Meteo's fallback, Open-Meteo's attribution: "Weather data by Open-Meteo.com" (link), "ERA5 reanalysis", "CC BY 4.0" (link to creativecommons.org).
 - A 429 from the data routes shows the API's own sentence in the problem card with "Try again".
 - The grey lean line ("The data lean up, but ...") now sits after sentence 1 at every width (it did so only on phones before).
 - When the catalog fails to load, the footer lists every known source except `grace`, which is known only through the catalog.
 - The "No change" label is drawn last, over the lines and the band, with a 4 px halo in the page background colour (`.c-halo`, used only by that label), so data never shows through it.
-- The footer's ERA5 entry is one list item that flows as one line of text: Open-Meteo link, ", ERA5 reanalysis, ", CC BY 4.0 link.
+- The footer's Open-Meteo credit (fallback answers only) is one list item that flows as one line of text: Open-Meteo link, ", ERA5 reanalysis, ", CC BY 4.0 link.
 - Below 360 px a lone last item in the app picker takes the full row.
 - The sideways-scroll hint on the code blocks says "Scroll sideways to see the whole line." on non-touch screens ("Swipe sideways..." on touch screens, from his option 4B).
 - The server address field on "Use in your AI" stays on one line.

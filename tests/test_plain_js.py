@@ -126,13 +126,15 @@ BOX_TEST = APP_HEAD + r"""
 location.hash = '#sea-level';
 FX = load('battery_sea_level');
 var T = FX.trend, CHK = T.projection.check.text, SRCU = T.projection.source.record_url;
-function series(src) { var s = copy(FX.series); if (src) s.source = Object.assign({}, s.source, { id: src }); return s; }
+var PSMSL = { id: 'psmsl', name: 'Permanent Service for Mean Sea Level (PSMSL)', url: 'https://psmsl.org/', record_url: 'https://psmsl.org/data/obtaining/stations/12.php' };
+// the series names the same record as the card (the page asks again when they differ: docs/CONTRACTS.md "ERA5 pack")
+function series(src) { var s = copy(FX.series); if (src) s.source = src === 'psmsl' ? copy(PSMSL) : Object.assign({}, s.source, { id: src }); return s; }
 answer = function (u) {
   var src = u.searchParams.get('source');
   if (u.pathname === '/api/variables') return { status: 200, body: VARS };
   if (u.pathname === '/api/series') return { status: 200, body: series(src) };
   var t = copy(T);
-  if (src === 'psmsl') Object.assign(t, { verdict: 'falling', source: { id: 'psmsl', name: 'Permanent Service for Mean Sea Level (PSMSL)', url: 'https://psmsl.org/', record_url: 'https://psmsl.org/data/obtaining/stations/12.php' },
+  if (src === 'psmsl') Object.assign(t, { verdict: 'falling', source: copy(PSMSL),
     now: Object.assign({}, t.now, { value: 12, text: '+1.2 cm' }), baseline: Object.assign({}, t.baseline, { value: 7100 }) });
   return { status: 200, body: t };
 };
