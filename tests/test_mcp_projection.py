@@ -110,7 +110,7 @@ def test_princeton(mcp_client, monkeypatch):
         "8 in 10 climate models put it between 1.2 and 2.3 °C warmer. That shows how much the models agree, not how "
         "likely it is.",
         "An average day, summer and winter together, would be about that much warmer; this does not say how summers "
-        "alone would change.")]
+        "alone would change.")] + [PRINCETON["projection"]["models_note"]]  # the climate models' note, last
     assert g["when"] == {"year": 2050, "start": 2041, "end": 2060, "text": "around 2050 (the 2041 to 2060 average)",
                          "note": None}
     assert (g["scenario"]["id"], g["scenario"]["code"], g["scenario"]["confidence"]) == ("ssp245", "SSP2-4.5", None)

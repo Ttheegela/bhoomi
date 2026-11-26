@@ -129,7 +129,10 @@ def get_projection(variable: str, lat: float, lon: float, scenario: str | None =
     src, now = r["source"], r.get("now")
     return {
         "available": True,
-        "plain": scenario_lines(variable, p, row, year),
+        # the climate models' note (CMIP6 temperature and hottest day) after the lines, so a reader who is given only
+        # `plain` still hears it; not when this row has no value to give
+        "plain": scenario_lines(variable, p, row, year) + ([p["models_note"]] if p.get("models_note") and typical
+                                                           else []),
         "variable": variable,
         "measure": names[variable],
         "place": r["place"],
