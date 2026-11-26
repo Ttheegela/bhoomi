@@ -1457,7 +1457,7 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     # expert projections and D5 (PR6)
     'So are its "guidance" strings, its "plain" lines and its "projection", but code writes the guidance and the '
     'plain lines into the answer for you (the opening and rule F).',
-    "also name its source (projection.source) and pass on its models_note, location_note and check when set",
+    "also name its source (projection.source) and pass on its location_note and check when set",
     "not a prediction, not a forecast, and not the past trend carried on",
     "Its plain lines, in the opening, already say what is projected, or why there is no projection; never restate them.",
     'Never call a projection\'s range a "95% range": it has its own name, which code writes.',
