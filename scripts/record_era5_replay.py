@@ -80,6 +80,9 @@ def main(out: Path, app: str) -> None:
                 s = r.json()
                 if s["source"]["id"] != "era5" or [s["place"]["lat"], s["place"]["lon"]] != [lat, lon] or len(s["times"]) != len(s["values"]):
                     sys.exit(f"Unexpected reply for {variable} at {lat}, {lon}: {str(s)[:200]}")
+                if s["source"].get("url") != era5.SOURCE["url"]:  # the app answered from our pack: not a recording
+                    sys.exit(f"{variable} at {lat}, {lon} came from {s['source'].get('name')!r}, not Open-Meteo. Replay "
+                             "stores Open-Meteo series only; run against an app with no ERA5 pack configured.")
                 rec = {"variable": variable, "lat": lat, "lon": lon, "place": place, "retrieved": retrieved,
                        "via": str(r.request.url), "times": s["times"], "values": s["values"]}
                 path.write_bytes(gzip.compress(json.dumps(rec, separators=(",", ":")).encode(), mtime=0))

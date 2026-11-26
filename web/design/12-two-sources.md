@@ -138,9 +138,9 @@ Numbers use the ASCII hyphen-minus, with PR1's formula guard.
 ## 11. Contract additions (the orchestrator writes them into `docs/CONTRACTS.md`)
 ```json
 "comparisons": [
-  {"main": true, "source": {"id": "era5", "name": "ERA5 reanalysis via Open-Meteo archive", "record_url": "https://…"},
+  {"main": true, "source": {"id": "era5", "name": "ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)", "record_url": "https://…"},
    "label": "ERA5", "kind": "grid", "where": "Weather model, grid cell about 25 km wide", "km": null, "station": null,
-   "status": "ok", "available": true, "why": null, "years": "1981–2026", "n_months": 549, "n_missing": 0, "n_preliminary": 3,
+   "status": "ok", "available": true, "why": null, "years": "1981–2025", "n_months": 540, "n_missing": 0, "n_preliminary": 0,
    "baseline_value": 33.6, "verdict": "no_clear_change", "confidence": "Not clear", "p_value": 0.09, "in_100": "9",
    "headline_rate": {"value": 0.13, "low": -0.02, "high": 0.27, "unit": "°C", "per": "per decade", "text": "+0.13 °C", "range_text": "−0.02 to +0.27 °C per decade"}},
   {"main": false, "source": {"id": "ghcn", "…": "…"}, "label": "Weather station", "kind": "station", "where": "New Delhi Safdarjung, 3 km away",
@@ -170,7 +170,7 @@ Numbers use the ASCII hyphen-minus, with PR1's formula guard.
 ## 13. Personas (under a minute each, no statistics words needed)
 - **Planner, "Has it been getting hotter in Delhi or Princeton?"** I pin Princeton: Rising, very clear, +0.31 °C per decade, and "All three records agree: rising" (NASA POWER +0.34, a station 12 km away +0.29), so it isn't one dataset's quirk. Around 2050: +1.9 °C. Then Delhi: ERA5 says rising, but "Other records disagree ↓" takes me to NASA POWER showing no clear change, with the reason that it has been cooling against the others. Two of three say warmer, and I know why the third doesn't. Next: my national weather service.
 - **Student, "Is Chennai really getting more rain?"** NASA POWER: Rising, clear, +5.5% per decade; ERA5 also rising (+6.9%); the station row says Madras Minambakkam has fewer than 30 years. "Both records agree: rising." The gauge note tells me where this kind of record is weaker. It isn't just this year.
-- **Delhi hottest-day demo** (as built, domain review 2026-11-23). ERA5: No clear change, then "Other records disagree ↓": NASA POWER falling; the Safdarjung station 1 km away rising but greyed ("Few readings in 8 of the last 10 years…", not counted). "The records disagree here." with three reasons, the first "ERA5 and NASA POWER have drifted apart" (a thin station never names the model). The presenter says "three records, three answers, and here is why"; the chart stays on ERA5 with the CMIP6 boxes. Numbers move slightly once the Copernicus ERA5 pack replaces Open-Meteo.
+- **Delhi hottest-day demo** (as built, domain review 2026-11-23). ERA5: No clear change, then "Other records disagree ↓": NASA POWER falling; the Safdarjung station 1 km away rising but greyed ("Few readings in 8 of the last 10 years…", not counted). "The records disagree here." with three reasons, the first "ERA5 and NASA POWER have drifted apart" (a thin station never names the model). The presenter says "three records, three answers, and here is why"; the chart stays on ERA5 with the CMIP6 boxes. With the Copernicus ERA5 pack the demo reads the same (POWER−ERA5 −0.40 °C per decade, −0.54 to −0.25).
 - **Sydney rain, the drift case.** All three show no clear change, but the rates differ: −5.4% (NASA POWER), +0.4% (ERA5), +2.9% (station). The drift line says NASA POWER has been getting drier relative to the others, and the gauge note follows. Step 8 gives the drift numbers.
 
 ## 14. Open questions
@@ -185,5 +185,5 @@ Numbers use the ASCII hyphen-minus, with PR1's formula guard.
 - [ ] Delhi, Hottest days: ERA5 card "No clear change" with "Other records disagree ↓"; rows NASA POWER falling and the station rising; "The records disagree here." with 4 reasons, drift first. No chip, risk or "trust" anywhere.
 - [ ] Princeton, Air temperature: "All three records agree: rising." and no reasons. Sydney, Rain: the agree line, the drift line and the gauge note. Chennai, Rain: the station "too short" row and "Both records agree: rising."
 - [ ] The card shows as fast as before; the block fills later without moving focus. Switching the main record, or coming back to a pin, asks the server nothing new.
-- [ ] Preliminary months show in the meta, the chart sub-line, the table and the CSV. Every row links its own record. The footer carries the Open-Meteo credit on these three tabs, whichever record is main.
+- [ ] Preliminary months show in the meta, the chart sub-line, the table and the CSV. Every row links its own record. The footer credits Open-Meteo only when an ERA5 record on screen came from Open-Meteo's fallback; a pack answer carries the Copernicus line and no Open-Meteo credit.
 - [ ] 375: no sideways page scroll; rows show as blocks. Dark mode works. The keyboard reaches every link and button. Ask: "Is Delhi's hottest day getting hotter?" says the records disagree and gives a reason. MCP output carries `comparisons`, `disagree` and `drift`.

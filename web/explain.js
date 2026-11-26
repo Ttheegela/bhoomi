@@ -59,6 +59,8 @@
   function own(text) { return str(text).replace(/^the /, ''); } // "its own 1995–2014 average"
   function yrsOf(b) { return b && b.years ? b.years[0] + '–' + b.years[1] : '1995–2014'; }
   function recordUrl(src) { return src ? https(src.record_url) || https(src.url) : ''; }
+  // a record's link: a DOI page (the ERA5 pack's) or the source's own page is the dataset, not this exact record
+  function recLink(href, src) { return href ? { text: href === https(src.url) || href.indexOf('https://doi.org/') === 0 ? 'Open the dataset ↗' : 'Open this exact record ↗', href: href } : null; }
   function clearV(t) { return t.verdict === 'rising' || t.verdict === 'falling'; }
   // The fitted line goes on the chart only in the chart's own units (never a second unit on one axis).
   function fitOnAxis(t, s, imp) {
@@ -526,7 +528,7 @@
       short: byYear ? commas(dat.n_years) + ' years from ' + srcIn(t) + ', ' + Y(dat.start) + ' to ' + Y(dat.end) : commas(dat.n_months) + ' months from ' + srcIn(t) + ', ' + M(dat.start) + ' to ' + M(dat.end),
       words: s1.concat(nPre ? [months(nPre) + ' preliminary: the provider may still change ' + (nPre === 1 ? 'it, so the trend leaves it out.' : 'them, so the trend leaves them out.')] : []),
       work: ['How the provider made them: ' + lc1(str(src.method)), 'Dataset: ' + str(src.dataset_id) + '.' + (src.version ? ' ' + ver(src.version, 'Version: ') + '.' : '') + ' Retrieved ' + D(src.retrieved) + '.'],
-      link: url ? { text: 'Open this exact record ↗', href: url } : null });
+      link: recLink(url, src) });
 
     var s2 = { title: 'Seasons removed' };
     if (src.deseasoned_upstream) { s2.short = 'Already removed by the provider'; s2.words = ['The provider has already removed the seasons, so we use its values as they come.']; }
@@ -663,16 +665,22 @@
     out.push({ title: 'Things to keep in mind', short: notes.length ? notes[0] + (notes.length > 1 ? ' And ' + (notes.length - 1) + ' more' : '') : last,
       words: [{ list: notes.concat([last]) }] });
 
-    var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', ' + ver(src.version, 'version ') : '') + '. Retrieved ' + D(src.retrieved) + '. ',
-      link: url ? { text: 'Open this exact record ↗', href: url } : null }];
+    var lic = function (q) { return str(q.licence) ? ', ' + q.licence : ''; }; // the ERA5 pack's, as the projection's (Open-Meteo's credit is in the footer)
+    var list = [{ text: 'Records: ' + str(src.name) + ', ' + str(src.dataset_id) + (src.version ? ', ' + ver(src.version, 'version ') : '') + lic(src) + '. Retrieved ' + D(src.retrieved) + '. ',
+      link: recLink(url, src) }];
     var oth = (rowsOf(t) || []).filter(function (x) { return !x.main && x.available === true; }); // §8: each other record with a trend
     oth.forEach(function (x) {
       var q = x.source || {};
-      list.push({ text: 'Other record: ' + str(q.name) + (str(q.dataset_id) ? ', ' + q.dataset_id : '') + '.' + (str(q.retrieved) ? ' Retrieved ' + D(q.retrieved) + '.' : '') + ' ',
-        link: https(q.record_url) ? { text: 'Open this exact record ↗', href: q.record_url } : null });
+      list.push({ text: 'Other record: ' + str(q.name) + (str(q.dataset_id) ? ', ' + q.dataset_id : '') + lic(q) + '.' + (str(q.retrieved) ? ' Retrieved ' + D(q.retrieved) + '.' : '') + ' ',
+        link: recLink(https(q.record_url), q) });
     });
     if (wp && w.source) list.push({ text: 'World figure: ' + w.source.name + (str(w.source.dataset_id) ? ', ' + w.source.dataset_id : '') + '. Retrieved ' + D(w.source.retrieved) + '. ', link: https(w.source.record_url) ? { text: 'Open it ↗', href: w.source.record_url } : null });
-    var ps = fx && (fx.p.source || {}), s9 = [{ list: list }];
+    var ps = fx && (fx.p.source || {}), s9 = [{ list: list }], rc = [];
+    // how to cite the records listed above (the ERA5 pack's), in the projections' box; none when no record has a citation
+    [src].concat(oth.map(function (x) { return x.source || {}; })).forEach(function (q) {
+      (Array.isArray(q.citation) ? q.citation : []).filter(str).forEach(function (c) { if (rc.indexOf(c) < 0) rc.push(c); });
+    });
+    if (rc.length) s9.push({ cite: rc, head: 'How to cite the records' });
     if (ps) {
       var rf = ps.retrieved_from;
       list.push({ text: 'Future: ' + str(ps.name) + ', ' + str(ps.dataset_id) + ', ' + ver(ps.version, 'version ') + ', ' + str(ps.licence) + '. '
@@ -1642,8 +1650,8 @@
       item.list.forEach(function (x) { ul.append(typeof x === 'string' ? h('li', {}, x) : h('li', {}, x.text, x.link ? ext(x.link.text, x.link.href) : '')); });
       return ul;
     }
-    if (item.cite) { // step 9: how to cite the projections, closed
-      var cd = h('details', { class: 'cite' }, h('summary', {}, h('span', { class: 'mark', 'aria-hidden': 'true' }), 'How to cite the projections'));
+    if (item.cite) { // step 9: how to cite the records or the projections, closed
+      var cd = h('details', { class: 'cite' }, h('summary', {}, h('span', { class: 'mark', 'aria-hidden': 'true' }), item.head || 'How to cite the projections'));
       item.cite.forEach(function (x) { cd.append(h('p', {}, x)); });
       if (item.ack) cd.append(h('p', {}, item.ack));
       return cd;

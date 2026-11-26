@@ -16,7 +16,7 @@ from earthtrends.stats.trend import _mk_sen, compute_trend
 log = logging.getLogger(__name__)
 VARIABLES = ("air_temp", "air_temp_max", "precip")
 LABEL = {"era5": "ERA5", "power": "NASA POWER", "ghcn": "Weather station"}
-SOURCE = {"era5": era5.SOURCE, "power": power.SOURCE, "ghcn": ghcn.SOURCE}  # for a row whose record never came
+SOURCE = {"power": power.SOURCE, "ghcn": ghcn.SOURCE}  # for a row whose record never came; ERA5: era5.default_source()
 GRID_KM = {"era5": 25, "power": 50}
 WHERE = "Weather model, grid cell about {} km wide"
 ERROR = "We couldn't read this record just now."
@@ -184,7 +184,7 @@ def _row(sid: str, main: bool, rec, lat: float, lon: float) -> dict:
     s = None if isinstance(rec, BaseException) else rec[0]
     station = sid not in GRID_KM
     km = where = st = None
-    src = {**SOURCE[sid], "record_url": None} if s is None else s["source"]
+    src = {**(era5.default_source() if sid == "era5" else SOURCE[sid]), "record_url": None} if s is None else s["source"]
     near = rec.station if isinstance(rec, ghcn.NoStation) and rec.status == "short" else None
     if near:  # a station in range without 30 years: name it and link it; "none" names no station as this place's
         km, st = near["km"], {"id": near["id"], "name": near["name"]}

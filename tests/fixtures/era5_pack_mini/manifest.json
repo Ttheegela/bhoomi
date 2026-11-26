@@ -1,0 +1,207 @@
+{
+ "version": "v1",
+ "dataset": "Gridded dataset underpinning the Copernicus Interactive Climate Atlas",
+ "origin": "era5",
+ "doi": "10.24381/cds.h35hb680",
+ "page": "https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas",
+ "citation": "Copernicus Climate Change Service, Climate Data Store, (2024): Gridded dataset underpinning the Copernicus Interactive Climate Atlas. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). DOI: 10.24381/cds.h35hb680 (Accessed on 2026-11-23)",
+ "licence": "CC-BY-4.0",
+ "attribution": "Contains modified Copernicus Climate Change Service information 2026.",
+ "retrieved": "2026-11-23",
+ "product_version": "v2.0",
+ "sources": {
+  "t": {
+   "name": "t_ERA5_mon_194001-202512_v025.nc",
+   "sha256": "e75098fc8ff398fb4d6f84634352ec86093f2a2db287ce8e4f0c72231b259489"
+  },
+  "txx": {
+   "name": "txx_ERA5_mon_194001-202512_v025.nc",
+   "sha256": "483f2a4391a634557715d24c6594982dc202df90a26d83d0428be1ccc768da5a"
+  },
+  "r": {
+   "name": "r_ERA5_mon_194001-202512_v025.nc",
+   "sha256": "1a0e5ac9b3669f4d85ab62e947c7fb211598224b4d41ec78566b4b917a122235"
+  }
+ },
+ "mask": {
+  "name": "land_sea_mask_025degree_binary.nc4",
+  "md5": "778eee304a1e8b4025556aedb95c5219",
+  "sha256": "d0e9cf87264ba684b914ead16a17767ddde3176ebb415842ee04757ada3e6502"
+ },
+ "grid": {
+  "step_deg": 0.25,
+  "lat": [
+   -60.0,
+   89.75
+  ],
+  "lon": [
+   -180.0,
+   179.75
+  ],
+  "tile_deg": 10,
+  "tile_cells": 40,
+  "idx": "row * 40 + col; row = (lat - lat0) * 4, col = (lon - lon0) * 4",
+  "names": "south-west corner, e.g. n20e070.npz, s10w080.npz",
+  "land_only": true
+ },
+ "vars": {
+  "t": {
+   "units": "degC",
+   "description": "monthly mean 2 m air temperature"
+  },
+  "txx": {
+   "units": "degC",
+   "description": "monthly maximum of the daily maximum 2 m air temperature (days in UTC)"
+  },
+  "r": {
+   "units": "mm/day",
+   "description": "precipitation: summed within each day, averaged over the month's days"
+  }
+ },
+ "scale": 0.01,
+ "fill": -32768,
+ "start": "1981-01",
+ "end": "2025-12",
+ "land_cells": 244450,
+ "checks": {
+  "t_above_txx": 0,
+  "t_txx_pairs": 87699240,
+  "missing": 0,
+  "max_round_trip_error": 0.005000000000002558,
+  "empty_cells": {
+   "-60": 0,
+   "-40": 0,
+   "10": 0,
+   "20": 0,
+   "40": 0,
+   "50": 0,
+   "60": 0,
+   "70": 0
+  },
+  "empty_cells_total": 0
+ },
+ "tiles": {
+  "n10e080.npz": {
+   "cells": 1,
+   "bytes": 3652,
+   "sha256": "7630c79d0215c3583d065e214bde98c0ec9ce00ea6b54d7f38cd1735e1dbee08"
+  },
+  "n20e070.npz": {
+   "cells": 1,
+   "bytes": 3771,
+   "sha256": "5ac8550415f51eecf25eeda449c9a24aa318be5e345287ad98114a8503efa209"
+  },
+  "n40w080.npz": {
+   "cells": 2,
+   "bytes": 6533,
+   "sha256": "3f3bd81c37a9a19a40d9631de150b42163cc5d5aa484eac8fb8ccea070948aaf"
+  },
+  "n50w010.npz": {
+   "cells": 1,
+   "bytes": 3744,
+   "sha256": "8bdcaa4ff724ee935255de06e64b022d33319c52b4f7100d46e5b12cab94a1d1"
+  },
+  "n60w030.npz": {
+   "cells": 1,
+   "bytes": 3700,
+   "sha256": "e8fb3535b5597adfa7156e0db2223c790d1e43a0c75155c4c15aeec95adbd7e3"
+  },
+  "n70e010.npz": {
+   "cells": 1,
+   "bytes": 3691,
+   "sha256": "70d4a6d4a43c8548c374b504043ec3ca6b352251a3b40edf628ebec2558453cd"
+  },
+  "s40e150.npz": {
+   "cells": 1,
+   "bytes": 3786,
+   "sha256": "1512aa733020f997de2038a38a7fc060578d7d39cd7f01145876e51829b9d879"
+  },
+  "s60w070.npz": {
+   "cells": 1,
+   "bytes": 3687,
+   "sha256": "e9f3dc4c516449f42ed3f4524d3a08649030dacfc0e0bafd854d462456936495"
+  }
+ },
+ "points": [
+  {
+   "lat": 28.61,
+   "lon": 77.21,
+   "cell": [
+    28.5,
+    77.25
+   ]
+  },
+  {
+   "lat": 28.58,
+   "lon": 77.21,
+   "cell": [
+    28.5,
+    77.25
+   ]
+  },
+  {
+   "lat": 40.35,
+   "lon": -74.66,
+   "cell": [
+    40.25,
+    -74.75
+   ]
+  },
+  {
+   "lat": 13.08,
+   "lon": 80.27,
+   "cell": [
+    13.0,
+    80.25
+   ]
+  },
+  {
+   "lat": -33.87,
+   "lon": 151.21,
+   "cell": [
+    -33.75,
+    151.0
+   ]
+  },
+  {
+   "lat": 51.51,
+   "lon": -0.13,
+   "cell": [
+    51.5,
+    -0.25
+   ]
+  },
+  {
+   "lat": 40.71,
+   "lon": -74.01,
+   "cell": [
+    40.75,
+    -74.0
+   ]
+  },
+  {
+   "lat": -54.8,
+   "lon": -68.3,
+   "cell": [
+    -54.75,
+    -68.25
+   ]
+  },
+  {
+   "lat": 64.15,
+   "lon": -21.94,
+   "cell": [
+    64.25,
+    -21.75
+   ]
+  },
+  {
+   "lat": 78.22,
+   "lon": 15.65,
+   "cell": [
+    78.25,
+    15.75
+   ]
+  }
+ ]
+}

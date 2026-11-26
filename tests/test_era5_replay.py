@@ -111,3 +111,26 @@ def test_the_recorder_refuses_a_reply_from_open_meteo():
         with pytest.raises(SystemExit, match="Refusing archive-api.open-meteo.com"):
             client.get("https://bhoomi.earth/api/series")
     assert asked == ["bhoomi.earth"]
+
+
+def test_the_recorder_never_stores_pack_data_as_open_meteo(tmp_path, monkeypatch):
+    import importlib.util
+
+    import httpx
+    spec = importlib.util.spec_from_file_location("rec", Path(__file__).parent.parent / "scripts" / "record_era5_replay.py")
+    rec = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rec)
+    monkeypatch.setattr(rec, "PLACES", [("Delhi", 28.61, 77.21)])
+    monkeypatch.setattr(rec, "GAP_S", 0)
+    url = [era5.PACK_SOURCE["url"]]
+
+    def app(request):
+        return httpx.Response(200, json={"source": {"id": "era5", "url": url[0], "name": "x"}, "times": ["2025-12"],
+                                         "values": [1.0], "place": {"lat": 28.61, "lon": 77.21}})
+    monkeypatch.setattr(rec, "make_client", lambda: httpx.Client(transport=httpx.MockTransport(app)))
+    with pytest.raises(SystemExit, match="not Open-Meteo"):
+        rec.main(tmp_path, "https://app.test")
+    assert not list(tmp_path.iterdir())
+    url[0] = era5.SOURCE["url"]
+    rec.main(tmp_path, "https://app.test")
+    assert len(list(tmp_path.iterdir())) == len(rec.VARIABLES)

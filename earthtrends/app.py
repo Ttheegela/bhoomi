@@ -7,14 +7,14 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, ConfigDict
 
 from earthtrends.agent import loop, ratelimit, tools
 from earthtrends.agent.providers import NotConfigured, UpstreamError
-from earthtrends.data import coops, psmsl, search_places
+from earthtrends.data import coops, era5, psmsl, search_places
 from earthtrends.mcp_server import SOURCE_DOWN, mcp
 
 # The public domain: always accepted, whatever the environment says.
@@ -105,8 +105,19 @@ def bad_input(_: Request, e: ValueError) -> JSONResponse:
 # JSONDecodeError is a ValueError, but a non-JSON 200 (an upstream maintenance page) is an outage, not bad input.
 @app.exception_handler(json.JSONDecodeError)
 @app.exception_handler(httpx.HTTPError)
-def source_down(_: Request, e: Exception) -> JSONResponse:
-    return JSONResponse({"detail": SOURCE_DOWN}, status_code=502)
+def source_down(request: Request, e: Exception) -> JSONResponse:
+    return JSONResponse({"detail": SOURCE_DOWN}, status_code=502, headers=_no_store(request))
+
+
+# Any other error is a 500 (Starlette still logs it).
+@app.exception_handler(Exception)
+def server_error(request: Request, e: Exception) -> PlainTextResponse:
+    return PlainTextResponse("Internal Server Error", status_code=500, headers=_no_store(request))
+
+
+def _no_store(request: Request) -> dict:
+    """A 5xx from the data answers is never cached, so "Try again" reaches the server (contract "Caching")."""
+    return {"Cache-Control": "no-store"} if request.url.path in ("/api/series", "/api/trend") else {}
 
 
 def limit_data(request: Request) -> None:
@@ -126,7 +137,7 @@ def series(request: Request, response: Response, variable: str, lat: float, lon:
            start: str | None = None, end: str | None = None, source: str | None = None) -> dict:
     limit_data(request)
     out = tools.get_series(variable, lat, lon, start, end, source)
-    response.headers["Cache-Control"] = CACHE
+    response.headers["Cache-Control"] = "no-store" if era5.is_fallback(out["source"]) else CACHE  # contract "Caching"
     return out
 
 
@@ -135,8 +146,11 @@ def trend(request: Request, response: Response, variable: str, lat: float, lon: 
           start: str | None = None, end: str | None = None, source: str | None = None, compare: bool = True) -> dict:
     limit_data(request)
     out = tools.detect_trend(variable, lat, lon, start, end, source, compare, wait=True)  # the page waits for every row
-    # a fallback or a row that couldn't be read is never cached: "Try again" must reach the server (contract "Caching")
-    partial = out.get("main_note") or any(c["status"] in ("error", "pending") for c in out.get("comparisons") or [])
+    # a fallback or a row that couldn't be read is never cached: "Try again" must reach the server (contract "Caching");
+    # nor is ERA5 from Open-Meteo while the pack is configured (main or a row), so a pack outage passes
+    rows = out.get("comparisons") or []
+    partial = (out.get("main_note") or any(c["status"] in ("error", "pending") for c in rows)
+               or any(era5.is_fallback(x["source"]) for x in [out, *rows]))
     response.headers["Cache-Control"] = "no-store" if partial else CACHE
     return out
 

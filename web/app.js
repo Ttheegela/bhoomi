@@ -6,15 +6,17 @@ const PLACE_SOURCE = { name: 'Open-Meteo Geocoding API (GeoNames)', url: 'https:
 
 const SOURCES = {
   power: { name: 'NASA POWER (MERRA-2)', url: 'https://power.larc.nasa.gov/' },
-  era5: { name: 'ERA5 reanalysis via Open-Meteo archive', url: 'https://open-meteo.com/',
-    // the footer carries the attribution Open-Meteo asks for: its credit line, the dataset, and the licence
-    credit: 'Weather data by Open-Meteo.com', dataset: 'ERA5 reanalysis', licence: { name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' } },
+  // our pack of the Copernicus Atlas dataset; an ERA5 answer names its own source (Open-Meteo's archive is the fallback)
+  era5: { name: 'ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset)', url: 'https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas' },
   ghcn: { name: 'NOAA NCEI GHCN-Daily', url: 'https://www.ncei.noaa.gov/' },
   coops: { name: 'NOAA CO-OPS tide gauges', url: 'https://tidesandcurrents.noaa.gov/' },
   psmsl: { name: 'Permanent Service for Mean Sea Level (PSMSL)', url: 'https://psmsl.org/' },
   // Used only when /api/variables lists it (the footer and the pickers follow the catalog).
   grace: { name: 'NASA GSFC GRACE and GRACE-FO mascons', url: 'https://earth.gsfc.nasa.gov/geo/data/grace-mascons' },
 };
+// the attribution Open-Meteo asks for, in the footer only when an ERA5 record on screen came from its archive: its credit
+// line, the dataset, and the licence
+const OPEN_METEO = { url: 'https://open-meteo.com/', credit: 'Weather data by Open-Meteo.com', dataset: 'ERA5 reanalysis', licence: { name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' } };
 // One plain-words line under "Measured by" (sea level, water storage); "Main record" takes its help from TDX.recHelp.
 const SOURCE_HELP = {
   coops: 'Readings from the nearest NOAA tide gauge (US coasts).',
@@ -42,6 +44,8 @@ function el(tag, attrs, ...kids) {
 function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
 
 const isHttps = (src) => !!src && typeof src.url === 'string' && src.url.startsWith('https://');
+// One record from one place: ERA5 has one id whether it came from our pack or from Open-Meteo's fallback, so the address too
+const sameSrc = (a, b) => !!a && !!b && a.id === b.id && a.url === b.url;
 // Display only: a trailing ", RLR monthly means" is jargon; the link is unchanged.
 const shownName = (src) => (src && typeof src.name === 'string' ? src.name.replace(/, RLR monthly means$/, '') : 'unknown');
 // Link with the name only (footer list).
@@ -219,10 +223,11 @@ function pump() {
         return;
       }
       // The record the card's answer used: when ERA5 can't be read the trend falls back to the next record (main_note) and
-      // the series doesn't, so the series is asked again for that record before anything fails; the records call follows it
-      const tid = tr.ok && tr.body && tr.body.source ? tr.body.source.id : null, sid = sr.ok && sr.body && sr.body.source ? sr.body.source.id : null;
+      // the series doesn't, and the two calls can read ERA5 from different places (our pack, Open-Meteo's fallback), so the
+      // series is asked again for that record before anything fails; the records call follows it
+      const ts = tr.ok && tr.body && tr.body.source ? tr.body.source : null, tid = ts && ts.id;
       if (tid) res.params = Object.assign({}, job.params, { source: tid }); // pinned on the stored answer
-      (tid && (tr.body.main_note || sid !== tid) ? api('/api/series', res.params) : Promise.resolve(sr)).then((sr2) => cardLanded(job, res, sr2, tr));
+      (tid && (tr.body.main_note || !sameSrc(ts, sr.ok && sr.body && sr.body.source)) ? api('/api/series', res.params) : Promise.resolve(sr)).then((sr2) => cardLanded(job, res, sr2, tr));
     });
   }
 }
@@ -233,6 +238,7 @@ function cardLanded(job, res, sr, tr) {
   if (!sr.ok) { res.status = 'error'; res.error = plainError(sr); res.none = sr.status === 400; } // none: a real "no record here", not asked again on every click
   else if (!has) { res.status = 'error'; res.error = `${s && s.source ? s.source.name : 'The source'} has no readings here for this measurement.`; res.none = true; }
   else if (!tr.ok) { res.status = 'error'; res.error = plainError(tr); res.series = s; res.none = tr.status === 400; }
+  else if (!sameSrc(tr.body.source, s.source)) { res.status = 'error'; res.error = plainError({ status: 502 }); } // still another source: never one chart under another's card
   else { res.status = 'ok'; res.series = s; res.trend = tr.body; }
   flight--;
   landed(job.win, job.p, res);
@@ -259,6 +265,13 @@ function askOthers() {
 function othersLanded(job, r) {
   const res = job.res;
   if (results[job.k] !== res) return;
+  // its main row read the record from another place than the card and chart did (ERA5: our pack or Open-Meteo's
+  // fallback): asked once more, then "Try again"; never merged under them
+  const m = r.ok && r.body && Array.isArray(r.body.comparisons) ? r.body.comparisons.find((x) => x && x.main) : null;
+  if (m && !sameSrc(m.source, res.series && res.series.source)) {
+    if (!job.again) { job.again = true; queue.unshift(job); return; }
+    r = { ok: false, status: 502 };
+  }
   if (r.ok && r.body) { window.TDX.mergeOthers(res.trend, r.body); res.cmp = 'ok'; }
   else { res.cmp = 'error'; res.cmpErr = r.status === 429 ? plainError(r) : "We couldn't read the other records just now."; }
   const t = res.trend, said = res.cmp === 'ok' && [t.thin_note, (t.disagree && t.disagree.line) || t.single_note].filter(Boolean).join(' ');
@@ -667,14 +680,18 @@ function renderFoot() {
   clear(p);
   const w = winOf(curWin);
   if (!w) return;
-  const v = varById(curWin), sid = sourceFor(curWin) || (v && v.sources && v.sources[0]);
-  const src = SOURCES[sid], pin = selectedPin(curWin), t = pin && pin.status === 'ok' ? pin.trend : null;
+  const v = varById(curWin), pin = selectedPin(curWin), t = pin && pin.status === 'ok' ? pin.trend : null;
+  // the answer's own record (it may have fallen back from the default), else the visitor's choice, else the catalog's first
+  const main = t && SOURCES[(t.source || {}).id] ? t.source : { id: sourceFor(curWin) || (v && v.sources && v.sources[0]) };
+  const src = footSrc(main), named = [src];
+  // each record by name, then its licence when its source gives one (the ERA5 pack's), as the projections' below
+  const credit = (s) => { srcLink(p, s, true); if (typeof s.licence === 'string' && s.licence) p.append(` (${s.licence})`); };
   p.append('Data: ');
-  if (src) srcLink(p, src, true); else p.append('public records');
+  if (src) credit(src); else p.append('public records');
   // the other records on the card (design 12 §3), each by its own source
   (t && Array.isArray(t.comparisons) ? t.comparisons : []).forEach((x) => {
-    const s = x && !x.main && x.available === true && SOURCES[(x.source || {}).id];
-    if (s) { p.append(' · '); srcLink(p, s, true); }
+    const s = x && !x.main && x.available === true && footSrc(x.source);
+    if (s) { p.append(' · '); credit(s); named.push(s); }
   });
   // with an expert projection on the page, the foot names it too
   const pj = t ? window.TDX.projOf(t) : null, ps = pj && pj.source;
@@ -684,15 +701,19 @@ function renderFoot() {
   p.append(`. Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed against ${curWin === 'water_storage' ? "the provider's own reference period" : 'the 1995–2014 average'}).`);
   const cop = t ? window.TDX.attribution(t) : ''; // ERA5 and the CMIP6 files are Copernicus products: once, as the server words it
   if (cop) p.append(` ${cop}`);
-  // the Open-Meteo attribution travels with its data: on every tab that sets ERA5 beside the main record too (design 12 §15)
+  // the Open-Meteo attribution travels with its data: only while an ERA5 record named above came from its archive
   const ul = $('footer-sources');
   let li = Array.prototype.find.call(ul.children, (x) => x.dataset.credit === 'era5');
-  if ((sid === 'era5' || (v && Array.isArray(v.sources) && v.sources.includes('era5'))) && SOURCES.era5) {
+  if (named.some(fromOpenMeteo)) {
     if (!li) { li = el('li', {}); li.dataset.credit = 'era5'; ul.append(li); }
     clear(li);
-    li.append(el('a', { href: SOURCES.era5.url, class: 'srclink' }, SOURCES.era5.credit), `, ${SOURCES.era5.dataset}, `, el('a', { href: SOURCES.era5.licence.url, class: 'srclink' }, SOURCES.era5.licence.name));
+    li.append(el('a', { href: OPEN_METEO.url, class: 'srclink' }, OPEN_METEO.credit), `, ${OPEN_METEO.dataset}, `, el('a', { href: OPEN_METEO.licence.url, class: 'srclink' }, OPEN_METEO.licence.name));
   } else if (li) li.remove();
 }
+// ERA5 comes from our pack or, when the pack can't be read, from Open-Meteo's archive (docs/CONTRACTS.md "ERA5 pack"): an
+// ERA5 record is named by its own source block, every other one by the page's table
+function footSrc(s) { return s && s.id === 'era5' && isHttps(s) ? s : s && SOURCES[s.id]; }
+function fromOpenMeteo(s) { return isHttps(s) && /^https:\/\/([\w-]+\.)*open-meteo\.com\//.test(s.url); }
 function placeCredit() {
   const ul = $('footer-sources');
   const li = el('li', {});

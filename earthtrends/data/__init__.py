@@ -16,6 +16,7 @@ __all__ = ["list_variables", "get_series", "search_places"]
 # Coordinates are rounded to 2 decimals (about 1 km) and the fetch uses the rounded point too, so a cached
 # entry describes exactly the point it was fetched for (and `place` echoes the rounded point).
 TTL_S = 12 * 3600
+FALLBACK_TTL_S = 10 * 60  # ERA5 from Open-Meteo while a pack is configured (era5.is_fallback): a pack outage passes
 MAX_ENTRIES = 256
 _cache: dict[tuple, tuple[float, dict]] = {}  # key -> (time stored, full result); dict order = oldest first
 _lock = threading.Lock()
@@ -40,9 +41,11 @@ def _bound(s: str | None, name: str, last: bool = False) -> str | None:
     return f"{y}-{int(m):02d}" if m else f"{y}-{'12' if last else '01'}"
 
 
-def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float) -> dict:
+def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float, stale: dict | None = None) -> dict:
     """One upstream fetch for the whole period, no trimming. `source` gets the full source block, `retrieved` = today (UTC),
-    except where the module keeps its own fetch date (a CO-OPS gauge's cached record, the GRACE file)."""
+    except where the module keeps its own fetch date (a CO-OPS gauge's cached record, the GRACE file). `stale`: an
+    expired ERA5 series from Open-Meteo after a failed pack read; only the pack is tried again, and if it still fails,
+    `stale` is returned (the caller keeps it another FALLBACK_TTL_S) with no new Open-Meteo call."""
     today = upstream.utc_today()
     flags = None  # None: no value is preliminary
     if source == "power":
@@ -51,11 +54,19 @@ def _fetch_full(entry: dict, variable: str, source: str, lat: float, lon: float)
         times, values = power.parse(resp, param)
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
         src, notes = power.source(resp, param, lat, lon, today), ["Grid cell about 50 km wide, not a single station."] + ([power.NOTES[variable]] if variable in power.NOTES else [])
-    elif source == "era5":
+    elif source == "era5" and (pack := era5.pack_series(variable, lat, lon)):  # our pack: monthly already, no flags
+        times, values, src, notes = pack
+        place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
+    elif source == "era5" and pack is False and stale:  # the pack is still down: no Open-Meteo call (its daily quota)
+        return stale
+    elif source == "era5":  # Open-Meteo: no pack base or no land cell near (pack is None), or a failed read (False)
+        # with a pack configured, a failed read's series is kept only FALLBACK_TTL_S, so an outage never pins the point
         param = era5.PARAMS[variable]
         times, values = monthly.daily_to_monthly(*era5.parse(era5.fetch(param, lat, lon), param), era5.HOW[variable])
         place = {"name": f"{lat}, {lon}", "lat": lat, "lon": lon}
         src, flags = era5.source(variable, lat, lon, today), era5.flags(times, today)
+        if pack is None and era5.pack_base():  # the pack has no land cell near: cached as usual (era5.is_fallback)
+            src |= era5.NO_LAND
         notes = ["Grid cell about 25 km wide, not a single station.",
                  f"Monthly values are built from daily ones; a month with fewer than {monthly.MIN_DAYS} valid days is left empty."]
         notes += [era5.NOTES[variable]] if variable in era5.NOTES else []
@@ -105,7 +116,8 @@ def _cached_full(entry: dict, variable: str, source: str, lat: float, lon: float
     key = (variable, source, lat, lon)
     with _lock:
         hit = _cache.get(key)
-        if hit and time.monotonic() - hit[0] < TTL_S:
+        fallback = hit and isinstance(hit[1], dict) and era5.is_fallback(hit[1]["source"])
+        if hit and time.monotonic() - hit[0] < (FALLBACK_TTL_S if fallback else TTL_S):
             return _served(hit[1])
         _cache.pop(key, None)  # expired
         flying = _flying.get(key)
@@ -114,7 +126,7 @@ def _cached_full(entry: dict, variable: str, source: str, lat: float, lon: float
     if flying is not None:  # the same record is being fetched: share that one call (Open-Meteo's daily quota)
         return copy.deepcopy(flying.result())  # its failure is raised here too
     try:
-        full = _fetch_full(entry, variable, source, lat, lon)
+        full = _fetch_full(entry, variable, source, lat, lon, stale=hit[1] if fallback else None)
     except ghcn.NoStation as e:  # no usable station here: kept like a series
         _keep(key, e)
         mine.set_exception(e)
