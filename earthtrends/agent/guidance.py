@@ -52,20 +52,24 @@ VOICE_NOTE = MODELS_NOTE.replace(". The ", "; the ")  # one spoken sentence
 
 
 def note(calls: list[dict], voice: bool = False) -> str:
-    """The climate models' note (CMIP6 air temperature and hottest day), written by code once per answer, when any
-    result has an available projection that carries models_note; else "". Voice: as one sentence (VOICE_NOTE)."""
-    ps = [(c.get("result") or {}).get("projection") or {} for c in calls]
+    """The climate models' note (CMIP6 air temperature and hottest day), written by code once per answer, when the
+    plain lines (lead) give a future from a projection that carries models_note; else "", so never without those
+    lines. Voice: as one sentence (VOICE_NOTE)."""
+    ps = [rs[0].get("projection") or {} for rs in _shown(calls)]
     if not any(p.get("available") and p.get("models_note") for p in ps):
         return ""
     return VOICE_NOTE if voice else MODELS_NOTE
 
 
+_NOTE = "|".join(re.escape(n).replace("'", "['’]") for n in (MODELS_NOTE, VOICE_NOTE))  # straight or curly
+
+
 def without_note(text: str) -> str:
-    """The text without any copy of the note (either form) and the space before it, so code's own shows once."""
-    for n in (MODELS_NOTE, VOICE_NOTE):
-        if n in text:
-            text = re.sub(r"\s*" + re.escape(n), "", text).lstrip()
-    return text
+    """The text without any copy of the note (either form), so code's own shows once. A line that is only the note
+    (after a list mark, if any) goes with its line break and one blank line after it; elsewhere the note goes with
+    the space after it."""
+    text = re.sub(rf"(?m)^[ \t]*(?:(?:[-*•]|\d+[.)])[ \t]+)?(?:{_NOTE})[ \t]*(?:\n(?:[ \t]*\n)?|\Z)", "", text)
+    return re.sub(rf"(?:{_NOTE})[ \t]*", "", text)
 
 
 def _key(c: dict):
@@ -139,6 +143,15 @@ RECORDS_DISAGREE = "Our records here disagree about the past."  # design 16 §4:
 MAX_LEAD = 3  # places and measurements that get a line, with two or more
 
 
+def _shown(calls: list[dict]) -> list[list[dict]]:
+    """The picked results lead() writes lines for: per place and measurement with plain lines, at most MAX_LEAD; the
+    first of each gives them."""
+    groups: dict = {}
+    for k, r in picked(calls):
+        groups.setdefault(k, []).append(r)
+    return [rs for rs in groups.values() if [x for x in rs[0].get("plain") or [] if _s(x)]][:MAX_LEAD]
+
+
 def lead(calls: list[dict]) -> str:
     """The lines an answer that looked something up starts with (design 16 §4), written by code and outside the word
     count. Per place and measurement in picked() order: line 1 is the past clause (the shared meaning.headline, or
@@ -146,13 +159,10 @@ def lead(calls: list[dict]) -> str:
     record is main), then plain[0]; then plain's other lines; then what each record shows with the first reason when
     the records disagree, and thin_note or single_note. Two or more places or measurements: line 1 of each (and its
     records lines), at most MAX_LEAD, each after "{Place}, {measurement}: ". "" when no result has plain lines."""
-    groups: dict = {}
-    for k, r in picked(calls):
-        groups.setdefault(k, []).append(r)
-    groups = {k: rs for k, rs in groups.items() if [x for x in rs[0].get("plain") or [] if _s(x)]}
+    groups = _shown(calls)
     names = {v["id"]: v["name"].split(" (")[0] for v in tools.list_variables()}
     out = []
-    for rs in list(groups.values())[:MAX_LEAD]:
+    for rs in groups:
         r = rs[0]
         apart = len(rs) > 1 or any((x.get("disagree") or {}).get("any") for x in rs)
         past = RECORDS_DISAGREE if apart else _s((r.get("meaning") or {}).get("headline"))

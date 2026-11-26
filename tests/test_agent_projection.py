@@ -131,7 +131,7 @@ def test_scorer_passes_an_answer_with_the_code_written_projection():
 
 
 CODE_WORDS = ("experts project", "climate models put", "2 in 3 chance", "8 in 10", "IPCC projections",
-              "Models disagree")  # the models' raw-results note: the loop writes it (tests/test_models_note.py)
+              "Models disagree", "raw results")  # the models' note: guidance.note, which the loop writes
 
 
 @pytest.mark.parametrize("cid,r", [("manhattan-family-house", BATTERY), ("manhattan-build-house", BATTERY),
@@ -141,7 +141,7 @@ def test_eval_cases_ask_for_the_words_code_writes(cid, r):
     """The cases' projection words are the code's own (the plain lines and the guidance), so a run can only miss them
     if the code's text is lost."""
     case = {c["id"]: c for c in run.load_cases()}[cid]
-    a = (guidance.lead([ok(r)]) + " " + guidance.block([ok(r)])).lower()
+    a = (guidance.lead([ok(r)]) + " " + guidance.note([ok(r)]) + " " + guidance.block([ok(r)])).lower()
     said = [w for w in case["must_say"] if any(k.lower() in w.lower() for k in CODE_WORDS)]
     assert said and all(w.lower() in a for w in said), said
     assert not [w for w in case["must_not_say"] if w.lower() in a]

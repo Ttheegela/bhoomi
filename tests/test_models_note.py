@@ -93,10 +93,23 @@ def test_typed_chat_after_the_sources_before_the_guidance(fake, monkeypatch):
     assert a.index(MODELS_NOTE) < a.index(g["disclaimer"])
 
 
-def test_typed_chat_without_a_marker_or_guidance_still_gets_it(fake, monkeypatch):
+def test_typed_chat_without_a_marker_still_gets_it_before_the_guidance(fake, monkeypatch):
+    a = ask(fake, monkeypatch, "Is it getting hotter in Princeton?", [PRINCETON], f"About 0.4 °C warmer. {POWER}")
+    assert a.count(MODELS_NOTE) == 1 and a.index(POWER) < a.index(MODELS_NOTE) < a.index(PRINCETON["guidance"]["fact"])
+
+
+def test_no_note_when_no_plain_line_gives_the_future(fake, monkeypatch):
+    """No guidance fact: picked() drops the result, so no plain line gives its future, and no note goes alone."""
     bare = {**PRINCETON, "guidance": None}
     a = ask(fake, monkeypatch, "Is it getting hotter in Princeton?", [bare], f"About 0.4 °C warmer. {POWER}")
-    assert a.count(MODELS_NOTE) == 1 and a.rstrip().endswith(MODELS_NOTE)
+    assert "raw results" not in a and a.startswith("About 0.4")
+    # a 4th place or measurement gets no line (MAX_LEAD), so Princeton's future is not given and its note neither
+    four = [BATTERY, CHENNAI, PUNJAB, PRINCETON]
+    assert len(guidance.lead([{"name": "detect_trend", "arguments": args(r), "result": r, "error": None}
+                              for r in four]).splitlines()) == guidance.MAX_LEAD
+    for voice in (False, True):
+        a = ask(fake, monkeypatch, "Which is changing?", four, f"Here is what the records show. {POWER}", voice=voice)
+        assert "raw results" not in a
 
 
 def test_simple_words_right_after_the_plain_lines(fake, monkeypatch):
@@ -127,13 +140,33 @@ def test_two_temperature_places_give_it_once(fake, monkeypatch):
     assert ask(fake, monkeypatch, q, [DELHI, PRINCETON], text, voice=True).count(VOICE) == 1
 
 
-def test_a_copy_the_model_wrote_still_shows_once_in_code_s_place(fake, monkeypatch):
-    copied = f"About 0.4 °C warmer every 10 years. {MODELS_NOTE} {POWER} [GUIDANCE]"
+CURLY = MODELS_NOTE.replace("'", "’")
+
+
+@pytest.mark.parametrize("copy", [MODELS_NOTE, CURLY, VOICE.replace("'", "’")], ids=["straight", "curly", "voice"])
+def test_a_copy_the_model_wrote_still_shows_once_in_code_s_place(fake, monkeypatch, copy):
+    copied = f"About 0.4 °C warmer every 10 years. {copy} {POWER} [GUIDANCE]"
     a = ask(fake, monkeypatch, "Is it getting hotter in Princeton?", [PRINCETON], copied)
-    assert a.count(MODELS_NOTE) == 1 and a.index(POWER) < a.index(MODELS_NOTE)
+    assert a.count(MODELS_NOTE) == 1 and "’s assessed" not in a and a.index(POWER) < a.index(MODELS_NOTE)
     v = ask(fake, monkeypatch, "Is it getting hotter in Princeton? Explain in simple words.", [PRINCETON],
-            f"{MODELS_NOTE} {SIMPLE}", voice=True)
-    assert MODELS_NOTE not in v and v.count(VOICE) == 1 and plain_lines(v)[-1] == VOICE
+            f"{copy} {SIMPLE}", voice=True)
+    assert MODELS_NOTE not in v and "’s assessed" not in v and v.count(VOICE) == 1 and plain_lines(v)[-1] == VOICE
+
+
+@pytest.mark.parametrize("text,left", [
+    (f"- One.\n- {MODELS_NOTE}\nDone.", "- One.\nDone."),  # a list line left empty goes
+    (f"A.\n\n{MODELS_NOTE} More.", "A.\n\nMore."),  # the paragraph break stays
+    (f"A.\n\n{CURLY}\n\nB.", "A.\n\nB."),  # a paragraph of its own goes with one blank line
+    (f"A. {MODELS_NOTE} B.", "A. B."), (f"{MODELS_NOTE}\n\nB.", "B."), ("No note here.\n\n- x", "No note here.\n\n- x"),
+])
+def test_removing_a_copy_keeps_the_layout(text, left):
+    assert guidance.without_note(text) == left
+
+
+def test_a_copy_echoed_from_history_goes_with_no_temperature_future(fake, monkeypatch):
+    for r in (BATTERY, CHENNAI):
+        a = ask(fake, monkeypatch, "And now?", [r], f"Here is what the record shows. {CURLY} {POWER} [GUIDANCE]")
+        assert "raw results" not in a and "Here is what the record shows. Source: NASA POWER" in a
 
 
 def test_mcp_get_projection_ends_plain_with_it(mcp_client, monkeypatch):
@@ -155,6 +188,17 @@ def test_no_note_without_a_cmip6_temperature_future(fake, monkeypatch, r, voice)
     a = ask(fake, monkeypatch, "Is it changing here?", [r], f"Here is what the record shows. {POWER} [GUIDANCE]",
             voice=voice)
     assert "raw results" not in a
+
+
+def test_mcp_get_projection_has_none_for_a_scenario_and_year_with_no_value(monkeypatch):
+    p = json.loads(json.dumps(PRINCETON["projection"]))
+    low = next(s for s in p["scenarios"] if s["id"] == "ssp126")
+    for k in ("p10", "p50", "p90"):
+        low[k][2] = None  # 2090 on the low path
+    monkeypatch.setattr(tools, "detect_trend", lambda *a, **k: {**PRINCETON, "projection": p})
+    g = projection_answer.get_projection(**args(PRINCETON), scenario="low", year=2090)
+    assert g["plain"] == ["Around 2090, the climate models have no value here on the low emissions path."]
+    assert g["typical"] is None and g["details"]["models_note"] == MODELS_NOTE  # the data field stays
 
 
 @pytest.mark.parametrize("r", [BATTERY, CHENNAI, RIVERSIDE])
