@@ -113,10 +113,11 @@ def test_era5_card_open_meteo_part():
 
 
 def test_era5_card_pack_part(monkeypatch):
-    pack = getattr(era5, "PACK_SOURCE", None)
-    if pack is None:
-        pytest.skip("ERA5's Copernicus pack (era5.PACK_SOURCE) is not on this branch yet; it arrives with PR #134")
-    monkeypatch.setattr(era5, "PACK_URL", "https://example.test/era5/v2025-12")  # conftest clears the real one
+    pack = era5.PACK_SOURCE
+    # the shipped default is our public Blob store (conftest clears it for every test, so read the module's own line)
+    assert re.search(r'^PACK_URL = "https://[\w-]+\.public\.blob\.vercel-storage\.com/era5/v2025-12"$',
+                     Path(era5.__file__).read_text(), re.M), "production must serve the pack (design 17 §4)"
+    monkeypatch.setattr(era5, "PACK_URL", "https://example.test/era5/v2025-12")
     monkeypatch.delenv(era5.PACK, raising=False)
     monkeypatch.delenv(era5.REPLAY, raising=False)
     assert era5.default_source() is pack, "the page shows the pack: era5 must serve it by default (design 17 §4)"
@@ -124,8 +125,6 @@ def test_era5_card_pack_part(monkeypatch):
     assert f"Named in answers: {pack['name']} · ID: {era5.PACK_DATASET_ID} ·" in text
     assert f"Licence {pack['licence']}, the licence of ERA5" in text
     assert pack["url"] in hrefs and era5.PACK_DOI_URL in hrefs
-    if pack.get("credit"):
-        assert pack["credit"] in text
     assert f"Our copy runs from {month(era5.PACK_START)} to December 2025." in text
 
 
