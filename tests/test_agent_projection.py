@@ -53,8 +53,7 @@ def test_model_view_has_the_compact_cmip6_projection():
         "available": True, "kind": "cmip6_atlas", "source": "IPCC AR6 Interactive Atlas, CMIP6 projections",
         "url": "https://digital.csic.es/handle/10261/332744",
         "scenario": "intermediate emissions (SSP2-4.5)", "when": "2041–2060", "baseline": "the 1995–2014 average",
-        "range_kind": SPREAD, "models_note": PRINCETON["projection"]["models_note"],
-        "baseline_record": "NASA POWER (MERRA-2)"}
+        "range_kind": SPREAD, "baseline_record": "NASA POWER (MERRA-2)"}  # no models_note: code writes it
     assert loop.model_view(CHENNAI)["projection"]["disagree"] == "Models disagree on wetter or drier."
     assert "more_than_today" not in loop.model_view(DELHI)["projection"]  # the tool gives none for the hottest day
     assert loop.model_view(PUNJAB)["projection"] == {"available": False, "why": PUNJAB["projection"]["why"]}
@@ -132,7 +131,7 @@ def test_scorer_passes_an_answer_with_the_code_written_projection():
 
 
 CODE_WORDS = ("experts project", "climate models put", "2 in 3 chance", "8 in 10", "IPCC projections",
-              "Models disagree")  # the models' raw-results note is the model's caveat now (prompt rule E)
+              "Models disagree")  # the models' raw-results note: the loop writes it (tests/test_models_note.py)
 
 
 @pytest.mark.parametrize("cid,r", [("manhattan-family-house", BATTERY), ("manhattan-build-house", BATTERY),

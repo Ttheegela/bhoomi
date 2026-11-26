@@ -1007,9 +1007,16 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
         if answer not in (GAVE_UP, NO_NUMBERS):
             # the projection's dataset and address, when the answer lacks them: code's text, after the checks
             answer = add_links(answer, projection_links(calls))
-            answer = guidance.fill(answer, ok_calls(calls), simple)  # the tool's own guidance, word for word
+            # The climate models' note, once, by code (owner, PR6): typed chat after the sources and caveats, in front
+            # of the guidance; simple words and voice right after the plain lines. A copy the model wrote goes.
+            note = guidance.note(ok_calls(calls), voice)
+            answer = guidance.without_note(answer) if note else answer
+            plain_note = simple or voice
+            # the tool's own guidance, word for word
+            answer = guidance.fill(answer, ok_calls(calls), simple, "" if plain_note else note)
             answer = add_examples(answer, calls)
             head = guidance.lead(ok_calls(calls))  # the plain lines first, outside the word count
+            head = "\n".join(filter(None, (head, note))) if plain_note else head
             answer = f"{head}\n\n{answer}" if head else answer
         # After every check, so it is outside the word limit; on every path, so the marker never reaches the user.
         answer = resources.fill(answer, [c["result"] for c in ok_calls(calls)])

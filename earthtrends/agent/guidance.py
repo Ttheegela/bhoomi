@@ -6,6 +6,7 @@ import re
 
 from earthtrends.agent import resources, tools
 from earthtrends.stats.guidance import DISCLAIMER_PROJECTION
+from earthtrends.stats.projection import MODELS_NOTE
 
 MARKER = "[GUIDANCE]"
 _MARK = re.compile(r"[ \t]*\**\[\s*guidance\s*\]\**", re.I)  # tolerant, like the official-resources marker
@@ -26,7 +27,8 @@ SOURCES_LINE = "All our data sources, with licences: bhoomi.earth/sources"  # de
 def projection_view(p):
     """A result's `projection` as the model reads it (the number check pools it): the dataset's name and address, the
     default scenario, its period and baseline, the range's name, and the notes the model passes on with the caveats
-    (models_note, location_note, check). No projected number: the plain lines carry those. Not available: its why."""
+    (location_note, check). No projected number: the plain lines carry those, and code writes models_note (note).
+    Not available: its why."""
     if not isinstance(p, dict):
         return p
     if not p.get("available"):
@@ -40,10 +42,30 @@ def projection_view(p):
            "scenario": f"{sc['name']} ({sc['code']})" if sc.get("name") and sc.get("code") else None,
            "when": f"{w[0]}–{w[1]}" if isinstance(w, list) and len(w) == 2 else "2050",  # sea level's by_2050 is 2050
            "baseline": (p.get("baseline") or {}).get("text"), "range_kind": b.get("range_kind"),
-           "disagree": DISAGREE if b.get("disagree") else None, "models_note": p.get("models_note"),
+           "disagree": DISAGREE if b.get("disagree") else None,
            "location_note": (p.get("location") or {}).get("note"), "check": (p.get("check") or {}).get("text"),
            "baseline_record": (p.get("baseline_record") or {}).get("name")}
     return {k: v for k, v in out.items() if v is not None}
+
+
+VOICE_NOTE = MODELS_NOTE.replace(". The ", "; the ")  # one spoken sentence
+
+
+def note(calls: list[dict], voice: bool = False) -> str:
+    """The climate models' note (CMIP6 air temperature and hottest day), written by code once per answer, when any
+    result has an available projection that carries models_note; else "". Voice: as one sentence (VOICE_NOTE)."""
+    ps = [(c.get("result") or {}).get("projection") or {} for c in calls]
+    if not any(p.get("available") and p.get("models_note") for p in ps):
+        return ""
+    return VOICE_NOTE if voice else MODELS_NOTE
+
+
+def without_note(text: str) -> str:
+    """The text without any copy of the note (either form) and the space before it, so code's own shows once."""
+    for n in (MODELS_NOTE, VOICE_NOTE):
+        if n in text:
+            text = re.sub(r"\s*" + re.escape(n), "", text).lstrip()
+    return text
 
 
 def _key(c: dict):
@@ -152,11 +174,12 @@ def strip(text: str) -> str:
     return _MARK.sub("", text)
 
 
-def fill(text: str, calls: list[dict], simple: bool = False) -> str:
+def fill(text: str, calls: list[dict], simple: bool = False, lead_in: str = "") -> str:
     """The first marker becomes the guidance (a space before it unless it starts a line); other markers go. No marker:
     the guidance goes in front of the official-resources marker if there is one, else at the end as its own
-    paragraph. No guidance: markers removed, text otherwise unchanged."""
-    add = block(calls, simple)
+    paragraph. No guidance: markers removed, text otherwise unchanged. `lead_in` (the models' note in typed chat)
+    goes right in front of the guidance, in the same place, even when there is no guidance."""
+    add = " ".join(filter(None, (lead_in, block(calls, simple))))
     if not _MARK.search(text):
         if not add:
             return text

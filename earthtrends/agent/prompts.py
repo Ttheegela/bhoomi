@@ -82,7 +82,7 @@ Leave it out when it is already one of the plain lines. No p-value, no "0.05 lin
 significant" in the answer, UNLESS the user asks about the statistics \
 (the p-value, significance, the method): then add one p-value phrase under the p-value rule below.
 E. Then the sources with their URLs and the caveats. When a result has an available projection, also name its \
-source (projection.source) and pass on its models_note, location_note and check when set, in plain words. Do not \
+source (projection.source) and pass on its location_note and check when set, in plain words. Do not \
 repeat meaning.limit, except for a decision question (below).
 F. When any result has a "guidance": write [GUIDANCE] on its own after the sources and caveats (before \
 [OFFICIAL RESOURCES] when the answer has it). Code puts there, word for word from the tool, each result's fact, \
