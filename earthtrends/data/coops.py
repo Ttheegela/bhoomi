@@ -12,7 +12,12 @@ from . import upstream
 from .upstream import LIMIT, NAME, fit, rule, source_block, text, why_not
 
 BASE = "https://api.tidesandcurrents.noaa.gov"
-SOURCE = {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/"}
+# licence and credit: https://tidesandcurrents.noaa.gov/disclaimers.html, read 2026-11-23. NOS "requests that
+# attribution be given" but sets no wording, so the credit line is ours.
+SOURCE = {"id": "coops", "name": "NOAA CO-OPS tide gauges", "url": "https://tidesandcurrents.noaa.gov/",
+          "licence": "Public domain (US Government information), unless specifically annotated otherwise",
+          "credit": "Data from the NOAA National Ocean Service, Center for Operational Oceanographic Products and "
+                    "Services (CO-OPS)."}
 MAX_KM = 100
 NAME_NEAREST_KM = 1000  # beyond this the nearest gauge is not worth naming
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)  # the station-list fetch: at most 5 + 10 + 30 = 45 s

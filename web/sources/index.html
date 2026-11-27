@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data sources · Bhoomi</title>
+<meta name="description" content="The public datasets behind every number on Bhoomi: who makes them, where we get them, their licences and the credit to give.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/prefs.js"></script>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/settings.css">
+<link rel="stylesheet" href="/sources.css">
+</head>
+<body>
+<!-- web/design/17-sources-pages.md. Every name, licence, credit, ID, date and period here is checked against the code by
+     tests/test_sources_pages.py; change both together. -->
+<a class="skip" href="#main">Skip to the content</a>
+<header class="top">
+  <a class="brand" href="/">Bhoomi</a>
+  <nav class="nav" aria-label="Measurements">
+    <a href="/#sea-level">Sea level</a><a href="/#air-temperature">Air temperature</a><a href="/#hottest-days">Hottest days</a><a href="/#rain">Rain</a><a href="/#water-storage">Water storage</a>
+  </nav>
+  <div class="right">
+    <a class="btn ghost" href="/#settings">Settings</a>
+    <span class="ai-label">Built with AI assistance</span>
+  </div>
+</header>
+
+<main id="main" class="src-wrap">
+  <div class="src-head">
+    <h1>Data sources</h1>
+    <p class="lead">Every number on Bhoomi comes from one of these public datasets. For each one: who makes it, where we get it, its licence, the credit to give, and how often it changes.</p>
+    <nav class="src-tabs" aria-label="Sources pages">
+      <a href="/sources/" aria-current="page">Data sources</a>
+      <a href="/sources/world/">World figures</a>
+    </nav>
+  </div>
+  <div class="src-cols">
+  <nav class="st-nav" aria-label="On this page">
+    <div class="lbl">On this page</div>
+    <a class="st-navlink" href="#weather">Weather records</a>
+    <a class="st-navlink" href="#sea-level">Sea level</a>
+    <a class="st-navlink" href="#water">Water on land</a>
+    <a class="st-navlink" href="#projections">Expert projections</a>
+    <a class="st-navlink" href="#maps">Maps and place names</a>
+    <a class="st-navlink" href="#reuse">Using a Bhoomi chart</a>
+  </nav>
+  <div class="st-sections">
+    <p class="src-note">The readings are each provider's own. The trends, ranges and comparisons with the world are our own calculation, not an official product of any provider.</p>
+
+    <section class="st-sec" id="weather" aria-labelledby="h-weather">
+      <h2 id="h-weather">Weather records</h2>
+      <p class="st-lead">Used for air temperature, hottest days and rain. Each answer names the record it used and links to that exact record.</p>
+
+      <article class="card src-card" id="era5" aria-labelledby="h-era5">
+        <div class="sc-head">
+          <div>
+            <h3 id="h-era5">ERA5</h3>
+            <p class="sc-desc">A European record of past weather on a grid about 25 km wide.</p>
+          </div>
+          <a class="btn ghost" href="https://doi.org/10.24381/cds.h35hb680">Open the dataset<span class="sr-only">: ERA5</span>&nbsp;↗</a>
+        </div>
+        <dl class="facts">
+          <div><dt>Made by</dt><dd>ECMWF, for the Copernicus Climate Change Service</dd></div>
+          <div><dt>We get it from</dt><dd>
+            <p>Our own copy of the <a href="https://cds.climate.copernicus.eu/datasets/multi-origin-c3s-atlas">Copernicus dataset&nbsp;↗</a> behind the Copernicus Interactive Climate Atlas (its ERA5 part, land only).</p>
+            <p>If our copy can't be read, or has no land cell for a place, we fetch ERA5 from Open-Meteo instead, and the answer names Open-Meteo.</p>
+          </dd></div>
+          <div><dt>Licence</dt><dd>
+            <p><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0<span class="sr-only">, the licence of ERA5</span>&nbsp;↗</a></p>
+            <p>If the answer names Open-Meteo: <a href="https://open-meteo.com/en/licence">CC BY 4.0<span class="sr-only">, the licence of Open-Meteo</span>&nbsp;↗</a>.</p>
+            <p>Open-Meteo's free service is for <a href="https://open-meteo.com/en/terms">non-commercial use only&nbsp;↗</a>.</p>
+          </dd></div>
+          <div><dt>Updated</dt><dd>Our copy runs from January 1981 to December 2025. The dataset is updated about once a year; we rebuild our copy by hand.</dd></div>
+        </dl>
+        <div class="credit">
+          <p class="cl">Credit to give</p>
+          <p>Contains modified Copernicus Climate Change Service information 2026.</p>
+          <p>If the answer names Open-Meteo, also: <a href="https://open-meteo.com/">Weather data by Open-Meteo.com&nbsp;↗</a></p>
+        </div>
+        <details class="cite">
+          <summary><span class="mark" aria-hidden="true"></span>How to cite</summary>
+          <p>Copernicus Climate Change Service, Climate Data Store, (2024): Gridded dataset underpinning the Copernicus Interactive Climate Atlas. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). DOI: 10.24381/cds.h35hb680 (Accessed on 2026-11-23)</p>
+        </details>
+        <p class="sc-id">Named in answers: ERA5 reanalysis (Copernicus Interactive Climate Atlas dataset) · ID: doi:10.24381/cds.h35hb680 · Copernicus dataset multi-origin-c3s-atlas, ERA5 part<br>
+          From Open-Meteo, named in answers: ERA5 reanalysis via Open-Meteo archive · ID: doi:10.24381/cds.adbb2d47 · ERA5 hourly data on single levels from 1940 to present</p>
+      </article>
+
+      <article class="card src-card" id="power" aria-labelledby="h-power">
+        <div class="sc-head">
+          <div>
+            <h3 id="h-power">NASA POWER</h3>
+            <p class="sc-desc">A NASA record of past weather on a grid about 50 km wide.</p>
+          </div>
+          <a class="btn ghost" href="https://power.larc.nasa.gov/">Open the dataset<span class="sr-only">: NASA POWER</span>&nbsp;↗</a>
+        </div>
+        <dl class="facts">
+          <div><dt>Made by</dt><dd>NASA Langley Research Center's POWER project, from the MERRA-2 weather model</dd></div>
+          <div><dt>We get it from</dt><dd>NASA POWER's monthly data service, for the place's grid cell.</dd></div>
+          <div><dt>Licence</dt><dd>No licence stated; POWER asks for the credit line, plus the service version and date accessed</dd></div>
+          <div><dt>Updated</dt><dd>Fetched when an answer needs it: whole months from January 1981 to the end of last year.</dd></div>
+        </dl>
+        <div class="credit">
+          <p class="cl">Credit to give</p>
+          <p>The data was obtained from National Aeronautics and Space Administration (NASA) Langley Research Center's Prediction Of Worldwide Energy Resources (POWER) project funded through the NASA Earth Science Division.</p>
+        </div>
+        <ul class="keep">
+          <li><b>Keep in mind:</b> NASA POWER comes from a weather model, MERRA-2, which does not use land thermometer readings; a nearby weather station can differ.</li>
+          <li><b>For rain:</b> NASA POWER's rain is corrected every day to rain-gauge maps. Where gauges are few (much of Africa, inland Australia, South America and the far north), it can drift.</li>
+        </ul>
+        <details class="cite">
+          <summary><span class="mark" aria-hidden="true"></span>How to cite</summary>
+          <p>POWER also asks for its version and the date you got the data: "The data was obtained from the POWER Project's [version] version on [date]." Step 9 of each answer, "Sources", gives both.</p>
+        </details>
+        <p class="sc-id">Named in answers: NASA POWER (MERRA-2) · ID: monthly point data, parameters T2M, T2M_MAX and PRECTOTCORR</p>
+      </article>
+
+      <article class="card src-card" id="ghcn" aria-labelledby="h-ghcn">
+        <div class="sc-head">
+          <div>
+            <h3 id="h-ghcn">Weather stations (GHCN-Daily)</h3>
+            <p class="sc-desc">Readings from the nearest weather station within 25 km that has at least 30 years of readings since 1981.</p>
+          </div>
+          <a class="btn ghost" href="https://doi.org/10.7289/V5D21VHZ">Open the dataset<span class="sr-only">: GHCN-Daily</span>&nbsp;↗</a>
+        </div>
+        <dl class="facts">
+          <div><dt>Made by</dt><dd><a href="https://www.ncei.noaa.gov/">NOAA's National Centers for Environmental Information (NCEI)&nbsp;↗</a>, from weather stations worldwide</dd></div>
+          <div><dt>We get it from</dt><dd>NCEI's data service, day by day. We turn the days into months, leaving out readings that failed NOAA's quality checks.</dd></div>
+          <div><dt>Licence</dt><dd>No licence stated; NCEI asks for the dataset citation with its version and access date</dd></div>
+          <div><dt>Updated</dt><dd>Fetched when an answer needs it, through the end of last year.</dd></div>
+        </dl>
+        <div class="credit">
+          <p class="cl">Credit to give</p>
+          <p>Menne, M.J., I. Durre, B. Korzeniewski, S. McNeill, K. Thomas, X. Yin, S. Anthony, R. Ray, R.S. Vose, B.E.Gleason, and T.G. Houston, 2012: Global Historical Climatology Network - Daily (GHCN-Daily), Version 3.35. NOAA National Climatic Data Center. http://doi.org/10.7289/V5D21VHZ.</p>
+        </div>
+        <ul class="keep">
+          <li><b>Keep in mind:</b> Station records are not adjusted for changes in instruments, observing times or station moves.</li>
+        </ul>
+        <details class="cite">
+          <summary><span class="mark" aria-hidden="true"></span>How to cite</summary>
+          <p>Menne, M.J., I. Durre, R.S. Vose, B.E. Gleason, and T.G. Houston, 2012: An overview of the Global Historical Climatology Network-Daily Database. Journal of Atmospheric and Oceanic Technology, 29, 897-910, doi:10.1175/JTECH-D-11-00103.1.</p>
+        </details>
+        <p class="sc-id">Named in answers: NOAA NCEI GHCN-Daily · ID: doi:10.7289/V5D21VHZ · Version 3.35</p>
+      </article>
+    </section>
+
+    <section class="st-sec" id="sea-level" aria-labelledby="h-sea">
+      <h2 id="h-sea">Sea level</h2>
+      <p class="st-lead">Tide gauges measure the sea against the land at one spot, so land sinking or rising is included. Each answer uses the nearest gauge within 100 km with at least 30 years of monthly readings, the last no more than 5 years before the end of last year.</p>
+
+      <article class="card src-card" id="coops" aria-labelledby="h-coops">
+        <div class="sc-head">
+          <div>
+            <h3 id="h-coops">NOAA tide gauges (CO-OPS)</h3>
+            <p class="sc-desc">Readings from the nearest NOAA tide gauge (US coasts).</p>
+          </div>
+          <a class="btn ghost" href="https://tidesandcurrents.noaa.gov/">Open the dataset<span class="sr-only">: NOAA tide gauges</span>&nbsp;↗</a>
+        </div>
+        <dl class="facts">
+          <div><dt>Made by</dt><dd>NOAA's National Ocean Service, Center for Operational Oceanographic Products and Services (CO-OPS)</dd></div>
+          <div><dt>We get it from</dt><dd>NOAA's Tides and Currents data service: the gauge's verified monthly mean sea level.</dd></div>
+          <div><dt>Licence</dt><dd>Public domain (US Government information), unless specifically annotated otherwise</dd></div>
+          <div><dt>Updated</dt><dd>Fetched when an answer needs it, up to the latest month NOAA has verified.</dd></div>
+        </dl>
+        <div class="credit">
+          <p class="cl">Credit to give</p>
+          <p>Data from the NOAA National Ocean Service, Center for Operational Oceanographic Products and Services (CO-OPS).</p>
+        </div>
+        <p class="sc-id">Named in answers: NOAA CO-OPS tide gauges · ID: NOAA CO-OPS verified monthly mean water level (API product monthly_mean)</p>
+      </article>
+
+      <article class="card src-card" id="psmsl" aria-labelledby="h-psmsl">
+        <div class="sc-head">
+          <div>
+            <h3 id="h-psmsl">Tide gauges worldwide (PSMSL)</h3>
+            <p class="sc-desc">Readings from the nearest tide gauge in a worldwide collection.</p>
+          </div>
+          <a class="btn ghost" href="https://psmsl.org/data/obtaining/">Open the dataset<span class="sr-only">: PSMSL</span>&nbsp;↗</a>
+        </div>
+        <dl class="facts">
+          <div><dt>Made by</dt><dd>Each gauge's own authority; collected and checked by the <a href="https://psmsl.org/">Permanent Service for Mean Sea Level (PSMSL)&nbsp;↗</a></dd></div>
+          <div><dt>We get it from</dt><dd>PSMSL's monthly files, on each gauge's fixed reference level. We leave out months PSMSL flags as doubtful or filled in.</dd></div>
+          <div><dt>Licence</dt><dd>No licence stated; PSMSL asks for the data set citation and its latest paper (Holgate et al., 2013)</dd></div>
+          <div><dt>Updated</dt><dd>Fetched when an answer needs it.</dd></div>
+        </dl>
+        <div class="credit">
+          <p class="cl">Credit to give</p>
+          <p>Permanent Service for Mean Sea Level (PSMSL), 2026, "Tide Gauge Data", Retrieved [the "Extracted from Database" date on PSMSL's data page] from http://www.psmsl.org/data/obtaining/.</p>
+        </div>
+        <details class="cite">
+          <summary><span class="mark" aria-hidden="true"></span>How to cite</summary>
+          <p>Simon J. Holgate, Andrew Matthews, Philip L. Woodworth, Lesley J. Rickards, Mark E. Tamisiea, Elizabeth Bradshaw, Peter R. Foden, Kathleen M. Gordon, Svetlana Jevrejeva, and Jeff Pugh (2013) New Data Systems and Products at the Permanent Service for Mean Sea Level. Journal of Coastal Research: Volume 29, Issue 3: pp. 493 – 504. doi:10.2112/JCOASTRES-D-12-00175.1.</p>
+        </details>
+        <p class="sc-id">Named in answers: Permanent Service for Mean Sea Level (PSMSL), RLR monthly means · ID: PSMSL Revised Local Reference (RLR) monthly mean sea level</p>
+      </article>
+    </section>
+
+    <section class="st-sec" id="water" aria-labelledby="h-water">
+      <h2 id="h-water">Water on land</h2>
+      <p class="st-lead">Used for water storage.</p>
+
+      <article class="card src-card" id="grace" aria-labelledby="h-grace">
+        <div class="sc-head">
+          <div>
+            <h3 id="h-grace">GRACE and GRACE-FO satellites</h3>
+            <p class="sc-desc">Satellite measurements of water stored on land, averaged over an area about 400 km wide.</p>
+          </div>
+          <a class="btn ghost" href="https://earth.gsfc.nasa.gov/geo/data/grace-mascons">Open the dataset<span class="sr-only">: GRACE</span>&nbsp;↗</a>
+        </div>
+        <dl class="facts">
+          <div><dt>Made by</dt><dd>NASA Goddard Space Flight Center (GSFC)</dd></div>
+          <div><dt>We get it from</dt><dd>Our own copy of NASA GSFC's file GSFC.glb_.200204_202606_RL06v2.0_OBP-ICE6GD.zip, land cells only.</dd></div>
+          <div><dt>Licence</dt><dd>No licence stated; NASA GSFC asks users of the monthly data to cite Loomis et al. (2019)</dd></div>
+          <div><dt>Updated</dt><dd>Our copy runs from April 2002 to June 2026 and was made on 14 November 2026. It changes only when we rebuild it by hand.</dd></div>
+        </dl>
+        <div class="credit">
+          <p class="cl">Credit to give</p>
+          <p>Loomis, B.D., Luthcke, S.B. &amp; Sabaka, T.J. (2019) Regularization and error characterization of GRACE mascons. J Geod 93, 1381–1398. https://doi.org/10.1007/s00190-019-01252-y</p>
+        </div>
+        <p class="sc-id">Named in answers: NASA GSFC GRACE and GRACE-FO mascons, RL06 v2.0 (OBP-ICE6GD) · ID: mascons RL06 v2.0, correction ICE-6G_D</p>
+      </article>
+    </section>
+
+    <section class="st-sec" id="projections" aria-labelledby="h-proj">
+      <h2 id="h-proj">Expert projections</h2>
+      <p class="st-lead">What experts project for the future. We show them exactly as published, never shifted to meet the records.</p>
+
+      <article class="card src-card" id="ar6" aria-labelledby="h-ar6">
+        <div class="sc-head">
+          <div>
+            <h3 id="h-ar6">IPCC sea-level projections (AR6)</h3>
+            <p class="sc-desc">The sea-level projections of the IPCC's Sixth Assessment Report, for each tide gauge, every 10 years from 2020 to 2150.</p>
+            <p class="sc-used">Used for sea level.</p>
+          </div>
+          <a class="btn ghost" href="https://doi.org/10.5281/zenodo.6382554">Open the dataset<span class="sr-only">: IPCC sea-level projections</span>&nbsp;↗</a>
+        </div>
+        <dl class="facts">
+          <div><dt>Made by</dt><dd>Garner and others (2021), for the IPCC's Sixth Assessment Report</dd></div>
+          <div><dt>We get it from</dt><dd>Our own copy of the published files on Zenodo.</dd></div>
+          <div><dt>Licence</dt><dd><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0<span class="sr-only">, the licence of the IPCC sea-level projections</span>&nbsp;↗</a></dd></div>
+          <div><dt>Updated</dt><dd>One fixed release, version 20210809. Our copy was made on 22 November 2026.</dd></div>
+        </dl>
+        <div class="credit">
+          <p class="cl">Credit to give</p>
+          <p>IPCC AR6 Sea Level Projections (Garner et al. 2021), version 20210809, CC BY 4.0.</p>
+        </div>
+        <details class="cite">
+          <summary><span class="mark" aria-hidden="true"></span>How to cite</summary>
+          <p>Fox-Kemper, B., H.T. Hewitt, C. Xiao, G. Aðalgeirsdóttir, S.S. Drijfhout, T.L. Edwards, N.R. Golledge, M. Hemer, R.E. Kopp, G. Krinner, A. Mix, D. Notz, S. Nowicki, I.S. Nurhati, L. Ruiz, J.-B. Sallée, A.B.A. Slangen, and Y. Yu, 2021: Ocean, Cryosphere and Sea Level Change. In Climate Change 2021: The Physical Science Basis. Contribution of Working Group I to the Sixth Assessment Report of the Intergovernmental Panel on Climate Change [Masson-Delmotte, V., P. Zhai, A. Pirani, S.L. Connors, C. Péan, S. Berger, N. Caud, Y. Chen, L. Goldfarb, M.I. Gomis, M. Huang, K. Leitzell, E. Lonnoy, J.B.R. Matthews, T.K. Maycock, T. Waterfield, O. Yelekçi, R. Yu, and B. Zhou (eds.)]. Cambridge University Press, Cambridge, United Kingdom and New York, NY, USA, pp. 1211–1362, doi:10.1017/9781009157896.011.</p>
+          <p>Kopp, R. E., Garner, G. G., Hermans, T. H. J., Jha, S., Kumar, P., Reedy, A., Slangen, A. B. A., Turilli, M., Edwards, T. L., Gregory, J. M., Koubbe, G., Levermann, A., Merzky, A., Nowicki, S., Palmer, M. D., &amp; Smith, C. (2023). The Framework for Assessing Changes To Sea-Level (FACTS) v1.0: A platform for characterizing parametric and structural uncertainty in future global, relative, and extreme sea-level change. Geoscientific Model Development, 16, 7461–7489. https://doi.org/10.5194/gmd-16-7461-2023</p>
+          <p>Garner, G. G., T. Hermans, R. E. Kopp, A. B. A. Slangen, T. L. Edwards, A. Levermann, S. Nowikci, M. D. Palmer, C. Smith, B. Fox-Kemper, H. T. Hewitt, C. Xiao, G. Aðalgeirsdóttir, S. S. Drijfhout, T. L. Edwards, N. R. Golledge, M. Hemer, G. Krinner, A. Mix, D. Notz, S. Nowicki, I. S. Nurhati, L. Ruiz, J-B. Sallée, Y. Yu, L. Hua, T. Palmer, B. Pearson, 2021. IPCC AR6 Sea Level Projections. Version 20210809. Dataset accessed 2026-11-22 at https://doi.org/10.5281/zenodo.5914709.</p>
+          <p>Acknowledgement: We thank the projection authors for developing and making the sea-level rise projections available, multiple funding agencies for supporting the development of the projections, and the NASA Sea Level Change Team for developing and hosting the IPCC AR6 Sea Level Projection Tool.</p>
+        </details>
+        <p class="sc-id">Named in answers: IPCC AR6 sea level projections (Garner et al. 2021) · ID: doi:10.5281/zenodo.6382554 · version 20210809</p>
+      </article>
+
+      <article class="card src-card" id="atlas" aria-labelledby="h-atlas">
+        <div class="sc-head">
+          <div>
+            <h3 id="h-atlas">Climate model projections (IPCC Interactive Atlas, CMIP6)</h3>
+            <p class="sc-desc">How the climate models in the IPCC's Interactive Atlas project air temperature, hottest days and rain to change, on a grid about 100 km wide, for 2021–2040, 2041–2060 and 2081–2100.</p>
+            <p class="sc-used">Used for air temperature, hottest days and rain.</p>
+          </div>
+          <a class="btn ghost" href="https://doi.org/10.20350/digitalCSIC/15492">Open the dataset<span class="sr-only">: IPCC Interactive Atlas</span>&nbsp;↗</a>
+        </div>
+        <dl class="facts">
+          <div><dt>Made by</dt><dd>Instituto de Física de Cantabria (IFCA, CSIC-UC), for the IPCC, from the CMIP6 climate models</dd></div>
+          <div><dt>We get it from</dt><dd>Our own copy, retrieved from the Copernicus Climate Data Store and checked value by value against the originals.</dd></div>
+          <div><dt>Licence</dt><dd><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0<span class="sr-only">, the licence of the IPCC Interactive Atlas</span>&nbsp;↗</a></dd></div>
+          <div><dt>Updated</dt><dd>One fixed release, Version 2 final. Our copy was made on 23 November 2026.</dd></div>
+        </dl>
+        <div class="credit">
+          <p class="cl">Credit to give</p>
+          <p>Contains modified Copernicus Climate Change Service information 2026.</p>
+          <p>IPCC AR6 Interactive Atlas, CMIP6 projections, version v2.0-final, CC BY 4.0.</p>
+        </div>
+        <details class="cite">
+          <summary><span class="mark" aria-hidden="true"></span>How to cite</summary>
+          <p>Copernicus Climate Change Service, Climate Data Store: Gridded monthly climate projection dataset underpinning the IPCC AR6 Interactive Atlas. https://doi.org/10.24381/cds.5292a2b0 (retrieved 2026-11-23)</p>
+          <p>Instituto de Física de Cantabria (IFCA); 2022; IPCC-WGI AR6 Interactive Atlas Dataset; Version 2 final; https://digital.csic.es/handle/10261/280324</p>
+          <p>Intergovernmental Panel on Climate Change. (2023). Atlas. In Climate Change 2021 – The Physical Science Basis: Working Group I Contribution to the Sixth Assessment Report of the Intergovernmental Panel on Climate Change (pp. 1927-2058). Cambridge: Cambridge University Press. https://doi.org/10.1017/9781009157896.021</p>
+          <p>Iturbide, M., Fernández, J., Gutiérrez, J.M., Bedia, J., Cimadevilla, E., Díez-Sierra, J., Manzanas, R., Casanueva, A., Baño-Medina, J., Milovac, J., Herrera, S., Cofiño, A.S., San Martín, D., García-Díez, M., Hauser, M., Huard, D., Yelekci, Ö. (2021) Repository supporting the implementation of FAIR principles in the IPCC-WG1 Atlas. Zenodo, DOI: 10.5281/zenodo.3691645</p>
+          <p>Iturbide, M., Fernández, J., Gutiérrez, J.M. et al. Implementation of FAIR principles in the IPCC: the WGI AR6 Atlas repository. Scientific Data 9, 629 (2022). https://doi.org/10.1038/s41597-022-01739-y</p>
+          <p>Acknowledgement: We acknowledge the World Climate Research Programme, which, through its Working Group on Coupled Modelling, coordinated and promoted CMIP6. We thank the climate modeling groups for producing and making available their model output, the Earth System Grid Federation (ESGF) for archiving the data and providing access, and the multiple funding agencies who support CMIP6 and ESGF.</p>
+        </details>
+        <p class="sc-id">Named in answers: IPCC AR6 Interactive Atlas, CMIP6 projections · ID: doi:10.20350/digitalCSIC/15492 · v2.0-final · retrieved from doi:10.24381/cds.5292a2b0</p>
+      </article>
+    </section>
+
+    <section class="st-sec" id="maps" aria-labelledby="h-maps">
+      <h2 id="h-maps">Maps and place names</h2>
+      <div class="card">
+        <table class="wf three">
+          <caption>Maps and place names: where they come from and the credit to give</caption>
+          <colgroup><col class="rh"><col><col><col></colgroup>
+          <thead><tr><th scope="col">What</th><th scope="col">From</th><th scope="col">Licence</th><th scope="col">Credit to give</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Place names in the search box</th><td><a href="https://open-meteo.com/en/docs/geocoding-api">Open-Meteo Geocoding API (GeoNames)&nbsp;↗</a></td><td>CC BY 4.0</td><td>Place names: Open-Meteo Geocoding API (GeoNames)</td></tr>
+            <tr><th scope="row">Map background</th><td>OpenFreeMap, with OpenMapTiles and OpenStreetMap data</td><td>ODbL (OpenStreetMap data)</td><td>© OpenMapTiles, data from OpenStreetMap contributors</td></tr>
+          </tbody>
+        </table>
+        <p class="wf-note">The coloured dots on the maps are our own calculation from the records above.</p>
+      </div>
+    </section>
+
+    <section class="st-sec" id="reuse" aria-labelledby="h-reuse">
+      <h2 id="h-reuse">Using a Bhoomi chart</h2>
+      <div class="card reuse">
+        <p>You may reuse our charts and text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0<span class="sr-only">, the licence of Bhoomi's charts and text</span>&nbsp;↗</a>. Credit "Bhoomi (bhoomi.earth), built with AI assistance", plus the credit lines above for the datasets the chart names.</p>
+      </div>
+    </section>
+
+    <p class="checked">Links checked on 23 November 2026. If a link doesn't open, search for the name or the ID under it.</p>
+  </div>
+  </div>
+</main>
+<footer class="foot src-foot">
+  <p>Data: the providers named on this page. Trends, ranges and world comparisons: our calculation.</p>
+</footer>
+</body>
+</html>

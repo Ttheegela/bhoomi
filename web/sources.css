@@ -1,0 +1,105 @@
+/* Data sources and World figures pages (web/design/17-sources-pages.md). Tokens, .top, .nav, .btn, .card, .lbl, .cite and
+   .foot come from style.css; .st-nav, .st-navlink, .st-sections, .st-sec and .st-lead from settings.css. */
+.top .brand { color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; min-height: 44px; } /* a link here: a 44 px target */
+a.st-navlink { text-decoration: none; }
+a.st-navlink:hover { color: var(--ink); }
+.st-nav .lbl { margin: 0 0 6px 12px; }
+.st-sec, .src-card, .wf th[id] { scroll-margin-top: calc(var(--top-h) + 16px); }
+/* this bar's real height, measured from 320 to 414 px: brand and Settings share a row down to 384 px (117 px, where
+   style.css's 399 px rule says 149 for the app), then wrap to two rows, 20 px taller than the app's with the 44 px brand link */
+@media (max-width: 399px) { :root { --top-h: 117px; } }
+@media (max-width: 383px) { :root { --top-h: 169px; } }
+
+/* the page: head across the top, then "On this page" beside the sections (the Settings layout's columns) */
+.src-wrap { padding: 28px 32px 0; max-width: 1312px; }
+.src-cols { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 28px; margin-top: 24px; }
+.src-cols .st-nav { top: calc(var(--top-h) + 24px); }
+.st-sec > h2 + .card { margin-top: 12px; }
+
+/* page head and the two-page switch */
+.src-head h1 { font-size: 30px; letter-spacing: -.4px; }
+.src-head .lead { margin: 6px 0 0; color: var(--ink-2); font-size: 17px; max-width: 74ch; }
+.src-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 16px 0 0; }
+.src-tabs a { display: flex; align-items: center; min-height: 48px; padding: 0 14px; color: var(--ink-2); font-weight: 500;
+  text-decoration: none; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.src-tabs a[aria-current="page"] { color: var(--ink); font-weight: 650; border-bottom-color: var(--ink); }
+.src-note { font-size: 15px; color: var(--ink-2); margin: 0; max-width: 80ch; }
+
+/* one card per dataset */
+.src-card { display: flex; flex-direction: column; gap: 14px; }
+.src-card + .src-card { margin-top: 14px; }
+.sc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px 16px; flex-wrap: wrap; }
+.sc-head h3 { font-size: 20px; margin: 0; } /* settings.css gives .st-sec h3 a 22 px top margin */
+.sc-desc { margin: 4px 0 0; max-width: 72ch; }
+.sc-used { font-size: 14px; color: var(--ink-2); margin: 2px 0 0; }
+.facts { display: grid; grid-template-columns: 150px minmax(0, 1fr); margin: 0; border-top: 1px solid var(--line); }
+.facts > div { display: contents; }
+.facts dt, .facts dd { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.facts dt { font-size: 14px; color: var(--ink-2); padding-right: 16px; line-height: 1.6; }
+.facts dd { margin: 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.facts dd p { margin: 0; max-width: 80ch; }
+.facts dd p + p { margin-top: 4px; }
+.credit { background: var(--bg); border-radius: 8px; padding: 12px 16px; }
+.credit .cl { font-size: 14px; font-weight: 600; color: var(--ink-2); margin: 0 0 4px; }
+.credit p { margin: 0; max-width: none; overflow-wrap: anywhere; }
+.credit p + p { margin-top: 6px; }
+.keep { margin: 0; padding: 0; list-style: none; font-size: 15px; }
+.keep li { max-width: 80ch; }
+.keep li + li { margin-top: 4px; }
+.keep b { font-weight: 600; }
+.src-card .cite { margin-top: 0; }
+.src-card .cite p { overflow-wrap: anywhere; }
+.sc-id { font-size: 13px; color: var(--ink-2); margin: 0; max-width: none; overflow-wrap: anywhere; }
+/* a provider link that failed the release check replaces its button (design 17 section 6) */
+.dead { font-size: 14px; color: var(--ink-2); max-width: 260px; text-align: right; margin: 0; }
+
+/* tables: maps and place names; the world figures */
+.wf { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.45; table-layout: fixed; }
+.wf caption { text-align: left; font-size: 14px; color: var(--ink-2); padding: 0 0 8px; }
+.wf th, .wf td { text-align: left; vertical-align: top; padding: 12px 16px 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.wf thead th { font-family: var(--font-head); font-size: 18px; font-weight: 650; color: var(--ink); border-bottom: 2px solid var(--ink); }
+.wf tbody th { font-weight: 500; font-size: 14px; color: var(--ink-2); }
+.wf .rh { width: 22%; }
+.wf.three .rh { width: 24%; }
+.wf td .sub { display: block; font-size: 14px; color: var(--ink-2); margin-top: 4px; }
+.wf-note { font-size: 14px; color: var(--ink-2); margin: 10px 0 0; }
+.nofig { margin: 0; }
+.nofig > div { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.nofig > div:first-child { border-top: 1px solid var(--line); }
+.nofig dt { font-weight: 600; }
+.nofig dd { margin: 0; }
+.read p { max-width: 74ch; }
+.read p:last-child { margin-bottom: 0; }
+.reuse p { margin: 0; }
+.checked { font-size: 14px; color: var(--ink-2); margin: 0; }
+.src-foot { padding: 32px 32px 48px; }
+
+@media (max-width: 820px) {
+  .src-wrap { padding: 16px 16px 0; }
+  .src-cols { grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+  .st-nav { position: static; flex-direction: row; flex-wrap: wrap; overflow: visible; gap: 0 4px; }
+  .st-nav .lbl { width: 100%; margin: 0 0 2px; }
+  a.st-navlink { padding: 10px 10px; min-height: 44px; }
+  .src-foot { padding: 24px 16px 40px; }
+}
+@media (max-width: 599px) {
+  .src-head h1 { font-size: 26px; }
+  .src-head .lead { font-size: 16px; }
+  .st-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .st-nav .lbl { grid-column: 1 / -1; }
+  a.st-navlink { white-space: normal; }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts dt { border-bottom: 0; padding: 10px 0 0; }
+  .facts dd { padding: 2px 0 10px; }
+  .sc-head .btn { width: 100%; }
+  .dead { text-align: left; max-width: none; }
+  .wf { font-size: 14px; }
+  .wf .rh, .wf.three .rh { width: 30%; }
+  .wf thead th { font-size: 16px; }
+  .wf th, .wf td { padding-right: 10px; }
+  .nofig > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+@media print {
+  .src-cols { display: block; }
+  .st-nav, .src-tabs { display: none; }
+}

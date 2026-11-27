@@ -465,6 +465,25 @@ function nextLine(items) {
   return el('div', { class: 'next' }, el('span', { class: 'nl' }, 'Where to look next:'), ' ', ul);
 }
 
+// "In plain words" (16-plain-language.md section 3): the chosen scenario's lines as given, then the projection's source,
+// its code (never split) and the tail. Not a live region: the chart's readout line announces a new scenario.
+const plainLines = (P) => P.lines.map((x) => el('li', {}, x));
+const plainFoot = (P) => ['Future: ', P.href ? el('a', { href: P.href, target: '_blank', rel: 'noopener' }, `${P.src} ↗`) : P.src, ' · ', el('span', { class: 'nw' }, P.code), P.tail];
+function plainBox(P) {
+  return el('section', { class: 'plain', 'aria-labelledby': 'pl-h' }, el('h3', { id: 'pl-h', class: 'pl-h' }, P.label),
+    el('ul', { role: 'list' }, ...plainLines(P)), el('p', { class: 'pl-src' }, ...plainFoot(P)));
+}
+// A new emissions scenario: with the box only its lines and foot change, in place (no card redraw, no focus move);
+// without it R3 follows the scenario, so the card is drawn again.
+function onScen() {
+  const box = $('rec').querySelector('.plain'), pin = selectedPin(curWin);
+  const P = box && pin && pin.status === 'ok' && window.TDX.card(pin.trend, imperial()).plain;
+  if (!P) { renderRec(); return; }
+  const ul = box.querySelector('ul'), foot = box.querySelector('.pl-src');
+  clear(ul); ul.append(...plainLines(P));
+  clear(foot); foot.append(...plainFoot(P));
+}
+
 /* ---------- "Records for this place" on the card (web/design/12-two-sources.md sections 3 to 5, 12) ---------- */
 
 // the pending line: the other records in catalog order, and the seconds since their call went out
@@ -609,8 +628,9 @@ function drawRec(box) {
     if (C.world.src) wl.append(' World figure: ', C.world.href ? el('a', { href: C.world.href, target: '_blank', rel: 'noopener' }, `${C.world.src}\u00a0↗`) : C.world.src);
     box.append(wl);
   }
+  if (C.plain) box.append(plainBox(C.plain)); // the box takes R3's place (design 16 §3)
   // R3: the chosen scenario's 2050 projection (design 11 §3; CMIP6 design 15 §2, rain's "of the usual yearly rain" small); without one, why there is none
-  const r3 = C.r3f ? el('div', {}, el('p', { class: 'rl' }, C.r3f.label), el('p', { class: 'rv' }, C.r3f.value, C.r3f.per ? ' ' : '', C.r3f.per ? el('small', {}, C.r3f.per) : ''), el('p', { class: 'rs' }, C.r3f.line))
+  const r3 = C.plain ? '' : C.r3f ? el('div', {}, el('p', { class: 'rl' }, C.r3f.label), el('p', { class: 'rv' }, C.r3f.value, C.r3f.per ? ' ' : '', C.r3f.per ? el('small', {}, C.r3f.per) : ''), el('p', { class: 'rs' }, C.r3f.line))
     : el('div', {}, el('p', { class: 'rl' }, 'What experts project'), el('p', { class: 'rt' }, C.r3));
   const fl = !C.r3f && g.future_link; // with a projection the flood map moves under the chart and into step 7
   if (fl && typeof fl.url === 'string' && fl.url.startsWith('https://') && fl.label) r3.append(el('p', { class: 'rt' }, el('a', { href: fl.url, target: '_blank', rel: 'noopener' }, `${fl.label} ↗`)));
@@ -701,6 +721,7 @@ function renderFoot() {
   p.append(`. Trends: our calculation (Mann-Kendall test with Sen's slope, seasons removed against ${curWin === 'water_storage' ? "the provider's own reference period" : 'the 1995–2014 average'}).`);
   const cop = t ? window.TDX.attribution(t) : ''; // ERA5 and the CMIP6 files are Copernicus products: once, as the server words it
   if (cop) p.append(` ${cop}`);
+  p.append(' ', el('a', { href: '/sources/', class: 'srclink' }, 'All data sources and licences')); // design 17 §1, every window
   // the Open-Meteo attribution travels with its data: only while an ERA5 record named above came from its archive
   const ul = $('footer-sources');
   let li = Array.prototype.find.call(ul.children, (x) => x.dataset.credit === 'era5');
@@ -1037,7 +1058,7 @@ async function init() {
 }
 
 window.addEventListener('resize', () => window.TDX.redraw());
-document.addEventListener('td:scen', renderRec); // a new emissions scenario: the card's "By 2050" follows it
+document.addEventListener('td:scen', onScen); // a new emissions scenario: the box's lines, or R3, follow it
 document.addEventListener('td:prefs', () => { if (curWin !== 'settings') { renderControls(); changed(); } });
 window.addEventListener('hashchange', route);
 document.addEventListener('DOMContentLoaded', init);

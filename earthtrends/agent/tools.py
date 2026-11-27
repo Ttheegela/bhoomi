@@ -101,5 +101,5 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
     finally:
         if pool:
             pool.shutdown(wait=False)  # a late or failed read finishes in the background and fills the cache
-    tail = {k: r.pop(k) for k in ("meaning", "guidance")}  # the contract keeps these two last
+    tail = {k: r.pop(k) for k in ("meaning", "plain", "guidance")}  # the contract keeps these last, plain after meaning
     return {**r, "main_note": note, **extra, **tail}

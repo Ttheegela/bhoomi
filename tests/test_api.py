@@ -15,7 +15,7 @@ FX = Path(__file__).parent / "fixtures"
 SERIES_KEYS = {"variable", "units", "freq", "place", "times", "values", "source", "notes", "flags", "anomaly"}
 TREND_KEYS = {"variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade",
               "ci_low", "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "baseline", "record",
-              "range_kind", "headline_rate", "fit", "latest", "now", "world", "projection", "explain", "caveats", "meaning", "guidance",
+              "range_kind", "headline_rate", "fit", "latest", "now", "world", "projection", "explain", "caveats", "meaning", "plain", "guidance",
               "main_note", "comparisons", "comparisons_window", "disagree", "drift", "thin_note", "single_note"}  # PR4a: null for sea level
 H = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 client = TestClient(app)
@@ -73,7 +73,7 @@ def test_single_note_on_the_trend_route(offline):
     assert full["thin_note"] is bare["thin_note"] is None  # the main record isn't thin
     pr4a = {"comparisons", "comparisons_window", "disagree", "drift", "thin_note", "single_note"}
     assert {k: v for k, v in full.items() if k not in pr4a} == {k: v for k, v in bare.items() if k not in pr4a}
-    assert list(full)[-2:] == ["meaning", "guidance"]
+    assert list(full)[-3:] == ["meaning", "plain", "guidance"]
 
 
 def test_start_end_passed_through(offline):

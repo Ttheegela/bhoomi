@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 import httpx
 
 from earthtrends.agent import providers, resources, tracing
+from earthtrends.agent.guidance import DISAGREE as MODELS_DISAGREE  # code writes it for rain; not the sources
 from earthtrends.agent.loop import (GAVE_UP, MAX_CALLS, NUM, agree_plan, agree_sentence, ask,
                                     history_error, tried_sources, wrong_periods)
 from earthtrends.agent.loop import _pool, invented_numbers, model_results  # one implementation, shared with the loop's check
@@ -56,9 +57,9 @@ STATS_WORDS = ("p-value", "p value", "statistically significant", "0.05 line", "
 URL = re.compile(r"https?://[^\s)\]>\"',]+", re.I)
 VERDICT_WORDS = {
     "rising": ("rising", "going up", "increasing", "risen", "upward", "warming", "getting hotter", "getting warmer",
-               "rises", "wetter"),
+               "rises", "wetter", "more rain"),  # "more rain" / "less rain": the records' own words (disagree.say)
     "falling": ("falling", "going down", "decreasing", "dropping", "declining", "downward", "cooling", "falls",
-                "losing", "cooler", "less hot", "drier"),
+                "losing", "cooler", "less hot", "drier", "less rain"),
     "no_clear_change": ("no clear change", "no change is plausible", "rule out no change", "not show a clear change",
                         "n't show a clear change", "no clear", "not clear", "can't tell", "cannot tell"),
 }
@@ -162,6 +163,10 @@ def check(case: dict, run: dict) -> dict[str, bool]:
         var = ALIASES.get(case.get("expect_variable"), case.get("expect_variable"))
         main = by_src.get(defaults.get(var)) or next(reversed(by_src.values()), None)
     verdicts = {r.get("verdict") for r in by_src.values()}
+    # A result whose records disagree (compared in one call, PR4a) adds its counted records' verdicts: the answer must
+    # say they disagree and give each one, as for sources called one by one.
+    verdicts |= {row.get("verdict") for r in by_src.values() if (r.get("disagree") or {}).get("any")
+                 for row in r.get("comparisons") or [] if isinstance(row, dict) and row.get("counted")}
     a = answer.lower()
     out = {"answered": bool(answer) and answer != GAVE_UP and not run.get("error")}
     if case["expect_tool"] == "none":
@@ -182,7 +187,9 @@ def check(case: dict, run: dict) -> dict[str, bool]:
             out["source"] = case["expect_source"] in called
         if case.get("expect_verdict"):
             out["verdict"] = bool(main) and main.get("verdict") == case["expect_verdict"]
-        said_disagree = bool(DISAGREE.search(a.replace("’", "'")))
+        # the code's rain words, in [GUIDANCE] ("Models disagree on wetter or drier.") and in the plain line ("The
+        # models disagree on wetter or drier: ..."), are about climate models, not the records
+        said_disagree = bool(DISAGREE.search(a.replace("’", "'").replace(MODELS_DISAGREE.lower().rstrip("."), "")))
         # Results for several places (a broad question): each city has its own verdict, and results keyed by source
         # can't tell them apart, so the verdict-word branches are skipped; the other wording checks still apply.
         # A multi_measure case is the same: each measurement has its own verdict.
@@ -232,6 +239,9 @@ def check(case: dict, run: dict) -> dict[str, bool]:
     # a failed call's sources: the addresses the model read with its error, this turn only
     known |= {_url(s["url"]) for c in run.get("tool_calls", []) if c.get("error") for s in tried_sources(c)}
     known |= {_url(u) for u in resources.URLS}
+    # the expert projection's dataset, which code names when the answer doesn't
+    known |= {_url(r["projection"]["url"]) for r in results if isinstance(r, dict)
+              and isinstance(r.get("projection"), dict) and r["projection"].get("url")}
     # the tool's own guidance links, which code inserts word for word
     known |= {_url(u) for r in results if isinstance(r, dict) and isinstance(r.get("guidance"), dict)
               for u in URL.findall(json.dumps(r["guidance"]))}

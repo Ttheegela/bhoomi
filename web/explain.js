@@ -13,6 +13,7 @@
   var MEASURE = { sea_level: 'sea level', air_temp: 'air temperature', air_temp_max: 'the hottest day of the month', precip: 'rain', water_storage: 'water storage' };
   var LEVELS = { air_temp: 1, air_temp_max: 1, precip: 1 }; // measurements whose own levels mean something to a visitor
   var OPEN_STEPS = [3, 4, 5, 6]; // steps that start open on a new answer, at every width
+  var WORLD_COL = { air_temp: 'air-temperature', sea_level: 'sea-level' }; // /sources/world/: each world figure's column
   var NO_FUTURE = 'We never stretch the past trend into the future. Future values on this page come only from published expert projections.';
 
   function isNum(x) { return typeof x === 'number' && isFinite(x); }
@@ -232,7 +233,18 @@
     var next = (Array.isArray(g.look_next) ? g.look_next : []).filter(function (x) { return x && str(x.label); })
       .map(function (x) { var u = https(x.url); return { text: u ? x.label + NB + '↗' : x.label, href: u }; });
     return { word: word, shape: t.verdict === 'rising' ? '▲' : t.verdict === 'falling' ? '▼' : '≈', conf: conf, fact: factOf(t, imp),
-      world: cardWorld(t, imp), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f, next: next, disc: str(g.disclaimer) };
+      world: cardWorld(t, imp), r1: r1, r2: r2, r3: str(t.projection && t.projection.why), r3f: r3f, plain: plainOf(fx, imp), next: next, disc: str(g.disclaimer) };
+  }
+  // "In plain words" (design 16 §3): the chosen scenario's lines as the server wrote them, its source, code and tail. Only
+  // projection fields, so the box reads the same whichever record is main; null without S.plain (no box: R3 stays).
+  function plainOf(fx, imp) {
+    var S = fx && fx.S, lines = S && Array.isArray(S.plain) ? S.plain.filter(function (x) { return str(x); }) : [];
+    if (!lines.length) return null;
+    var n = (S.models || [])[1], ct = str((fx.p.check || {}).text);
+    return { label: imp ? 'In plain words (in metric)' : 'In plain words', lines: lines, href: https((fx.p.source || {}).record_url),
+      src: fx.cm ? 'IPCC AR6 Atlas, CMIP6' : 'IPCC AR6 sea level projections', code: fx.code,
+      tail: fx.cm ? (isNum(n) ? ', ' + n + ' climate models' : '')
+        : ', ' + (fx.low ? 'low' : 'medium') + ' confidence' + (fx.regional ? ' · Regional estimate: local sinking may differ.' : '') + (ct ? ' · ' + ct : '') };
   }
   /* Records for this place (web/design/12-two-sources.md): the main record and the others side by side. Agreement,
      reasons and drift are the server's words (comparisons, disagree, drift); the page lays them out, never works them out. */
@@ -652,6 +664,8 @@
       s6.short = str(w.why_none);
       s6.words = s6.short ? [s6.short] : [];
     }
+    // the world figures page (design 17 §1): the measurement's column, or why some have none
+    s6.links = [{ text: 'About the world figures we compare with', href: '/sources/world/#' + (WORLD_COL[t.variable] || 'none') }];
     out.push(s6);
 
     var pj = str(t.projection && t.projection.why), fl = g.future_link, flink = fl && https(fl.url) && str(fl.label) ? { text: fl.label + ' ↗', href: fl.url } : null;
@@ -690,6 +704,7 @@
     }
     list.push({ text: "Our calculation: the Mann-Kendall test and Sen's slope on " + (byYear ? 'yearly rain' : 'monthly values with seasons removed') + (b.method === 'none' ? '.' : ', against ' + b.text + '.') });
     if (attribution(t)) list.push({ text: attribution(t) });
+    list.push({ text: '', link: { text: 'All our data sources, with licences and credits', href: '/sources/' + (str(src.id) ? '#' + src.id : '') } }); // design 17 §1: the main record's card
     out.push({ title: 'Sources', short: [str(src.name)].concat(oth.map(function (x) { return str((x.source || {}).name); })).filter(Boolean).join('; ') + (wp && w.source ? '; world figure from ' + lc1(str(w.source.name)) : '') + (ps ? (fx.cm ? '; future from the IPCC AR6 Atlas (CMIP6)' : '; future from IPCC AR6') : ''),
       words: s9, csv: true, csvFut: !!ps });
     return out;
@@ -1184,7 +1199,8 @@
     return n;
   }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  function ext(text, href) { return href ? h('a', { href: href, target: '_blank', rel: 'noopener', class: 'srclink' }, text) : text.replace(/\s*↗$/, ''); }
+  // a link on our own site (it starts with "/") opens in the same tab
+  function ext(text, href) { return href ? h('a', href.charAt(0) === '/' ? { href: href, class: 'srclink' } : { href: href, target: '_blank', rel: 'noopener', class: 'srclink' }, text) : text.replace(/\s*↗$/, ''); }
   function download(c) {
     var url = URL.createObjectURL(new Blob(['﻿' + c.text], { type: 'text/csv;charset=utf-8' })); // the mark tells spreadsheets it is UTF-8
     var a = h('a', { href: url, download: c.name });

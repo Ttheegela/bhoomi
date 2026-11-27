@@ -6,7 +6,7 @@ import httpx
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from earthtrends.agent import tools
+from earthtrends.agent import projection_answer, tools
 
 try:
     VERSION = importlib.metadata.version("bhoomi")
@@ -92,14 +92,50 @@ def detect_trend(variable: str, lat: float, lon: float, start: str | None = None
     slope_per_decade (in `units` per decade, e.g. degC per decade or mm per decade), ci_low, ci_high,
     p_value, autocorrelation_adjusted, verdict, source {id, name, url}, caveats, and meaning: four plain-language
     strings computed from the result (headline, confidence, comparison, limit) for readers who are not analysts.
+    It also carries plain: two or three short lines for the public. Start with meaning.headline, then plain, word for
+    word.
     It also carries guidance: fact (one sentence on what the records show), look_next (where to look next: labels,
     with a url or null) and disclaimer. These are facts, not advice: pass them on as given, and give no risk level
     or recommendation of your own.
+    It also carries projection: the experts' projection for this place under emission scenarios, not a prediction
+    and not the past trend carried on. available false: `why` says why there is none. Sea level: IPCC AR6 at the
+    tide gauge; readouts.by_2050 is 2050, and its range is the "likely range (about 2 in 3 chance)" (medium
+    confidence; low-confidence scenarios give the "17th to 83rd percentile", never "likely"). Air temperature,
+    hottest day of the month and rain: CMIP6 from the IPCC AR6 Interactive Atlas; readouts.by_2050 is 2041–2060 and
+    its range is the "range across climate models (10th–90th percentile)", never "likely" or a chance; for rain,
+    by_2050.disagree true means models disagree on wetter or drier. Quote readouts.by_2050.text with its range_kind
+    and scenario, readouts.more_than_today only where it is given, and models_note when it is set; every level is
+    against the 1995–2014 average.
+    For air temperature, the hottest day of the month and rain it also compares the other records at this place
+    over the same years (comparisons, disagree, drift, thin_note, single_note, main_note). When disagree.any is true,
+    say the records disagree, give what each one shows (disagree.say) and the first reason (disagree.reasons), and
+    never say which record is right. Pass on thin_note, single_note, main_note and source.limit when they are set.
     verdict is one of "rising", "falling" or "no_clear_change" (p >= 0.05 or the CI crosses 0).
     When you report it, give the slope with its CI, name the source, and keep the caveats.
     """
     with _as_tool_error():
         return tools.detect_trend(variable, lat, lon, start, end, source)
+
+
+PROJECTION_DESCRIPTION = (
+    "What experts project for a place: IPCC AR6 sea-level projections at the nearest tide gauge, or IPCC AR6 Atlas "
+    "(CMIP6) climate-model projections for air temperature, the hottest day of the month and rain. Water storage has "
+    "none. Start your answer with the strings in `plain`, word for word and in order: what is projected, how sure the "
+    "experts are, and what it means day to day; for air temperature and the hottest day of the month `plain` ends "
+    "with the climate models' note. They are written for the public and every number in them is in this result. Use the other fields only if the user wants more: typical, likely_range (sea level only: about a 2 in 3 "
+    "chance, medium confidence), model_range (temperature and rain: how much climate models agree, never a chance or "
+    "'likely'), high_end, today_level, scenario. Give details (quantiles, the parts of sea-level rise, provenance) "
+    "only when asked. Name the source (details.source.name and record_url) and end with disclaimer. These are "
+    "projections that depend on the world's emissions, not predictions. State no number that is not in this result, "
+    "and give no advice: no 'you should', no buy, build, move or avoid, no risk level. To say whether the records "
+    "show a change, use detect_trend.")
+
+
+@mcp.tool(description=PROJECTION_DESCRIPTION)
+def get_projection(variable: str, lat: float, lon: float, scenario: str | None = None, year: int | None = None,
+                   source: str | None = None) -> dict:
+    with _as_tool_error():
+        return projection_answer.get_projection(variable, lat, lon, scenario, year, source)
 
 
 def main() -> None:

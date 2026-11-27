@@ -938,7 +938,9 @@ assert.deepStrictEqual(cmTable(cpx), { caption: 'Intermediate emissions (SSP2-4.
 assert.deepStrictEqual(cmTable(ccx).rows.map(function (r) { return r.cells[4]; }), ['66%, disagree', '75%, disagree', '91%']);
 assert.strictEqual(cmTable(ccx).cols[4], 'Models agreeing on wetter or drier');
 // agreement at 80% or more everywhere: no "disagree" sentence anywhere (the caveat and step 7's rule are not about this place)
-var CA = copy(CC); CA.trend.projection.scenarios.forEach(function (x) { x.agree = [0.9, 0.85, 0.95]; x.disagree = [false, false, false]; }); CA.trend.projection.readouts.by_2050.disagree = false;
+var CA = copy(CC); CA.trend.projection.scenarios.forEach(function (x) { x.agree = [0.9, 0.85, 0.95]; x.disagree = [false, false, false];
+  x.plain[1] = x.plain[1].replace('The models disagree on wetter or drier: 8 in 10 of them put it', '8 in 10 climate models put it') + ' That shows how much the models agree, not how likely it is.'; }); // the server's agree form (design 16 §1)
+CA.trend.projection.readouts.by_2050.disagree = false;
 all(CA, pc2(CA, 'Chennai')).forEach(function (x) { assert.ok(!/disagree/i.test(x) || /Climate models disagree more about rain/.test(x) || /Under 80%, we say they disagree\.$/.test(x) || /^# Bhoomi: /.test(x), x); }); // the CSV: its column name
 assert.ok(!/disagree/.test(steps(CA.trend, CA.series, pc2(CA, 'Chennai'))[6].short) && cmTable(futOf(CA.trend, null, false, TODAY)).rows.every(function (r) { return !/disagree/.test(r.cells[4]); }));
 // §4 step 7 "What comes next": the delta method, the cell, the models, the range's name, the caveat, the working
@@ -1536,3 +1538,46 @@ assert.deepStrictEqual(opened(), [3, 4, 5, 6]); says('Open all steps');
     env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
     r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_steps_6_and_9_link_to_the_sources_pages():
+    """Design 17 §1: step 6 ends with "About the world figures we compare with", to the measurement's column on
+    /sources/world/ (sea level keeps its column with no world figure; hottest day, rain and water go to #none); step 9's
+    last item is "All our data sources, with licences and credits", to the main record's card. Both are on our own site,
+    so they open in the same tab; provider links still open a new one."""
+    js = PURE + r"""
+var assert = require('assert'), fs = require('fs'), path = require('path');
+function load(n) { return JSON.parse(fs.readFileSync(path.join(process.env.FIX, n + '.json'), 'utf8')); }
+var got = {};
+['princeton_air_temp', 'battery_sea_level', 'mumbai_sea_level_no_world', 'delhi_hottest_day', 'chennai_rain', 'grace_water_storage'].forEach(function (n) {
+  var d = load(n), S = steps(d.trend, d.series, { label: 'X', name: 'X', slug: 'x', imperial: false });
+  var s6 = S.filter(function (s) { return s.title === 'Compared with the world'; })[0], s9 = S[S.length - 1];
+  assert.strictEqual(s9.title, 'Sources');
+  assert.deepStrictEqual(s6.links.map(function (l) { return l.text; }), ['About the world figures we compare with']);
+  var list = s9.words[0].list, last = list[list.length - 1];
+  assert.strictEqual(last.text, '');
+  assert.strictEqual(last.link.text, 'All our data sources, with licences and credits');
+  got[n] = [s6.links[0].href, last.link.href];
+});
+console.log(JSON.stringify(got));
+"""
+    env = dict(os.environ, FIX=str(ROOT / "tests" / "fixtures" / "rework"))
+    r = subprocess.run(["node", "-"], input=js, capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == {
+        "princeton_air_temp": ["/sources/world/#air-temperature", "/sources/#power"],
+        "battery_sea_level": ["/sources/world/#sea-level", "/sources/#coops"],
+        "mumbai_sea_level_no_world": ["/sources/world/#sea-level", "/sources/#psmsl"],
+        "delhi_hottest_day": ["/sources/world/#none", "/sources/#power"],
+        "chennai_rain": ["/sources/world/#none", "/sources/#power"],
+        "grace_water_storage": ["/sources/world/#none", "/sources/#grace"],
+    }
+    # the anchors exist: the world table's two columns and #none, and one card per source id
+    world = (ROOT / "web" / "sources" / "world" / "index.html").read_text(encoding="utf-8")
+    cards = (ROOT / "web" / "sources" / "index.html").read_text(encoding="utf-8")
+    assert all(f'id="{a}"' in world for a in ("air-temperature", "sea-level", "none"))
+    assert all(f'<article class="card src-card" id="{a}"' in cards for a in ("era5", "power", "ghcn", "coops", "psmsl", "grace"))
+    # the same tab for our own pages, a new tab for a provider's
+    assert ("function ext(text, href) { return href ? h('a', href.charAt(0) === '/' ? { href: href, class: 'srclink' } "
+            ": { href: href, target: '_blank', rel: 'noopener', class: 'srclink' }, text)") in SRC

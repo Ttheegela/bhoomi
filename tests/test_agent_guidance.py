@@ -24,6 +24,7 @@ GI = {"variable": "sea_level", "units": "mm", "place": {"name": "Grand Isle", "l
                   "comparison": "About 8 cm higher every 10 years.", "limit": "It cannot tell the future."},
       "guidance": GUIDE}
 GI_ARGS = {"variable": "sea_level", "lat": 29.26, "lon": -89.96}
+SOURCES = "All our data sources, with licences: bhoomi.earth/sources"  # design 17 §8: first answer or when asked
 EXPECT = (f"Sea level: {FACT} Where to look next: Official flood maps (FEMA Flood Map Service Center) "
           "(https://msc.fema.gov/portal/home); Your local planning office. Future flood map (NOAA) "
           f"(https://coast.noaa.gov/slr/). {DISCLAIMER}")
@@ -45,6 +46,9 @@ def test_block_is_the_tools_strings_word_for_word():
     assert guidance.block([ok(GI, GI_ARGS)]) == EXPECT
     for s in (GUIDE["fact"], GUIDE["disclaimer"], FEMA["label"], FEMA["url"], PLANNING["label"]):
         assert s in EXPECT
+    assert guidance.SOURCES_LINE == SOURCES and loop.stated_numbers(SOURCES) == []  # no number: outside every check
+    # simple words: the same block without the fact
+    assert guidance.block([ok(GI, GI_ARGS)], simple=True) == EXPECT.replace(f"Sea level: {FACT} ", "")
     # an old result that still carries a past-trend outlook adds nothing about the future (spec D1)
     old = {**GUIDE, "outlook_label": "If the past trend continues",
            "outlook": [{"year": 2050, "low": 18.2, "high": 21.4, "unit": "cm", "text": "+18 to +21 cm by 2050"}]}
@@ -70,6 +74,8 @@ def test_hottest_day_adds_its_fact():
 ])
 def test_fill(text, want):
     assert guidance.fill(text, [ok(GI, GI_ARGS)]) == want
+
+
 
 
 def test_result_without_guidance_is_unchanged():
@@ -157,7 +163,9 @@ def test_loop_inserts_guidance_outside_the_word_limit(fake, monkeypatch):
     body = " ".join(["word"] * 100) + "."
     fake.script = [step(calls=[call("a", **GI_ARGS)]), step(body + " [GUIDANCE] [OFFICIAL RESOURCES]")]
     r = loop.ask("Should I invest in a house in Grand Isle?", model="fake:m")
-    assert r["answer"] == f"{body} {EXPECT} {resources.US_COAST} Source: NOAA CO-OPS tide gauges, {SRC['url']}."
+    # the missing source link goes in front of the markers; the guidance and the official resources follow, and
+    # the sources pages line (a first answer) is the very last line
+    assert r["answer"] == f"{body} Source: NOAA CO-OPS tide gauges, {SRC['url']}. {EXPECT} {resources.US_COAST}\n{SOURCES}"
     assert fake.script == []  # 100 words + code's text: no length retry
     # FEMA's flood maps once, in "Where to look next"; the official-resources sentence doesn't repeat them
     assert r["answer"].count("msc.fema.gov") == 1 and r["answer"].index("msc.fema.gov") < r["answer"].index(resources.US_COAST)
@@ -437,32 +445,35 @@ def test_scorer_uses_the_loops_number_check():
 
 # ---- the model reads, and the number check pools, only the fields the prompt uses ----
 
-LEAKS = ("It could warm another 1.5 °C by mid-century.",  # fit.change
-         "July is about 24 °C.")  # baseline.months
-
-
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_rework_fields_stay_out_of_the_model_view_and_the_number_check(monkeypatch):
+    """ERA5 is air temperature's main record (PR4a): Princeton's recorded ERA5 series, with NASA POWER beside it (the
+    station can't be read offline). Numbers only the page uses (fit.change, the July normal) stay out of the view."""
     import json
     from pathlib import Path
 
-    from earthtrends.data import power
-    fx = json.loads((Path(__file__).parent / "fixtures" / "power_monthly.json").read_text())
+    from earthtrends.data import era5, power
+    fixtures = Path(__file__).parent / "fixtures"
+    monkeypatch.setenv(era5.REPLAY, str(fixtures / "era5_replay"))
+    fx = json.loads((fixtures / "power_monthly.json").read_text())
     monkeypatch.setattr(power, "fetch", lambda p, la, lo: fx)
-    args = {"variable": "air_temp", "lat": 39.36, "lon": -74.42}
+    args = {"variable": "air_temp", "lat": 40.35, "lon": -74.66}
     full = tools.detect_trend(**args)
+    assert full["source"]["id"] == "era5" and full["main_note"] is None
+    assert [c["label"] for c in full["comparisons"]] == ["ERA5", "NASA POWER", "Weather station"]
+    leaks = (f"It could warm another {full['fit']['change']:.2f} °C by mid-century.",  # fit.change
+             f"July is about {full['baseline']['months'][6]:.1f} °C.")  # baseline.months
     calls = [ok(full, args)]
     view = loop.for_model(calls)[0]["result"]
     assert loop.model_results(calls) == [view]  # one view for the model and for the check (the scorer's too)
     assert set(view) <= set(loop.MODEL_FIELDS) and not {"fit", "explain", "record", "latest"} & set(view)
     assert view["baseline"] == {"text": full["baseline"]["text"]} and view["world"] == {"text": full["world"]["text"]}
     assert set(view["source"]) == {"id", "name", "url"} and view["headline_rate"] == full["headline_rate"]
-    assert all(not loop.invented_numbers(t, [full]) for t in LEAKS)  # the whole result would let them through
+    assert all(set(row) == {"label", "where", "years", "verdict", "note", "rate"} for row in view["comparisons"])
+    assert all(not loop.invented_numbers(t, [full]) for t in leaks)  # the whole result would let them through
     res = loop.model_results(calls)
-    for text in LEAKS:
+    for text in leaks:
         assert loop.invented_numbers(loop.without_periods(text), res), text
     h = full["headline_rate"]
     good = (f"It has clearly been getting warmer here: {h['text']} (95% range {h['range_text']}), January 1981 to "
-            f"December 2025. {full['world']['text']}")
+            f"December 2025. {full['world']['text']} {' '.join(full['plain'])}")
     assert loop.invented_numbers(loop.without_periods(good), res) == []
-

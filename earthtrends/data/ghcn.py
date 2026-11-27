@@ -13,7 +13,18 @@ from .upstream import LIMIT, NAME, fit, source_block, text
 
 SEARCH = "https://www.ncei.noaa.gov/access/services/search/v1/data"
 DATA = "https://www.ncei.noaa.gov/access/services/data/v1"
-SOURCE = {"id": "ghcn", "name": "NOAA NCEI GHCN-Daily", "url": "https://www.ncei.noaa.gov/"}
+# NCEI asks to cite "Version 3. [indicate subset used following decimal, e.g. Version 3.12]". ghcnd-version.txt on
+# 2026-11-23: "3.35-upd-2026111517", a daily update of the last full reprocessing, 3.35-por-2026110623; the -upd- part
+# changes every day. ponytail: fixed at 3.35; read https://www.ncei.noaa.gov/pub/data/ghcn/daily/ghcnd-version.txt
+# again when NCEI reprocesses.
+VERSION = "Version 3.35"
+# licence and credit: https://www.ncei.noaa.gov/pub/data/ghcn/daily/readme.txt (citation; no licence named), read 2026-11-23.
+# Its "[access date]" is left out: each answer carries its own `retrieved`.
+SOURCE = {"id": "ghcn", "name": "NOAA NCEI GHCN-Daily", "url": "https://www.ncei.noaa.gov/",
+          "licence": "No licence stated; NCEI asks for the dataset citation with its version and access date",
+          "credit": "Menne, M.J., I. Durre, B. Korzeniewski, S. McNeill, K. Thomas, X. Yin, S. Anthony, R. Ray, "
+                    "R.S. Vose, B.E.Gleason, and T.G. Houston, 2012: Global Historical Climatology Network - Daily "
+                    f"(GHCN-Daily), {VERSION}. NOAA National Climatic Data Center. http://doi.org/10.7289/V5D21VHZ."}
 MAX_KM = 25  # the nearest-station radius everywhere (docs/CONTRACTS.md, PR4a)
 MIN_YEARS = 30  # of the needed data type, since 1981
 FIRST_DAY = "1981-01-01"  # the data requests start here
@@ -72,7 +83,7 @@ def record_url(station_id: str) -> str:
 
 
 def source(station_id: str, types: tuple[str, ...], retrieved: str) -> dict:
-    return source_block(SOURCE, DATASET_ID, "Version 3", record_url(station_id), retrieved, METHOD[types])
+    return source_block(SOURCE, DATASET_ID, VERSION, record_url(station_id), retrieved, METHOD[types])
 
 
 def last_day() -> str:

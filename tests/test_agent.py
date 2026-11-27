@@ -366,18 +366,18 @@ def three_calls():
     return [call(arguments={**DELHI, "source": s}, id=s) for s in ("power", "era5", "ghcn")]
 
 
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_three_sources_agree(fake, monkeypatch):
     by_source(monkeypatch, {"power": "rising", "era5": "rising", "ghcn": "rising"})
     fake.script = [step(tool_calls=three_calls()), step("All three agree: rising.", cost=0.002)]
     r = loop.ask("Is Delhi getting hotter?", model="fake:m")
-    # the code adds one sentence per agreeing source (same period: the short form), and its missing link
-    assert r["answer"] == (f"All three agree: rising. {ERA5_SENT} Its data: "
-                           f"https://open-meteo.com/. {GHCN_SENT} Its data: https://www.ncei.noaa.gov/. "
-                           + link("power"))
+    # ERA5 is the default for the hottest day (catalog order, PR4a), whatever order the calls came in: the code adds
+    # one sentence per other agreeing source (same period: the short form), and the default's missing link
+    assert r["answer"] == (f"All three agree: rising. {POWER_SENT} Its data: "
+                           f"https://power.larc.nasa.gov/. {GHCN_SENT} Its data: https://www.ncei.noaa.gov/. "
+                           + link("era5"))
     assert [c["result"]["source"]["id"] for c in r["tool_calls"]] == ["power", "era5", "ghcn"]
     assert all(c["result"]["slope_per_decade"] == 41.0 for c in r["tool_calls"])  # the caller keeps full results
-    assert ["slope_per_decade" in x["content"] for x in fake.results[0]] == [True, False, False]
+    assert ["slope_per_decade" in x["content"] for x in fake.results[0]] == [False, True, False]
     assert [x["id"] for x in fake.results[0]] == ["power", "era5", "ghcn"]  # one model step reads all three
     assert r["usage"] == {"prompt_tokens": 200, "completion_tokens": 40, "cost_usd": 0.003}
 
@@ -399,17 +399,18 @@ def test_multi_source_over_180_retried_with_its_own_numbers(fake, monkeypatch):
     assert loop.RETRY_LONG.format(limit=180, target=150) in fake.started[1]
 
 
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_one_source_errors_two_answer(fake, monkeypatch):
     by_source(monkeypatch, {"power": "rising", "era5": "rising"}, fail={"ghcn"})
     fake.script = [step(tool_calls=three_calls()), step(words(150))]
     r = loop.ask("q", model="fake:m")
     assert r["tool_calls"][2]["error"] == "No weather station within 50 km of this point."
     assert fake.results[0][2] == {"id": "ghcn", "content": {"error": loop.STATION_REASON, "sources": tried(ghcn_src)}}  # the model sees no digit
-    # two sources returned results, so 180 applies; they agree, so the code adds ERA5's sentence
-    assert r["answer"] == (words(150) + f" {ERA5_SENT} Its data: "
-                           "https://open-meteo.com/. " + link("power"))
-    assert "slope_per_decade" not in fake.results[0][1]["content"]  # the failed one doesn't stop the agree rule
+    # two sources returned results, so 180 applies; they agree, so the code adds NASA POWER's sentence (ERA5 is the
+    # default)
+    assert r["answer"] == (words(150) + f" {POWER_SENT} Its data: "
+                           "https://power.larc.nasa.gov/. " + link("era5"))
+    assert "slope_per_decade" not in fake.results[0][0]["content"]  # the failed one doesn't stop the agree rule
+    assert "slope_per_decade" in fake.results[0][1]["content"]
 
 
 # ---- agreeing sources: the code writes their sentence, the model never sees their numbers ----
@@ -417,14 +418,21 @@ def test_one_source_errors_two_answer(fake, monkeypatch):
 from earthtrends.data import coops as coops_src, psmsl as psmsl_src  # noqa: E402
 
 NY = {"variable": "sea_level", "lat": 40.70, "lon": -74.01}
+
+
+def seen(m):
+    """A module's SOURCE as the model reads it (loop.SOURCE_FIELDS): id, name and url, never licence or credit."""
+    return {k: m.SOURCE[k] for k in loop.SOURCE_FIELDS if k in m.SOURCE}  # limit is passed only when set
+
+
 NY_COOPS = {"variable": "sea_level", "units": "mm", "place": {"name": "The Battery", "lat": 40.7, "lon": -74.01},
             "period": {"start": "1900-01", "end": "2026-10"}, "n": 1520, "deseasonalized": True,
             "method": "mann_kendall_sen", "slope_per_decade": 31.787, "ci_low": 30.616, "ci_high": 32.9559,
-            "p_value": 1e-12, "autocorrelation_adjusted": True, "verdict": "rising", "source": coops_src.SOURCE,
+            "p_value": 1e-12, "autocorrelation_adjusted": True, "verdict": "rising", "source": seen(coops_src),
             "caveats": ["Tide gauge The Battery (8518750), 0 km from the point you asked about."]}
 NY_PSMSL = {**NY_COOPS, "place": {"name": "NEW YORK (THE BATTERY)", "lat": 40.7, "lon": -74.01},
             "period": {"start": "1856-01", "end": "2025-12"}, "n": 1980, "slope_per_decade": 29.6154,
-            "ci_low": 28.7611, "ci_high": 30.4702, "p_value": 3e-11, "source": psmsl_src.SOURCE,
+            "ci_low": 28.7611, "ci_high": 30.4702, "p_value": 3e-11, "source": seen(psmsl_src),
             "caveats": ["Tide gauge NEW YORK (THE BATTERY) (PSMSL id 12), 1 km from the point you asked about."]}
 NY_SENT = ("Permanent Service for Mean Sea Level (PSMSL) agrees: 29.62 mm per decade (95% range 28.76 to 30.47), over "
            "its own record, January 1856 to December 2025.")
@@ -476,9 +484,15 @@ def test_two_sources_agree_code_writes_the_sentence(fake, monkeypatch, model_tex
     coops_seen, psmsl_seen = (x["content"] for x in fake.results[0])
     assert coops_seen == NY_COOPS  # the default source: full result
     assert no_trend_numbers(psmsl_seen)
-    assert psmsl_seen["source"] == psmsl_src.SOURCE and psmsl_seen["caveats"] == NY_PSMSL["caveats"]
+    assert psmsl_seen["source"] == seen(psmsl_src) and psmsl_seen["caveats"] == NY_PSMSL["caveats"]
     assert loop.MARKER in psmsl_seen["note"]
     assert [c["result"] for c in r["tool_calls"]] == [NY_COOPS, NY_PSMSL]  # the caller gets full results
+
+
+def test_model_never_reads_licence_or_credit():
+    # PR6: credit lines carry years and page numbers; the number check must never take them for stated numbers
+    for m in (coops_src, psmsl_src, ghcn_src):
+        assert loop.model_view({**NY_COOPS, "source": m.SOURCE})["source"] == seen(m)
 
 
 def test_marker_in_prompt_is_the_one_the_code_replaces():
@@ -635,26 +649,26 @@ def test_note_asks_for_the_link_without_a_sentence():
                                "on its caveats. Write [AGREEING SOURCES] where the agreeing sources belong.")
 
 
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_later_disagreeing_source_brings_back_earlier_numbers(fake, monkeypatch):
     period = {"start": "1981-01", "end": "2025-12"}
-    era5 = {**TREND, "variable": "air_temp_max", "verdict": "rising", "slope_per_decade": 0.3187, "ci_low": 0.1234,
-            "ci_high": 0.5321, "period": {"start": "1940-01", "end": "2025-12"},
-            "source": {"id": "era5", "name": SRC["era5"][0], "url": SRC["era5"][1]}}
-    res = {"power": {**era5, "slope_per_decade": 0.2, "period": period,
-                     "source": {"id": "power", "name": SRC["power"][0], "url": SRC["power"][1]}},
-           "era5": era5,
-           "ghcn": {**era5, "verdict": "falling", "slope_per_decade": -0.25, "period": period,
+    # ERA5 is the hottest day's default (PR4a), so the agreeing NASA POWER is the one held back in step 1
+    power = {**TREND, "variable": "air_temp_max", "verdict": "rising", "slope_per_decade": 0.3187, "ci_low": 0.1234,
+             "ci_high": 0.5321, "period": {"start": "1981-01", "end": "2024-12"},
+             "source": {"id": "power", "name": SRC["power"][0], "url": SRC["power"][1]}}
+    res = {"era5": {**power, "slope_per_decade": 0.2, "period": {"start": "1940-01", "end": "2025-12"},
+                    "source": {"id": "era5", "name": SRC["era5"][0], "url": SRC["era5"][1]}},
+           "power": power,
+           "ghcn": {**power, "verdict": "falling", "slope_per_decade": -0.25, "period": period,
                     "source": {"id": "ghcn", "name": SRC["ghcn"][0], "url": SRC["ghcn"][1]}}}
     monkeypatch.setattr(tools, "detect_trend", lambda variable, lat, lon, source=None, **kw: res[source])
     s1 = [call(arguments={**DELHI, "source": s}, id=s) for s in ("power", "era5")]
     fake.script = [step(tool_calls=s1), step(tool_calls=[call(arguments={**DELHI, "source": "ghcn"}, id="ghcn")]),
                    step("The sources disagree. [AGREEING SOURCES]")]
     r = loop.ask("q", model="fake:m")
-    assert "0.3187" not in json.dumps(fake.results[0])  # step 1: ERA5 held back
+    assert "0.3187" not in json.dumps(fake.results[0])  # step 1: NASA POWER held back
     sent = json.dumps(fake.results)
-    assert all(x in sent for x in ("0.3187", "0.1234", "0.5321", "1940-01"))  # all sent, taken together
-    assert fake.results[1][0]["content"]["earlier_results_in_full"]["results"] == [era5]
+    assert all(x in sent for x in ("0.3187", "0.1234", "0.5321", "2024-12"))  # all sent, taken together
+    assert fake.results[1][0]["content"]["earlier_results_in_full"]["results"] == [power]
     assert r["answer"] == "The sources disagree. " + link("power", "era5", "ghcn") and "agrees" not in r["answer"]
     # restored results ride on a result that is already a dict, never on the catalog list
     fake.results.clear()
@@ -663,7 +677,7 @@ def test_later_disagreeing_source_brings_back_earlier_numbers(fake, monkeypatch)
                    step("ok")]
     loop.ask("q", model="fake:m")
     catalog, station = (x["content"] for x in fake.results[1])
-    assert catalog == tools.list_variables() and station["earlier_results_in_full"]["results"] == [era5]
+    assert catalog == tools.list_variables() and station["earlier_results_in_full"]["results"] == [power]
 
 
 NY_BULLETS = ("Sources:\n- NOAA CO-OPS tide gauges, https://tidesandcurrents.noaa.gov/\n"
@@ -705,19 +719,21 @@ DELHI_CALLS = done_calls(*(({**DELHI, "source": s}, {**TREND, "variable": "air_t
                             "source": {"id": s, "name": SRC[s][0], "url": SRC[s][1]}}) for s in SRC))
 DELHI_LINKS = "Sources: " + ", ".join(url for _, url in SRC.values()) + "."
 ERA5_SENT, GHCN_SENT = f"ERA5 reanalysis via Open-Meteo archive agrees{TREND_FIG}", f"NOAA NCEI GHCN-Daily agrees{TREND_FIG}"
+POWER_SENT = f"NASA POWER (MERRA-2) agrees{TREND_FIG}"
 
 
 @pytest.mark.parametrize("model,calls,want", [
-    ("Rising. The NOAA NCEI GHCN-Daily agrees.", DELHI_CALLS, "{m} {E} {G} {L}"),
+    # ERA5 is the hottest day's default (PR4a): the code's sentences are NASA POWER's and the station's
+    ("Rising. The NOAA NCEI GHCN-Daily agrees.", DELHI_CALLS, "{m} {P} {G} {L}"),
     # ".)" ends no sentence, so the sources sentence (where the code's go in front) starts at "Station"
-    ("Station data (NOAA NCEI GHCN-Daily agrees.)", DELHI_CALLS, "{E} {G} {m} {L}"),
+    ("Station data (NOAA NCEI GHCN-Daily agrees.)", DELHI_CALLS, "{P} {G} {m} {L}"),
     (f"As a check, {NY_SENT} It is 1 km away.", NY_CALLS, "{m} {N} {L}"),
 ])
-@pytest.mark.usefixtures("power_first_for_heat")
 def test_copy_inside_a_model_sentence_stays(model, calls, want):
     links = DELHI_LINKS if calls is DELHI_CALLS else NY_SOURCES
     # the model's words are intact; the code's sentences are added next to them
-    assert loop.compose(f"{model} {links}", calls) == want.format(m=model, E=ERA5_SENT, G=GHCN_SENT, N=NY_SENT, L=links)
+    assert loop.compose(f"{model} {links}", calls) == want.format(m=model, P=POWER_SENT, G=GHCN_SENT, N=NY_SENT,
+                                                                 L=links)
 
 
 @pytest.mark.parametrize("items", [
@@ -1411,11 +1427,11 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "all in the same step",
     "call detect_trend once with that source only",
     "If the variable has only one source, call it once and leave source out",
-    'Your first sentence says plainly that the sources disagree (use the word "disagree")',
-    "this shape replaces the plain first sentence, the comparison and the how-sure sentence",
+    "this shape replaces the comparison and the how-sure sentence (the opening already says the records disagree)",
     "if no source returned a result, give the no-data answer, say that past data alone cannot settle it, and still end with the marker",
     "you add none of your own",
-    "Never give a number about the future",
+    "Give no number about the future yourself: the experts' projection reaches the answer only through the "
+    "plain lines in the opening.",
     "look up only the measurements it names",
     "Describe each source's gauge or station in its own clause with that source's name",
     "never write \"the same gauge\" or \"the same station\", and never that \"both\" or \"the two\" sources use, share or come from a gauge or station",
@@ -1433,10 +1449,22 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "write as if for a ten-year-old",
     "write [GUIDANCE] on its own",
     # facts, not advice (owner, 2026-11-22)
-    "each result's fact, where to look next, the future link and the disclaimer once",
+    "each result's fact, where to look next, the future link, the disclaimer once and a line naming our data "
+    "sources page",
     "Bhoomi states facts, not advice: never give a risk level, a recommendation, or advice on whether to buy, build, "
-    "move, avoid or invest.",
+    "move, avoid or invest, and never call a place risky, safe or dangerous.",
     "from these verdicts only; never a difference, a ratio or a risk level of your own",
+    # expert projections and D5 (PR6)
+    'So are its "guidance" strings, its "plain" lines and its "projection", but code writes the guidance and the '
+    'plain lines into the answer for you (the opening and rule F).',
+    "also name its source (projection.source) and pass on its location_note and check when set",
+    "not a prediction, not a forecast, and not the past trend carried on",
+    "Its plain lines, in the opening, already say what is projected, or why there is no projection; never restate them.",
+    'Never call a projection\'s range a "95% range": it has its own name, which code writes.',
+    "point opposite ways (the record clearly falling while the projection rises, or clearly rising while it falls",
+    "keep both as they are: never pick one, never explain the difference, never average them",
+    "Each place's comparison with the world (a ratio with its 95% range) is in its fact, which code puts in "
+    "[GUIDANCE]: never repeat it, and never turn it into a risk or a ranking.",
     "at most six calls",
     "past data at single places",
     "A question is broad only when it asks which places or where across a large area and names no single place or "
@@ -1475,8 +1503,15 @@ def test_deg_c_written_as_degree_sign(fake, monkeypatch, text, want):
     "say each caveat only once",
     # agreeing sources, naming, no guessed reasons
     "no comparison of rates",
-    # the plain shape (card: plain answers)
-    "built on the default source's meaning.headline",
+    # the plain shape (card: plain answers); PR6: code writes the opening (the past clause and the plain lines)
+    "Code starts the answer before your text, outside your word count (the opening)",
+    "A. The opening takes the place of a first sentence of yours: begin with B.",
+    "Never write, repeat or reword the opening, and give no future number of your own.",
+    # PR6: the records in one call, said by code; simple words
+    "call detect_trend once with source left out: its result already compares the other records at that place",
+    "Never say which record is right, better or more reliable, never average them, and give no other reason.",
+    "call detect_trend again for the place this question is about (the earlier answer's unless it names another)",
+    "in at most 40 words, with no number, range, year, p-value or list of caveats",
     "quote meaning.comparison exactly as given",
     'Never use the word "slope"',
     '"Very clear": "A change this steady would be very unlikely if nothing were really changing."',
@@ -1519,7 +1554,17 @@ def test_prompt_rules(phrase):
                                     'Broad questions (a region or "which places"', "you cannot advise", "judge investments", "past data cannot tell what will happen",
                                     # facts, not advice: the prompt never asks for a risk level or a recommendation
                                     "risk_label", "risk level, why, recommendation", "You may name a result's risk level",
-                                    "The recommendation is the tool's alone", "each result's risk level only"])
+                                    "The recommendation is the tool's alone", "each result's risk level only",
+                                    # PR6: the experts' projection is said; past records alone are not the future rule
+                                    "Never give a number about the future.",
+                                    "Only when the question asks about the future, say plainly",
+                                    # PR6 plain lines: code writes the first sentence and the projection's lead
+                                    "built on the default source's meaning.headline",
+                                    "Your first sentence says plainly that the sources disagree",
+                                    "write one short sentence with no number right before [GUIDANCE]",
+                                    # PR6: [GUIDANCE] no longer repeats the projection (design 16 §4.3)
+                                    "reaches the answer only through [GUIDANCE]",
+                                    'the experts\' projection (from its "projection", when available)'])
 def test_prompt_rules_removed(phrase):
     assert phrase not in prompts.SYSTEM
 
@@ -1972,7 +2017,8 @@ def test_marker_never_reaches_the_user_on_the_fallback_path(fake, monkeypatch):
     fake.script = [step(tool_calls=[call(arguments=NY)]), step(words(200) + " [OFFICIAL RESOURCES]"),
                    step(words(210) + " [OFFICIAL RESOURCES]")]
     r = loop.ask("q", model="fake:m")  # both too long: the shorter is returned, its marker still replaced
-    assert r["answer"] == f"{words(200)} {resources.US_COAST} {COOPS_LINK}" and "[OFFICIAL" not in r["answer"]
+    # the code's missing link goes in front of the marker, so the official resources stay last
+    assert r["answer"] == f"{words(200)} {COOPS_LINK} {resources.US_COAST}" and "[OFFICIAL" not in r["answer"]
 
 
 def test_marker_removed_when_nothing_was_found(fake, monkeypatch):

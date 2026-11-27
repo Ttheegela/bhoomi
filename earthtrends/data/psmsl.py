@@ -14,7 +14,13 @@ from .coops import haversine_km
 from .upstream import LIMIT, NAME, readable, rule, source_block, text, why_not
 
 BASE = "https://psmsl.org/data/obtaining/rlr.monthly.data"
-SOURCE = {"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/"}
+# licence and credit: https://psmsl.org/data/obtaining/reference.php (no licence named), read 2026-11-23. PSMSL's
+# "Retrieved" date is the "Extracted from Database" date on its data page (16 Nov 2026 that day), which moves with each
+# update, so the credit names that date instead of copying one.
+SOURCE = {"id": "psmsl", "name": "Permanent Service for Mean Sea Level (PSMSL), RLR monthly means", "url": "https://psmsl.org/",
+          "licence": "No licence stated; PSMSL asks for the data set citation and its latest paper (Holgate et al., 2013)",
+          "credit": 'Permanent Service for Mean Sea Level (PSMSL), 2026, "Tide Gauge Data", Retrieved [the "Extracted '
+                    'from Database" date on PSMSL\'s data page] from http://www.psmsl.org/data/obtaining/.'}
 MAX_KM = 100
 TIMEOUT = httpx.Timeout(30, connect=5, write=10)
 MAX_TRIES = 12  # gauge files fetched at most

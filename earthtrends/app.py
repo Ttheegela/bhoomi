@@ -183,6 +183,9 @@ def gauges(request: Request, response: Response) -> dict:
     return {"gauges": out, "sources": sources}
 
 
+VOICE_HEADER = "x-bhoomi-voice"  # "1" when /api/ask's answer will be spoken (set in the voice agent's tool)
+
+
 class AskBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     question: str
@@ -218,8 +221,11 @@ def ask(body: AskBody, request: Request) -> dict:
     if wait := ratelimit.check(client_id(request)):  # after validation, so a 400 uses no quota
         raise HTTPException(429, f"Too many questions right now. Please wait {wait} seconds and try again.",
                             headers={"Retry-After": str(wait)})
+    # A spoken answer (the voice assistant sends this header): no sources pages line. Passed only when set, so every
+    # other call is exactly as before.
+    voice = request.headers.get(VOICE_HEADER, "").strip().lower() in ("1", "true", "yes")
     try:
-        return loop.ask(q, history=h) if h else loop.ask(q)  # no history: the call is exactly as before
+        return loop.ask(q, **({"history": h} if h else {}), **({"voice": True} if voice else {}))
     except NotConfigured:
         raise HTTPException(503, "The assistant is not set up on this server.") from None
     except UpstreamError:

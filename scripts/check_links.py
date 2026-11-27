@@ -8,12 +8,19 @@ dataset pages are fetched here: the pack's CDS page and DOI (the dataset title i
 JavaScript), and Open-Meteo ERA5's DOI (tests/test_data.py checks the fallback URL is the request made).
 CO-OPS station pages are filled in by JavaScript, so their HTML never holds the station's name: the page must answer 200,
 and the station metadata it loads (the CO-OPS metadata API, same id) must name the station.
+It also opens every outbound link on the two sources pages (web/sources/index.html and web/sources/world/index.html,
+design 17): each must answer 200. With --stamp, and only when every check passes, it sets the pages' "Links checked on
+{date}" line to today:  uv run python scripts/check_links.py --stamp
 Exit status 1 if any check fails. Hosts it reaches: power.larc.nasa.gov, www.ncei.noaa.gov, tidesandcurrents.noaa.gov,
 api.tidesandcurrents.noaa.gov, psmsl.org, earth.gsfc.nasa.gov, assets.science.nasa.gov, doi.org and the DOI landing hosts
-(cds.climate.copernicus.eu, earthdata.nasa.gov, www.earthdata.nasa.gov).
+(cds.climate.copernicus.eu, earthdata.nasa.gov, www.earthdata.nasa.gov, zenodo.org, digital.csic.es), and from the
+sources pages open-meteo.com and creativecommons.org.
 """
+import html
 import re
 import sys
+from datetime import date
+from pathlib import Path
 
 import httpx
 
@@ -23,7 +30,24 @@ from earthtrends.data import era5, grace, world
 PLACES = {"New York (The Battery)": (40.70, -74.01), "Princeton NJ": (40.35, -74.66), "Delhi": (28.61, 77.21)}
 TYPES = (("air_temp_max", "power"), ("air_temp_max", "ghcn"), ("sea_level", "coops"), ("sea_level", "psmsl"), ("water_storage", "grace"))
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; link-check)"}
+PAGES = [Path(__file__).resolve().parent.parent / "web" / "sources" / p / "index.html" for p in ("", "world")]
+CHECKED = re.compile(r"Links checked on \d{1,2} [A-Z][a-z]+ \d{4}\.")
 rows, failed = [], []
+
+
+def page_links() -> list[str]:
+    """Every outbound link (href) on the two sources pages, each once, in page order."""
+    found = (html.unescape(u) for p in PAGES for u in re.findall(r'href="(https?://[^"]+)"', p.read_text(encoding="utf-8")))
+    return list(dict.fromkeys(found))
+
+
+def stamp(day: date) -> None:
+    """Set both pages' "Links checked on {d Month yyyy}." line to `day`."""
+    for p in PAGES:
+        text = p.read_text(encoding="utf-8")
+        if not CHECKED.search(text):
+            sys.exit(f"no 'Links checked on' line in {p}")
+        p.write_text(CHECKED.sub(f"Links checked on {day.day} {day:%B %Y}.", text), encoding="utf-8")
 
 
 def check(label: str, url: str, want: list[str], body_url: str | None = None) -> None:
@@ -71,11 +95,16 @@ def main() -> None:
         src = world.reference(name)["source"]
         check(f"world {name}", src["record_url"], want)
         check(f"world {name} DOI", "https://doi.org/" + src["dataset_id"][4:], [])
+    for url in page_links():
+        check("sources pages", url, [])
     print("| check | URL | status | what the body names |\n|---|---|---|---|")
     for row in rows:
         print("| " + " | ".join(str(x) for x in row) + " |")
     if failed:
         sys.exit(f"failed: {', '.join(failed)}")
+    if "--stamp" in sys.argv[1:]:
+        stamp(date.today())
+        print(f"Set 'Links checked on' to today in {', '.join(str(p) for p in PAGES)}.")
 
 
 if __name__ == "__main__":

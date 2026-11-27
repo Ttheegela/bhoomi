@@ -169,6 +169,7 @@ Space: 4, 8, 12, 16, 24, 32, 48. Radius: 6 (controls, chips), 8 (cards). Control
   - The new step 8 "Other records" leaves steps 1 to 7 numbered as before.
   - ERA5T months are named in the card meta and the chart sub-line, with no new chart mark.
   - Pictures for the owner: `rework-pr4-records-design/` in the side-session notes.
+- Plain-language layer (`web/design/16-plain-language.md`, 2026-11-23): the three lines (what experts project, how sure, day to day) are written by the stats lane from the projection only, so they read the same whichever record is main; on the card an "In plain words" box (`--bg` fill, after the fact and world line) follows the scenario radios and replaces R3; no box without a projection (R3 keeps `projection.why`); Ask leads with the past clause plus the lines, MCP `get_projection` leads with `plain`; CMIP6 ranges are "8 in 10 climate models", never a chance; day to day is high tides (sea level), "an average day, summer and winter together" (temperature), "for every 100 mm" (rain). Pictures for the owner: `rework-pr6-plain-design/` in the side-session notes.
 - Hand-written SVG chart and no JS libraries or CDN fonts.
 - Two stacked chart panels (raw, then seasons removed with trend and band).
 - Tab icon `web/favicon.svg`: a rising line, then a dot, white on a black rounded square (plain presentation attributes, no embedded style, so a strict Content-Security-Policy cannot block it; reads on light and dark tabs); no text, no NASA imagery. Link previews use title and description only (no og:image).

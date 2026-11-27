@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World figures · Bhoomi</title>
+<meta name="description" content="The two world figures Bhoomi compares places with, what they cover, and the months we compare.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/prefs.js"></script>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/settings.css">
+<link rel="stylesheet" href="/sources.css">
+</head>
+<body>
+<!-- web/design/17-sources-pages.md. Names, periods, dates, IDs and the "no world figure" sentences are checked against
+     the snapshot files and earthtrends/stats/trend.py by tests/test_sources_pages.py; change both together. -->
+<a class="skip" href="#main">Skip to the content</a>
+<header class="top">
+  <a class="brand" href="/">Bhoomi</a>
+  <nav class="nav" aria-label="Measurements">
+    <a href="/#sea-level">Sea level</a><a href="/#air-temperature">Air temperature</a><a href="/#hottest-days">Hottest days</a><a href="/#rain">Rain</a><a href="/#water-storage">Water storage</a>
+  </nav>
+  <div class="right">
+    <a class="btn ghost" href="/#settings">Settings</a>
+    <span class="ai-label">Built with AI assistance</span>
+  </div>
+</header>
+
+<main id="main" class="src-wrap">
+  <div class="src-head">
+    <h1>World figures we compare with</h1>
+    <p class="lead">Some answers set a place's rate of change beside the world's, over exactly the same months. These are the two world figures we use, and the measurements that have none.</p>
+    <nav class="src-tabs" aria-label="Sources pages">
+      <a href="/sources/">Data sources</a>
+      <a href="/sources/world/" aria-current="page">World figures</a>
+    </nav>
+  </div>
+  <div class="src-cols">
+  <nav class="st-nav" aria-label="On this page">
+    <div class="lbl">On this page</div>
+    <a class="st-navlink" href="#figures">The two world figures</a>
+    <a class="st-navlink" href="#differ">Why the two sides differ</a>
+    <a class="st-navlink" href="#none">No world figure</a>
+    <a class="st-navlink" href="#reading">Reading a comparison</a>
+    <a class="st-navlink" href="#credits">Credits</a>
+  </nav>
+  <div class="st-sections">
+
+    <section class="st-sec" id="figures" aria-labelledby="h-fig">
+      <h2 id="h-fig">The two world figures</h2>
+      <div class="card">
+        <table class="wf">
+          <caption>The world figures: what they cover, our copy, and the months we compare</caption>
+          <colgroup><col class="rh"><col><col></colgroup>
+          <thead><tr><td></td><th scope="col" id="air-temperature">Air temperature</th><th scope="col" id="sea-level">Sea level</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Compared with</th><td>The average for all land areas</td><td>Global average sea level, measured by satellites</td></tr>
+            <tr><th scope="row">What it covers</th><td>Land only, no ocean</td><td>The ocean from 66° south to 66° north</td></tr>
+            <tr><th scope="row">How it is measured</th><td>Weather stations on land</td><td>Satellites measuring the height of the sea surface, corrected for the slow sinking of the ocean floor since the last ice age</td></tr>
+            <tr><th scope="row">Dataset</th>
+              <td>NOAA Global Surface Temperature (NOAAGlobalTemp) version 6.1, land part, from NOAA NCEI Climate at a Glance<span class="sub">Named in answers: NOAA NCEI Climate at a Glance, global land (NOAAGlobalTemp)</span></td>
+              <td>NASA Global Mean Sea Level version 5.2, from the TOPEX/Poseidon, Jason and Sentinel-6 satellites<span class="sub">Named in answers: NASA Global Mean Sea Level Trend from Integrated Multi-Mission Ocean Altimeters, Version 5.2</span></td></tr>
+            <tr><th scope="row">Our copy runs</th><td>January 1850 to October 2026</td><td>January 1993 to April 2025</td></tr>
+            <tr><th scope="row">Updated</th><td>We refresh our copy by hand; last fetched 22 November 2026.</td><td>We refresh our copy by hand; last fetched 22 November 2026.</td></tr>
+            <tr><th scope="row">Months compared</th><td>The same months as the place's record (from 1981 at the earliest), with at least 20 years in common</td><td>The gauge's months from January 1993 to April 2025 (or to the gauge's last month, if earlier), with at least 20 years</td></tr>
+            <tr><th scope="row">Rate shown in</th><td>°C per decade</td><td>mm a year</td></tr>
+            <tr><th scope="row">Licence</th><td>NOAA data, free to use with the citation below</td><td>NASA data, openly shared without restriction</td></tr>
+            <tr><th scope="row">Dataset ID</th><td><a href="https://doi.org/10.25921/vvaa-wq11">doi:10.25921/vvaa-wq11&nbsp;↗</a></td><td><a href="https://doi.org/10.5067/GMSLM-TJ152">doi:10.5067/GMSLM-TJ152&nbsp;↗</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="st-sec" id="differ" aria-labelledby="h-differ">
+      <h2 id="h-differ">Why the two sides differ</h2>
+      <div class="card read">
+        <p><b>Air temperature.</b> The world figure is built from weather stations on land. The number for a place comes from a weather model (ERA5 or NASA POWER) or from one weather station, so the two are measured in different ways.</p>
+        <p><b>Sea level.</b> Satellites measure the height of the sea surface itself. A tide gauge measures the sea against the land, so if the land at the gauge is sinking, that adds to the local number.</p>
+        <p><b>Recent months.</b> NOAA says its most recent months may still be revised, without saying which. NASA calls its sea-level values after 28 March 2022 preliminary while its checks go on. We mark neither.</p>
+      </div>
+    </section>
+
+    <section class="st-sec" id="none" aria-labelledby="h-none">
+      <h2 id="h-none">No world figure</h2>
+      <div class="card">
+        <dl class="nofig">
+          <div><dt>Hottest days</dt><dd>There is no matching world figure for the hottest day of the month.</dd></div>
+          <div><dt>Rain</dt><dd>Rainfall is compared with this place's own usual rainfall, not with a world figure.</dd></div>
+          <div><dt>Water on land</dt><dd>Water storage is judged on this region's own change, not against a world figure.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="st-sec" id="reading" aria-labelledby="h-reading">
+      <h2 id="h-reading">Reading a comparison</h2>
+      <div class="card read">
+        <p>A rate on its own is hard to judge. Beside the world's rate over the same months, it shows whether this place has changed faster or slower than the world as a whole. It describes the past; it is not a forecast.</p>
+        <p>1× is the same pace as the world; 2× is twice as fast. Below 0, the change here went the other way.</p>
+        <p>The two numbers in brackets show how uncertain the comparison is. They come from the range of rates this place's own record allows.</p>
+        <p>There is no "times as fast" figure when the change here is not clear, when the world figure did not rise over those years, or when the two records share fewer than 20 years.</p>
+      </div>
+    </section>
+
+    <section class="st-sec" id="credits" aria-labelledby="h-credits">
+      <h2 id="h-credits">Credits</h2>
+      <div class="card src-card">
+        <div class="credit">
+          <p class="cl">Credit to give: the air temperature figure</p>
+          <p>Huang, B., X. Yin, M. J. Menne, R. Vose (2026), NOAA Global Surface Temperature Dataset (NOAAGlobalTemp), Version 6.1, NOAA NCEI, doi:10.25921/vvaa-wq11.</p>
+        </div>
+        <div class="credit">
+          <p class="cl">Credit to give: the sea level figure</p>
+          <p>GSFC (2024), Global Mean Sea Level Trend from Integrated Multi-Mission Ocean Altimeters TOPEX/Poseidon, Jason-1, OSTM/Jason-2, Jason-3, and Sentinel-6A, Version 5.2, PO.DAAC, doi:10.5067/GMSLM-TJ152.</p>
+        </div>
+      </div>
+    </section>
+
+    <p class="checked">Links checked on 23 November 2026. If a link doesn't open, search for the ID instead.</p>
+  </div>
+  </div>
+</main>
+<footer class="foot src-foot">
+  <p>Data: the providers named on this page. Trends, ranges and world comparisons: our calculation.</p>
+</footer>
+</body>
+</html>

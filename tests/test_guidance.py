@@ -377,7 +377,7 @@ def test_compute_trend_attaches_guidance_last():
     values = [3.0 + 0.04 * i / 12 for i in range(len(times))]  # 0.04 mm/day a year on a 3 mm/day start
     r = compute_trend({"variable": "precip", "units": "mm/day", "freq": "monthly", "place": VIZAG, "times": times,
                        "values": values, "source": {"id": "power"}, "notes": []})
-    assert list(r)[-2:] == ["meaning", "guidance"]
+    assert list(r)[-3:] == ["meaning", "plain", "guidance"]
     assert r["guidance"]["fact"].startswith("Rising about 11% of the usual yearly rain every 10 years (1990 to 2024; "
                                             "95% range +")
 

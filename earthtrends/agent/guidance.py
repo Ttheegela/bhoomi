@@ -1,9 +1,12 @@
 """The tool's own guidance: the model writes MARKER, the code puts each result's guidance strings there word for word
-(the fact, then where to look next, the future links and the disclaimer once). The model never composes them.
-A result without a guidance fact adds nothing."""
+(the fact, then where to look next, the future links and the disclaimer once). The model
+never composes them. A result without a guidance fact adds nothing. The experts' projection reaches the answer in the
+plain lines that lead it (lead), not here."""
 import re
 
 from earthtrends.agent import resources, tools
+from earthtrends.stats.guidance import DISCLAIMER_PROJECTION
+from earthtrends.stats.projection import MODELS_NOTE
 
 MARKER = "[GUIDANCE]"
 _MARK = re.compile(r"[ \t]*\**\[\s*guidance\s*\]\**", re.I)  # tolerant, like the official-resources marker
@@ -15,6 +18,58 @@ def _s(x) -> str:
 
 def _end(s: str) -> str:
     return s if s[-1:] in ".!?" else s + "."
+
+
+DISAGREE = "Models disagree on wetter or drier."  # the page's words for by_2050.disagree (rain)
+SOURCES_LINE = "All our data sources, with licences: bhoomi.earth/sources"  # design 17 §8: the loop adds it last
+
+
+def projection_view(p):
+    """A result's `projection` as the model reads it (the number check pools it): the dataset's name and address, the
+    default scenario, its period and baseline, the range's name, and the notes the model passes on with the caveats
+    (location_note, check). No projected number: the plain lines carry those, and code writes models_note (note).
+    Not available: its why."""
+    if not isinstance(p, dict):
+        return p
+    if not p.get("available"):
+        return {"available": False, "why": p.get("why")}
+    ro = p.get("readouts") or {}
+    b = ro.get("by_2050") or {}
+    sc = next((s for s in p.get("scenarios") or [] if s.get("id") == b.get("scenario")), {})
+    w = b.get("window")
+    out = {"available": True, "kind": p.get("kind"), "source": (p.get("source") or {}).get("name"),
+           "url": (p.get("source") or {}).get("record_url"),
+           "scenario": f"{sc['name']} ({sc['code']})" if sc.get("name") and sc.get("code") else None,
+           "when": f"{w[0]}–{w[1]}" if isinstance(w, list) and len(w) == 2 else "2050",  # sea level's by_2050 is 2050
+           "baseline": (p.get("baseline") or {}).get("text"), "range_kind": b.get("range_kind"),
+           "disagree": DISAGREE if b.get("disagree") else None,
+           "location_note": (p.get("location") or {}).get("note"), "check": (p.get("check") or {}).get("text"),
+           "baseline_record": (p.get("baseline_record") or {}).get("name")}
+    return {k: v for k, v in out.items() if v is not None}
+
+
+VOICE_NOTE = MODELS_NOTE.replace(". The ", "; the ")  # one spoken sentence
+
+
+def note(calls: list[dict], voice: bool = False) -> str:
+    """The climate models' note (CMIP6 air temperature and hottest day), written by code once per answer, when the
+    plain lines (lead) give a future from a projection that carries models_note; else "", so never without those
+    lines. Voice: as one sentence (VOICE_NOTE)."""
+    ps = [rs[0].get("projection") or {} for rs in _shown(calls)]
+    if not any(p.get("available") and p.get("models_note") for p in ps):
+        return ""
+    return VOICE_NOTE if voice else MODELS_NOTE
+
+
+_NOTE = "|".join(re.escape(n).replace("'", "['’]") for n in (MODELS_NOTE, VOICE_NOTE))  # straight or curly
+
+
+def without_note(text: str) -> str:
+    """The text without any copy of the note (either form), so code's own shows once. A line that is only the note
+    (after a list mark, if any) goes with its line break and one blank line after it; elsewhere the note goes with
+    the space after it."""
+    text = re.sub(rf"(?m)^[ \t]*(?:(?:[-*•]|\d+[.)])[ \t]+)?(?:{_NOTE})[ \t]*(?:\n(?:[ \t]*\n)?|\Z)", "", text)
+    return re.sub(rf"(?:{_NOTE})[ \t]*", "", text)
 
 
 def _key(c: dict):
@@ -47,8 +102,10 @@ def picked(calls: list[dict]) -> list[tuple[tuple, dict]]:
     return out
 
 
-def block(calls: list[dict]) -> str:
-    """The guidance text for this turn's results; "" when none has a fact."""
+def block(calls: list[dict], simple: bool = False) -> str:
+    """The guidance text for this turn's results; "" when none has a fact. `simple` (a request for simple words,
+    design 16 §4): without the facts (they carry the 95% range and the world ratio). No projection line: the plain
+    lines, first in the answer, carry the projection (design 16 §4.3)."""
     rs = picked(calls)
     if not rs:
         return ""
@@ -57,7 +114,7 @@ def block(calls: list[dict]) -> str:
     per = {}  # place and measurement -> how many entries: the source is named only when two there differ
     for k, _ in rs:
         per[k] = per.get(k, 0) + 1
-    parts, disclaimer, look, links = [], "", {}, {}
+    parts, disclaimers, look, links = [], [], {}, {}
     for k, r in rs:
         g = r["guidance"]
         what = names.get(r.get("variable"), str(r.get("variable") or ""))
@@ -65,18 +122,61 @@ def block(calls: list[dict]) -> str:
         label = f"{place}, {what[:1].lower()}{what[1:]}" if places and place else what
         if per[k] > 1:
             label += f" ({_s((r.get('source') or {}).get('name')).split(',')[0]})"
-        parts.append(f"{label}: {_end(_s(g['fact']))}")
+        if not simple:
+            parts.append(f"{label}: {_end(_s(g['fact']))}")
         for x in g.get("look_next") or []:
             if isinstance(x, dict) and _s(x.get("label")):
                 url = _s(x.get("url"))
                 look.setdefault(_s(x["label"]), f" ({url})" if url.startswith("https://") else "")
-        disclaimer = disclaimer or _s(g.get("disclaimer"))
+        disclaimers.append(_s(g.get("disclaimer")))
         f = g.get("future_link") or {}
         if isinstance(f, dict) and _s(f.get("url")).startswith("https://"):
             links.setdefault(f["url"].strip(), _s(f.get("label")) or "Future map")
+    # once: the projection wording if any result carries it, so a mixed answer never hides the IPCC part
+    disclaimer = DISCLAIMER_PROJECTION if DISCLAIMER_PROJECTION in disclaimers else next(filter(None, disclaimers), "")
     tail = ([f"Where to look next: {'; '.join(lab + url for lab, url in look.items())}."] if look else [])
-    tail += [f"{lab} ({url})." for url, lab in links.items()] + ([_end(disclaimer)] if disclaimer else [])
-    return " ".join(parts + tail)
+    tail += [f"{lab} ({url})." for url, lab in links.items()]
+    return " ".join(parts + tail + ([_end(disclaimer)] if disclaimer else []))
+
+
+RECORDS_DISAGREE = "Our records here disagree about the past."  # design 16 §4: the past clause when verdicts differ
+MAX_LEAD = 3  # places and measurements that get a line, with two or more
+
+
+def _shown(calls: list[dict]) -> list[list[dict]]:
+    """The picked results lead() writes lines for: per place and measurement with plain lines, at most MAX_LEAD; the
+    first of each gives them."""
+    groups: dict = {}
+    for k, r in picked(calls):
+        groups.setdefault(k, []).append(r)
+    return [rs for rs in groups.values() if [x for x in rs[0].get("plain") or [] if _s(x)]][:MAX_LEAD]
+
+
+def lead(calls: list[dict]) -> str:
+    """The lines an answer that looked something up starts with (design 16 §4), written by code and outside the word
+    count. Per place and measurement in picked() order: line 1 is the past clause (the shared meaning.headline, or
+    RECORDS_DISAGREE when the picked verdicts differ or the records there disagree, so it never depends on which
+    record is main), then plain[0]; then plain's other lines; then what each record shows with the first reason when
+    the records disagree, and thin_note or single_note. Two or more places or measurements: line 1 of each (and its
+    records lines), at most MAX_LEAD, each after "{Place}, {measurement}: ". "" when no result has plain lines."""
+    groups = _shown(calls)
+    names = {v["id"]: v["name"].split(" (")[0] for v in tools.list_variables()}
+    out = []
+    for rs in groups:
+        r = rs[0]
+        apart = len(rs) > 1 or any((x.get("disagree") or {}).get("any") for x in rs)
+        past = RECORDS_DISAGREE if apart else _s((r.get("meaning") or {}).get("headline"))
+        plain = [_s(x) for x in r["plain"] if _s(x)]
+        what = names.get(r.get("variable"), _s(r.get("variable")))
+        place = _s((r.get("place") or {}).get("name"))
+        head = (f"{place}, {what[:1].lower()}{what[1:]}: " if place else f"{what}: ") if len(groups) > 1 else ""
+        d = r.get("disagree") or {}
+        why = next((_s(x.get("text")) for x in d.get("reasons") or [] if isinstance(x, dict) and _s(x.get("text"))), "")
+        said = [" ".join(filter(None, (_s(d.get("say")), why)))] if d.get("any") else []
+        out += [head + " ".join(filter(None, (past and _end(past), plain[0]))),
+                *(plain[1:] if len(groups) == 1 else []),
+                *filter(None, said + [_s(r.get("thin_note")), _s(r.get("single_note"))])]
+    return "\n".join(out)
 
 
 def strip(text: str) -> str:
@@ -84,11 +184,12 @@ def strip(text: str) -> str:
     return _MARK.sub("", text)
 
 
-def fill(text: str, calls: list[dict]) -> str:
+def fill(text: str, calls: list[dict], simple: bool = False, lead_in: str = "") -> str:
     """The first marker becomes the guidance (a space before it unless it starts a line); other markers go. No marker:
     the guidance goes in front of the official-resources marker if there is one, else at the end as its own
-    paragraph. No guidance: markers removed, text otherwise unchanged."""
-    add = block(calls)
+    paragraph. No guidance: markers removed, text otherwise unchanged. `lead_in` (the models' note in typed chat)
+    goes right in front of the guidance, in the same place, even when there is no guidance."""
+    add = " ".join(filter(None, (lead_in, block(calls, simple))))
     if not _MARK.search(text):
         if not add:
             return text

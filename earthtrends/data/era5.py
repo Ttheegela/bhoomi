@@ -62,8 +62,10 @@ from .upstream import COPERNICUS, fit, source_block
 log = logging.getLogger(__name__)
 
 URL = "https://archive-api.open-meteo.com/v1/archive"
+# licence and credit: https://open-meteo.com/en/licence (the credit is a link to `url`), read 2026-11-23. Open-Meteo's
+# free API is for non-commercial use only (https://open-meteo.com/en/terms).
 SOURCE = {"id": "era5", "name": "ERA5 reanalysis via Open-Meteo archive", "url": "https://open-meteo.com/",
-          "attribution": COPERNICUS}
+          "attribution": COPERNICUS, "licence": "CC BY 4.0", "credit": "Weather data by Open-Meteo.com"}
 PARAMS = {"air_temp": "temperature_2m_mean", "air_temp_max": "temperature_2m_max", "precip": "precipitation_sum"}
 HOW = {"air_temp": "mean", "air_temp_max": "max", "precip": "mean"}  # daily -> monthly rule
 NOTES = {"air_temp_max": "Each monthly value is the hottest single day of that month, not the average of the daily highs."}

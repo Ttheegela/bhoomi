@@ -30,7 +30,8 @@ RETRY = ("\n\nYour answer did not fit. Answer now, in at most {target} words, fo
          "tool results; do not call a tool:\n")
 MAX_WORDS = 120  # longest answer we return without asking for a shorter one
 MAX_WORDS_MULTI = 180  # the same, when results from two or more sources are reported
-SHORTER = {MAX_WORDS: 100, MAX_WORDS_MULTI: 150}  # what the length retry asks for
+SIMPLE_WORDS = 40  # the model's own words in a simple-words answer (design 16 §4)
+SHORTER = {MAX_WORDS: 100, MAX_WORDS_MULTI: 150, SIMPLE_WORDS: 30}  # what the length retry asks for
 LONG_ASK = ("Your first answer to this question was over {limit} words. Give the same answer again in at most "
             "{target} words, following every rule: one short sentence per caveat, no unit explained twice, and any "
             "declined request in a few words.")
@@ -40,6 +41,24 @@ NUMBER_ASK = ("Your first answer to this question stated a number, but no data l
               "Give the same answer again with no number at all.")
 INVENTED_ASK = ("Your first answer stated numbers that are in no tool result: {numbers}. Use only the tool's numbers, "
                 "each with the tool's own sign.")
+FIGURES_ASK = ("Your first answer stated figures: {numbers}. This is a simple-words answer: write no number, range or "
+               "year at all; the plain lines code puts first already carry them.")
+# A request for simple words (design 16 §4); voice forwards every question with "Explain in simple words."
+# A question about where the data come from (design 17 §8): the answer ends with guidance.SOURCES_LINE, as the
+# first answer of a conversation does. "resources" is no source; "this data comes from" is one.
+SOURCES_Q = re.compile(r"\bsources?\b|\blicen[cs]|\bwhere do(?:es)? (?:the|this|that|your|these|you get) data\b"
+                       r"|\bdata comes? from\b|\bwhere do you get\b|\bcite\b|\bcitations?\b|\bcredits?\b", re.I)
+SIMPLE = re.compile(r"\b(?:" + "|".join(re.escape(p) for p in prompts.SIMPLE_PHRASES) + r")\b", re.I)
+SIMPLE_LOOKUP = ("\n\nThis asks for simple words: call detect_trend again for the place this question is about (the "
+                 "earlier answer's unless it names another) and its measurement, so every number comes from this turn.")
+# A question about what a word means ("What does 95% range mean?", "What is a tide gauge?") needs no lookup, even in
+# simple words. One that asks about the earlier answer or a place still looks up: "What does that/this/it mean?",
+# "... mean for me/my family/Mumbai?" (no "for" after "mean") and "What does the trend in Delhi mean?" (no
+# "in/at/near <word>" in what is asked about).
+WORD_MEANING = re.compile(r"\bwhat (?:does|do) (?!(?:that|this|it)\s+(?:all\s+|really\s+|actually\s+)?mean\b)"
+                          r"(?:(?!\b(?:in|at|near)\s+\w)[^?.!]){1,60}? mean\b(?!\s+for\b)"
+                          r"|\bwhat(?:'s| is| are) an?\b|\bwhat is meant by\b|\bmeaning of\b|\bdefine\b"
+                          r"|\bdefinition\b", re.I)
 NO_NUMBERS = ("I can only give numbers that come from a data lookup, and I did not look anything up for that. "
               "Ask about a place and a measurement and I will check.")
 NO_TOOL = " Do not call a tool: these are the tool results you already got:\n"
@@ -52,7 +71,10 @@ TOOLS = [
     {"name": "detect_trend",
      "description": ("Significance test for a long-term trend in past monthly data at a point: removes the seasonal "
                      "cycle, then Mann-Kendall (autocorrelation-adjusted) and Sen's slope with a 95% range. "
-                     "Returns verdict, slope_per_decade, ci_low, ci_high, p_value, period, source, caveats."),
+                     "Returns verdict, slope_per_decade, ci_low, ci_high, p_value, period, source, caveats, plain, "
+                     "guidance and projection (the experts' projection for this place, when there is one). For air "
+                     "temperature, the hottest day and rain it also compares the other records here (comparisons, "
+                     "disagree, drift, thin_note, single_note)."),
      "parameters": {"type": "object", "required": ["variable", "lat", "lon"], "properties": {
          "variable": {"type": "string", "description": "A catalog id, e.g. air_temp, air_temp_max, precip, sea_level."},
          "lat": {"type": "number", "description": "Latitude, -90 to 90."},
@@ -95,8 +117,8 @@ def run_tool(name: str, args: dict) -> tuple[dict | list | None, str | None]:
         if name == "detect_trend":
             if not all(k in args for k in ("variable", "lat", "lon")):
                 return None, "detect_trend needs variable, lat and lon."
-            # compare=False until PR6 shows the records to the model (MODEL_FIELDS drops them); MCP still compares
-            return tools.detect_trend(**{k: args[k] for k in TREND_ARGS if k in args}, compare=False), None
+            # the other records too, within detect_trend's budget (rows not back in time are "pending")
+            return tools.detect_trend(**{k: args[k] for k in TREND_ARGS if k in args}), None
         return None, f"Unknown tool {name!r}."
     except (json.JSONDecodeError, httpx.HTTPError):  # JSONDecodeError first: it is also a ValueError
         return None, SOURCE_DOWN
@@ -251,13 +273,14 @@ def _cut(text: str, s: int, e: int, mask: list[bool]) -> None:
     mask[s:e] = [True] * (e - s)
 
 
-def compose(text: str, calls: list[dict]) -> str:
+def compose(text: str, calls: list[dict], agree: bool = True) -> str:
     """The final text. The agreeing sources' sentences go where the marker is (or, if it is missing or inside a
     sentence, in front of the first sentence or list line with a link, else at the end), each followed by
     "Its data: <url>." if the text lacks its link. Only markers are removed; everything the model wrote stays
     (a copy of the code's sentence written by the model shows twice: accepted). Any other source with a result whose link is missing gets
-    "Source: <name>, <url>." at the end. Only the space around a change is touched."""
-    plan = agree_plan(calls)
+    "Source: <name>, <url>." at the end. Only the space around a change is touched. agree=False (simple words): no
+    agreeing sources' sentences, which carry figures."""
+    plan = agree_plan(calls) if agree else None
     lead, others = plan or ({}, [])
     sents = [agree_sentence(r, lead) for r in others]
     mask, at = [False] * len(text), None
@@ -298,18 +321,57 @@ def compose(text: str, calls: list[dict]) -> str:
             ins += " " if right and not right[0].isspace() else ""
         left += ins
     out = left + right
-    # Every source with a result names its link: any still missing goes at the end.
-    srcs = {}
-    for c in ok_calls(calls):
-        src = c["result"].get("source") or {}
-        srcs.setdefault(src.get("id"), src)
-    missing = [f"Source: {s['name'].split(',')[0].strip()}, {s['url']}." for s in srcs.values()
-               if _host(s.get("url")) not in out.lower() and s.get("name")]  # no URL: "" is always "in"
-    if missing:
-        body = out.rstrip()
-        out = body + (" " if body else "") + " ".join(missing) + out[len(body):]
+    out = add_links(out, record_links(calls))
     out = DEG_C.sub("\u00b0C", out)  # the tool spells the unit "degC"; the reader sees "°C", as on the page
     return NEG_ZERO.sub(r"\1", out)  # "-0.00" is a zero: no sign
+
+
+def record_links(calls: list[dict]) -> list[tuple[str, str]]:
+    """(name, url) of each record behind this turn's results, once each (its name before any ",")."""
+    seen: dict = {}
+    for c in ok_calls(calls):
+        src = c["result"].get("source") or {}
+        if src.get("name") and src.get("url"):
+            seen.setdefault(src.get("id"), (src["name"].split(",")[0].strip(), src["url"]))
+    return list(seen.values())
+
+
+def projection_links(calls: list[dict]) -> list[tuple[str, str]]:
+    """(name, url) of each expert projection's dataset behind this turn's results, once each: its full name and its
+    record_url. The plain lines that open the answer give its numbers, so it is named like a record."""
+    seen: dict = {}
+    for c in ok_calls(calls):
+        p = c["result"].get("projection") or {}
+        ps = (p.get("source") or {}) if p.get("available") else {}
+        if ps.get("name") and ps.get("record_url"):
+            seen.setdefault(ps["name"], (ps["name"], ps["record_url"]))
+    return list(seen.values())
+
+
+def add_links(out: str, links: list[tuple[str, str]]) -> str:
+    """Every source with a result names its link ("every result names its data source"): each one the text lacks goes
+    at the end, or in front of the first [GUIDANCE] or [OFFICIAL RESOURCES] marker, so code's text there stays last."""
+    missing = [f"Source: {name}, {url}." for name, url in links if _host(url) not in out.lower()]
+    if missing:
+        mark = min(filter(None, (guidance._MARK.search(out), resources._MARK.search(out))), key=re.Match.start,
+                   default=None)
+        body = out[:mark.start()].rstrip() if mark else out.rstrip()
+        rest = " " + out[mark.start():].lstrip() if mark else out[len(body):]
+        out = body + (" " if body else "") + " ".join(missing) + rest
+    return out
+
+
+def without_sources(text: str, calls: list[dict]) -> str:
+    """The text with this turn's own addresses (each record's, each projection's, the official resources') and each
+    source's name (and the short forms _forms gives) blanked, so a simple-words answer's figures are only the model's
+    own: "(Garner et al. 2021)" names a dataset. Any other address keeps its digits."""
+    for u in sorted({u for _, u in record_links(calls) + projection_links(calls)} | set(resources.URLS), key=len,
+                    reverse=True):
+        text = text.replace(u, " ")
+    names = {f for name, _ in record_links(calls) + projection_links(calls) for f in _forms(name)}
+    for f in sorted(names, key=len, reverse=True):
+        text = re.sub(re.escape(f), " ", text, flags=re.I)
+    return text
 
 
 def hidden_calls(calls: list[dict]) -> set[int]:
@@ -319,19 +381,24 @@ def hidden_calls(calls: list[dict]) -> set[int]:
 
 
 # The TrendResult fields the model reads (the prompt's), and so the only numbers the invented-number check accepts:
-# what results carried before Rework v2, plus headline_rate and the baseline's and world's text. The rest (baseline
-# normals, fit, explain, record, world numbers, the source block's record details) is for the page.
+# what results carried before Rework v2, plus headline_rate, the baseline's and world's text, the compact expert
+# projection (guidance.projection_view), the plain lines (PR6) and the records block as contract "Ask and MCP" lists
+# it (each row's label, where, years, verdict, note and rate text; disagree's line, say and reason texts; drift's
+# text; the notes). The rest (baseline normals, fit, explain, record, world numbers, the projection's arrays, the
+# source block's record details, the rows' sources and counts) is for the page.
 MODEL_FIELDS = ("variable", "units", "place", "period", "n", "deseasonalized", "method", "slope_per_decade", "ci_low",
                 "ci_high", "p_value", "autocorrelation_adjusted", "verdict", "source", "headline_rate", "baseline",
-                "world", "caveats", "meaning", "guidance")
-SOURCE_FIELDS = ("id", "name", "url")
+                "world", "projection", "caveats", "main_note", "comparisons", "disagree", "drift", "thin_note",
+                "single_note", "meaning", "plain", "guidance")
+SOURCE_FIELDS = ("id", "name", "url", "limit")  # limit: NASA POWER rain's gauge note, only when set
 TEXT_ONLY = ("baseline", "world")
+ROW_FIELDS = ("label", "where", "years", "verdict", "note")
 
 
 def model_view(r):
     """A tool result as the model reads it and the number check pools it: a detect_trend result cut to MODEL_FIELDS
-    (the source to id, name and url; baseline and world to their text), in its own key order. Anything else is
-    returned as it is."""
+    (the source to id, name and url; baseline and world to their text, world with its why_none when set; the
+    projection to guidance.projection_view), in its own key order. Anything else is returned as it is."""
     if not isinstance(r, dict):
         return r
     out = {}
@@ -339,9 +406,19 @@ def model_view(r):
         if k not in MODEL_FIELDS:
             continue
         if k == "source" and isinstance(v, dict):
-            v = {f: x for f, x in v.items() if f in SOURCE_FIELDS}
+            v = {f: x for f, x in v.items() if f in SOURCE_FIELDS and (f != "limit" or x)}
+        elif k == "comparisons" and isinstance(v, list):
+            v = [{**{f: row.get(f) for f in ROW_FIELDS}, "rate": (row.get("headline_rate") or {}).get("text")}
+                 for row in v if isinstance(row, dict)]
+        elif k == "disagree" and isinstance(v, dict):
+            v = {"any": v.get("any"), "line": v.get("line"), "say": v.get("say"),
+                 "reasons": [x.get("text") for x in v.get("reasons") or [] if isinstance(x, dict)]}
+        elif k == "drift" and isinstance(v, dict):
+            v = v.get("text")
         elif k in TEXT_ONLY and isinstance(v, dict):
-            v = {"text": v.get("text")}
+            v = {"text": v.get("text"), **({"why_none": v["why_none"]} if k == "world" and v.get("why_none") else {})}
+        elif k == "projection":
+            v = guidance.projection_view(v)
         out[k] = v
     return out
 
@@ -360,8 +437,11 @@ def for_model(calls: list[dict]) -> list[dict]:
             for i, c in enumerate(calls)]
 
 
-def word_limit(calls: list[dict]) -> int:
-    """120 words, or 180 when detect_trend results came back from two or more distinct sources or places."""
+def word_limit(calls: list[dict], simple: bool = False) -> int:
+    """120 words, or 180 when detect_trend results came back from two or more distinct sources or places; 40 for a
+    request for simple words."""
+    if simple:
+        return SIMPLE_WORDS
     ok = ok_calls(calls)
     srcs = {(c["result"].get("source") or {}).get("id") for c in ok}
     return MAX_WORDS_MULTI if len(srcs) >= 2 or len({_where(c) for c in ok}) >= 2 else MAX_WORDS
@@ -378,6 +458,9 @@ def words(text: str) -> int:
 # The prompt's fixed phrases with an outside number; they are removed before numbers are checked.
 ALLOWED = re.compile(r"\b0\.05 line|less than 0\.01|\b95\s*(?:%|percent)", re.I)
 NUM = re.compile(r"(?<![\w.])([-\u2212]?)(\d+(?:\.\d+)?)")  # a minus only when it isn't a hyphen after a word
+# A name with digits is no number. NUM already skips a digit glued to letters ("ERA5", "CMIP6", "AR6", "RL06"); an
+# emissions scenario's code also has a hyphen and a decimal ("SSP2-4.5" would read as 4.5), so it goes first.
+CODES = re.compile(r"\bSSP\d[-‐‑–]\d\.\d\b", re.I)
 UNIT = re.compile(r"\s*(?:%|°|degrees?\b|deg\b|mm\b|cm\b|m\b|km\b|inch|feet\b|ft\b|days?\b|weeks?\b|months?\b"
                   r"|years?\b|decades?\b|times\b|percent\b)", re.I)
 
@@ -393,7 +476,7 @@ def stated_numbers(text: str) -> list[tuple[str, str]]:
     for u in resources.URLS:  # "data_tools/17" is no number; any other address's digits still count
         text = text.replace(u, " ")
     text = re.sub(r"(?m)^\s*\d+[.)]\s", " ", text)
-    text = ALLOWED.sub(" ", text)
+    text = CODES.sub(" ", ALLOWED.sub(" ", text))
     text = re.sub(r"(?<=\d),(?=\d{3}\b)", "", text)
     out = []
     for m in NUM.finditer(text):
@@ -417,7 +500,7 @@ def _pool(x, out: list[float]) -> list[float]:
     elif isinstance(x, (int, float)):
         out.append(float(x))
     elif isinstance(x, str):
-        out += [float(s) * (-1 if sign else 1) for sign, s in NUM.findall(x)]
+        out += [float(s) * (-1 if sign else 1) for sign, s in NUM.findall(CODES.sub(" ", x))]
     elif isinstance(x, dict):
         for k, v in x.items():
             _pool(v, out)
@@ -564,16 +647,20 @@ def without_periods(text: str) -> str:
 
 def _check(text: str, calls: list[dict]) -> list[tuple[re.Match, bool]]:
     """(range, certain) for each wrong period range in `text`. A range passes if it is the window the user asked for
-    (a call's start and end, by year) or written in a result's own caveat or guidance fact ("its 2004 to 2009
-    average", "(1993 to April 2025; ...)": the tool's words). CERTAIN, code may rewrite it: it fits no result's period
+    (a call's start and end, by year) or written in a result's own caveat, guidance fact, baseline or projection years
+    ("its 2004 to 2009 average", "(1993 to April 2025; ...)", "the 1995–2014 average", "2041–2060": the tool's words;
+    the projection's are in the answer through guidance.fill). CERTAIN, code may rewrite it: it fits no result's period
     at all. DOUBTFUL, retry only, never rewritten: the only range of its sentence fits some result's period but none
     of its candidates', or is said for several sources at once ("both cover ...") whose candidates have different
     periods. In a sentence with two or more ranges, each range is fine when it fits any result's period."""
     ok = [c for c in ok_calls(calls) if _period(c["result"])]
     if not ok:
         return []
-    caveats = [c.lower() for x in ok
-               for c in [*(x["result"].get("caveats") or []), (x["result"].get("guidance") or {}).get("fact")]
+    caveats = [c.lower() for x in ok for p in [guidance.projection_view(x["result"].get("projection")) or {}]
+               for c in [*(x["result"].get("caveats") or []), (x["result"].get("guidance") or {}).get("fact"),
+                         (x["result"].get("baseline") or {}).get("text"), p.get("baseline"), p.get("when"),
+                         *(row.get(f) for row in x["result"].get("comparisons") or [] if isinstance(row, dict)
+                           for f in ("years", "note"))]  # each record's own years, over the shared window
                if isinstance(c, str)]
     asked = [(str(a["start"])[:4], str(a["end"])[:4]) for a in (c.get("arguments") or {} for c in calls)
              if isinstance(a, dict) and a.get("start") and a.get("end")]
@@ -669,13 +756,13 @@ def periods_note(calls: list[dict]) -> str:
     return "; ".join(seen)
 
 
-def best(kept: list[str], calls: list[dict]) -> str | None:
+def best(kept: list[str], calls: list[dict], limit: int | None = None) -> str | None:
     """What to return when every complete attempt failed a check: each with its wrong periods replaced by code, then
     within the word limit first, then the fewest period flags left, then the later attempt; over the limit, the
     fewest flags, then the shortest (the first of equals). Cut-off text is never in `kept`."""
     if not kept:
         return None
-    fixed, limit = [fix_periods(t, calls) for t in kept], word_limit(calls)
+    fixed, limit = [fix_periods(t, calls) for t in kept], limit or word_limit(calls)
     flags = [len(_check(t, calls)) for t in fixed]  # left after fixing: the doubtful ones
     n = [words(t) for t in fixed]
     return fixed[min(range(len(fixed)), key=lambda i: (0, flags[i], -i) if n[i] <= limit else (1, flags[i], n[i]))]
@@ -759,9 +846,11 @@ def found_answer(calls: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def ask(question: str, model: str | None = None, history: list[dict] | None = None) -> dict:
+def ask(question: str, model: str | None = None, history: list[dict] | None = None, voice: bool = False) -> dict:
     """`history`: earlier turns of the chat (see history_error), sent as plain text before the question; no tool
-    call or result from them is carried over."""
+    call or result from them is carried over. `voice`: the answer will be spoken (the caller marks it), so it never
+    ends with the sources pages line; otherwise that line closes the first answer of a conversation and any answer
+    to a question about sources."""
     history = history or []
     t0 = time.monotonic()
     try:
@@ -775,11 +864,13 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
     provider.start(system, question, TOOLS, history=history)
 
     trace = Trace(question, model_id)
+    simple = bool(SIMPLE.search(question.replace("’", "'")))  # plain lines, sources, guidance without the fact
     calls, usage, costs, answer, checked = [], {"prompt_tokens": 0, "completion_tokens": 0}, [], None, False
     kept: list[str] = []  # complete answers that failed a check (too long, or a wrong period), in order
     no_tools = False  # the current attempt was started without tools
     sent_hidden: set[int] = set()  # calls whose result the model got without its numbers
     numbered = False  # an answer stated a number with no data result this turn: never returned
+    restarted = False  # the simple-words restart ran (once); it leaves the check retries as they are
     try:
         for i in range(MAX_CALLS):
             if time.monotonic() - t0 >= BUDGET_S:
@@ -797,7 +888,7 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
             if not step["tool_calls"]:
                 # Cut off at the output cap: never show partial text. The token check covers providers without "stop".
                 cut = step.get("stop") == "length" or step["usage"]["completion_tokens"] >= MAX_TOKENS
-                text, limit, long, wrong, nums, invented = step["text"], word_limit(calls), False, False, False, []
+                text, limit, long, wrong, nums, invented = step["text"], word_limit(calls, simple), False, False, False, []
                 if not cut:
                     if not (text or "").strip():
                         break  # empty text (e.g. reasoning spent the cap): falls through to kept or GAVE_UP
@@ -807,14 +898,23 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                         checked = True  # nothing fetched yet: the failed-check restart, once, tools offered
                         provider.start(system, question, TOOLS, history=history)
                         continue
-                    text = compose(text, calls)  # before the checks: they hold for what the user sees
+                    if (simple and history and not calls and not checked and not restarted and i < MAX_CALLS - 1
+                            and not WORD_MEANING.search(question.replace("\u2019", "'"))):
+                        # Simple words about an earlier answer: look it up again, once (§4). The reply without a
+                        # lookup is dropped, never kept; if the restart brings nothing usable, code answers from
+                        # what it has. The figures, length and cut-off retries still apply after it.
+                        restarted = True
+                        provider.start(system, question + SIMPLE_LOOKUP, TOOLS, history=history)
+                        continue
+                    text = compose(text, calls, agree=not simple)  # before the checks: they hold for what users see
                     long, wrong = words(text) > limit, bool(wrong_periods(text, calls))
                     # No result to take a number from: any number but the fixed phrases is made up.
                     nums = not ok_calls(calls) and bool(stated_numbers(UNDER_001.sub(" ", text)))
                     # With results: every number must be one of theirs. Period ranges are left to the period check
-                    # above, which can retry or fix them.
-                    invented = (invented_numbers(without_periods(text), model_results(calls))
-                                if ok_calls(calls) else [])
+                    # above, which can retry or fix them. Simple words: the model's own text states no figure at all.
+                    invented = ([] if not ok_calls(calls)
+                                else [g + n for g, n in stated_numbers(without_sources(text, calls))] if simple
+                                else invented_numbers(without_periods(text), model_results(calls)))
                     if not (long or wrong or nums or invented):
                         answer = text
                         break
@@ -839,7 +939,8 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                     asks = ([LONG_ASK.format(limit=limit, target=SHORTER[limit])] if long else []) + (
                         [PERIOD_ASK.format(periods=periods_note(calls))] if wrong else []) + (
                         [NUMBER_ASK] if nums else []) + (
-                        [INVENTED_ASK.format(numbers=", ".join(invented))] if invented else [])
+                        [(FIGURES_ASK if simple else INVENTED_ASK).format(numbers=", ".join(invented))]
+                        if invented else [])
                     again = "\n\n" + " ".join(asks) + (NO_TOOL if calls else " Do not call a tool.")
                 # No tools: no refetch. No history either: the retry rewrites from this turn's results only, so an
                 # earlier answer's numbers and periods are not in front of it. The no-number retry keeps it: there
@@ -898,14 +999,33 @@ def ask(question: str, model: str | None = None, history: list[dict] | None = No
                 first = content[k] if isinstance(content[k], dict) else {"result": content[k]}
                 content[k] = {**first, "earlier_results_in_full": {"note": RESTORED_NOTE, "results": back}}
             provider.add_tool_results([{"id": c["id"], "content": x} for c, x in zip(todo, content)])
-        # Results but no usable answer of the model's: never give up on data we have (code writes it from them).
-        answer = answer or best(kept, calls) or (found_answer(calls) if ok_calls(calls)
-                                                 else NO_NUMBERS if numbered else GAVE_UP)
+        # Results but no usable answer of the model's: never give up on data we have (code writes it from them; in
+        # simple words, the sources line alone: the plain lines and the guidance carry the rest, with no figures).
+        answer = answer or best(kept, calls, word_limit(calls, simple)) or (
+            ((compose("", calls, agree=False) or FOUND_HEAD) if simple else found_answer(calls)) if ok_calls(calls)
+            else NO_NUMBERS if numbered else GAVE_UP)
         if answer not in (GAVE_UP, NO_NUMBERS):
-            answer = guidance.fill(answer, ok_calls(calls))  # the tool's own guidance, word for word
+            # the projection's dataset and address, when the answer lacks them: code's text, after the checks
+            answer = add_links(answer, projection_links(calls))
+            # The climate models' note, once, by code (owner, PR6), only when the plain lines give a CMIP6 temperature
+            # future: typed chat after the sources and caveats, in front of the guidance; simple words and voice right
+            # after the plain lines. Any copy the model wrote goes, even one echoed from history with no such future.
+            note = guidance.note(ok_calls(calls), voice)
+            answer = guidance.without_note(answer)
+            plain_note = simple or voice
+            # the tool's own guidance, word for word
+            answer = guidance.fill(answer, ok_calls(calls), simple, "" if plain_note else note)
             answer = add_examples(answer, calls)
+            head = guidance.lead(ok_calls(calls))  # the plain lines first, outside the word count
+            head = f"{head}\n{note}" if plain_note and note else head  # note() is "" without plain lines
+            answer = f"{head}\n\n{answer}" if head else answer
         # After every check, so it is outside the word limit; on every path, so the marker never reaches the user.
         answer = resources.fill(answer, [c["result"] for c in ok_calls(calls)])
+        # The sources pages line, last of all (design 17 §8): on the first answer that gives guidance, or any answer
+        # to a question about sources; never spoken.
+        first = guidance.picked(ok_calls(calls)) and not any(m.get("role") == "assistant" for m in history)
+        if answer not in (GAVE_UP, NO_NUMBERS) and not voice and (first or SOURCES_Q.search(question)):
+            answer = f"{answer.rstrip()}\n{guidance.SOURCES_LINE}"
     finally:
         trace_id = trace.end(answer)
 

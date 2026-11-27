@@ -6,10 +6,20 @@
 #   multi_measure    optional, true or false: several measurements are expected, each with its own verdict, so the
 #                    single-verdict wording check is skipped (as for several places); default false.
 # Loaded after cases.toml by `uv run python -m evals.run`; ids must be unique across both files.
+#
+# Expert projections (PR6): code leads the answer with the plain lines (web/design/16-plain-language.md §1), which
+# carry the projection; [GUIDANCE] no longer repeats it, and its disclaimer names IPCC projections whenever any result
+# has one. The range words are exact: sea level (IPCC AR6, medium confidence) "By 2050, experts project ..." and
+# "about a 2 in 3 chance"; air temperature, hottest day and rain (CMIP6, IPCC AR6 Interactive Atlas) "Around 2050,
+# climate models put ..." and "8 in 10 climate models", never a chance; rain says "The models disagree on wetter or
+# drier: 8 in 10 of them ..." where under 8 in 10 models agree (Chennai's cell does). "unlikely" is in the how-sure
+# sentence, so the CMIP6 cases ban "likely range" and "in 3 chance", not "likely". The models' raw-results note is a
+# caveat the model passes on (prompt rule E).
 
 # A follow-up that names only a new place: the agent must keep the earlier measurement (sea level) and run a new
-# check near Jakarta. The earlier answer's numbers are written for this case (not tool output); none of them may
-# show up in the new answer (the "no invented numbers" check). No expect_verdict: no independent reference.
+# check near Jakarta. The earlier answer is shaped like a rework answer (fact, where to look next, the experts'
+# projection, the disclaimer); its numbers are written for this case (not tool output) and none of them may show up
+# in the new answer (the "no invented numbers" check). No expect_verdict: no independent reference.
 # Scorable when no gauge near Jakarta has a usable record: an errored call still counts for tool, variable and
 # place, and the answer then must state no number at all.
 [[case]]
@@ -23,11 +33,11 @@ must_say = []
 must_not_say = []
 history = [
   { role = "user", content = "Is sea level rising in New York?" },
-  { role = "assistant", content = """Sea level in New York is clearly going up. At the tide gauge at The Battery, it rises by 29.15 mm per decade (a decade is ten years), with a 95% range of 28.10 to 30.21 mm per decade, from January 1856 to October 2026. The p-value is below 0.001, well below the usual 0.05 line.
+  { role = "assistant", content = """Yes. Sea level at The Battery in New York has clearly been rising. About 3 mm higher each year. The rate is 29.73 mm per decade (95% range 28.71 to 30.79), January 1856 to October 2026. A change this steady would be very unlikely if nothing were really changing. Permanent Service for Mean Sea Level (PSMSL) agrees: 29.51 mm per decade (95% range 28.40 to 30.66), over its own record, January 1856 to December 2025.
 
-Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, January 1856 to December 2025.
+Sources: NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and PSMSL (https://psmsl.org/). This is the sea measured against the land, so the land rising or sinking is part of it.
 
-Data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and the Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Sea level is measured relative to the land at the gauge, so land rising or sinking is included.""" },
+Sea level: Rising about 0.8 times as fast as the world average (1993 to April 2025; 95% range 0.4 to 1.2 times). Where to look next: Official flood maps (FEMA Flood Map Service Center) (https://msc.fema.gov/portal/home); Your local planning office. Sea level, experts' projection for 2050 under intermediate emissions (SSP2-4.5), from IPCC AR6 sea level projections (Garner et al. 2021): +36 cm (likely +27 to +46 cm) against the 1995–2014 average, about 29 cm more than today. The range is the likely range (about 2 in 3 chance). This shows past measurements and IPCC projections, which depend on how much the world emits. It is not a prediction and not professional advice.""" },
 ]
 
 # A follow-up that only asks what a word in the earlier answer means: no data tool, plain words. No code checks this
@@ -41,24 +51,42 @@ must_say = []
 must_not_say = []
 history = [
   { role = "user", content = "Is sea level rising in New York?" },
-  { role = "assistant", content = """Sea level in New York is clearly going up. At the tide gauge at The Battery, it rises by 29.15 mm per decade (a decade is ten years), with a 95% range of 28.10 to 30.21 mm per decade, from January 1856 to October 2026. The p-value is below 0.001, well below the usual 0.05 line.
+  { role = "assistant", content = """Yes. Sea level at The Battery in New York has clearly been rising. About 3 mm higher each year. The rate is 29.73 mm per decade (95% range 28.71 to 30.79), January 1856 to October 2026. A change this steady would be very unlikely if nothing were really changing. Permanent Service for Mean Sea Level (PSMSL) agrees: 29.51 mm per decade (95% range 28.40 to 30.66), over its own record, January 1856 to December 2025.
 
-Permanent Service for Mean Sea Level (PSMSL) agrees, over its own record, January 1856 to December 2025.
+Sources: NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and PSMSL (https://psmsl.org/). This is the sea measured against the land, so the land rising or sinking is part of it.
 
-Data come from NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/) and the Permanent Service for Mean Sea Level (PSMSL), RLR monthly means (https://psmsl.org/). Sea level is measured relative to the land at the gauge, so land rising or sinking is included.""" },
+Sea level: Rising about 0.8 times as fast as the world average (1993 to April 2025; 95% range 0.4 to 1.2 times). Where to look next: Official flood maps (FEMA Flood Map Service Center) (https://msc.fema.gov/portal/home); Your local planning office. Sea level, experts' projection for 2050 under intermediate emissions (SSP2-4.5), from IPCC AR6 sea level projections (Garner et al. 2021): +36 cm (likely +27 to +46 cm) against the 1995–2014 average, about 29 cm more than today. The range is the likely range (about 2 in 3 chance). This shows past measurements and IPCC projections, which depend on how much the world emits. It is not a prediction and not professional advice.""" },
+]
+
+# The same earlier answer, now asking about the projection's range name: plain words, no tool, no number. The likely
+# range is the experts' judgement for the future, not the 95% range of a past rate, and not a sure thing.
+[[case]]
+id = "followup-explain-likely-range"
+question = "what does likely range mean there?"
+expect_tool = "none"
+must_say = []
+must_not_say = ["95% chance", "definitely", "will be exactly"]
+history = [
+  { role = "user", content = "Is sea level rising in New York?" },
+  { role = "assistant", content = """Yes. Sea level at The Battery in New York has clearly been rising. The rate is 29.73 mm per decade (95% range 28.71 to 30.79), January 1856 to October 2026. Source: NOAA CO-OPS tide gauges (https://tidesandcurrents.noaa.gov/).
+
+Sea level: Rising about 0.8 times as fast as the world average (1993 to April 2025; 95% range 0.4 to 1.2 times). Where to look next: Official flood maps (FEMA Flood Map Service Center) (https://msc.fema.gov/portal/home); Your local planning office. Sea level, experts' projection for 2050 under intermediate emissions (SSP2-4.5), from IPCC AR6 sea level projections (Garner et al. 2021): +36 cm (likely +27 to +46 cm) against the 1995–2014 average, about 29 cm more than today. The range is the likely range (about 2 in 3 chance). This shows past measurements and IPCC projections, which depend on how much the world emits. It is not a prediction and not professional advice.""" },
 ]
 
 # A decision question at a US coast: the data as usual, what past data cannot tell (meaning.limit: "cannot tell"),
 # no advice of the model's own (only the tool's guidance, put in by code), and the official links for a CO-OPS result:
 # NOAA's viewer from the [OFFICIAL RESOURCES] marker, FEMA's flood maps from the guidance's "Where to look next".
+# The Battery has an AR6 projection: its line and the IPCC disclaimer.
 [[case]]
 id = "manhattan-build-house"
 question = "I want to build a house in Lower Manhattan. What are the risks?"
 expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [40.70, -74.01]      # The Battery
-must_say = ["coast.noaa.gov/slr", "msc.fema.gov", "cannot tell"]
-must_not_say = ["p-value", "0.05 line", "decade is ten years", "slope", "you should", "I recommend", "[OFFICIAL"]
+must_say = ["coast.noaa.gov/slr", "msc.fema.gov", "cannot tell", "By 2050, experts project",
+            "about a 2 in 3 chance", "IPCC projections"]
+must_not_say = ["p-value", "0.05 line", "decade is ten years", "slope", "you should", "I recommend", "[OFFICIAL",
+                "range across climate models", "High risk", "Moderate risk", "Low risk"]
 
 # A broad question with no single place: no ranking, but up to three cities the agent picks, checked in one step.
 [[case]]
@@ -75,7 +103,8 @@ must_not_say = ["p-value", "0.05 line", "you should", "I recommend", "[OFFICIAL"
 # code; these cases check what the agent controls, plus the guidance words where a case names them. Facts, not
 # advice (owner, 2026-11-22): no answer gives a risk level or a recommendation.
 
-# Student: one place, rain. "Just this year?" is answered by the long record, not one year.
+# Student: one place, rain. "Just this year?" is answered by the long record, not one year. Chennai's cell has a
+# CMIP6 rain projection (2041-2060 +11%, range across climate models -3 to +24%) on which the models disagree.
 [[case]]
 id = "chennai-rain-or-this-year"
 question = "Is Chennai really getting more rain, or is it just this year?"
@@ -83,8 +112,9 @@ expect_tool = "detect_trend"
 expect_variable = "precip"
 expect_place = [13.08, 80.27]
 max_km = 40
-must_say = []
-must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL"]
+must_say = ["8 in 10 of them put it", "Models disagree on wetter or drier",
+            "IPCC projections"]
+must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "likely range", "in 3 chance"]
 
 # Investor: a broad question, then two follow-ups that name only a new place (sea level is kept). The earlier
 # answers are written for these cases and carry no number, so any number must be this turn's.
@@ -118,8 +148,8 @@ expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [18.92, 72.83]
 max_km = 40
-must_say = []
-must_not_say = ["[GUIDANCE", "[OFFICIAL"]
+must_say = ["about a 2 in 3 chance"]  # AR6 has the Mumbai gauge; no world comparison there (QA B3)
+must_not_say = ["[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk"]
 history = [
   { role = "user", content = "Which coastal cities in Asia are risky for property because of sea-level rise?" },
   { role = "assistant", content = "I cannot rank a whole region from past data at single places. Tokyo: sea level is clearly going up. Singapore: sea level is clearly going up. Manila: sea level is clearly going up. These are examples I chose, not a ranking." },
@@ -128,26 +158,30 @@ history = [
 ]
 
 # Builder: a decision at a US coast; NOAA's viewer comes from the [OFFICIAL RESOURCES] marker, FEMA's flood maps from
-# the guidance's "Where to look next".
+# the guidance's "Where to look next", and the AR6 projection at The Battery (2050) from the guidance too.
 [[case]]
 id = "manhattan-family-house"
 question = "I want to build a house in Lower Manhattan for my family's future. Is sea level rising there, and what should I check?"
 expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [40.70, -74.01]
-must_say = ["coast.noaa.gov/slr", "msc.fema.gov"]
-must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL"]
+must_say = ["coast.noaa.gov/slr", "msc.fema.gov", "By 2050, experts project", "about a 2 in 3 chance",
+            "IPCC projections"]
+must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "range across climate models",
+                "95% range of the projection", "High risk", "Moderate risk", "Low risk"]
 
 # Planner: heat now and later. Air temperature or the hottest day of the month both fit, so no expect_variable.
 # "Summers" is part of the year, so the answer must say the tool does not look at summer alone ("not only summer").
+# Either measurement has a CMIP6 projection for 2041-2060, with the climate models' range and the models' note.
 [[case]]
 id = "delhi-hotter-when-older"
 question = "Has it been getting hotter in Delhi? Will summers be worse when I'm older?"
 expect_tool = "detect_trend"
 expect_place = [28.61, 77.21]
 max_km = 50
-must_say = ["not only summer"]
-must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL"]
+must_say = ["not only summer", "Around 2050, climate models put", "8 in 10 climate models",
+            "climate models' raw results", "IPCC projections"]
+must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "likely range", "in 3 chance"]
 
 [[case]]
 id = "princeton-hotter-when-older"
@@ -155,11 +189,25 @@ question = "Has it been getting hotter in Princeton, New Jersey? Will summers be
 expect_tool = "detect_trend"
 expect_place = [40.35, -74.66]
 max_km = 50
-must_say = ["not only summer"]
-must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL"]
+must_say = ["not only summer", "Around 2050, climate models put", "8 in 10 climate models",
+            "climate models' raw results", "IPCC projections"]
+must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "likely range", "in 3 chance"]
+
+# The hottest day itself, now and later: records and models can point opposite ways here (NASA POWER's record fell
+# from 1981 to 2025 while the models' 2041-2060 change is a rise). Both are given as they are, none picked.
+[[case]]
+id = "delhi-hottest-day-later"
+question = "Are Delhi's hottest days getting hotter, and will they be hotter in future?"
+expect_tool = "detect_trend"
+expect_variable = "air_temp_max"
+expect_place = [28.58, 77.21]
+max_km = 50
+must_say = ["Around 2050, climate models put each month's hottest day", "8 in 10 climate models"]
+must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "likely range", "in 3 chance",
+                "more than today"]
 
 # An investment on a coast where the sea is rising fast: the tool's fact compares it with the world average, and
-# the US gauge's look_next names FEMA's flood maps. No risk level, no advice for or against.
+# the US gauge's look_next names FEMA's flood maps. No risk level, no advice for or against. AR6 has the gauge.
 [[case]]
 id = "grand-isle-invest"
 question = "Should I invest in a house in Grand Isle, Louisiana?"
@@ -167,12 +215,14 @@ expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [29.26, -89.96]      # NOAA CO-OPS Grand Isle, LA
 max_km = 40
-must_say = ["times as fast as the world average", "Where to look next", "msc.fema.gov", "not professional advice"]
+must_say = ["times as fast as the world average", "Where to look next", "msc.fema.gov", "not professional advice",
+            "about a 2 in 3 chance", "IPCC projections"]
 must_not_say = ["p-value", "0.05 line", "[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk",
                 "advise against", "Our recommendation"]
 
 # A calm one: at Juneau the land rises faster than the sea, so sea level there is clearly falling (the golden case
-# juneau-sea-level-falling). The tool's fact says it is falling here while the world average rose.
+# juneau-sea-level-falling). The tool's fact says it is falling here while the world average rose; AR6's 2050
+# projection at the gauge is a fall too.
 [[case]]
 id = "juneau-calm-sea-falling"
 question = "Is sea-level rise a risk for a house by the water in Juneau, Alaska?"
@@ -180,20 +230,20 @@ expect_tool = "detect_trend"
 expect_variable = "sea_level"
 expect_place = [58.30, -134.41]
 max_km = 40
-must_say = ["Falling here, while the world average rose"]
+must_say = ["Falling here, while the world average rose", "about a 2 in 3 chance"]
 must_not_say = ["p-value", "0.05 line", "[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk",
                 "Our recommendation"]
 
-# The owner's comparison: two states, several measurements, each place's fact, where to look next and the
-# disclaimer. No expect_variable: sea level, air temperature and rain are all expected.
+# The owner's comparison: two states, several measurements, each place's fact, where to look next, the experts'
+# projections and the disclaimer. No expect_variable: sea level, air temperature and rain are all expected.
 [[case]]
 id = "louisiana-vs-new-jersey"
 question = "If I can buy a house in Louisiana or a house in New Jersey, how does it compare for my family's safety for future generations? If I want to build a farmhouse or a sea-facing house, what risks am I facing, and what should I keep in mind?"
 expect_tool = "detect_trend"
 min_places = 2
-must_say = ["Where to look next", "not professional advice"]
+must_say = ["Where to look next", "not professional advice", "IPCC projections"]
 must_not_say = ["p-value", "0.05 line", "slope", "[GUIDANCE", "[OFFICIAL", "High risk", "Moderate risk", "Low risk",
-                "advise against", "Our recommendation"]
+                "advise against", "Our recommendation", "riskier"]
 
 # The voice agent's question that came back as the give-up text although its lookups had results (the model kept
 # asking for tools until the call cap). It must answer from what was found and name sea level and temperature.
@@ -204,5 +254,37 @@ expect_tool = "detect_trend"
 expect_place = [39.36, -74.42]
 max_km = 40
 multi_measure = true
-must_say = ["sea level", "temperature"]
+must_say = ["sea level", "temperature", "IPCC projections"]
 must_not_say = ["[GUIDANCE", "[OFFICIAL"]
+
+# ---- simple words and voice (PR6, web/design/16-plain-language.md §4) ----
+# Code puts the plain lines first (the past clause, then what experts project, how sure they are, what it means day
+# to day), then the model's one sentence naming the sources, then [GUIDANCE] without the fact (it carries the 95% range
+# and the world ratio). The model writes no figure of its own.
+
+# The grandparent on voice: the voice agent forwards every question with "Explain in simple words." The Battery has
+# an AR6 projection, so the lines give the experts' 2 in 3 chance.
+[[case]]
+id = "battery-simple-words-voice"
+question = "Is the sea going up at the Battery? Explain in simple words."
+expect_tool = "detect_trend"
+expect_variable = "sea_level"
+expect_place = [40.70, -74.01]
+must_say = ["2 in 3 chance", "Where to look next", "not professional advice"]
+must_not_say = ["95% range", "times as fast", "p-value", "slope", "[GUIDANCE", "[OFFICIAL", "you should"]
+
+# A simple-words follow-up: it looks the earlier place and measurement up again, so every number is this turn's. The
+# earlier answer carries no number. Chennai's CMIP6 rain lines say how many of 10 climate models put it where.
+[[case]]
+id = "followup-simple-words-chennai"
+question = "What does that mean for me?"
+expect_tool = "detect_trend"
+expect_variable = "precip"
+expect_place = [13.08, 80.27]
+max_km = 40
+must_say = ["8 in 10", "not professional advice"]
+must_not_say = ["95% range", "p-value", "slope", "[GUIDANCE", "[OFFICIAL", "likely range", "in 3 chance"]
+history = [
+  { role = "user", content = "Is Chennai really getting more rain, or is it just this year?" },
+  { role = "assistant", content = "It has clearly been getting wetter here, over the whole record, not just this year. Source: NASA POWER (MERRA-2), https://power.larc.nasa.gov/." },
+]

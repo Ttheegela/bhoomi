@@ -85,7 +85,7 @@ def test_rows_follow_the_catalog_with_the_main_record_first(monkeypatch):
     assert main["years"] == "1981–2025" and main["headline_rate"] == r["headline_rate"]  # same years as the headline
     assert (main["verdict"], main["p_value"], main["baseline_value"]) == (r["verdict"], r["p_value"],
                                                                           r["baseline"]["value"])
-    assert list(r)[-2:] == ["meaning", "guidance"]  # the contract keeps these last
+    assert list(r)[-3:] == ["meaning", "plain", "guidance"]  # the contract keeps these last
     # the station made main: it leads, then the two models in catalog order
     r = tools.detect_trend("air_temp", 0, 0, source="ghcn")
     assert [c["source"]["id"] for c in r["comparisons"]] == ["ghcn"] + [s for s in order if s != "ghcn"]
